@@ -365,8 +365,6 @@ jobs:
           ICON_DEST="${APPDIR}/usr/share/icons/hicolor/256x256/apps/finterm.png"
           if [ -f "resources/icons/app_icon_256.png" ]; then
             cp "resources/icons/app_icon_256.png" "${ICON_DEST}"
-          elif [ -f "resources/fincept.png" ]; then
-            cp "resources/fincept.png" "${ICON_DEST}"
           elif [ -f "resources/finterm.ico" ]; then
             # .ico may hold multiple frames — "ico:file[0]" selects the first,
             # which is conventionally the largest/primary. Explicit "ico:" prefix
@@ -1069,16 +1067,26 @@ jobs:
 
             | Platform | File | Notes |
             |----------|------|-------|
-            | **Windows x64** | `finterm-*-setup*.exe` | Run installer → `finterm.exe` |
-            | **Linux x64** | `finterm-*.run` | `chmod +x` → run installer |
-            | **macOS Apple Silicon** | `finterm-*.dmg` or setup | Open DMG → drag to Applications |
+            | **Windows x64** | `finterm-*-setup.exe` | Run the installer → `finterm.exe` |
+            | **Linux x64** | `finterm-*-linux-x64-setup.run` | An AppImage: `chmod +x` and run it — nothing is installed |
+            | **macOS Apple Silicon** | `finterm-*.dmg` | Open, drag to Applications |
+
+            These builds are free and **not code-signed by a paid certificate**, so the
+            first launch needs one extra click:
+            - **Windows** — SmartScreen says "Windows protected your PC": *More info* → *Run anyway*.
+            - **macOS** — "cannot be opened because the developer cannot be verified":
+              right-click the app → *Open* → *Open* (once), or System Settings → Privacy & Security → *Open Anyway*.
+            - **Linux** — on Ubuntu 22.04+ install FUSE 2 first: `sudo apt install libfuse2`
+              (or run with `--appimage-extract-and-run`).
+
+            The first start sets up finterm's Python environment (5–15 minutes, once).
 
             ### Requirements
             - Windows 10/11 x64
-            - Ubuntu 20.04+ / Debian 11+
+            - Ubuntu 22.04+ / Debian 12+ / Fedora 38+ (x86-64)
             - macOS 13+ (Apple Silicon)
 
-            See the [README](https://github.com/yumima/finterm#readme) for full installation instructions.
+            See the [README](https://github.com/yumima/finterm#install) for details.
           files: |
             dist/windows/**
             dist/linux/**
@@ -1222,7 +1230,7 @@ jobs:
           | Platform | Download | Run |
           |----------|----------|-----|
           | **Windows x64** | [finterm-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`finterm.exe\` |
-          | **Linux x64** | [finterm-Linux-x64.run](${LIN_URL}) | \`chmod +x\` → run installer |
+          | **Linux x64** | [finterm-Linux-x64.run](${LIN_URL}) | AppImage: \`chmod +x\` and run |
           | **macOS Apple Silicon** | [finterm-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
           ${END_MARKER}"
 

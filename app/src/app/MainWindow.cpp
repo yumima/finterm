@@ -680,6 +680,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                     dock_router_->navigate(screens[i]); // fill grid
                 LOG_INFO("MainWindow", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
+        } else if (action == "check_updates") {
+            // Help › Check for Updates — the only way an update check runs.
+            services::UpdateService::instance().set_dialog_parent(this);
+            services::UpdateService::instance().check_for_updates(/*silent=*/false);
         } else if (action == "logout") {
             confirm_and_logout();
         } else if (action == "fullscreen") {

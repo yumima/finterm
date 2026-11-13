@@ -104,7 +104,6 @@ class UpdateService : public QObject {
     /// Silent auto-checks skip themselves after the first one per process run
     /// so multiple login/unlock code paths don't fire repeated checks. A
     /// user-initiated check (silent=false) always runs regardless.
-    bool silent_check_done_ = false;
 };
 
 } // namespace finterm::services

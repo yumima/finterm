@@ -102,25 +102,19 @@ bool UpdateService::is_newer(const QString& local, const QString& remote) {
 // ── Public entry point ──────────────────────────────────────────────────────
 
 void UpdateService::check_for_updates(bool silent) {
-    // Localhost-only fork: auto-update phones home to an upstream-controlled
-    // GitHub manifest URL on every launch and on focus, leaking platform +
-    // current version. Disabled here so no traffic ever leaves the machine.
-    // Pull upstream changes manually via `git pull origin main` when desired.
-    Q_UNUSED(silent);
-    LOG_DEBUG("UpdateService", "Auto-update disabled in localhost-only fork");
-    return;
+    // Never on its own: finterm makes no network request the user didn't ask
+    // for, so the launch/focus checks (silent) do nothing. Help › Check for
+    // Updates and About › Check for updates ask explicitly, and those fetch
+    // this project's own manifest (updates.json in the GitHub repo).
+    if (silent) {
+        LOG_DEBUG("UpdateService", "Automatic update check skipped — only on request");
+        return;
+    }
 
     if (in_progress_) {
         LOG_INFO("UpdateService", "Check already in progress — ignoring duplicate call");
         return;
     }
-    if (silent && silent_check_done_) {
-        LOG_DEBUG("UpdateService", "Silent check already completed this session — skipping");
-        return;
-    }
-    if (silent)
-        silent_check_done_ = true;
-
     silent_ = silent;
     update_available_ = false;
     latest_version_.clear();
