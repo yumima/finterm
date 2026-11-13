@@ -36,31 +36,81 @@ void narrate(const QString& msg) {
     std::fflush(stdout);
 }
 
-// ── Step v1: settings-store rebrand ──────────────────────────────────────────
-// The QSettings *application* name moved FinceptTerminal → finterm. The
-// organization ("Fincept") and the bundle-id data root (com.fincept.terminal)
-// are frozen, so only the .conf basename changed. Copy the legacy store into
-// the new one once — idempotent (skips when the new store already has keys) and
-// never clobbering. Covers both the normal and the -Secure (credentials) store.
-void migrate_settings_store(const char* new_app, const char* old_app) {
-    QSettings dst(AppIdentity::kOrg, new_app);
-    if (!dst.allKeys().isEmpty())
-        return; // new store already populated — never overwrite
-    QSettings src(AppIdentity::kOrg, old_app);
-    const QStringList keys = src.allKeys();
-    if (keys.isEmpty())
-        return; // no legacy store to import (e.g. a fresh install)
-    for (const QString& k : keys)
-        dst.setValue(k, src.value(k));
+// A settings store opened for migration: no fallbacks, so allKeys() is the
+// store's own keys — on macOS the default fallbacks add the global domain
+// (AppleLocale, AppleLanguages, …) and a brand-new store never looks empty.
+struct Store {
+    QSettings s;
+    Store(const char* org, const char* app) : s(org, app) { s.setFallbacksEnabled(false); }
+};
+
+// Absolute paths into the legacy data root (Report Builder's current file and
+// recent list, …) follow the folder AppPaths::migrate_root moved.
+QVariant repoint(const QVariant& v) {
+    const QString old_root = AppPaths::legacy_root_path();
+    const QString new_root = AppPaths::current_root_path();
+    const auto fix = [&](QString str) {
+        str.replace(old_root, new_root);
+        str.replace(QDir::toNativeSeparators(old_root), QDir::toNativeSeparators(new_root));
+        return str;
+    };
+    if (v.typeId() == QMetaType::QString)
+        return fix(v.toString());
+    if (v.typeId() == QMetaType::QStringList) {
+        QStringList out;
+        for (const QString& item : v.toStringList())
+            out << fix(item);
+        return out;
+    }
+    return v;
+}
+
+// Copy every key of `src` that `dst` does not have — the destination wins, so
+// this never overwrites and is safe to repeat. Returns how many were copied,
+// or -1 when the destination could not be written.
+int merge_store(QSettings& src, QSettings& dst) {
+    int copied = 0;
+    for (const QString& k : src.allKeys()) {
+        if (dst.contains(k))
+            continue;
+        dst.setValue(k, repoint(src.value(k)));
+        ++copied;
+    }
     dst.sync();
-    narrate(QString("settings: imported %1 keys from legacy \"%2\" store")
-                .arg(keys.size())
-                .arg(QString::fromLatin1(old_app)));
+    return dst.status() == QSettings::NoError ? copied : -1;
+}
+
+// Empty a settings store and, where it is a file, delete the file and its
+// folder if that is now empty.
+void remove_store(QSettings& store) {
+    const QFileInfo file(store.fileName());
+    store.clear();
+    store.sync();
+    if (store.format() != QSettings::NativeFormat || !file.isAbsolute() || !file.isFile())
+        return; // the Windows registry: clear() was the removal
+    QFile::remove(file.absoluteFilePath());
+    QDir().rmdir(file.absolutePath());
+}
+
+// ── Step v1: settings-store rebrand ──────────────────────────────────────────
+// The QSettings *application* name moved kAppLegacy → kApp (under the legacy
+// organization, at the time). Import the legacy store's keys once.
+void migrate_settings_store(const char* dst_org, const char* new_app, const char* old_app) {
+    Store src(AppIdentity::kOrgLegacy, old_app);
+    if (src.s.allKeys().isEmpty())
+        return; // no legacy store to import (e.g. a fresh install)
+    Store dst(dst_org, new_app);
+    const int n = merge_store(src.s, dst.s);
+    if (n > 0)
+        narrate(QString("settings: imported %1 keys from legacy \"%2\" store").arg(n).arg(QString::fromLatin1(old_app)));
 }
 
 void step_v1_settings_rebrand() {
-    migrate_settings_store(AppIdentity::kApp, AppIdentity::kAppLegacy);
-    migrate_settings_store(AppIdentity::kAppSecure, AppIdentity::kAppSecureLegacy);
+    migrate_settings_store(AppIdentity::kOrg, AppIdentity::kApp, AppIdentity::kAppLegacy);
+    // The credentials store stays under the legacy organization: its values are
+    // obfuscated with the legacy identity, and SecureStorage::migrate_identity()
+    // re-encodes them from there.
+    migrate_settings_store(AppIdentity::kOrgLegacy, AppIdentity::kAppSecure, AppIdentity::kAppSecureLegacy);
 }
 
 // ── Step v2: orphaned legacy cache directory ─────────────────────────────────
@@ -72,33 +122,24 @@ void step_v1_settings_rebrand() {
 // after the legacy app, so the path is still derived from AppIdentity, never
 // hardcoded.
 void step_v2_orphan_cache_cleanup() {
-    const QString cur = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (cur.isEmpty())
+    // Qt's AppLocalDataLocation is <GenericData>/<Org>/<App> on every platform.
+    const QString share = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (share.isEmpty())
         return;
-
-    const QString cur_leaf = QDir(cur).dirName(); // == AppIdentity::kApp
-    const QString legacy_leaf = QString::fromLatin1(AppIdentity::kAppLegacy);
-    if (cur_leaf == legacy_leaf)
-        return; // names coincide (shouldn't happen) — nothing safe to do
-    // Resolve the parent by string, NOT QDir::cdUp(): cdUp() returns false when
-    // the parent doesn't exist yet, which would silently leave us looking in the
-    // wrong place. absolutePath() is pure string manipulation.
-    const QString parent = QFileInfo(cur).absolutePath();
-    if (parent.isEmpty())
-        return;
-    const QString legacy_path = parent + "/" + legacy_leaf;
+    const QString legacy_path = share + "/" + AppIdentity::kOrgLegacy + "/" + AppIdentity::kAppLegacy;
 
     QDir legacy(legacy_path);
     if (!legacy.exists())
         return; // no orphan — the overwhelmingly common case
-    // Path-aliasing safety: never delete the directory we're actively using.
-    if (legacy.canonicalPath() == QDir(cur).canonicalPath())
+    // Path-aliasing safety: never delete the data root we're actively using.
+    if (legacy.canonicalPath() == QDir(AppPaths::root()).canonicalPath())
         return;
 
     if (legacy.removeRecursively())
         narrate(QString("cache: removed orphaned legacy data dir %1").arg(legacy_path));
     else
         narrate(QString("cache: could not remove legacy dir %1 (left in place)").arg(legacy_path));
+    QDir().rmdir(share + "/" + AppIdentity::kOrgLegacy); // only if now empty
 }
 
 // ── Step v3: personal data under user/, every feature's data in one home ─────
@@ -284,9 +325,9 @@ V3Result step_v3_user_data_home() {
 
     // 2. Qt's per-app folder <Org>/<App>: its cache/ is the live DiskCache
     //    store (last-known-good payloads, paid Databento pulls) — merged, not
-    //    dropped. Not swept wholesale: main.cpp's legacy AppDataLocation
-    //    migration still reads its own files from this folder.
-    const QString applocal = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    //    dropped. Only the files finterm wrote are moved.
+    // (Under the legacy organization: this build's own <Org>/<App> never held them.)
+    const QString applocal = share + "/" + AppIdentity::kOrgLegacy + "/" + AppIdentity::kApp;
     if (!applocal.isEmpty() && QDir(applocal).canonicalPath() != QDir(root).canonicalPath()) {
         m.merge_dir(applocal + "/cache", root + "/cache", root + "/cache/.imported");
         m.move_group(applocal + "/pre_ipo_valuation_seed.json", files_dir + "/pre_ipo/valuation_overrides.json",
@@ -360,9 +401,56 @@ V3Result step_v3_user_data_home() {
     return any_live ? V3Result::Deferred : V3Result::Done;
 }
 
+// ── Step v4: pre-rebrand settings stores ─────────────────────────────────────
+// v1 imported the kAppLegacy stores — but only into an empty destination, so a
+// key that was only in the legacy store may never have come across. Merge what
+// is missing (the destination wins), then remove the stale store. The
+// credentials twin (kAppSecureLegacy) is SecureStorage::migrate_identity()'s:
+// it holds secrets only an obfuscated-file build reads, and that build merges
+// them in the same pass that moves them, whatever launch this step runs on.
+void step_v4_stale_legacy_stores() {
+    Store src(AppIdentity::kOrgLegacy, AppIdentity::kAppLegacy);
+    if (!src.s.allKeys().isEmpty()) {
+        Store dst(AppIdentity::kOrg, AppIdentity::kApp);
+        if (merge_store(src.s, dst.s) < 0)
+            return; // keep it: its keys could not be merged
+    }
+    if (QFileInfo(src.s.fileName()).isFile() || !src.s.allKeys().isEmpty()) {
+        remove_store(src.s);
+        narrate(QString("settings: merged and removed the stale \"%1\" store")
+                    .arg(QString::fromLatin1(AppIdentity::kAppLegacy)));
+    }
+    // v2's cleanup of <GenericData>/<legacy org>, for users who were past v2.
+    const QString share = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (!share.isEmpty()) {
+        QDir().rmdir(share + "/" + AppIdentity::kOrgLegacy + "/" + AppIdentity::kApp); // only if empty
+        QDir().rmdir(share + "/" + AppIdentity::kOrgLegacy);
+    }
+}
+
+// ── Settings organization rename ─────────────────────────────────────────────
+// The QSettings organization moved kOrgLegacy → kOrg (~/.config/Fincept →
+// ~/.config/finterm on Linux; registry / plist elsewhere). Runs before the
+// layout version is read, because that version lives in this very store.
+// Merge (never overwriting), then clear the old store.
+void move_settings_org() {
+    Store src(AppIdentity::kOrgLegacy, AppIdentity::kApp);
+    if (src.s.allKeys().isEmpty())
+        return;
+    Store dst(AppIdentity::kOrg, AppIdentity::kApp);
+    const int n = merge_store(src.s, dst.s);
+    if (n < 0) {
+        narrate("settings: could not write the new settings store — keeping the old one");
+        return;
+    }
+    narrate(QString("settings: moved %1 keys from the \"%2\" store").arg(n).arg(QString::fromLatin1(AppIdentity::kOrgLegacy)));
+    remove_store(src.s);
+}
+
 } // namespace
 
 void LayoutMigrations::run() {
+    move_settings_org();
     QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     const int stored = s.value(QString::fromLatin1(kVersionKey), 0).toInt();
     if (stored >= kCurrentVersion)
@@ -395,6 +483,8 @@ void LayoutMigrations::run() {
             narrate("data: some items could not be moved after 3 attempts; they were left in place");
         }
     }
+    if (stored < 4)
+        step_v4_stale_legacy_stores();
     // Future moves: bump kCurrentVersion and add `if (stored < N) step_vN();`.
 
     s.setValue(QString::fromLatin1(kVersionKey), kCurrentVersion);

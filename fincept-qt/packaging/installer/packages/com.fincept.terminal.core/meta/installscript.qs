@@ -171,7 +171,8 @@ function cleanUserDataWindows()
     var appData      = installer.environmentVariable("APPDATA");
     var tempDir      = installer.environmentVariable("TEMP");
 
-    // 1. Main data root
+    // 1. Main data root (current, and an older build's not yet moved)
+    removeDirWindows(localAppData + "/finterm");
     removeDirWindows(localAppData + "/com.fincept.terminal");
 
     // 2. Legacy data roots
@@ -185,6 +186,7 @@ function cleanUserDataWindows()
     removeDirIfEmptyWindows(appData + "/Fincept");
 
     // 4. Registry — QSettings default format on Windows
+    runAndLog("reg.exe", ["delete", "HKCU\\Software\\finterm", "/f"]);
     runAndLog("reg.exe", ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal", "/f"]);
     runAndLog("reg.exe", ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal-Secure", "/f"]);
     // Remove parent key last — only succeeds if no other Fincept apps remain.
@@ -194,7 +196,7 @@ function cleanUserDataWindows()
     //    cmdkey has no wildcard delete. Enumerate via PowerShell and delete each.
     runAndLog("powershell.exe", [
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-        "$list = cmdkey /list 2>$null | Select-String -Pattern 'FinceptTerminal/'; " +
+        "$list = cmdkey /list 2>$null | Select-String -Pattern '(finterm|FinceptTerminal)/'; " +
         "foreach ($line in $list) { " +
         "  $target = ($line.ToString() -replace '^\\s*Target:\\s*','').Trim(); " +
         "  if ($target) { cmdkey /delete:$target | Out-Null } " +
@@ -258,8 +260,10 @@ function cleanUserDataMac()
 {
     var home = installer.environmentVariable("HOME");
 
-    // 1. Main data root
+    // 1. Main data root (current, and an older build's not yet moved)
+    removeDirPosix(home + "/Library/Application Support/finterm");
     removeDirPosix(home + "/Library/Application Support/com.fincept.terminal");
+    runAndLog("/bin/bash", ["-c", "rm -f \"$HOME\"/Library/Preferences/com.finterm.*.plist; exit 0"]);
 
     // 2. Preferences / plist
     removeFilePosix(home + "/Library/Preferences/com.fincept.FinceptTerminal.plist");
@@ -276,6 +280,7 @@ function cleanUserDataMac()
     // 5. Keychain: delete all entries under service "com.fincept.terminal".
     //    security(1) removes one entry per call — loop until it fails (no more).
     runAndLog("/bin/bash", ["-c",
+        "while /usr/bin/security delete-generic-password -s 'finterm' >/dev/null 2>&1; do :; done; " +
         "while /usr/bin/security delete-generic-password -s 'com.fincept.terminal' >/dev/null 2>&1; do :; done; exit 0"
     ]);
 
@@ -308,11 +313,16 @@ function cleanUserDataLinux()
     if (!xdgDat) xdgDat = home + "/.local/share";
     if (!xdgCch) xdgCch = home + "/.cache";
 
-    // 1. Main data root (respect XDG)
+    // 1. Main data root (respect XDG; current, and an older build's not yet moved)
+    removeDirPosix(xdgDat + "/finterm");
+    removeDirPosix(home   + "/.local/share/finterm");
     removeDirPosix(xdgDat + "/com.fincept.terminal");
     removeDirPosix(home   + "/.local/share/com.fincept.terminal");
 
     // 2. QSettings .conf files
+    removeDirPosix(xdgCfg + "/finterm");
+    removeFilePosix(xdgCfg + "/Fincept/finterm.conf");
+    removeFilePosix(xdgCfg + "/Fincept/finterm-Secure.conf");
     removeFilePosix(xdgCfg + "/Fincept/FinceptTerminal.conf");
     removeFilePosix(xdgCfg + "/Fincept/FinceptTerminal-Secure.conf");
     removeDirIfEmptyPosix(xdgCfg + "/Fincept");

@@ -4,10 +4,15 @@
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QMutex>
 #include <QSet>
 #include <QSettings>
+
+#include <optional>
 
 // ── Platform-specific credential storage ──────────────────────────────────────
 //
@@ -49,7 +54,19 @@
 #endif
 
 static constexpr auto TAG = "SecureStorage";
-static constexpr const char* kService = fincept::AppIdentity::kBundleId;
+
+// Where secrets are filed. The current identity, and the one older builds used
+// — read only by SecureStorage::migrate_identity(), which moves them over.
+struct KeyringIdentity {
+    const char* service;      // keychain service / Secret Service schema / obfuscation seed
+    const char* attr;         // Secret Service attribute holding the key name
+    const wchar_t* win_prefix; // Credential Manager target prefix
+    const char* settings_org; // QSettings organization of the obfuscated fallback
+};
+static const KeyringIdentity kCurrentId{fincept::AppIdentity::kBundleId, "finterm-key", L"finterm/",
+                                        fincept::AppIdentity::kOrg};
+static const KeyringIdentity kLegacyId{fincept::AppIdentity::kBundleIdLegacy, "fincept-key", L"FinceptTerminal/",
+                                       fincept::AppIdentity::kOrgLegacy};
 
 namespace fincept {
 
@@ -90,9 +107,9 @@ SecureStorage& SecureStorage::instance() {
 
 #    ifdef FINCEPT_HAVE_LIBSECRET
 
-// Schema describing the structure of secrets we store. The single
-// attribute "fincept-key" holds the per-secret name (e.g. FRED_API_KEY)
-// so we can look it up later without scanning the whole keyring.
+// Schema describing the structure of secrets we store. The single attribute
+// (KeyringIdentity::attr) holds the per-secret name (e.g. FRED_API_KEY) so we
+// can look it up later without scanning the whole keyring.
 //
 // libsecret's SecretSchema has eight private trailing `reserved` /
 // `reserved1`..`reserved7` slots that the documentation explicitly says
@@ -100,24 +117,29 @@ SecureStorage& SecureStorage::instance() {
 // but gcc still emits -Wmissing-field-initializers in C++ for the
 // unnamed trailing fields (long-standing quirk; gcc bug 39589 family).
 // Suppress just here — it's not a bug we can fix on the libsecret side.
-static const SecretSchema* fincept_schema() {
 #        if defined(__GNUC__) && !defined(__clang__)
 #            pragma GCC diagnostic push
 #            pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #        endif
-    static const SecretSchema schema = {
-        .name = AppIdentity::kBundleId,
+static SecretSchema make_schema(const KeyringIdentity& id) {
+    return SecretSchema{
+        .name = id.service,
         .flags = SECRET_SCHEMA_NONE,
         .attributes =
             {
-                {"fincept-key", SECRET_SCHEMA_ATTRIBUTE_STRING},
+                {id.attr, SECRET_SCHEMA_ATTRIBUTE_STRING},
                 {nullptr, SecretSchemaAttributeType(0)},
             },
     };
+}
 #        if defined(__GNUC__) && !defined(__clang__)
 #            pragma GCC diagnostic pop
 #        endif
-    return &schema;
+
+static const SecretSchema* schema_for(const KeyringIdentity& id) {
+    static const SecretSchema current = make_schema(kCurrentId);
+    static const SecretSchema legacy = make_schema(kLegacyId);
+    return &id == &kLegacyId ? &legacy : &current;
 }
 
 static bool default_collection_locked() {
@@ -145,13 +167,13 @@ static bool default_collection_locked() {
 
 // Derive a machine-unique obfuscation key from stable system identifiers.
 // Not a secret — just prevents the file being readable at a glance.
-static QByteArray machine_key() {
-    const QString seed = QSysInfo::machineUniqueId() + QSysInfo::productType() + QLatin1String(kService);
+static QByteArray machine_key(const KeyringIdentity& id) {
+    const QString seed = QSysInfo::machineUniqueId() + QSysInfo::productType() + QLatin1String(id.service);
     return QCryptographicHash::hash(seed.toUtf8(), QCryptographicHash::Sha256);
 }
 
-static QByteArray xor_obfuscate(const QByteArray& data) {
-    const QByteArray key = machine_key();
+static QByteArray xor_obfuscate(const QByteArray& data, const KeyringIdentity& id) {
+    const QByteArray key = machine_key(id);
     QByteArray out;
     out.resize(data.size());
     for (int i = 0; i < data.size(); ++i)
@@ -176,10 +198,10 @@ static QString scoped_key(const QString& key) {
 // store
 // ─────────────────────────────────────────────────────────────────────────────
 
-static Result<void> backend_store(const QString& key, const QString& value) {
+static Result<void> backend_store(const QString& key, const QString& value, const KeyringIdentity& id = kCurrentId) {
 #ifdef Q_OS_WIN
     // Windows Credential Manager — DPAPI-encrypted, user-scoped
-    std::wstring target = L"FinceptTerminal/" + key.toStdWString();
+    std::wstring target = id.win_prefix + key.toStdWString();
     QByteArray data = value.toUtf8();
 
     CREDENTIALW cred = {};
@@ -200,7 +222,7 @@ static Result<void> backend_store(const QString& key, const QString& value) {
     // existing item, fall through to SecItemAdd. Any other status is logged
     // (it indicates a real Keychain problem we don't want to silently mask
     // by overwriting with Add).
-    const QByteArray svc_bytes = QByteArray(kService);
+    const QByteArray svc_bytes = QByteArray(id.service);
     const QByteArray acct_bytes = key.toUtf8();
     const QByteArray data_bytes = value.toUtf8();
 
@@ -259,8 +281,8 @@ static Result<void> backend_store(const QString& key, const QString& value) {
     const QByteArray val_bytes = value.toUtf8();
     const QByteArray label = ("finterm: " + key).toUtf8();
 
-    secret_password_store_sync(fincept_schema(), SECRET_COLLECTION_DEFAULT, label.constData(), val_bytes.constData(),
-                               nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
+    secret_password_store_sync(schema_for(id), SECRET_COLLECTION_DEFAULT, label.constData(), val_bytes.constData(),
+                               nullptr, &err, id.attr, key_bytes.constData(), nullptr);
 
     if (err) {
         QString msg = QString::fromUtf8(err->message);
@@ -272,8 +294,8 @@ static Result<void> backend_store(const QString& key, const QString& value) {
 
 #    else
     // XOR-obfuscated QSettings fallback — NOT cryptographically secure.
-    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
-    const QByteArray obfuscated = xor_obfuscate(value.toUtf8()).toBase64();
+    QSettings s(id.settings_org, AppIdentity::kAppSecure);
+    const QByteArray obfuscated = xor_obfuscate(value.toUtf8(), id).toBase64();
     s.setValue("secure/" + key, QString::fromLatin1(obfuscated));
     return Result<void>::ok();
 #    endif
@@ -284,9 +306,9 @@ static Result<void> backend_store(const QString& key, const QString& value) {
 // retrieve
 // ─────────────────────────────────────────────────────────────────────────────
 
-static Result<QString> backend_retrieve(const QString& key) {
+static Result<QString> backend_retrieve(const QString& key, const KeyringIdentity& id = kCurrentId) {
 #ifdef Q_OS_WIN
-    std::wstring target = L"FinceptTerminal/" + key.toStdWString();
+    std::wstring target = id.win_prefix + key.toStdWString();
     PCREDENTIALW cred = nullptr;
 
     if (!CredReadW(target.c_str(), CRED_TYPE_GENERIC, 0, &cred)) {
@@ -303,7 +325,7 @@ static Result<QString> backend_retrieve(const QString& key) {
     return Result<QString>::ok(value);
 
 #elif defined(Q_OS_MAC)
-    const QByteArray svc_bytes = QByteArray(kService);
+    const QByteArray svc_bytes = QByteArray(id.service);
     const QByteArray acct_bytes = key.toUtf8();
 
     CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
@@ -341,7 +363,7 @@ static Result<QString> backend_retrieve(const QString& key) {
     const QByteArray key_bytes = key.toUtf8();
 
     gchar* password =
-        secret_password_lookup_sync(fincept_schema(), nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
+        secret_password_lookup_sync(schema_for(id), nullptr, &err, id.attr, key_bytes.constData(), nullptr);
 
     if (err) {
         QString msg = QString::fromUtf8(err->message);
@@ -363,7 +385,7 @@ static Result<QString> backend_retrieve(const QString& key) {
     return Result<QString>::ok(value);
 
 #    else
-    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
+    QSettings s(id.settings_org, AppIdentity::kAppSecure);
     QVariant v = s.value("secure/" + key);
     if (!v.isValid())
         return Result<QString>::err("Not found");
@@ -371,7 +393,7 @@ static Result<QString> backend_retrieve(const QString& key) {
     const QByteArray raw = QByteArray::fromBase64(v.toString().toLatin1());
     if (raw.isEmpty())
         return Result<QString>::err("Not found");
-    return Result<QString>::ok(QString::fromUtf8(xor_obfuscate(raw)));
+    return Result<QString>::ok(QString::fromUtf8(xor_obfuscate(raw, id)));
 #    endif
 #endif
 }
@@ -380,16 +402,16 @@ static Result<QString> backend_retrieve(const QString& key) {
 // remove
 // ─────────────────────────────────────────────────────────────────────────────
 
-static Result<void> backend_remove(const QString& key) {
+static Result<void> backend_remove(const QString& key, const KeyringIdentity& id = kCurrentId) {
 #ifdef Q_OS_WIN
-    std::wstring target = L"FinceptTerminal/" + key.toStdWString();
+    std::wstring target = id.win_prefix + key.toStdWString();
     if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0) && GetLastError() != ERROR_NOT_FOUND) {
         return Result<void>::err("Failed to delete credential");
     }
     return Result<void>::ok();
 
 #elif defined(Q_OS_MAC)
-    const QByteArray svc_bytes = QByteArray(kService);
+    const QByteArray svc_bytes = QByteArray(id.service);
     const QByteArray acct_bytes = key.toUtf8();
 
     CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
@@ -415,7 +437,7 @@ static Result<void> backend_remove(const QString& key) {
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
 
-    secret_password_clear_sync(fincept_schema(), nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
+    secret_password_clear_sync(schema_for(id), nullptr, &err, id.attr, key_bytes.constData(), nullptr);
 
     // An absent item is not an error (clear returns FALSE without setting
     // err); a set err means the Secret Service itself failed, and a caller
@@ -428,7 +450,7 @@ static Result<void> backend_remove(const QString& key) {
     return Result<void>::ok();
 
 #    else
-    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
+    QSettings s(id.settings_org, AppIdentity::kAppSecure);
     s.remove("secure/" + key);
     return Result<void>::ok();
 #    endif
@@ -476,14 +498,14 @@ SecretCache& secret_cache() {
 const Result<QString> kNotFound = Result<QString>::err("Not found");
 
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
-// One Secret Service search returning every fincept item with its secret.
+// One Secret Service search returning every finterm item with its secret.
 // Leaves the cache incomplete (per-key lookups take over) if the search fails
 // or any item's secret could not be read, e.g. a collection that stayed locked.
 void preload_all(SecretCache& c) {
     GError* err = nullptr;
     const int flags = SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS;
     GList* items =
-        secret_password_search_sync(fincept_schema(), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
+        secret_password_search_sync(schema_for(kCurrentId), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
     if (err) {
         LOG_WARN(TAG, QString("libsecret preload failed, using per-key lookups: ") + QString::fromUtf8(err->message));
         g_error_free(err);
@@ -494,7 +516,7 @@ void preload_all(SecretCache& c) {
     for (GList* l = items; l; l = l->next) {
         auto* retrievable = SECRET_RETRIEVABLE(l->data);
         GHashTable* attrs = secret_retrievable_get_attributes(retrievable);
-        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, "fincept-key"));
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, kCurrentId.attr));
         const QString key = raw ? QString::fromUtf8(raw) : QString();
         g_hash_table_unref(attrs);
         if (key.isEmpty())
@@ -633,6 +655,228 @@ void SecureStorage::migrate_legacy_ids() {
         flags.setValue(flag, true);
 }
 
+namespace {
+
+// Every secret filed under the legacy identity, across all profiles (raw,
+// scoped names) — with its value where the backend hands it over in the same
+// call (Secret Service, Credential Manager), so a large keyring is one round
+// trip, not one per key. An error when the backend could not be searched —
+// distinct from an empty list, so a locked keyring is retried, not marked done.
+struct LegacyEntry {
+    QString key;
+    std::optional<QString> value; // nullopt: read it with backend_retrieve
+};
+
+Result<QList<LegacyEntry>> legacy_entries() {
+    QList<LegacyEntry> out;
+#if defined(Q_OS_WIN)
+    const std::wstring filter = std::wstring(kLegacyId.win_prefix) + L"*";
+    DWORD count = 0;
+    PCREDENTIALW* creds = nullptr;
+    if (!CredEnumerateW(filter.c_str(), 0, &count, &creds)) {
+        if (GetLastError() == ERROR_NOT_FOUND)
+            return Result<QList<LegacyEntry>>::ok(out);
+        return Result<QList<LegacyEntry>>::err("Credential Manager enumerate failed");
+    }
+    const size_t prefix_len = std::wcslen(kLegacyId.win_prefix);
+    for (DWORD i = 0; i < count; ++i) {
+        const std::wstring target = creds[i]->TargetName ? creds[i]->TargetName : L"";
+        if (target.size() <= prefix_len)
+            continue;
+        const QString value = QString::fromUtf8(reinterpret_cast<const char*>(creds[i]->CredentialBlob),
+                                                static_cast<int>(creds[i]->CredentialBlobSize));
+        out.append({QString::fromStdWString(target.substr(prefix_len)), value});
+    }
+    CredFree(creds);
+#elif defined(Q_OS_MAC)
+    const QByteArray svc_bytes(kLegacyId.service);
+    CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
+                                                  svc_bytes.size(), kCFStringEncodingUTF8, false);
+    const void* keys[] = {kSecClass, kSecAttrService, kSecReturnAttributes, kSecMatchLimit};
+    const void* vals[] = {kSecClassGenericPassword, service, kCFBooleanTrue, kSecMatchLimitAll};
+    CFDictionaryRef query =
+        CFDictionaryCreate(nullptr, keys, vals, 4, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFTypeRef result = nullptr;
+    const OSStatus status = SecItemCopyMatching(query, &result);
+    CFRelease(query);
+    CFRelease(service);
+    if (status == errSecItemNotFound)
+        return Result<QList<LegacyEntry>>::ok(out);
+    if (status != errSecSuccess || !result)
+        return Result<QList<LegacyEntry>>::err("Keychain search failed (OSStatus " + std::to_string(status) + ")");
+    const auto items = static_cast<CFArrayRef>(result);
+    for (CFIndex i = 0; i < CFArrayGetCount(items); ++i) {
+        const auto attrs = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(items, i));
+        const auto account = static_cast<CFStringRef>(CFDictionaryGetValue(attrs, kSecAttrAccount));
+        if (!account)
+            continue;
+        char buf[1024];
+        if (CFStringGetCString(account, buf, sizeof(buf), kCFStringEncodingUTF8))
+            out.append({QString::fromUtf8(buf), std::nullopt}); // Keychain reads are local and fast
+    }
+    CFRelease(result);
+#elif defined(FINCEPT_HAVE_LIBSECRET)
+    GError* err = nullptr;
+    const int flags = SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS;
+    GList* items =
+        secret_password_search_sync(schema_for(kLegacyId), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
+    if (err) {
+        const std::string msg = err->message;
+        g_error_free(err);
+        return Result<QList<LegacyEntry>>::err("libsecret search failed: " + msg);
+    }
+    for (GList* l = items; l; l = l->next) {
+        GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, kLegacyId.attr));
+        const QString key = raw ? QString::fromUtf8(raw) : QString();
+        g_hash_table_unref(attrs);
+        if (key.isEmpty())
+            continue;
+        SecretValue* value = SECRET_IS_ITEM(l->data) ? secret_item_get_secret(SECRET_ITEM(l->data)) : nullptr;
+        if (value) {
+            out.append({key, QString::fromUtf8(secret_value_get_text(value))});
+            secret_value_unref(value);
+        } else {
+            out.append({key, std::nullopt}); // not loaded (still locked?) — per-key read decides
+        }
+    }
+    g_list_free_full(items, g_object_unref);
+#else
+    QSettings s(kLegacyId.settings_org, AppIdentity::kAppSecure);
+    s.beginGroup(QStringLiteral("secure"));
+    for (const QString& key : s.allKeys())
+        out.append({key, std::nullopt}); // a local file: per-key decode is cheap
+#endif
+    return Result<QList<LegacyEntry>>::ok(out);
+}
+
+// Keys already filed under the current identity, in one search where the
+// backend can list (Secret Service); nullopt elsewhere — ask per key.
+std::optional<QSet<QString>> current_keys() {
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+    GError* err = nullptr;
+    GList* items = secret_password_search_sync(schema_for(kCurrentId), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
+    if (err) {
+        g_error_free(err);
+        return std::nullopt;
+    }
+    QSet<QString> out;
+    for (GList* l = items; l; l = l->next) {
+        GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
+        if (const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, kCurrentId.attr)))
+            out.insert(QString::fromUtf8(raw));
+        g_hash_table_unref(attrs);
+    }
+    g_list_free_full(items, g_object_unref);
+    return out;
+#else
+    return std::nullopt;
+#endif
+}
+
+} // namespace
+
+void SecureStorage::migrate_identity() {
+    QSettings flags(AppIdentity::kOrg, AppIdentity::kApp);
+    const QString flag = QStringLiteral("migration/secure_identity_v1");
+    if (flags.value(flag).toBool())
+        return;
+
+    auto& c = secret_cache();
+    QMutexLocker lock(&c.mutex);
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINCEPT_HAVE_LIBSECRET)
+    // The obfuscated-file store an even older build kept under kAppSecureLegacy:
+    // fold whatever it has that the legacy store lacks into that store first,
+    // so this one pass moves both (the legacy store wins on a clash).
+    {
+        QSettings older(kLegacyId.settings_org, AppIdentity::kAppSecureLegacy);
+        older.setFallbacksEnabled(false);
+        const QStringList older_keys = older.allKeys();
+        if (!older_keys.isEmpty()) {
+            QSettings legacy(kLegacyId.settings_org, AppIdentity::kAppSecure);
+            legacy.setFallbacksEnabled(false);
+            for (const QString& k : older_keys)
+                if (!legacy.contains(k))
+                    legacy.setValue(k, older.value(k));
+            legacy.sync();
+            if (legacy.status() != QSettings::NoError)
+                return; // keep both; retry next launch
+            const QFileInfo file(older.fileName());
+            older.clear();
+            older.sync();
+            if (file.isFile())
+                QFile::remove(file.absoluteFilePath());
+        }
+    }
+#endif
+    const auto listed = legacy_entries();
+    if (listed.is_err()) {
+        LOG_WARN(TAG, "credential move deferred: " + QString::fromStdString(listed.error()));
+        return; // keyring unavailable — try again next launch
+    }
+    const std::optional<QSet<QString>> existing = listed.value().isEmpty() ? QSet<QString>{} : current_keys();
+    bool all_ok = true;
+    int moved = 0;
+    for (const LegacyEntry& e : listed.value()) {
+        QString value;
+        if (e.value) {
+            value = *e.value;
+        } else {
+            const auto old = backend_retrieve(e.key, kLegacyId);
+            if (is_not_found(old))
+                continue;
+            if (old.is_err()) {
+                all_ok = false;
+                continue;
+            }
+            value = old.value();
+        }
+        bool have_current;
+        if (existing) {
+            have_current = existing->contains(e.key);
+        } else {
+            const auto cur = backend_retrieve(e.key, kCurrentId);
+            if (cur.is_err() && !is_not_found(cur)) {
+                all_ok = false; // cannot tell whether it is set: never write over it
+                continue;
+            }
+            have_current = cur.is_ok();
+        }
+        if (!have_current) {
+            if (backend_store(e.key, value, kCurrentId).is_err()) {
+                all_ok = false; // keep the old copy; retry next launch
+                continue;
+            }
+            ++moved;
+        }
+        // Set under the current identity (just now, or already): the old copy
+        // is a stale duplicate.
+        if (backend_remove(e.key, kLegacyId).is_err())
+            all_ok = false;
+    }
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINCEPT_HAVE_LIBSECRET)
+    if (all_ok) {
+        QSettings old_store(kLegacyId.settings_org, AppIdentity::kAppSecure);
+        if (old_store.allKeys().isEmpty()) {
+            const QFileInfo file(old_store.fileName());
+            if (file.isFile()) {
+                QFile::remove(file.absoluteFilePath());
+                QDir().rmdir(file.absolutePath()); // only if now empty
+            }
+        }
+    }
+#endif
+    // Anything cached so far was read before the move.
+    c.values.clear();
+    c.absent.clear();
+    c.complete = false;
+    c.preload_tried = false;
+    if (moved > 0)
+        LOG_INFO(TAG, QString("moved %1 credential(s) to the current keyring identity").arg(moved));
+    if (all_ok)
+        flags.setValue(flag, true);
+}
+
 bool SecureStorage::can_enumerate() {
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
     return true;
@@ -647,7 +891,7 @@ Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
     QStringList out;
     const QString scope = ProfileManager::instance().secure_key_prefix();
     GError* err = nullptr;
-    GList* items = secret_password_search_sync(fincept_schema(), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
+    GList* items = secret_password_search_sync(schema_for(kCurrentId), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
     if (err) {
         const std::string msg = err->message;
         g_error_free(err);
@@ -656,7 +900,7 @@ Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
     }
     for (GList* l = items; l; l = l->next) {
         GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
-        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, "fincept-key"));
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, kCurrentId.attr));
         if (raw) {
             const QString full = QString::fromUtf8(raw);
             // The default profile has no scope prefix, so its keys must not

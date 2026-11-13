@@ -29,13 +29,22 @@ $BuildPreset = 'win-release'
 $BuildDir    = Join-Path $AppDir "build\$BuildPreset"
 $Bin         = Join-Path $BuildDir 'finterm.exe'
 
-# App state. AppPaths::root() on Windows = %LOCALAPPDATA%\com.fincept.terminal.
-$Root        = Join-Path $env:LOCALAPPDATA 'com.fincept.terminal'
-$DataDir     = Join-Path $Root 'data'
-$Workspaces  = Join-Path $Root 'workspaces'
-# Settings live in the registry (QSettings native format), org "Fincept".
-$RegApp      = 'HKCU:\Software\Fincept\finterm'
-$RegOrg      = 'HKCU:\Software\Fincept'
+# App state. AppPaths::root() on Windows = %LOCALAPPDATA%\finterm.
+# Settings live in the registry (QSettings native format), org "finterm".
+$Root        = Join-Path $env:LOCALAPPDATA 'finterm'
+$RegOrgName  = 'finterm'
+# An older build's folders, until the app's first launch moves them.
+$LegacyRoot  = Join-Path $env:LOCALAPPDATA 'com.fincept.terminal'
+$Ours = (Test-Path (Join-Path $Root 'user')) -or (Test-Path (Join-Path $Root 'profiles.json')) -or (Test-Path (Join-Path $Root '.legacy-moved'))
+if (-not $Ours -and (Test-Path $LegacyRoot)) {
+    $Root = $LegacyRoot
+    $RegOrgName = 'Fincept'
+}
+$RegOrg      = "HKCU:\Software\$RegOrgName"
+$RegApp      = "$RegOrg\finterm"
+# Everything personal is under user\ (other profiles: profiles\<name>\user\).
+$UserDir     = Join-Path $Root 'user'
+$DataDir     = Join-Path $UserDir 'data'
 # Portable data snapshots — outside the wiped trees so `reset` never deletes them.
 $BackupDir   = if ($env:FINCEPT_BACKUP_DIR) { $env:FINCEPT_BACKUP_DIR } `
                else { Join-Path $env:LOCALAPPDATA 'finterm-backups' }
@@ -78,20 +87,27 @@ function Test-VenvHealthy {
 # snapshot dir. Used as insurance by both repair and reset. Regenerable state
 # (caches, venv, models) is never captured.
 function Snapshot-Data($dest) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $dest 'data'), (Join-Path $dest 'workspaces') | Out-Null
-    if (Test-Path (Join-Path $DataDir 'users')) {
-        Copy-Item (Join-Path $DataDir 'users') (Join-Path $dest 'data\users') -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    # Everything personal, per profile: its user\ folder — and, in a layout an
+    # older build left that has not been reorganised yet, data\, files\ and
+    # workspaces\, which held the same things.
+    $profiles = @(@{ Path = $Root; Name = '.' })
+    foreach ($p in (Get-ChildItem (Join-Path $Root 'profiles') -Directory -ErrorAction SilentlyContinue)) {
+        $profiles += @{ Path = $p.FullName; Name = ("profiles\" + $p.Name) }
     }
-    foreach ($f in 'fincept.db','fincept.db-wal','fincept.db-shm','auth.db','auth.db-wal','auth.db-shm') {
-        $src = Join-Path $DataDir $f
-        if (Test-Path $src) { Copy-Item $src (Join-Path $dest 'data') -Force -ErrorAction SilentlyContinue }
-    }
-    if (Test-Path $Workspaces) {
-        Copy-Item (Join-Path $Workspaces '*') (Join-Path $dest 'workspaces') -Recurse -Force -ErrorAction SilentlyContinue
+    foreach ($p in $profiles) {
+        foreach ($sub in 'user','data','files','workspaces') {
+            $src = Join-Path $p.Path $sub
+            if (Test-Path $src) {
+                $pd = Join-Path $dest $p.Name
+                New-Item -ItemType Directory -Force -Path $pd | Out-Null
+                Copy-Item $src (Join-Path $pd $sub) -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
     # Settings (incl. API keys held in QSettings) → registry export.
-    if (Test-Path $RegApp) {
-        & reg.exe export 'HKCU\Software\Fincept' (Join-Path $dest 'settings.reg') /y | Out-Null
+    if (Test-Path $RegOrg) {
+        & reg.exe export ("HKCU\Software\" + $RegOrgName) (Join-Path $dest 'settings.reg') /y | Out-Null
     }
     Write-Host "  data snapshot -> $dest"
 }
@@ -264,11 +280,16 @@ function Cmd-Reset {
     Snapshot-Data $snap
     # Safety gate: if there was data to snapshot but the snapshot came up empty
     # (e.g. files still locked), do NOT proceed to wipe.
-    if ((Test-Path (Join-Path $DataDir 'users')) -and -not (Test-Path (Join-Path $snap 'data\users'))) {
-        Fail "Snapshot looks incomplete (data\users not captured) - aborting before wipe. Is the app still running?"
+    # Both layouts: user\data\users, and data\users in a folder not reorganised yet.
+    foreach ($rel in 'user\data\users','data\users') {
+        if ((Test-Path (Join-Path $Root $rel)) -and -not (Test-Path (Join-Path $snap $rel))) {
+            Fail "Snapshot looks incomplete ($rel not captured) - aborting before wipe. Is the app still running?"
+        }
     }
     Write-Host "=== Wiping app data + settings (factory reset) ==="
-    Remove-Item $Root -Recurse -Force -ErrorAction SilentlyContinue
+    # Everything except voice models other tools keep in this folder.
+    Get-ChildItem $Root -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin 'piper','kokoro' } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     # Remove the whole org key (matches the snapshot export and Linux's wholesale
     # config wipe); $RegApp is nested under it.
     Remove-Item $RegOrg -Recurse -Force -ErrorAction SilentlyContinue
@@ -276,8 +297,7 @@ function Cmd-Reset {
     Write-Host "`nClean slate. Next launch reprovisions from scratch (~5-15 min)."
     Write-Host "Your data was snapshotted to:`n    $snap"
     Write-Host "  To recover after relaunching: stop the app, then"
-    Write-Host "    Copy-Item `"$snap\data\*`"       `"$DataDir`" -Recurse -Force"
-    Write-Host "    Copy-Item `"$snap\workspaces\*`" `"$Workspaces`" -Recurse -Force"
+    Write-Host "    Copy-Item `"$snap\*`" `"$Root`" -Exclude settings.reg -Recurse -Force"
     Write-Host "    reg import `"$snap\settings.reg`"      # restores settings + API keys"
     Write-Host "Relaunch: .\finterm.ps1"
 }
@@ -348,8 +368,8 @@ USAGE
 
     .\finterm.ps1 help                     Show this message
 
-Settings live in the registry (HKCU\Software\Fincept); app data under
-%LOCALAPPDATA%\com.fincept.terminal. `reset`/`repair` snapshot your data to
+Settings live in the registry (HKCU\Software\finterm); app data under
+%LOCALAPPDATA%\finterm. `reset`/`repair` snapshot your data to
 $BackupDir first.
 "@ | Write-Host
 }

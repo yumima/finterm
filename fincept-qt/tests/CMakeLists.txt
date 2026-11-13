@@ -479,11 +479,16 @@ if(Python3_Interpreter_FOUND)
     # the test then exits 77 (skip) after its static drift checks — green CI
     # with zero coverage of the code under test.
     set(_TALIPP_TEST_PY "${Python3_EXECUTABLE}")
-    if(EXISTS "$ENV{HOME}/.local/share/com.fincept.terminal/venv-numpy2/bin/python3")
-        set(_TALIPP_TEST_PY "$ENV{HOME}/.local/share/com.fincept.terminal/venv-numpy2/bin/python3")
-    elseif(EXISTS "$ENV{LOCALAPPDATA}/com.fincept.terminal/venv-numpy2/Scripts/python.exe")
-        set(_TALIPP_TEST_PY "$ENV{LOCALAPPDATA}/com.fincept.terminal/venv-numpy2/Scripts/python.exe")
-    endif()
+    # The app's data root (AppPaths::root), or an older build's not yet moved.
+    foreach(_root finterm com.fincept.terminal)
+        if(EXISTS "$ENV{HOME}/.local/share/${_root}/venv-numpy2/bin/python3")
+            set(_TALIPP_TEST_PY "$ENV{HOME}/.local/share/${_root}/venv-numpy2/bin/python3")
+            break()
+        elseif(EXISTS "$ENV{LOCALAPPDATA}/${_root}/venv-numpy2/Scripts/python.exe")
+            set(_TALIPP_TEST_PY "$ENV{LOCALAPPDATA}/${_root}/venv-numpy2/Scripts/python.exe")
+            break()
+        endif()
+    endforeach()
     add_test(
         NAME equity_talipp
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_equity_talipp.py

@@ -159,7 +159,7 @@ catalogue index.  No code change required.
 
 | Symptom | First check |
 |---|---|
-| Backtest crashes | Logs at `~/.local/share/com.fincept.terminal/runtime/` |
+| Backtest crashes | Logs at `~/.local/share/finterm/runtime/` |
 | quant_critic returns gibberish | Check the active LLM profile + model (small local models can struggle with quant prose) |
 | "Tool disabled by the kill-switch" | Settings → AI System → re-enable the tool, or remove it from the agent's `allow_tools` |
 | "daily budget exceeded" | Edit `agent_configs.config_json.budget.max_usd_per_day` or wait for the day to roll |

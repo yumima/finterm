@@ -56,6 +56,13 @@ class SecureStorage {
     /// Settings › Credentials shows the value services actually use.
     void migrate_legacy_ids();
 
+    /// Once: move every secret an older build filed under the previous keyring
+    /// identity (AppIdentity::kBundleIdLegacy) to the current one, across all
+    /// profiles, never overwriting a value already set. Deferred while that
+    /// build's data folder is still in use, and retried while the keyring is
+    /// unavailable. Call at startup before anything reads a secret.
+    void migrate_identity();
+
     /// Which backend is actually protecting these secrets on this build and
     /// platform — "Windows Credential Manager", "macOS Keychain",
     /// "libsecret (Secret Service)", or "obfuscated file (NOT SECURE)".

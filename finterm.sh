@@ -44,20 +44,34 @@ if [[ "$FINCEPT_OS" == "macos" ]]; then
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
     FINTERM_BIN="$BUILD_DIR/finterm.app/Contents/MacOS/finterm"
     FINTERM_PROC="finterm.app/Contents/MacOS"   # pgrep/pkill match (binary path; never matches finterm.sh)
-    SHARE_DIR="$HOME/Library/Application Support/com.fincept.terminal"
+    SHARE_DIR="$HOME/Library/Application Support/finterm"
+    LEGACY_SHARE_DIR="$HOME/Library/Application Support/com.fincept.terminal"
     CONFIG_DIR="$HOME/Library/Preferences"   # SHARED dir — QSettings writes a plist here
+    LEGACY_CONFIG_DIR="$CONFIG_DIR"
     BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/Library/Application Support/finterm-backups}"
 else
     BUILD_PRESET="linux-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
     FINTERM_BIN="$BUILD_DIR/finterm.bin"
     FINTERM_PROC="finterm.bin"                  # pgrep/pkill match (never matches finterm.sh)
-    SHARE_DIR="$HOME/.local/share/com.fincept.terminal"
-    CONFIG_DIR="$HOME/.config/Fincept"       # app-specific dir (safe to wipe wholesale)
+    SHARE_DIR="$HOME/.local/share/finterm"
+    LEGACY_SHARE_DIR="$HOME/.local/share/com.fincept.terminal"
+    CONFIG_DIR="$HOME/.config/finterm"       # app-specific dir (safe to wipe wholesale)
+    LEGACY_CONFIG_DIR="$HOME/.config/Fincept"
     BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/.local/share/finterm-backups}"
 fi
-DATA_DIR="$SHARE_DIR/data"              # SQLite DBs (per-user portfolio under data/users/, auth.db)
-WORKSPACES_DIR="$SHARE_DIR/workspaces"  # saved .fwsp workspace layouts
+# An older build's folders, until the app's first launch moves them
+# (AppPaths::migrate_root / LayoutMigrations).
+# (The current folder can exist for shared voice models alone — finterm's own
+# data is what marks it, as in AppPaths::root.)
+if [[ ! -e "$SHARE_DIR/user" && ! -e "$SHARE_DIR/profiles.json" && ! -e "$SHARE_DIR/.legacy-moved" \
+      && -d "$LEGACY_SHARE_DIR" ]]; then
+    SHARE_DIR="$LEGACY_SHARE_DIR"
+    CONFIG_DIR="$LEGACY_CONFIG_DIR"
+fi
+# Everything personal is under user/ (the default profile's; other profiles
+# keep theirs in profiles/<name>/user/) — see AppPaths.h.
+DATA_DIR="$SHARE_DIR/user/data"              # SQLite DBs (auth.db, users/<name>.db, cache.db)
 # BACKUP_DIR (set per-OS above) holds portable snapshots OUTSIDE the reset
 # targets, so `reset` never deletes them.
 
@@ -460,28 +474,32 @@ do_window_only_reset() {
 # snapshot by both `repair` and `reset`. Regenerable state (caches, venv,
 # models) is never captured. Per-user DBs live under data/users/.
 _snapshot_data() {
-    local dest="$1" f g
-    mkdir -p "$dest/config" "$dest/data" "$dest/workspaces"
-    # Settings: Linux keeps .conf files in ~/.config/Fincept; macOS keeps a
-    # QSettings plist under ~/Library/Preferences (filename varies by Qt).
-    for f in finterm.conf finterm-Secure.conf Terminal.conf FinceptTerminal.conf FinceptTerminal-Secure.conf; do
-        [[ -f "$CONFIG_DIR/$f" ]] && cp -p "$CONFIG_DIR/$f" "$dest/config/"
-    done
+    local dest="$1" f p name sub
+    mkdir -p "$dest/config"
+    # Settings: every store in the app's settings folder on Linux (current and
+    # older names alike); macOS keeps QSettings plists under ~/Library/Preferences.
     if [[ "$FINCEPT_OS" == "macos" ]]; then
-        cp -p "$HOME/Library/Preferences/"*[Ff]incept*.plist "$dest/config/" 2>/dev/null || true
+        # Current names, and an older build's until its first launch moves them.
+        cp -p "$HOME/Library/Preferences/"com.finterm.*.plist "$HOME/Library/Preferences/"com.fincept.*.plist \
+            "$dest/config/" 2>/dev/null || true
+    else
+        for f in "$CONFIG_DIR"/*.conf; do
+            [[ -f "$f" ]] && cp -p "$f" "$dest/config/"
+        done
     fi
-    for g in auth.db auth.db-wal auth.db-shm; do
-        [[ -f "$DATA_DIR/$g" ]] && cp -p "$DATA_DIR/$g" "$dest/data/"
+    # Everything personal, per profile: its user/ folder — and, in a layout an
+    # older build left that has not been reorganised yet, the data/, files/
+    # and workspaces/ folders that held the same things.
+    for p in "$SHARE_DIR" "$SHARE_DIR"/profiles/*; do
+        [[ -d "$p" ]] || continue
+        if [[ "$p" == "$SHARE_DIR" ]]; then name="."; else name="profiles/$(basename "$p")"; fi
+        for sub in user data files workspaces; do
+            [[ -d "$p/$sub" ]] || continue
+            mkdir -p "$dest/$name"
+            cp -a "$p/$sub" "$dest/$name/$sub"
+        done
     done
-    if [[ -d "$DATA_DIR/users" ]]; then
-        mkdir -p "$dest/data/users"
-        cp -rp "$DATA_DIR/users/." "$dest/data/users/" 2>/dev/null || true
-    fi
-    for g in fincept.db fincept.db-wal fincept.db-shm; do
-        [[ -f "$DATA_DIR/$g" ]] && cp -p "$DATA_DIR/$g" "$dest/data/"
-    done
-    [[ -d "$WORKSPACES_DIR" ]] && cp -rp "$WORKSPACES_DIR/." "$dest/workspaces/" 2>/dev/null || true
-    for f in config data workspaces; do rmdir "$dest/$f" 2>/dev/null || true; done
+    rmdir "$dest/config" 2>/dev/null || true
     echo "  data snapshot → $dest"
 }
 
@@ -556,13 +574,16 @@ cmd_reset() {
     echo "=== Snapshotting your data first ==="
     _snapshot_data "$snap"
     echo "=== Wiping app state (factory reset) ==="
-    rm -rf "$SHARE_DIR"
+    # Everything except the voice models hearth shares with this folder
+    # (piper/, kokoro/): re-downloadable, but not this app's to wipe.
+    find "$SHARE_DIR" -mindepth 1 -maxdepth 1 ! -name piper ! -name kokoro -exec rm -rf {} +
     if [[ "$FINCEPT_OS" == "macos" ]]; then
         # CONFIG_DIR is the SHARED ~/Library/Preferences — only remove OUR plist(s),
         # never the whole directory. Kill cfprefsd FIRST so it flushes its in-memory
         # cache and can't immediately rewrite the plist we're about to delete.
         killall -u "$USER" cfprefsd 2>/dev/null || true
-        rm -f "$HOME/Library/Preferences/"*[Ff]incept*.plist 2>/dev/null || true
+        rm -f "$HOME/Library/Preferences/"com.finterm.*.plist "$HOME/Library/Preferences/"com.fincept.*.plist \
+            2>/dev/null || true
     else
         rm -rf "$CONFIG_DIR"     # app-specific dir on Linux — safe to remove wholesale
     fi
@@ -573,8 +594,7 @@ cmd_reset() {
     echo "    $snap"
     echo "  To recover it after relaunching, stop the app and copy it back:"
     echo "    finterm stop"
-    echo "    cp -a \"$snap/data/.\"       \"$DATA_DIR/\""
-    echo "    cp -a \"$snap/workspaces/.\" \"$WORKSPACES_DIR/\""
+    echo "    find \"$snap\" -mindepth 1 -maxdepth 1 ! -name config -exec cp -a {} \"$SHARE_DIR/\" \\;"
     if [[ "$FINCEPT_OS" == "macos" ]]; then
         echo "    cp -a \"$snap/config/.\"     \"$HOME/Library/Preferences/\"   # settings + keys"
     else

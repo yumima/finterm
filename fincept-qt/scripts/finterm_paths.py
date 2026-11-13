@@ -21,19 +21,31 @@ import os
 import sys
 from pathlib import Path
 
-_BUNDLE_ID = "com.fincept.terminal"
+_BUNDLE_ID = "finterm"
+# An older build's folder, until the app's first launch moves it (AppPaths::root).
+_LEGACY_BUNDLE_ID = "com.fincept.terminal"
+
+
+def _data_base() -> Path:
+    if sys.platform.startswith("win"):
+        return Path(os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local"))
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    return Path.home() / ".local" / "share"
 
 
 def data_root() -> Path:
     env = os.environ.get("FINCEPT_DATA_DIR")
     if env:
         return Path(env)
-    if sys.platform.startswith("win"):
-        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return Path(base) / _BUNDLE_ID
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / _BUNDLE_ID
-    return Path.home() / ".local" / "share" / _BUNDLE_ID
+    base = _data_base()
+    cur, old = base / _BUNDLE_ID, base / _LEGACY_BUNDLE_ID
+    # The folder may exist only for shared voice models; finterm's own data
+    # marks it (AppPaths::root does the same).
+    ours = any((cur / m).exists() for m in ("user", "profiles.json", ".legacy-moved"))
+    if not ours and old.is_dir():
+        return old
+    return cur
 
 
 def user_root() -> Path:

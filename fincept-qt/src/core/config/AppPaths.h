@@ -6,9 +6,9 @@ namespace fincept {
 /// Central registry for all application file-system paths.
 ///
 /// One root directory, split into what is the USER's and what is the APP's:
-///   Windows : %LOCALAPPDATA%/com.fincept.terminal/
-///   macOS   : ~/Library/Application Support/com.fincept.terminal/
-///   Linux   : ~/.local/share/com.fincept.terminal/
+///   Windows : %LOCALAPPDATA%/finterm/
+///   macOS   : ~/Library/Application Support/finterm/
+///   Linux   : ~/.local/share/finterm/
 ///
 ///   user/          — personal data, the one folder to back up or erase
 ///     data/        —   databases: auth.db, users/<name>.db, cache.db
@@ -28,8 +28,22 @@ namespace fincept {
 /// Call AppPaths::ensure_all() once at startup to create every sub-directory.
 class AppPaths {
   public:
-    /// Root: %LOCALAPPDATA%\com.fincept.terminal  (Windows)
+    /// Root: %LOCALAPPDATA%\finterm  (Windows). While an older build's folder
+    /// (AppIdentity::kBundleIdLegacy) has not been moved yet, that folder.
     static QString root();
+
+    /// Move an older build's data root to the current name — one directory
+    /// rename, refused while any instance holds a database lock in it — and
+    /// repoint the Python venvs inside it. Call first thing in main(), before
+    /// anything reads root(). False when an older build's folder is still
+    /// there and could not be moved: the app must not run on it, since its
+    /// settings and keyring entries have moved on (see main.cpp).
+    static bool migrate_root();
+
+    /// The older build's data root (AppIdentity::kBundleIdLegacy), and the
+    /// current one whether or not it exists yet — for messages.
+    static QString legacy_root_path();
+    static QString current_root_path();
 
     /// <profile>/user — everything personal; nothing else is.
     static QString user();

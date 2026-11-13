@@ -1,7 +1,10 @@
 #include "screens/info/PrivacyScreen.h"
 
+#include "core/config/AppPaths.h"
+
 #include "ui/theme/Theme.h"
 
+#include <QDir>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -100,11 +103,13 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->addWidget(bullet("Notes, chat history with any LLM you wired up"));
     pvl->addWidget(bullet("Window layouts, theme, workspaces"));
     pvl->addWidget(bullet("Cached candles, quotes, news"));
-    pvl->addWidget(bullet("Login state for the localhost stub"));
+    pvl->addWidget(bullet("Local accounts and login state"));
 
     pvl->addSpacing(4);
     pvl->addWidget(
-        body_text("Locations: ~/.local/share/com.fincept.terminal/ (data) and ~/.config/Fincept/ (settings)."));
+        body_text(QString("Locations: %1/ (data — everything personal is in its user/ folder) and the "
+                          "\"finterm\" settings store (~/.config/finterm/ on Linux).")
+                      .arg(QDir::toNativeSeparators(AppPaths::root()))));
 
     // 3 — Outbound
     pvl->addWidget(section_heading("→", "OUTBOUND TRAFFIC"));

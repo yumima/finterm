@@ -79,11 +79,14 @@ def keyring_secrets():
         gi.require_version("Secret", "1")
         from gi.repository import Secret
 
-        schema = Secret.Schema.new(
-            "com.fincept.terminal", Secret.SchemaFlags.NONE, {"fincept-key": Secret.SchemaAttributeType.STRING}
-        )
-        items = Secret.password_search_sync(
-            schema, {}, Secret.SearchFlags.ALL | Secret.SearchFlags.LOAD_SECRETS | Secret.SearchFlags.UNLOCK, None)
+        # The current keyring identity, and an older build's until its first
+        # launch moves the entries (SecureStorage::migrate_identity).
+        items = []
+        for name, attr in (("finterm", "finterm-key"), ("com.fincept.terminal", "fincept-key")):
+            schema = Secret.Schema.new(name, Secret.SchemaFlags.NONE, {attr: Secret.SchemaAttributeType.STRING})
+            items += Secret.password_search_sync(
+                schema, {}, Secret.SearchFlags.ALL | Secret.SearchFlags.LOAD_SECRETS | Secret.SearchFlags.UNLOCK,
+                None)
         out = []
         for it in items:
             sec = it.get_secret()

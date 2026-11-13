@@ -64,9 +64,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLockFile>
+#include <QMessageBox>
 #include <QPointer>
-#include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUuid>
@@ -79,6 +78,11 @@
 #endif
 
 int main(int argc, char* argv[]) {
+    // ── Move an older build's data folder to the current name ───────────────
+    // Before anything below creates the new root: once it exists, the old
+    // folder can no longer be moved into place with a single rename.
+    const bool data_root_ready = fincept::AppPaths::migrate_root();
+
     // ── Parse --profile <name> from argv before Qt initialises ───────────────
     // This must happen first so that:
     //   1. AppPaths returns the correct per-profile directories
@@ -186,6 +190,22 @@ int main(int argc, char* argv[]) {
 
     // ── Primary instance from here on ────────────────────────────────────────
 
+    // An older build's data folder that could not be moved (that build is still
+    // running, or the rename failed): stop here. Running on it would split the
+    // user's state — settings and keyring entries move below, the data would not.
+    if (!data_root_ready) {
+        QMessageBox::warning(
+            nullptr, QStringLiteral("finterm"),
+            QStringLiteral("This version of finterm moves its data folder to\n%1\n\n"
+                           "It could not finish moving %2 — an older finterm (any profile) or one of "
+                           "its helper processes is probably still running, or a file in that folder "
+                           "is open.\n\n"
+                           "Close every finterm window and start it again: the move picks up where it "
+                           "stopped. Nothing is deleted.")
+                .arg(fincept::AppPaths::current_root_path(), fincept::AppPaths::legacy_root_path()));
+        return 1;
+    }
+
     // ── Versioned layout migrations (primary only) ───────────────────────────
     // Self-healing for on-disk layout moves between releases (settings-store
     // rebrand, orphaned legacy caches, …). Fast no-op once up to date — a single
@@ -194,6 +214,9 @@ int main(int argc, char* argv[]) {
     // returned above, so this runs once per primary launch. See
     // core/config/LayoutMigrations.h.
     fincept::LayoutMigrations::run();
+    // Secrets an older build filed under the previous keyring identity move
+    // before anything below reads one (Polymarket credentials, a few lines on).
+    fincept::SecureStorage::instance().migrate_identity();
 
     // Register DataHub payload meta-types (QuoteData, HistoryPoint, InfoData,
     // NewsArticle, EconomicsResult) so they can flow through QVariant-keyed
@@ -264,28 +287,8 @@ int main(int argc, char* argv[]) {
     // Track 10: cron-shaped scheduler for agent runs.  Reads agent_schedule
     // on each 60s tick; no-op until the user adds entries.
     fincept::services::AgentScheduler::instance().start();
-    // Create all application directories under %LOCALAPPDATA%/com.fincept.terminal
+    // Create all application directories under the data root (AppPaths::root)
     fincept::AppPaths::ensure_all();
-
-    // ── One-time migration from legacy %APPDATA% location ─────────────────
-    // Current locations (under %LOCALAPPDATA%\com.fincept.terminal\):
-    //   Log: <root>/logs/fincept.log    DB: <root>/data/fincept.db
-    {
-        const QString old_base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-        const auto migrate_file = [](const QString& old_path, const QString& new_path) {
-            if (QFile::exists(old_path) && !QFile::exists(new_path))
-                QFile::rename(old_path, new_path);
-        };
-        migrate_file(old_base + "/fincept.db", fincept::AppPaths::data() + "/fincept.db");
-        migrate_file(old_base + "/cache.db", fincept::AppPaths::data() + "/cache.db");
-        migrate_file(old_base + "/fincept.log", fincept::AppPaths::logs() + "/fincept.log");
-        migrate_file(old_base + "/fincept-files", fincept::AppPaths::files());
-        // Remove stale WAL/SHM from old location too
-        QFile::remove(old_base + "/fincept.db-wal");
-        QFile::remove(old_base + "/fincept.db-shm");
-        QFile::remove(old_base + "/cache.db-wal");
-        QFile::remove(old_base + "/cache.db-shm");
-    }
 
     // ── WAL/SHM cleanup — gated behind QLockFile ────────────────────────────
     // Deleting WAL/SHM files while another process has the DB open corrupts it.
@@ -302,18 +305,6 @@ int main(int argc, char* argv[]) {
         QFile::remove(fincept::AppPaths::data() + "/cache.db-shm");
     }
     // db_lock remains held (stack-allocated) until main() returns.
-    // Also clean legacy v3 DB location
-    {
-        const QString local_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-        const QString legacy1 = local_dir.section('/', 0, -3) + "/FinceptTerminal/fincept_settings.db";
-        const QString legacy2 =
-            QString(local_dir).replace("Fincept/FinceptTerminal", "FinceptTerminal") + "/fincept_settings.db";
-        QFile::remove(legacy1 + "-wal");
-        QFile::remove(legacy1 + "-shm");
-        QFile::remove(legacy2 + "-wal");
-        QFile::remove(legacy2 + "-shm");
-    }
-
     fincept::Logger::instance().set_file(fincept::AppPaths::logs() + "/fincept.log");
 
     // P3.18 — route Qt's own qDebug/qWarning/qCritical messages into our log
@@ -443,43 +434,6 @@ int main(int argc, char* argv[]) {
         const QString sid = QUuid::createUuid().toString(QUuid::WithoutBraces);
         fincept::ScreenStateManager::instance().set_session_id(sid);
         LOG_INFO("App", "Session ID: " + sid);
-    }
-
-    LOG_INFO("App", "Checking settings for legacy migration...");
-    // One-time migration: copy settings from old DB (Local\FinceptTerminal\fincept_settings.db)
-    // to new DB (Roaming\Fincept\FinceptTerminal\fincept.db) if the new DB has no settings yet.
-    {
-        LOG_INFO("App", "Querying settings...");
-        auto existing = fincept::SettingsRepository::instance().get("fincept_session");
-        LOG_INFO("App", "Settings query done");
-        bool new_db_empty = existing.is_err() || existing.value().isEmpty();
-        if (new_db_empty) {
-            QString local_base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-            // AppLocalDataLocation = .../Local/Fincept/FinceptTerminal — strip to .../Local/FinceptTerminal
-            QString old_db_path = local_base.section('/', 0, -3) + "/FinceptTerminal/fincept_settings.db";
-            if (!QFile::exists(old_db_path)) {
-                // Try without the org subfolder
-                old_db_path = local_base.replace("Fincept/FinceptTerminal", "FinceptTerminal") + "/fincept_settings.db";
-            }
-            if (QFile::exists(old_db_path)) {
-                QSqlDatabase old_db = QSqlDatabase::addDatabase("QSQLITE", "legacy_migration");
-                old_db.setDatabaseName(old_db_path);
-                if (old_db.open()) {
-                    QSqlQuery src(old_db);
-                    if (src.exec("SELECT key, value FROM settings")) {
-                        int count = 0;
-                        while (src.next()) {
-                            fincept::SettingsRepository::instance().set(src.value(0).toString(),
-                                                                        src.value(1).toString(), "migrated");
-                            ++count;
-                        }
-                        LOG_INFO("App", QString("Migrated %1 settings from legacy DB").arg(count));
-                    }
-                    old_db.close();
-                }
-                QSqlDatabase::removeDatabase("legacy_migration");
-            }
-        }
     }
 
     LOG_INFO("App", "Starting session manager...");

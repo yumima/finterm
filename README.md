@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e5c33d835`](https://github.com/yumima/finterm/commit/e5c33d835) license: full AGPL text, NOTICE carries the one required attribution
 - [`5dd3c1183`](https://github.com/yumima/finterm/commit/5dd3c1183) chat: untagged sessions bind '' not NULL — bubble "Session error" fixed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
@@ -78,7 +79,7 @@ finterm is **data-in only**:
 - **Outbound, on your behalf** — Yahoo Finance, akshare. Quotes/history flow *into* the app.
 - **Outbound, never** — no analytics, no crash reporter, no SaaS backend, no LLM unless *you* configure one in Settings → Agent.
 - **Local only** — auth/profile/session/passcode handled entirely in-process by `AuthService` (C++, backed by `auth.db`). Nothing leaves the machine.
-- **Local only** — everything else lives in `~/.local/share/com.fincept.terminal/` (SQLite + JSON) and `~/.config/Fincept/`.
+- **Local only** — everything else lives in `~/.local/share/finterm/` (SQLite + JSON; everything personal under its `user/`) and `~/.config/finterm/`.
 
 ## Architecture
 
@@ -99,7 +100,7 @@ finterm/
 
 One process runs when you launch:
 
-1. **finterm binary** — the Qt app. Auth/profile/session run in-process via `AuthService` (no stub server). Spawns `yfinance_data.py --daemon --socket <path>` as a Python child for all market-data work; communicates via a Unix domain socket at `~/.local/share/com.fincept.terminal/runtime/yfinance.sock`. The daemon runs a `ThreadPoolExecutor` internally so multiple yfinance fetches execute concurrently.
+1. **finterm binary** — the Qt app. Auth/profile/session run in-process via `AuthService` (no stub server). Spawns `yfinance_data.py --daemon --socket <path>` as a Python child for all market-data work; communicates via a Unix domain socket at `~/.local/share/finterm/runtime/yfinance.sock`. The daemon runs a `ThreadPoolExecutor` internally so multiple yfinance fetches execute concurrently.
 
 Nothing talks to anything outside `localhost` except the data scripts and any LLM provider you explicitly configure.
 
@@ -114,7 +115,7 @@ Linux is regularly tested (Ubuntu / Debian-likes, x86-64). macOS and Windows bui
 - Qt 6.8+ — the **system** Qt (distro `qt6-*` packages, or Homebrew `qt` on macOS); `finterm setup` installs it. Not vendored into the tree.
 - CMake 3.27+, GCC 12.3+ / Clang 15+ / MSVC 2022.
 - Python 3.11+ (for the data scripts; no stub server needed).
-- A separate venv for the data scripts — `finterm setup` provisions it under `~/.local/share/com.fincept.terminal/`. ~110 packages, ~5–15 minutes the first time.
+- A separate venv for the data scripts — `finterm setup` provisions it under `~/.local/share/finterm/`. ~110 packages, ~5–15 minutes the first time.
 
 ### First-time setup
 
@@ -161,12 +162,12 @@ When something's wrong, reach for `finterm repair` — it fixes the common break
 
 What `finterm start` does:
 
-1. **Strips Qt window/dock layout state** from `~/.config/Fincept/finterm.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
+1. **Strips Qt window/dock layout state** from `~/.config/finterm/finterm.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
 2. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell.
 
 ### Auth & user accounts
 
-Local-only multi-user, no email, no SaaS round-trip. Auth runs entirely in-process via `AuthService` (C++); users and sessions are stored in `~/.local/share/com.fincept.terminal/data/auth.db`. Each user's portfolio, watchlists, and settings live in their own isolated `users/<username>.db`.
+Local-only multi-user, no email, no SaaS round-trip. Auth runs entirely in-process via `AuthService` (C++); users and sessions are stored in `~/.local/share/finterm/user/data/auth.db`. Each user's portfolio, watchlists, and settings live in their own isolated `users/<username>.db`.
 
 **Sign-up flow:**
 1. Launch the app → on first run, the login picker is empty; click **Create Account**.
@@ -194,7 +195,7 @@ Use the PowerShell sibling **`finterm.ps1`** — same commands as `finterm.sh`, 
 
 ### Recovery
 
-`finterm repair` covers ~95% of breakage — it clears caches/transient state and rebuilds a broken venv while keeping your portfolio, API keys, GUI layout, and workspaces. Use `finterm reset` only for a genuinely clean install. Both snapshot your data to `~/.local/share/finterm-backups/` first (printed path), so nothing is lost. Portfolio data lives in SQLite under `~/.local/share/com.fincept.terminal/data/`.
+`finterm repair` covers ~95% of breakage — it clears caches/transient state and rebuilds a broken venv while keeping your portfolio, API keys, GUI layout, and workspaces. Use `finterm reset` only for a genuinely clean install. Both snapshot your data to `~/.local/share/finterm-backups/` first (printed path), so nothing is lost. Portfolio data lives in SQLite under `~/.local/share/finterm/user/data/`.
 
 | Symptom | Try |
 |---|---|
@@ -203,8 +204,8 @@ Use the PowerShell sibling **`finterm.ps1`** — same commands as `finterm.sh`, 
 | Python venv / data scripts broken (e.g. "Install Analytics Libraries" keeps reappearing) | `finterm repair` — it rebuilds the venv if a health check finds it broken |
 | Want a genuinely clean install | `finterm reset` (snapshots your data first) |
 | Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it automatically. |
-| Stale socket file after crash | `rm ~/.local/share/com.fincept.terminal/runtime/yfinance.sock` — cleared automatically on next launch too. |
-| Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — every local user disappears; sign up again. |
+| Stale socket file after crash | `rm ~/.local/share/finterm/runtime/yfinance.sock` — cleared automatically on next launch too. |
+| Auth DB locked / corrupt | Delete `~/.local/share/finterm/user/data/auth.db` and restart — every local user disappears; sign up again. |
 | Forgot a user's PIN | Login picker → select the user → **Forgot PIN? Reset this user**. Per-user DB is removed too. |
 
 ## License

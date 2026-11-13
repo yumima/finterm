@@ -15,7 +15,7 @@ canonical path.
   not vendored. Ship builds can pin the tested version via
   `FINCEPT_QT_STRICT`.
 - **Python 3.11** — the data daemon's venv is provisioned by
-  `finterm setup` under `~/.local/share/com.fincept.terminal/`.
+  `finterm setup` under `~/.local/share/finterm/`.
 
 ## Build
 

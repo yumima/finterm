@@ -38,7 +38,7 @@ PythonSetupManager& PythonSetupManager::instance() {
 PythonSetupManager::PythonSetupManager(QObject* parent) : QObject(parent) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Install directory — com.fincept.terminal
+// Install directory — the data root (AppPaths::root)
 // ─────────────────────────────────────────────────────────────────────────────
 
 QString PythonSetupManager::install_dir() const {
