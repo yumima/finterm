@@ -86,27 +86,32 @@ void fetch_index_futures(const QStringList& indices, QObject* ctx,
             QHash<QString, IndexFutureQuote> out;
             for (const auto& v : rows) {
                 const auto o = v.toObject();
-                // Null pct is the daemon declining a pairing it can't stand
-                // behind. Absent stays absent: never a 0.00%.
-                if (!o.value(QStringLiteral("pct")).isDouble())
-                    continue;
                 IndexFutureQuote q;
                 q.index = o.value(QStringLiteral("symbol")).toString();
-                if (!wanted.contains(q.index))
-                    continue;
                 q.contract = o.value(QStringLiteral("contract")).toString();
-                q.price = o.value(QStringLiteral("price")).toDouble();
-                q.change = o.value(QStringLiteral("change")).toDouble();
-                q.pct = o.value(QStringLiteral("pct")).toDouble();
-                q.ref_price = o.value(QStringLiteral("ref_price")).toDouble();
-                q.session_date = QDate::fromString(o.value(QStringLiteral("session_date")).toString(), Qt::ISODate);
-                q.ts = static_cast<qint64>(o.value(QStringLiteral("ts")).toDouble());
-                // The daemon already refuses stale prints and missing closes;
-                // this only guards the shape. A last print from the future
-                // would be a clock or decode bug, not a quote.
-                if (!std::isfinite(q.pct) || q.price <= 0 || q.ref_price <= 0 || !q.session_date.isValid() || q.ts <= 0 ||
-                    q.ts > now + 600)
+                if (!wanted.contains(q.index) || q.contract.isEmpty())
                     continue;
+                q.refused = o.value(QStringLiteral("transient")).toBool();
+                q.reason = o.value(QStringLiteral("reason")).toString();
+                // Null pct is the daemon declining a pairing it can't stand
+                // behind, or a refused quote: the row stays PENDING — named,
+                // so its contract streams and its prints fill it — never 0.00%.
+                if (o.value(QStringLiteral("pct")).isDouble()) {
+                    IndexFutureQuote f = q;
+                    f.price = o.value(QStringLiteral("price")).toDouble();
+                    f.change = o.value(QStringLiteral("change")).toDouble();
+                    f.pct = o.value(QStringLiteral("pct")).toDouble();
+                    f.ref_price = o.value(QStringLiteral("ref_price")).toDouble();
+                    f.session_date =
+                        QDate::fromString(o.value(QStringLiteral("session_date")).toString(), Qt::ISODate);
+                    f.ts = static_cast<qint64>(o.value(QStringLiteral("ts")).toDouble());
+                    // The daemon already refuses stale prints and missing
+                    // closes; this only guards the shape. A last print from
+                    // the future would be a clock or decode bug, not a quote.
+                    if (std::isfinite(f.pct) && f.price > 0 && f.ref_price > 0 && f.session_date.isValid() &&
+                        f.ts > 0 && f.ts <= now + 600)
+                        q = f;
+                }
                 out.insert(q.index, q);
             }
             cb(true, out, {});

@@ -564,13 +564,23 @@ def test_index_future_contract_is_pinned_across_the_roll():
 
 
 def test_quote_streamer_fast_lane():
-    """Indices and ROOT=F aliases never tick on the push feed, so they ride the
-    batch-quote fast lane — with the snapshot's own previous close, never a
-    price paired with some other source's close."""
+    """Cash indices never tick on the push feed, so they ride the batch-quote
+    fast lane — with the snapshot's own previous close, never a price paired
+    with some other source's close. ROOT=F aliases ride their contract's
+    push ticks instead (polling is what Yahoo throttles per IP)."""
     QS = yd._QuoteStreamer
     check("index → fast lane", QS.fast_lane("^GSPC"), "")
-    check("continuous future → fast lane", QS.fast_lane("GC=F"), "")
+    check("continuous future → NOT polled", not QS.fast_lane("GC=F") and QS.is_alias("GC=F"), "")
     check("dated contract → push feed (it ticks)", not QS.fast_lane("ESZ26.CME"), "")
+    s = QS(lambda f: None)
+    s._alias = {"GC=F": "GCZ26.CMX"}
+    check("push set: stocks as-is, aliases as their contract, indices not at all",
+          s._stream_set({"AAPL", "GC=F", "CL=F", "^GSPC"}) == {"AAPL", "GCZ26.CMX"},
+          s._stream_set({"AAPL", "GC=F", "CL=F", "^GSPC"}))
+    t = QS.alias_tick("GC=F", {"id": "GCZ26.CMX", "price": 3922.8, "change": 37.5, "time": "1", "market_hours": 1,
+                               "exchange": "CMX"})
+    check("alias tick: relabelled, Yahoo's change kept as the pair, marked",
+          t["id"] == "GC=F" and t["change"] == 37.5 and t["source"] == "alias" and "exchange" not in t, t)
     check("stock / FX / coin → push feed",
           not any(QS.fast_lane(x) for x in ("AAPL", "EURUSD=X", "BTC-USD")), "")
 

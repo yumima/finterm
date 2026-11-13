@@ -307,6 +307,7 @@ void IpoWatchView::build_title_bar(QVBoxLayout* root) {
             // hiccup), re-attempt on PERFORMANCE open. enrich is idempotent.
             if (active_lens_ == LensPerformance)
                 enrich_priced_with_quotes();
+            follow_priced();
             render();
         });
         lens_btns_[i] = b;
@@ -1597,6 +1598,61 @@ void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
         });
 }
 
+void IpoWatchView::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    follow_priced();
+}
+
+void IpoWatchView::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
+    follow_priced();
+}
+
+void IpoWatchView::follow_priced() {
+    if (!live_) {
+        live_render_ = new QTimer(this);
+        live_render_->setSingleShot(true);
+        live_render_->setInterval(500); // the lens re-renders whole: twice a second is live enough
+        connect(live_render_, &QTimer::timeout, this, [this]() {
+            if (active_lens_ == LensPerformance || active_lens_ == LensWatchlist)
+                render();
+            else
+                render_kpis();
+        });
+        live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
+            if (!(q.price > 0))
+                return;
+            bool moved = false;
+            for (auto& e : entries_) {
+                if (e.status != "priced" || e.ticker != q.symbol || e.last_price == q.price)
+                    continue;
+                e.last_price = q.price;
+                e.pop_pct = e.final_price > 0 ? (e.last_price - e.final_price) / e.final_price * 100.0
+                                              : std::numeric_limits<double>::quiet_NaN();
+                e.perf_fetched = true;
+                moved = true;
+            }
+            if (moved && !live_render_->isActive())
+                live_render_->start();
+        });
+    }
+    // Capped: every followed name is a hub quote (polled and streamed), and
+    // the priced list runs to hundreds. Newest listings first — the ones
+    // still moving on their debut.
+    static constexpr int kMaxFollowed = 80;
+    QVector<const Entry*> priced;
+    if (isVisible() && (active_lens_ == LensPerformance || active_lens_ == LensWatchlist))
+        for (const auto& e : entries_)
+            if (e.status == "priced" && !e.ticker.isEmpty() && e.perf_fetched)
+                priced << &e;
+    std::stable_sort(priced.begin(), priced.end(),
+                     [](const Entry* a, const Entry* b) { return a->priced_date > b->priced_date; });
+    QStringList syms;
+    for (int i = 0; i < priced.size() && i < kMaxFollowed; ++i)
+        syms << priced[i]->ticker;
+    live_->set_symbols(syms);
+}
+
 // Lazily fetch yfinance quotes for priced tickers so the PERFORMANCE lens can
 // show pop %, in paced chunks (run_pump). Only re-fetches symbols whose
 // perf_fetched is false, so subsequent lens switches are no-ops.
@@ -1646,6 +1702,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
         [self]() {
             if (!self)
                 return;
+            self->follow_priced();
             // The table only where pop % is on screen; the KPI strip always is.
             if (self->active_lens_ == LensPerformance || self->active_lens_ == LensWatchlist)
                 self->render();
@@ -2907,6 +2964,7 @@ void IpoWatchView::show_add_company_dialog() {
     for (int j = 0; j < LensCount; ++j)
         if (lens_btns_[j])
             lens_btns_[j]->setChecked(j == LensPrivate);
+    follow_priced();
     render();
 }
 

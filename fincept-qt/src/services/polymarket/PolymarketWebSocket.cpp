@@ -43,19 +43,45 @@ void PolymarketWebSocket::ensure_connected() {
     }
 }
 
+// After the initial "type: market" message (sent on connect with the whole
+// set), changes go out as Polymarket's incremental operations — only the ids
+// that changed, so a list refresh doesn't re-dump every book (parsed on the
+// GUI thread) and one screen's change can't replace another's subscription.
 void PolymarketWebSocket::subscribe(const QStringList& token_ids) {
+    // A set: the one caller (PolymarketScreen) keeps its list and its
+    // selection apart and releases only ids neither still wants.
+    QStringList added;
     for (const auto& id : token_ids)
-        subscribed_tokens_.insert(id);
+        if (!id.isEmpty() && !subscribed_tokens_.contains(id)) {
+            subscribed_tokens_.insert(id);
+            added << id;
+        }
     ensure_connected();
-    if (connected_)
-        send_subscribe(token_ids);
+    if (connected_ && !added.isEmpty())
+        send_operation(added, QStringLiteral("subscribe"));
 }
 
 void PolymarketWebSocket::unsubscribe(const QStringList& token_ids) {
+    QStringList removed;
     for (const auto& id : token_ids)
-        subscribed_tokens_.remove(id);
+        if (subscribed_tokens_.remove(id))
+            removed << id;
     if (subscribed_tokens_.isEmpty())
         disconnect();
+    else if (connected_ && !removed.isEmpty())
+        send_operation(removed, QStringLiteral("unsubscribe"));
+}
+
+void PolymarketWebSocket::send_operation(const QStringList& token_ids, const QString& op) {
+    QJsonObject msg;
+    QJsonArray assets;
+    for (const auto& id : token_ids)
+        assets.append(id);
+    msg["assets_ids"] = assets;
+    msg["operation"] = op;
+    if (op == QLatin1String("subscribe"))
+        msg["initial_dump"] = true; // books for the NEW ids only
+    ws_->send(QString::fromUtf8(QJsonDocument(msg).toJson(QJsonDocument::Compact)));
 }
 
 void PolymarketWebSocket::unsubscribe_all() {

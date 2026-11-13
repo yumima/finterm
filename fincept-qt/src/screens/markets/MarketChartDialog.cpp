@@ -376,9 +376,12 @@ void MarketChartDialog::fetch_futures() {
                 fut_->setToolTip(services::index_future_unavailable_tooltip(sym, label_));
                 paint(ui::colors::TEXT_TERTIARY());
             } else {
-                // A live print newer than the fetched quote stays.
+                // A live print newer than the fetched quote stays, and a
+                // pending row (quote refused) never blanks a streamed one.
                 const bool keep = fut_quote_ && fut_quote_->contract == it->contract &&
-                                  fut_quote_->ref_price == it->ref_price && fut_quote_->ts > it->ts;
+                                  !services::is_pending(*fut_quote_) &&
+                                  (it->refused ||
+                                   (fut_quote_->ref_price == it->ref_price && fut_quote_->ts > it->ts));
                 if (!keep)
                     fut_quote_ = *it;
                 paint_fut();
@@ -394,6 +397,12 @@ void MarketChartDialog::paint_fut() {
     if (!fut_quote_)
         return;
     const auto& q = *fut_quote_;
+    if (services::is_pending(q)) { // named contract, no number yet: its next print fills it
+        fut_->setText(QStringLiteral("%1 —").arg(services::contract_label(q)));
+        fut_->setToolTip(services::index_future_unavailable_tooltip(q.index, label_));
+        ui::set_style_if_changed(fut_, fut_style(ui::colors::TEXT_TERTIARY()));
+        return;
+    }
     // "ESZ26 7,740.75 +38.00 (+0.49%)"
     fut_->setText(QStringLiteral("%1 %2 %3%4 (%5)")
                       .arg(services::contract_label(q), price_text(q.price), q.change >= 0 ? "+" : "−",

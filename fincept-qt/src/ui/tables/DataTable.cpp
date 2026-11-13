@@ -1,7 +1,6 @@
 #include "ui/tables/DataTable.h"
 
 #include "ui/tables/TickFlashDelegate.h"
-
 #include "ui/theme/Theme.h"
 
 #include <QHeaderView>

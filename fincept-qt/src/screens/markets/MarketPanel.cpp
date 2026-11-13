@@ -1,6 +1,5 @@
 #include "screens/markets/MarketPanel.h"
 
-#include "ui/tables/TickFlashDelegate.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -82,7 +81,6 @@ void MarketPanel::build_ui() {
 
     // Data table
     table_ = new QTableWidget(body_);
-    tick_flash_ = ui::TickFlashDelegate::install(table_); // key column set per populate()
     table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setShowGrid(false);
@@ -388,8 +386,6 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
         };
 
         const QStringList& cols = config_.column_order;
-        if (tick_flash_ && row == 0)
-            tick_flash_->set_key_column(cols.indexOf(QStringLiteral("SYMBOL")));
         for (int ci = 0; ci < cols.size(); ++ci) {
             const QString& col = cols[ci];
             if (col == "SYMBOL")

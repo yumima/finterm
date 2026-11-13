@@ -149,6 +149,13 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
 
     // WS tracking
     QStringList subscribed_asset_ids_;
+    /// The browse list's outcomes stream too (the list itself refreshes every
+    /// 60 s; each card's price moves with the exchange's feed in between).
+    QVector<fincept::services::prediction::PredictionMarket> browse_markets_;
+    QHash<QString, int> browse_index_; ///< outcome asset_id → browse_markets_ row
+    QStringList browse_asset_ids_;     ///< what is subscribed for the list
+    void stream_browse(const QVector<fincept::services::prediction::PredictionMarket>& markets);
+    void unstream_browse();
 
     // Per-adapter Qt connections, dropped whenever the active exchange
     // changes so the next adapter's signals don't clash with the previous

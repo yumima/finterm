@@ -1,4 +1,5 @@
 #pragma once
+#include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
 
 #include <QHash>
@@ -149,6 +150,10 @@ class MarketPulsePanel : public QWidget {
 
     QHash<QString, services::QuoteData> breadth_cache_;
     services::MarketDataService::TopMovers movers_data_;
+    /// The listed movers' live quotes: the LIST refreshes from the screener
+    /// (60 s), the prices and the ranking move with the tape.
+    services::LiveQuoteFollower* movers_live_ = nullptr;
+    void follow_movers();
     bool movers_loaded_ = false;
     QTimer* movers_timer_ = nullptr;
     QHash<QString, services::QuoteData> snapshot_cache_;

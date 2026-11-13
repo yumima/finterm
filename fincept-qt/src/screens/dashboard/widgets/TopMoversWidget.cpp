@@ -8,6 +8,10 @@
 #include "ui/theme/Theme.h"
 
 #include <QPointer>
+#include <QTimer>
+
+#include <algorithm>
+#include <cmath>
 
 namespace fincept::screens::widgets {
 
@@ -21,6 +25,14 @@ TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", par
     connect(coalesce_, &QTimer::timeout, this, &TopMoversWidget::rebuild_from_cache);
 
     connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
+
+    list_timer_ = new QTimer(this);
+    list_timer_->setInterval(60'000); // the screener's own refresh (the service caches 60 s)
+    connect(list_timer_, &QTimer::timeout, this, &TopMoversWidget::refresh_data);
+    live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
+        if (services::LiveQuoteFollower::merge_movers(cached_movers_, q))
+            coalesce_->start();
+    });
 
     apply_styles();
     set_loading(true);
@@ -90,10 +102,28 @@ void TopMoversWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
     hub_active_ = true;
     resubscribe_sparklines();
+    follow_live();
+    if (!list_timer_->isActive()) {
+        list_timer_->start();
+        if (shown_before_)
+            refresh_data(); // back on screen: the list may be minutes old (the first show's fetch is the ctor's)
+        shown_before_ = true;
+    }
+}
+
+void TopMoversWidget::follow_live() {
+    QStringList syms;
+    if (isVisible())
+        for (const auto* list : {&cached_movers_.gainers, &cached_movers_.losers})
+            for (const auto& q : *list)
+                syms << q.symbol;
+    live_->set_symbols(syms);
 }
 
 void TopMoversWidget::hideEvent(QHideEvent* e) {
     BaseWidget::hideEvent(e);
+    list_timer_->stop();
+    live_->clear();
     if (hub_active_) {
         datahub::DataHub::instance().unsubscribe(this);
         // Drop the tracking list too — otherwise resubscribe_sparklines() on
@@ -120,9 +150,11 @@ void TopMoversWidget::refresh_data() {
                 return;
             }
             self->cached_movers_ = std::move(tm);
+            services::LiveQuoteFollower::refresh_movers(self->cached_movers_); // the tape is newer than the screener
             self->set_loading(false);
             self->clear_error();
             self->resubscribe_sparklines();
+            self->follow_live();
             self->rebuild_from_cache();
         });
 }
@@ -152,7 +184,7 @@ void TopMoversWidget::resubscribe_sparklines() {
 }
 
 void TopMoversWidget::rebuild_from_cache() {
-    show_tab(showing_gainers_);
+    render_table(); // data only: the tab styles change on a tab switch / theme, not per tick
 }
 
 void TopMoversWidget::show_tab(bool gainers) {
@@ -181,7 +213,13 @@ void TopMoversWidget::style_tabs() {
 // Fill the persistent rows from the active list, updating cells + sparklines in
 // place. Unused slots are hidden so the visible row set matches the data count.
 void TopMoversWidget::render_table() {
-    const auto& rows = showing_gainers_ ? cached_movers_.gainers : cached_movers_.losers;
+    // A gainer that has since turned negative (or a loser positive) on live
+    // prints no longer belongs under the tab's label: shown again only once
+    // the next screener list says so — as Market Pulse does.
+    QVector<services::QuoteData> rows;
+    for (const auto& q : showing_gainers_ ? cached_movers_.gainers : cached_movers_.losers)
+        if (std::isfinite(q.change_pct) && (showing_gainers_ ? q.change_pct > 0 : q.change_pct < 0))
+            rows.append(q);
     const int count = std::min<int>(rows.size(), kMaxRows);
     for (int i = 0; i < count; ++i) {
         const auto& q = rows[i];

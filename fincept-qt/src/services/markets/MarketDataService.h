@@ -377,6 +377,10 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     /// screen. Ticks arrive through stream_ticks().
     void set_stream_extras(QObject* owner, const QStringList& symbols);
 
+    /// Whether the hub's market:quote:<symbol> was polled or ticked in THIS
+    /// process (not a disk-hydrated quote from an earlier session).
+    bool has_live_quote(const QString& symbol) const { return polled_syms_.contains(symbol); }
+
   signals:
     /// Every push-stream print of a tick batch (fast-lane quotes excluded),
     /// all sessions, at most once per flush (~4/s).
@@ -507,6 +511,9 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     QSet<QObject*> extras_watched_; ///< owners whose destroyed() is connected
     QHash<QString, LastTick> last_tick_;
     QHash<QString, qint64> last_raw_ms_; ///< newest push print per symbol, any session (ordering)
+    QSet<QString> spark_live_;      ///< sparklines whose last point is today's in-progress bar
+    QHash<QString, qint64> session_start_ms_; ///< first regular print after a quiet 30 min (local ms)
+    QHash<QString, qint64> last_print_ms_;    ///< when a NEW regular print last arrived (not a re-send)
     QSet<QString> polled_syms_; ///< hub holds a quote polled THIS process (tick baseline)
     /// fetch_quotes() answers from the poll cache, which ticks never touch:
     /// for a symbol streaming now, hand out the hub's tick-refined quote

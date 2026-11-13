@@ -1,6 +1,5 @@
 #pragma once
 #include "ui/RenderCoalescer.h"
-#include "ui/tables/TickFlashDelegate.h"
 #include "screens/markets/MarketPanelConfig.h"
 #include "services/markets/MarketDataService.h"
 
@@ -107,7 +106,6 @@ class MarketPanel : public QWidget {
 
   private:
     /// Coalesces the per-quote re-render: one rebuild_from_cache() per tick batch.
-    ui::TickFlashDelegate* tick_flash_ = nullptr; ///< null when the table already had a delegate
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 

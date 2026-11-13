@@ -17,6 +17,9 @@ class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
 class QButtonGroup;
+namespace fincept::services {
+class LiveQuoteFollower;
+}
 class QPoint;
 class QUrl;
 class QTimer;
@@ -73,6 +76,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
 
   protected:
     void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
     bool eventFilter(QObject* o, QEvent* e) override;
 
@@ -163,6 +167,17 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     int band_width_ = -1;            // the width the document was last laid out at
     int band_cap_ = -1;              // the most height it may take (the pane's 75%)
     bool filling_ = false;           // programmatic selection: not the reader's pick
+    /// The listed rows' Price and 1D columns follow the tape (the scan is a
+    /// snapshot; those two are the live part of it). -1 = not in this view.
+    int price_col_ = -1;
+    int chg_col_ = -1;
+    services::LiveQuoteFollower* live_ = nullptr;
+    void follow_listed();
+    void on_live_quote(const QString& symbol, double price, double change_pct);
+    void apply_live_quotes();
+    QHash<QString, QPair<double, double>> live_pending_; ///< symbol → (price, change %), this batch
+    bool live_apply_pending_ = false;
+    int followed_first_ = -1, followed_last_ = -1; ///< row window currently followed
     QTimer* follow_timer_ = nullptr; // keyboard browsing -> ER, debounced
     QString last_research_;          // last symbol sent to ER: a re-sort moving rows is not a pick
 

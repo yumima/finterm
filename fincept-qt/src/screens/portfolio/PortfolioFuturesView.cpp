@@ -24,6 +24,7 @@
 #include <QStandardPaths>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 namespace fincept::screens {
@@ -232,17 +233,39 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
                     return;
                 namespace exthours = fincept::screens::widgets::exthours;
                 bool changed = false;
+                QSet<QString> held; // once per batch, not a holdings scan per print
+                for (const auto& h : summary_.holdings)
+                    held.insert(h.symbol);
                 for (const auto& t : ticks) {
                     auto it = ext_quotes_.find(t.symbol);
-                    if (it == ext_quotes_.end() || !it->has_ext)
+                    // A row with no ext price is the fetch declining this pairing on purpose.
+                    const bool declined = it != ext_quotes_.end() && !it->has_ext;
+                    if (it == ext_quotes_.end() || declined) {
+                        // No fetched row at all: a held name's own print is a
+                        // complete one (Yahoo's change vs the last close).
+                        const auto f = exthours::ext_for_holding(held.contains(t.symbol), declined, t.market_hours,
+                                                                 t.price, t.change, t.time_ms);
+                        if (f) {
+                            ExtQuote q;
+                            q.regular = f->regular;
+                            q.ext_price = f->price;
+                            q.ext_change = f->price - f->regular;
+                            q.ext_change_pct = f->pct;
+                            q.session = exthours::ext_side_label(f->side);
+                            q.has_ext = true;
+                            q.ext_ts = f->ts_secs;
+                            ext_quotes_.insert(t.symbol, q);
+                            changed = true;
+                        }
                         continue;
+                    }
                     const auto pre = exthours::apply_ext_tick(it->regular, it->ext_price, it->ext_change_pct,
                                                               it->ext_ts, t.market_hours, t.price, t.change,
                                                               t.time_ms);
                     if (!pre)
                         continue;
                     it->ext_change = it->ext_price - it->regular;
-                    it->session = *pre ? QStringLiteral("PRE") : QStringLiteral("POST");
+                    it->session = exthours::ext_side_label(*pre);
                     changed = true;
                 }
                 if (changed)

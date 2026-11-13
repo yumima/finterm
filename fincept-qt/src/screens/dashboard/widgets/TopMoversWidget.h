@@ -1,5 +1,6 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
+#include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/tables/DataTable.h"
 
@@ -76,6 +77,12 @@ class TopMoversWidget : public BaseWidget {
 
     // Collapse the burst of per-symbol sparkline callbacks into one re-render.
     QTimer* coalesce_ = nullptr;
+    /// The LIST re-ranks from the screener every minute while shown; the
+    /// listed rows' prices (and their order) follow the tape in between.
+    QTimer* list_timer_ = nullptr;
+    bool shown_before_ = false;
+    services::LiveQuoteFollower* live_ = nullptr;
+    void follow_live();
 };
 
 } // namespace fincept::screens::widgets

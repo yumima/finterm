@@ -55,6 +55,7 @@ class PolymarketWebSocket : public QObject, public fincept::datahub::Producer {
     PolymarketWebSocket();
     void ensure_connected();
     void send_subscribe(const QStringList& token_ids);
+    void send_operation(const QStringList& token_ids, const QString& op); ///< incremental (un)subscribe
 
     fincept::WebSocketClient* ws_ = nullptr;
     QTimer* ping_timer_ = nullptr;

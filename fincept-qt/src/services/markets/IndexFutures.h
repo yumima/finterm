@@ -3,12 +3,17 @@
 #include "services/markets/LivePrice.h"
 
 #include <QDate>
+#include <QDateTime>
+#include <QTime>
+#include <QTimeZone>
 #include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
+#include <cmath>
 #include <functional>
+#include <limits>
 
 namespace fincept::services {
 
@@ -38,7 +43,12 @@ struct IndexFutureQuote {
     QString contract;  // the contract month quoted, "ESZ26.CME"
     double price = 0;  // last print
     double change = 0; // since the previous close
-    double pct = 0;
+    double pct = std::numeric_limits<double>::quiet_NaN(); // NaN = pending (see is_pending)
+    /// Pending because Yahoo REFUSED the quote (rate limit) — not declined on
+    /// purpose (dead feed, waiting for the reopen). Only a refusal keeps the
+    /// number the stream already filled; a declined row goes back to a dash.
+    bool refused = false;
+    QString reason; ///< why a pending row has no number (the daemon's words)
     double ref_price = 0; // the contract's previous close (Yahoo's own "previous close")
     QDate session_date;   // the CME trading day of the last print — the close is the one before it
     qint64 ts = 0;        // end of the last bar
@@ -52,23 +62,54 @@ struct IndexFutureQuote {
 void fetch_index_futures(const QStringList& indices, QObject* ctx,
                          std::function<void(bool ok, QHash<QString, IndexFutureQuote>, QString error)> cb);
 
-/// Lay a live print of `contract` on `q`: true when it moved it. Only a
-/// print of the quoted contract, measured against the quote's own previous
-/// close (services::tick_pairs_with) — after the CME day rolls at 18:00 ET
-/// the stream's close moves on and its prints wait for the next fetch.
+/// The CME trading day an instant belongs to: the ET date, a session that
+/// opens at 18:00 ET belonging to the next day, weekends to Monday.
+inline QDate cme_trading_day(qint64 secs) {
+    // EVENT-STAMP: a print is an instant, placed on the CME session clock.
+    const QDateTime et = QDateTime::fromSecsSinceEpoch(secs).toTimeZone(QTimeZone("America/New_York"));
+    QDate d = et.date();
+    if (et.time() >= QTime(18, 0))
+        d = d.addDays(1);
+    while (d.dayOfWeek() >= 6)
+        d = d.addDays(1);
+    return d;
+}
+
+/// Lay a live print of `contract` on `q`: true when it moved it.
+///
+/// A push print carries Yahoo's change against the contract's own previous
+/// close, so price and close arrive as a PAIR from one print — the quote takes
+/// both, never this price against a close from elsewhere. That also fills a
+/// quote the fetch could not (pending: Yahoo refused the batch quote) and
+/// carries it across the 18:00 ET reopen, where the close rolls with the
+/// prints. Older prints than the one shown (a reconnect replay) are ignored.
 inline bool apply_future_tick(IndexFutureQuote& q, const QString& contract, double price, double change,
                               qint64 time_ms) {
-    if (contract != q.contract || price == q.price || !tick_pairs_with(q.ref_price, price, change))
+    if (contract != q.contract || !(price > 0) || !std::isfinite(change))
+        return false;
+    const double ref = price - change;
+    if (!(ref > 0))
         return false;
     const qint64 ts = time_ms / 1000;
     if (ts > 0 && ts < q.ts)
-        return false; // older than what is shown
+        return false;
+    if (price == q.price && std::abs(ref - q.ref_price) <= 1e-9 * ref)
+        return false;
     q.price = price;
-    q.change = price - q.ref_price;
-    q.pct = q.change / q.ref_price * 100.0;
-    if (ts > 0)
+    q.ref_price = ref;
+    q.change = change;
+    q.pct = change / ref * 100.0;
+    if (ts > 0) {
         q.ts = ts;
+        q.session_date = cme_trading_day(ts);
+    }
     return true;
+}
+
+/// True for a row that names its contract but has no number yet (the fetch
+/// was refused or the contract hasn't printed): a dash, filled by its prints.
+inline bool is_pending(const IndexFutureQuote& q) {
+    return !std::isfinite(q.pct) || !(q.price > 0);
 }
 
 /// "ESZ26" from "ESZ26.CME".

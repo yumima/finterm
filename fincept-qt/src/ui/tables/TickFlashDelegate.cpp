@@ -148,7 +148,7 @@ void TickFlashDelegate::paint(QPainter* p, const QStyleOptionViewItem& opt, cons
     }
     flashing_.insert(key, Flash{opt.rect, c.flash_ms}); // current position (rows can move between paints)
     QColor col(c.dir > 0 ? colors::POSITIVE() : colors::NEGATIVE());
-    col.setAlpha(static_cast<int>(110.0 * (1.0 - double(age) / kFlashMs)));
+    col.setAlpha(static_cast<int>(kFlashAlpha * (1.0 - double(age) / kFlashMs)));
     p->fillRect(opt.rect, col);
 }
 

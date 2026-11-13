@@ -3,6 +3,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "screens/ownership/OwnershipUi.h"
+#include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "services/util/DiskCache.h"
@@ -45,6 +46,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <utility>
 
 namespace fincept::screens {
 
@@ -134,16 +136,20 @@ class SparkDelegate : public QStyledItemDelegate {
     }
 };
 
-QTableWidgetItem* metric_item(Kind kind, const std::optional<double>& v) {
-    auto* it = new SortItem(screener::format_value(kind, v));
-    it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    if (v)
-        it->setData(kSortKey, *v);
-    else
-        it->setData(kMissingRole, true);
+/// A metric cell's contract — text, sort key (or missing), colour — for a new
+/// cell and for a live update of an existing one.
+void set_metric(QTableWidgetItem* it, Kind kind, const std::optional<double>& v) {
+    it->setText(screener::format_value(kind, v));
+    it->setData(kSortKey, v ? QVariant(*v) : QVariant());
+    it->setData(kMissingRole, v ? QVariant() : QVariant(true));
     const QString c = screener::colour_for(kind, v);
-    if (!c.isEmpty())
-        it->setForeground(QColor(c));
+    it->setData(Qt::ForegroundRole, c.isEmpty() ? QVariant() : QVariant(QColor(c)));
+}
+
+QTableWidgetItem* metric_item(Kind kind, const std::optional<double>& v) {
+    auto* it = new SortItem(QString());
+    it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    set_metric(it, kind, v);
     return it;
 }
 
@@ -564,6 +570,7 @@ QString ScreenerScreen::cache_name() const {
 void ScreenerScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     even_out_panes();
+    follow_listed();
     if (shown_once_)
         return;
     shown_once_ = true;
@@ -1116,7 +1123,7 @@ void ScreenerScreen::fill_table() {
     for (const auto& c : cols)
         headers << c.header;
     table_->setHorizontalHeaderLabels(headers);
-    shares_col_ = position_col_ = -1;
+    shares_col_ = position_col_ = price_col_ = chg_col_ = -1;
     for (int c = 0; c < cols.size(); ++c) {
         if (cols[c].col == Col::Shares)
             shares_col_ = c;
@@ -1124,6 +1131,10 @@ void ScreenerScreen::fill_table() {
             position_col_ = c;
         if (cols[c].col == Col::Name)
             name_col_ = c;
+        if (cols[c].def && QLatin1String(cols[c].def->key) == QLatin1String("price"))
+            price_col_ = c;
+        if (cols[c].def && QLatin1String(cols[c].def->key) == QLatin1String("chg_1d"))
+            chg_col_ = c;
         if (cols[c].col == Col::Sector)
             sector_col_ = c;
         if (auto* h = table_->horizontalHeaderItem(c)) {
@@ -1278,6 +1289,103 @@ void ScreenerScreen::fill_table() {
         table_->setCurrentCell(sel, kSymbolCol); // keep the place, but do not load it into ER
     follow_timer_->stop();
     filling_ = false;
+    followed_first_ = followed_last_ = -1; // new rows: follow afresh
+    follow_listed();
+}
+
+void ScreenerScreen::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
+    followed_first_ = followed_last_ = -1;
+    follow_listed();
+}
+
+void ScreenerScreen::follow_listed() {
+    if (!live_) {
+        live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
+            on_live_quote(q.symbol, q.price, q.change_pct);
+        });
+        // Scrolling brings other rows on screen: follow those instead.
+        auto* follow_scroll = new QTimer(this);
+        follow_scroll->setSingleShot(true);
+        follow_scroll->setInterval(600); // settle first: not every row a fast scroll passes
+        connect(follow_scroll, &QTimer::timeout, this, &ScreenerScreen::follow_listed);
+        connect(table_->verticalScrollBar(), &QScrollBar::valueChanged, follow_scroll,
+                qOverload<>(&QTimer::start));
+        // A header sort puts other names on screen: follow those.
+        connect(table_->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this, follow_scroll]() {
+            followed_first_ = followed_last_ = -1;
+            follow_scroll->start();
+        });
+    }
+    // The rows on screen (plus a screen's worth either side for scrolling) —
+    // not the whole list: every followed name is a hub quote, polled and
+    // streamed, and a broad scan lists hundreds.
+    QStringList syms;
+    if (isVisible() && (price_col_ >= 0 || chg_col_ >= 0) && table_->rowCount() > 0) {
+        const int vh = table_->viewport()->height();
+        int first = table_->rowAt(0), last = table_->rowAt(vh - 1);
+        if (first < 0)
+            first = 0;
+        if (last < 0)
+            last = table_->rowCount() - 1;
+        // Hysteresis: a scroll that stays inside the followed window changes
+        // nothing — each newly followed row is a hub quote (a poll and a
+        // stream resubscribe), and Yahoo throttles polling per IP.
+        if (followed_first_ >= 0 && first >= followed_first_ && last <= followed_last_)
+            return;
+        const int span = last - first + 1;
+        followed_first_ = std::max(0, first - span);
+        followed_last_ = std::min(table_->rowCount() - 1, last + span);
+        for (int r = followed_first_; r <= followed_last_; ++r)
+            if (auto* it = table_->item(r, kSymbolCol); it && !table_->isRowHidden(r))
+                syms << it->text();
+    } else {
+        followed_first_ = followed_last_ = -1;
+    }
+    live_->set_symbols(syms);
+}
+
+void ScreenerScreen::on_live_quote(const QString& symbol, double price, double change_pct) {
+    if (!(price > 0))
+        return;
+    // Collected, then applied once per tick batch: one pass over the rows and
+    // ONE re-sort, not a full sort per quote.
+    live_pending_.insert(symbol, {price, change_pct});
+    if (!live_apply_pending_) {
+        live_apply_pending_ = true;
+        QTimer::singleShot(0, this, &ScreenerScreen::apply_live_quotes);
+    }
+}
+
+void ScreenerScreen::apply_live_quotes() {
+    live_apply_pending_ = false;
+    if (filling_ || live_pending_.isEmpty())
+        return;
+    const auto pending = std::exchange(live_pending_, {});
+    // Only when the reader sorts BY Price or 1D can these edits reorder rows:
+    // then sorting is off for the pass (a moved row would take the second
+    // cell to another stock) and ONE re-sort follows. Sorted by anything
+    // else, the edits move nothing and nothing is re-sorted. chg_1d is a
+    // ratio, change_pct a percent.
+    const int sort_col = table_->horizontalHeader()->sortIndicatorSection();
+    const bool reorders = table_->isSortingEnabled() && (sort_col == price_col_ || sort_col == chg_col_);
+    if (reorders)
+        table_->setSortingEnabled(false);
+    for (int r = 0; r < table_->rowCount(); ++r) {
+        auto* sym = table_->item(r, kSymbolCol);
+        const auto it = sym ? pending.constFind(sym->text()) : pending.constEnd();
+        if (it == pending.constEnd())
+            continue;
+        if (auto* p = price_col_ >= 0 ? table_->item(r, price_col_) : nullptr)
+            set_metric(p, Kind::Money, it->first);
+        if (auto* c = chg_col_ >= 0 ? table_->item(r, chg_col_) : nullptr; c && std::isfinite(it->second))
+            set_metric(c, Kind::PctSigned, it->second / 100.0);
+    }
+    if (reorders) {
+        table_->setSortingEnabled(true);
+        followed_first_ = followed_last_ = -1; // other names are on screen now
+        follow_listed();
+    }
 }
 
 void ScreenerScreen::open_research(const QString& sym) {

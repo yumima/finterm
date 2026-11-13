@@ -156,6 +156,11 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     connect(movers_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_movers_from_cache);
     // Screener-driven movers are not on the DataHub quote stream; poll them
     // while visible. fetch_top_movers() caches for 60s, so this is cheap.
+    movers_live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
+        if (services::LiveQuoteFollower::merge_movers(movers_data_, q))
+            movers_coalesce_->start();
+    });
+
     movers_timer_ = new QTimer(this);
     movers_timer_->setInterval(60000);
     connect(movers_timer_, &QTimer::timeout, this, &MarketPulsePanel::fetch_movers);
@@ -341,6 +346,7 @@ void MarketPulsePanel::showEvent(QShowEvent* e) {
 void MarketPulsePanel::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     hub_unsubscribe_all();
+    movers_live_->clear();
     hours_timer_->stop();
     movers_timer_->stop();
 }
@@ -970,9 +976,20 @@ void MarketPulsePanel::fetch_movers() {
                 return;
             }
             self->movers_data_ = std::move(tm);
+            services::LiveQuoteFollower::refresh_movers(self->movers_data_); // the tape is newer than the screener
             self->movers_loaded_ = true;
+            self->follow_movers();
             self->movers_coalesce_->start();
         });
+}
+
+void MarketPulsePanel::follow_movers() {
+    QStringList syms;
+    if (isVisible())
+        for (const auto* list : {&movers_data_.gainers, &movers_data_.losers})
+            for (const auto& q : *list)
+                syms << q.symbol;
+    movers_live_->set_symbols(syms);
 }
 
 void MarketPulsePanel::rebuild_movers_from_cache() {

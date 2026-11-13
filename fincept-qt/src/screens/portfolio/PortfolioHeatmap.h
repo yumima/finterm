@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSet>
 #include <QShowEvent>
 #include <QString>
 #include <QStringList>
@@ -101,6 +102,7 @@ class PortfolioHeatmap : public QWidget {
         qint64 print_ts = 0;
     };
     QHash<QString, AftQuote> aft_quotes_;
+    QSet<QString> aft_declined_; ///< the fetch declined the pairing: never built from a print
     /// Live extended-hours prints → aft_quotes_ (AFT mode, on screen only).
     void on_stream_ticks(const QVector<fincept::services::StreamTick>& ticks);
     void sync_aft_stream();

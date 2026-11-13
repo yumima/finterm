@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <QTimeZone>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -194,15 +195,30 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
                 if (!isVisible() || aft_.isEmpty())
                     return;
                 bool changed = false;
+                QSet<QString> held; // once per batch, not a holdings scan per print
+                for (const auto& h : last_holdings_)
+                    held.insert(h.symbol);
                 for (const auto& t : ticks) {
                     auto it = aft_.find(t.symbol);
-                    if (it == aft_.end())
+                    if (it == aft_.end()) {
+                        // No fetched quote (refused / not yet): a held name's
+                        // own print is a complete, self-consistent one.
+                        const auto f = exthours::ext_for_holding(held.contains(t.symbol),
+                                                                 aft_declined_.contains(t.symbol), t.market_hours,
+                                                                 t.price, t.change, t.time_ms);
+                        if (f) {
+                            const qint64 at = f->ts_secs > 0 ? f->ts_secs : QDateTime::currentSecsSinceEpoch();
+                            aft_.insert(t.symbol, AftQuote{f->pct, f->price, f->regular,
+                                                           exthours::ext_side_label(f->side), at, f->ts_secs});
+                            changed = true;
+                        }
                         continue;
+                    }
                     const auto pre = exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts,
                                                               t.market_hours, t.price, t.change, t.time_ms);
                     if (!pre)
                         continue;
-                    it->session = *pre ? QStringLiteral("PRE") : QStringLiteral("POST");
+                    it->session = exthours::ext_side_label(*pre);
                     it->fetched_at = it->print_ts > 0 ? it->print_ts : QDateTime::currentSecsSinceEpoch();
                     changed = true;
                 }
@@ -423,8 +439,8 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
     aft_state_ = state;
     static constexpr auto kBase =
         QLatin1String("Move in extended-hours trading against the last regular close — pre-market "
-                      "before the open, post-market after it. The cell says which session it came "
-                      "from.\n\n"
+                      "before the open, post-market after it, overnight (20:00–04:00 ET) between. "
+                      "Live: it moves with every print. The cell says which session it came from.\n\n"
                       "During the regular session this is the LAST extended move, not a live one, and "
                       "it is already inside DAY CHG% — the two are not additive.");
     switch (state) {
@@ -525,6 +541,7 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                                         ? result.value(QStringLiteral("_value")).toArray()
                                         : result.value(QStringLiteral("data")).toArray();
             QHash<QString, AftQuote> fresh;
+            guard->aft_declined_.clear();
             for (const auto& v : rows) {
                 const auto o = v.toObject();
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
@@ -536,8 +553,13 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 const auto q = exthours::quote_from_row(o, current_session() == ExtSession::Pre);
                 // Rejected here rather than at render: an unsound pairing is
                 // not a value to be displayed carefully, it is not a value.
-                if (!q || !exthours::pairing_is_sound(*q, QDateTime::currentSecsSinceEpoch()))
+                if (!q || !exthours::pairing_is_sound(*q, QDateTime::currentSecsSinceEpoch())) {
+                    // Declined on purpose (stale reference, unpaired prints):
+                    // a print must not build it back either.
+                    if (o.value(QStringLiteral("ext_price")).isNull())
+                        guard->aft_declined_.insert(sym);
                     continue;
+                }
                 fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
                                            q->from_pre ? QStringLiteral("PRE") : QStringLiteral("POST"),
                                            QDateTime::currentSecsSinceEpoch(), q->ext_ts});
@@ -725,7 +747,9 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
-                          .arg(it->session == QLatin1String("PRE") ? QStringLiteral("Pre") : QStringLiteral("Post"))
+                          .arg(it->session == QLatin1String("PRE")         ? QStringLiteral("Pre")
+                               : it->session == QLatin1String("OVERNIGHT") ? QStringLiteral("Overnight")
+                                                                           : QStringLiteral("Post"))
                           .arg(it->price, 0, 'f', 2)
                           .arg(it->regular, 0, 'f', 2)
                           .arg(h.shares > 0

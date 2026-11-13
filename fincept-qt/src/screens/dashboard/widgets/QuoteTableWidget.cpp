@@ -43,11 +43,11 @@ constexpr auto kFutTip = "Each index's futures quote: the future's change since 
 
 void QuoteTableWidget::build_table() {
     table_ = new ui::DataTable;
-    table_->enable_tick_flash(); // live quotes: flash cells as they tick (column 0 = row key)
     if (fut_enabled_) {
         apply_fut_columns();
     } else {
         table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
+        table_->enable_tick_flash(); // a faint cue on a moved number (column 0 = row key)
         table_->set_column_widths({130, 100, 80, 70});
     }
     content_layout()->addWidget(table_);
@@ -194,20 +194,32 @@ void QuoteTableWidget::fetch_futures() {
                 sync_fut_stream(); // the quotes kept on screen still take live prints
                 return;
             }
-            fut_failed_ = false;
             // Replace, don't merge: a row that lost its sound reading goes
             // back to a dash rather than keeping a quote against an old settle.
             // A live print newer than the fetched quote (the daemon caches the
             // answer) stays — same contract, same previous close.
+            // A REFUSED row never blanks one the stream filled (a row declined
+            // on purpose does: "replace, don't merge" — no sound reading, a dash).
+            QString refused_why;
             for (auto it = fresh.begin(); it != fresh.end(); ++it) {
+                if (it->refused && refused_why.isEmpty())
+                    refused_why = it->reason;
                 const auto cur = fut_.constFind(it.key());
-                if (cur != fut_.constEnd() && cur->contract == it->contract && cur->ref_price == it->ref_price &&
-                    cur->ts > it->ts)
+                if (cur == fut_.constEnd() || cur->contract != it->contract || services::is_pending(*cur))
+                    continue;
+                if (it->refused || (cur->ref_price == it->ref_price && cur->ts > it->ts))
                     it.value() = cur.value();
             }
             fut_ = fresh;
             sync_fut_stream();
-            set_fut_header(QString());
+            fut_failed_ = !refused_why.isEmpty();
+            if (fut_failed_)
+                set_fut_header(QStringLiteral(" !"),
+                               QStringLiteral("Yahoo refused the futures quote: %1\nRows fill from the contracts' "
+                                              "live prints meanwhile.")
+                                   .arg(refused_why));
+            else
+                set_fut_header(QString());
             render_from_cache();
         });
 }
@@ -325,8 +337,9 @@ void QuoteTableWidget::render_from_cache() {
         QStringList cells{display_name, price_str, chg_str, pct_str};
         const auto fut = fut_.constFind(q.symbol);
         if (fut_enabled_)
-            cells << (fut != fut_.constEnd() ? ui::formatting::format_percent(fut->pct, 2, true)
-                                             : ui::formatting::placeholder());
+            cells << (fut != fut_.constEnd() && !services::is_pending(*fut)
+                          ? ui::formatting::format_percent(fut->pct, 2, true)
+                          : ui::formatting::placeholder());
         rows.append(cells);
         row_quotes.append(&q);
         row_syms.append(q.symbol);
@@ -341,7 +354,7 @@ void QuoteTableWidget::render_from_cache() {
             if (auto* it = table_->item(row, kColFut)) {
                 const auto fut = fut_.constFind(q.symbol);
                 const QString display_name = label_map_.value(q.symbol, q.symbol);
-                if (fut != fut_.constEnd()) {
+                if (fut != fut_.constEnd() && !services::is_pending(*fut)) {
                     it->setForeground(QColor(ui::change_color(fut->pct)));
                     it->setToolTip(services::index_future_tooltip(*fut, display_name));
                 } else {

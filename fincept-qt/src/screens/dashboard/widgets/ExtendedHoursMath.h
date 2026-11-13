@@ -133,31 +133,40 @@ inline bool pairing_is_sound(const ExtQuote& q, qint64 now_secs, int max_close_a
     return (now_secs - q.regular_ts) <= static_cast<qint64>(max_close_age_days) * 86400;
 }
 
-/// Which side a live extended-hours print fills — `true` pre-market, `false`
-/// post-market — or nullopt when it must not move a quote measured against
-/// `regular`.
+/// Which session a live extended-hours print belongs to.
+enum class ExtSide { Pre, Post, Overnight };
+
+/// The session label a surface shows for a side ("PRE" / "POST" / "OVERNIGHT").
+inline QString ext_side_label(ExtSide s) {
+    return s == ExtSide::Pre ? QStringLiteral("PRE") : s == ExtSide::Post ? QStringLiteral("POST")
+                                                                          : QStringLiteral("OVERNIGHT");
+}
+
+/// The side a live extended-hours print fills, or nullopt when it must not
+/// move a quote measured against `regular`.
 ///
-/// Only pre-market (market_hours 0) and post-market (2) prints. Overnight (4)
-/// is a different venue, outside the 04:00–20:00 window this column means.
+/// Pre-market (market_hours 0), post-market (2) and the overnight session (4,
+/// 20:00–04:00 ET) — all measured against the last regular close, so the
+/// column keeps moving whenever the source does.
 /// The print must pair with `regular` itself (services::tick_pairs_with):
 /// the pairing rules above were settled when the quote was built, and a print
 /// measured against a different close — the bell has rung since, it is an
 /// ex-dividend morning — is a different number, left to the next fetch.
-inline std::optional<bool> live_ext_side(int market_hours, double regular, double price, double change) {
-    if (market_hours != 0 && market_hours != 2)
+inline std::optional<ExtSide> live_ext_side(int market_hours, double regular, double price, double change) {
+    if (market_hours != 0 && market_hours != 2 && market_hours != 4)
         return std::nullopt;
     if (!fincept::services::tick_pairs_with(regular, price, change))
         return std::nullopt;
-    return market_hours == 0;
+    return market_hours == 0 ? ExtSide::Pre : market_hours == 2 ? ExtSide::Post : ExtSide::Overnight;
 }
 
 /// Lay a live extended-hours print on a quote measured against `regular`
 /// (its `price`, `pct` and print time `ts_secs`, updated in place). Returns
-/// the side it filled — true pre-market — or nullopt when it did not move the
+/// the side it filled, or nullopt when it did not move the
 /// quote: not an extended print of this close (live_ext_side), the same price,
 /// or OLDER than what is shown (a reconnect can replay prints). One copy of
 /// the rule for every AFT surface.
-inline std::optional<bool> apply_ext_tick(double regular, double& price, double& pct, qint64& ts_secs,
+inline std::optional<ExtSide> apply_ext_tick(double regular, double& price, double& pct, qint64& ts_secs,
                                           int market_hours, double tick_price, double tick_change,
                                           qint64 tick_ms) {
     const auto side = live_ext_side(market_hours, regular, tick_price, tick_change);
@@ -171,6 +180,44 @@ inline std::optional<bool> apply_ext_tick(double regular, double& price, double&
     if (t > 0)
         ts_secs = t;
     return side;
+}
+
+/// A quote built from ONE extended-hours print, for a symbol the fetch has
+/// nothing for (Yahoo refused it, or the print is newer than any fetch). The
+/// print's change is Yahoo's own, against the last regular close, so the pair
+/// (price, price − change) is self-consistent by construction.
+struct ExtFromTick {
+    double regular = 0;
+    double price = 0;
+    double pct = 0;
+    ExtSide side = ExtSide::Post;
+    qint64 ts_secs = 0;
+};
+inline std::optional<ExtFromTick> ext_from_tick(int market_hours, double price, double change, qint64 tick_ms) {
+    if (market_hours != 0 && market_hours != 2 && market_hours != 4)
+        return std::nullopt;
+    if (!(price > 0) || !std::isfinite(change))
+        return std::nullopt;
+    const double regular = price - change;
+    if (!(regular > 0))
+        return std::nullopt;
+    ExtFromTick q;
+    q.regular = regular;
+    q.price = price;
+    q.pct = change / regular * 100.0;
+    q.side = market_hours == 0 ? ExtSide::Pre : market_hours == 2 ? ExtSide::Post : ExtSide::Overnight;
+    q.ts_secs = tick_ms / 1000;
+    return q;
+}
+
+/// The rule every AFT surface uses to build a quote from a print when it has
+/// none: only for a name the book HOLDS, never for one the last fetch
+/// declined on purpose (a stale reference, unpaired prints).
+inline std::optional<ExtFromTick> ext_for_holding(bool held, bool declined, int market_hours, double price,
+                                                  double change, qint64 tick_ms) {
+    if (!held || declined)
+        return std::nullopt;
+    return ext_from_tick(market_hours, price, change, tick_ms);
 }
 
 } // namespace fincept::screens::widgets::exthours

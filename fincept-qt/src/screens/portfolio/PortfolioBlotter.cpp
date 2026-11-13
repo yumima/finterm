@@ -164,7 +164,7 @@ void PortfolioBlotter::hub_resubscribe_sparklines() {
             const auto prices = v.value<QVector<double>>();
             sparkline_cache_.insert(sym, prices);
             sparkline_state_[sym] = SparklineState::Loaded;
-            repaint_sparkline_cells();
+            spark_render_.request(); // live ticks move every sparkline: one repaint per batch
         });
     }
     // force=true: holdings set changes on portfolio edits; bypass the sparkline

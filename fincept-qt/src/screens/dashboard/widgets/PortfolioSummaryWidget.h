@@ -146,6 +146,7 @@ class PortfolioSummaryWidget : public BaseWidget {
         qint64 print_ts = 0; ///< when the extended price printed (0 = unknown)
     };
     QHash<QString, AftQuote> aft_;
+    QSet<QString> aft_declined_; ///< the last fetch had a row but no sound pairing: never built from a print
     // Bumped per fetch so a reply that lands after a portfolio switch can't
     // paint another book's after-hours moves onto this one.
     quint64 aft_gen_ = 0;

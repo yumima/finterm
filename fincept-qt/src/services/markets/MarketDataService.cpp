@@ -431,7 +431,7 @@ void MarketDataService::init_stream() {
     stream_sync_timer_->setInterval(500);
     connect(stream_sync_timer_, &QTimer::timeout, this, [this]() { sync_stream(false); });
     const auto on_topic = [this](const QString& topic) {
-        if (topic.startsWith(QLatin1String("market:quote:")))
+        if (topic.startsWith(QLatin1String("market:quote:")) || topic.startsWith(QLatin1String("market:sparkline:")))
             stream_sync_timer_->start(); // restart: one sync per burst (a screen opening subscribes dozens)
     };
     connect(&hub, &datahub::DataHub::topic_active, this, on_topic);
@@ -482,8 +482,13 @@ void MarketDataService::sync_stream(bool force) {
         return;
     QStringList syms;
     for (const auto& st : datahub::DataHub::instance().stats()) {
-        if (st.subscriber_count > 0 && st.topic.startsWith(QLatin1String("market:quote:")))
+        if (st.subscriber_count <= 0)
+            continue;
+        // Quotes, and sparklines (their last point follows the tape too).
+        if (st.topic.startsWith(QLatin1String("market:quote:")))
             syms << st.topic.mid(13);
+        else if (st.topic.startsWith(QLatin1String("market:sparkline:")))
+            syms << st.topic.mid(17);
     }
     for (const auto& extra : std::as_const(stream_extras_))
         syms += extra;
@@ -540,10 +545,21 @@ void MarketDataService::apply_ticks(const QJsonArray& ticks) {
         const qint64 tms = t.value(QStringLiteral("time")).toVariant().toLongLong();
         // Proto3 omits a 0, so an absent market_hours IS pre-market.
         const int mh = t.value(QStringLiteral("market_hours")).toInt(0);
-        // A fast-lane quote (indices, ROOT=F) carries its snapshot's previous
-        // close; a push-stream print carries Yahoo's change instead.
-        const bool snapshot = t.value(QStringLiteral("source")).toString() == QLatin1String("quote");
-        const double snap_prev = snapshot ? t.value(QStringLiteral("prev_close")).toDouble(qQNaN()) : qQNaN();
+        // A fast-lane quote (cash indices) carries its snapshot's previous
+        // close; an alias tick (GC=F, relabelled from its contract's print)
+        // carries Yahoo's change, so its close is price − change — a pair
+        // from one print either way. A plain push print rides the polled
+        // quote's own baseline instead.
+        const QString source = t.value(QStringLiteral("source")).toString();
+        const bool snapshot = source == QLatin1String("quote") || source == QLatin1String("alias");
+        double snap_prev = qQNaN();
+        if (source == QLatin1String("quote")) {
+            snap_prev = t.value(QStringLiteral("prev_close")).toDouble(qQNaN());
+        } else if (source == QLatin1String("alias")) {
+            const QJsonValue cv = t.value(QStringLiteral("change"));
+            const double chg = cv.isUndefined() ? 0.0 : cv.isDouble() ? cv.toDouble() : qQNaN();
+            snap_prev = std::isfinite(chg) ? price - chg : qQNaN();
+        }
         if (!snapshot) {
             // Every session, in order: a reconnect can replay older prints,
             // and last_tick_ below only orders the regular session's.
@@ -566,7 +582,38 @@ void MarketDataService::apply_ticks(const QJsonArray& ticks) {
         LastTick& lt = last_tick_[sym];
         if (tms > 0 && tms < lt.time_ms)
             continue; // out of order
+        // A NEW print — the exchange time moved or the price did; a fast-lane
+        // re-send of an unchanged quote (every 5 min, even overnight) is not
+        // one. The first new print after a quiet half hour opens a session,
+        // and a series from before it no longer ends on today's bar.
+        const bool new_print = (tms > 0 && tms > lt.time_ms) || price != lt.price;
+        if (new_print) {
+            qint64& last_print = last_print_ms_[sym];
+            if (last_print == 0 || now - last_print > 30 * 60'000) {
+                session_start_ms_.insert(sym, now);
+                spark_live_.remove(sym);
+            }
+            last_print = now;
+        }
         lt = LastTick{price, vol, tms, now, snap_prev};
+
+        // The sparkline's last point is the in-progress hourly bar's close —
+        // the last price — but only once the series HAS today's bar: one
+        // fetched before the open ends on yesterday's last bar, and moving
+        // that would erase a real point (and the overnight gap). Its own
+        // refresh (10-min TTL) brings today's bar; nothing is force-fetched
+        // here — a burst of those at the open is what Yahoo throttles.
+        if (spark_live_.contains(sym)) {
+            const QString spark_topic = QStringLiteral("market:sparkline:") + sym;
+            const QVariant sv = hub.peek_raw(spark_topic);
+            if (sv.canConvert<QVector<double>>()) {
+                QVector<double> pts = sv.value<QVector<double>>();
+                if (!pts.isEmpty() && pts.last() != price) {
+                    pts.last() = price;
+                    hub.publish_live(spark_topic, QVariant::fromValue(pts));
+                }
+            }
+        }
 
         // Only on a quote polled this process: a hydrated one may be a prior
         // session's, and its baseline (price − change) that session's previous
@@ -595,7 +642,26 @@ void MarketDataService::publish_history_to_hub(const QString& symbol, const QStr
 }
 
 void MarketDataService::publish_sparkline_to_hub(const QString& symbol, const QVector<double>& points) {
-    datahub::DataHub::instance().publish(QStringLiteral("market:sparkline:") + symbol, QVariant::fromValue(points));
+    // Same rule as a polled quote: the bars lag the tape, so a fresh tick
+    // keeps the last point (no snap-back to the older bar close).
+    QVector<double> pts = points;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const auto it = last_tick_.constFind(symbol);
+    const auto lp = last_print_ms_.constFind(symbol); // new prints only, not re-sends
+    const bool ticking = it != last_tick_.constEnd() && lp != last_print_ms_.constEnd() && now - *lp < 5 * 60'000;
+    // Fetched at least 2 min into a session the symbol is ticking in → Yahoo
+    // has formed today's first hourly bar, so the series ends on today's
+    // in-progress bar, which the ticks may move (apply_ticks). Earlier — or
+    // before any tick (app start) — it may still end on yesterday's last bar.
+    const auto start = session_start_ms_.constFind(symbol);
+    const bool live = ticking && start != session_start_ms_.constEnd() && now - *start >= 2 * 60'000;
+    if (live)
+        spark_live_.insert(symbol);
+    else
+        spark_live_.remove(symbol);
+    if (live && !pts.isEmpty() && now - it->seen_ms < kTickWinsOverPollMs)
+        pts.last() = it->price;
+    datahub::DataHub::instance().publish(QStringLiteral("market:sparkline:") + symbol, QVariant::fromValue(pts));
 }
 
 void MarketDataService::ensure_registered_with_hub() {

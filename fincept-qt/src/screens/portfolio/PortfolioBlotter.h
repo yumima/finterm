@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioBlotter.h
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
+#include "ui/RenderCoalescer.h"
 
 #include <QHash>
 #include <QPointer>
@@ -64,6 +65,7 @@ class PortfolioBlotter : public QWidget {
     // Sparkline fetch state per symbol
     enum class SparklineState { Pending, Loaded, Failed };
     QHash<QString, SparklineState> sparkline_state_;
+    ui::RenderCoalescer spark_render_{this, [this]() { repaint_sparkline_cells(); }};
 };
 
 } // namespace fincept::screens

@@ -927,6 +927,7 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
                                         ? result.value(QStringLiteral("_value")).toArray()
                                         : result.value(QStringLiteral("data")).toArray();
             guard->aft_quotes_.clear();
+            guard->aft_declined_.clear();
             // Same reduction the dashboard's AFT% column uses. Reading the
             // daemon's ext_change_pct straight off the row skipped the session
             // pairing and the timestamp check, so this column would happily
@@ -941,8 +942,11 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
                 if (sym.isEmpty())
                     continue;
                 const auto q = exthours::quote_from_row(o, in_pre);
-                if (!q || !exthours::pairing_is_sound(*q, now_secs))
+                if (!q || !exthours::pairing_is_sound(*q, now_secs)) {
+                    if (o.value(QStringLiteral("ext_price")).isNull())
+                        guard->aft_declined_.insert(sym); // declined on purpose: not from a print either
                     continue;
+                }
                 guard->aft_quotes_.insert(sym, AftQuote{q->pct, q->regular, q->price, q->ext_ts});
             }
             guard->set_aft_status(guard->aft_quotes_.isEmpty()
@@ -973,14 +977,25 @@ void PortfolioHeatmap::hideEvent(QHideEvent* e) {
 }
 
 void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& ticks) {
-    if (mode_ != portfolio::HeatmapMode::Aft || aft_quotes_.isEmpty() || !isVisible())
+    if (mode_ != portfolio::HeatmapMode::Aft || !isVisible())
         return;
     namespace exthours = fincept::screens::widgets::exthours;
     QSet<QString> moved;
+    QSet<QString> held; // once per batch, not a holdings scan per print
+    for (const auto& h : holdings_)
+        held.insert(h.symbol);
     for (const auto& t : ticks) {
         auto it = aft_quotes_.find(t.symbol);
-        if (it == aft_quotes_.end())
+        if (it == aft_quotes_.end()) {
+            // No fetched quote: a held name's own print is a complete one.
+            const auto f = exthours::ext_for_holding(held.contains(t.symbol), aft_declined_.contains(t.symbol),
+                                                     t.market_hours, t.price, t.change, t.time_ms);
+            if (f) {
+                aft_quotes_.insert(t.symbol, AftQuote{f->pct, f->regular, f->price, f->ts_secs});
+                moved.insert(t.symbol);
+            }
             continue;
+        }
         // Only a newer print measured against this tile's own close.
         if (exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts, t.market_hours, t.price,
                                      t.change, t.time_ms))

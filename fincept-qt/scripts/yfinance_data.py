@@ -5847,11 +5847,15 @@ def get_index_futures(pairs):
     cme_today = now_utc.astimezone(ZoneInfo("America/Chicago")).date()
     contract = {p["proxy"]: _index_future_contract(p["proxy"], cme_today) for p in pairs}
     symbols = sorted(set(contract.values()))
+    # A refused quote (Yahoo 429s per IP) is not a failure of the column:
+    # every row still names its contract, which the host streams — each push
+    # print carries its own previous close, so FUT% fills from the stream.
+    refused = None
     try:
         quotes = {q.get("symbol"): q for q in _v7_quotes(
             symbols, "regularMarketPrice,regularMarketPreviousClose,regularMarketTime")}
     except Exception as e:
-        raise RuntimeError(f"index futures quote failed: {e}") from e
+        quotes, refused = {}, str(e)[:120]
 
     rows = []
     for p in pairs:
@@ -5859,7 +5863,10 @@ def get_index_futures(pairs):
         row = {"symbol": p["index"], "proxy": p["proxy"], "contract": fut, "pct": None, "reason": ""}
         try:
             r, why = _index_future_row(quotes.get(fut), now_utc)
-            if r is None:
+            if refused:
+                row["reason"] = f"{fut}: quote refused ({refused}) — waiting for the contract's next print"
+                row["transient"] = True
+            elif r is None:
                 row["reason"] = f"{fut}: {why}"
             else:
                 row.update(r)
@@ -5909,8 +5916,9 @@ class _QuoteStreamer:
     forwarded to the C++ host as unsolicited {"event": "ticks"} frames.
 
     Polling (batch_all) stays the source of truth for every field; the stream
-    only moves the last price between polls, so a symbol Yahoo never ticks
-    (indices, most futures) is simply left to polling.
+    moves the last price between polls. Yahoo never ticks cash indices — they
+    get the fast lane below — nor the continuous futures aliases (GC=F): those
+    ride their underlying contract's ticks (GCZ26.CMX), relabelled.
 
     Our own loop rather than yf.WebSocket.listen(): that one gives up on the
     first error (no reconnect) and the sync client never sends the 15s
@@ -5922,15 +5930,18 @@ class _QuoteStreamer:
 
     HEARTBEAT_S = 15.0
     FLUSH_S = 0.25
-    # Fast lane: Yahoo's push feed never ticks cash indices (^GSPC) or the
-    # continuous futures aliases (ES=F — only dated contracts like ESZ26.CME
-    # tick). Those are read from the batch quote endpoint instead — ONE request
-    # for all of them, the same one Yahoo's own pages poll — every
-    # FAST_POLL_S while any of them is in session, FAST_IDLE_S otherwise.
+    # Fast lane: cash indices (^GSPC) never tick on the push feed, so they are
+    # read from the batch quote endpoint — ONE request for all of them — every
+    # FAST_POLL_S while any is in session, FAST_IDLE_S otherwise. Polling is
+    # the one thing Yahoo throttles per IP (a 2 s cadence plus a screener scan
+    # earned a 429 on EVERY endpoint, 2026-11-12), so the lane is kept to the
+    # symbols with no other live source and backs off hard on a refusal.
     FAST_POLL_S = 5.0
-    FAST_IDLE_S = 30.0
+    FAST_IDLE_S = 60.0
     FAST_RESEND_S = 300.0  # < the host's kSnapshotPrevMs (10 min)
     FAST_CHUNK = 50
+    RATE_LIMIT_BACKOFF_S = (300.0, 900.0)  # first wait after a 429, ceiling
+    ALIAS_REFRESH_S = 600.0  # ROOT=F → contract map (it moves on a roll)
 
     def __init__(self, send):
         self._send = send  # callable(dict) — the daemon's locked frame writer
@@ -5940,11 +5951,45 @@ class _QuoteStreamer:
         self._started = False
         self._fast_last = {}  # symbol -> ((price, prev_close), sent_at): unchanged quotes aren't re-sent...
         self._fast_wake = threading.Event()  # set_symbols: a newly shown symbol shouldn't wait out an idle sleep
+        self._alias = {}  # "GC=F" -> "GCZ26.CMX" (Yahoo's own underlyingSymbol)
+        self._alias_at = 0.0
+        self._alias_tried = {}  # alias -> monotonic time last asked (answered or not)
+        self._limited_until = 0.0  # monotonic: Yahoo 429'd us — nothing wakes the lane before this
 
     @staticmethod
     def fast_lane(symbol):
-        """Symbols the push feed never ticks: cash indices and ROOT=F aliases."""
-        return symbol.startswith("^") or symbol.endswith("=F")
+        """Symbols polled instead of streamed: cash indices."""
+        return symbol.startswith("^")
+
+    @staticmethod
+    def is_alias(symbol):
+        """Continuous futures (GC=F): streamed through their underlying contract."""
+        return symbol.endswith("=F")
+
+    def _stream_set(self, want):
+        """What the push feed is subscribed to for `want`: streamable symbols
+        as they are, aliases as their mapped contract (unmapped: none yet)."""
+        out = set()
+        for x in want:
+            if self.fast_lane(x):
+                continue
+            if self.is_alias(x):
+                c = self._alias.get(x)
+                if c:
+                    out.add(c)
+            else:
+                out.add(x)
+        return out
+
+    @staticmethod
+    def alias_tick(alias, msg):
+        """A contract's push tick relabelled for its ROOT=F alias. Price and
+        Yahoo's change come as a pair from the same print, so the host takes
+        the previous close as price − change (source "alias")."""
+        t = {k: msg[k] for k in _STREAM_TICK_KEYS if k in msg}
+        t["id"] = alias
+        t["source"] = "alias"
+        return t
 
     def set_symbols(self, symbols):
         from yfinance.live import BaseWebSocket  # raises on a yfinance without the live feed
@@ -5952,7 +5997,15 @@ class _QuoteStreamer:
             self._want = {str(x) for x in symbols if x}
             self._pending = {k: v for k, v in self._pending.items() if k in self._want}
             self._fast_last = {k: v for k, v in self._fast_last.items() if k in self._want}
-            if any(self.fast_lane(x) and x not in self._fast_last for x in self._want):
+            # Wake for a newly shown symbol — never during a rate-limit backoff
+            # (that is what the backoff is for), and not for an alias already
+            # asked about this refresh (Yahoo may simply have no underlying).
+            now = time.monotonic()
+            if now >= self._limited_until and any(
+                    (self.fast_lane(x) and x not in self._fast_last)
+                    or (self.is_alias(x) and x not in self._alias
+                        and now - self._alias_tried.get(x, -1e18) >= self.ALIAS_REFRESH_S)
+                    for x in self._want):
                 self._fast_wake.set()
             if not self._started:
                 self._decode = BaseWebSocket(verbose=False)._decode_message
@@ -5984,17 +6037,48 @@ class _QuoteStreamer:
             tick["day_volume"] = str(int(vol))
         return tick
 
+    def _refresh_aliases(self, want):
+        """Map each wanted ROOT=F to Yahoo's underlyingSymbol (every
+        ALIAS_REFRESH_S, and at once for a newly shown alias)."""
+        aliases = sorted(x for x in want if self.is_alias(x))
+        if not aliases:
+            return
+        now = time.monotonic()
+        stale = now - self._alias_at >= self.ALIAS_REFRESH_S
+        # Negative cache: an alias Yahoo answered WITHOUT an underlying (or
+        # dropped) is not re-asked every loop — only on the next refresh.
+        if not stale and all(x in self._alias or now - self._alias_tried.get(x, -1e18) < self.ALIAS_REFRESH_S
+                             for x in aliases):
+            return
+        for x in aliases:
+            self._alias_tried[x] = now
+        self._alias_at = now  # an attempt, answered or not: the next one waits a full refresh
+        rows = _v7_quotes(aliases, "underlyingSymbol", self.FAST_CHUNK)
+        fresh = {q.get("symbol"): q.get("underlyingSymbol") for q in rows
+                 if q.get("symbol") and q.get("underlyingSymbol")}
+        with self._lock:
+            self._alias.update(fresh)
+
     def _fast_loop(self):
         backoff = 0.0
         while True:
-            want = sorted(s for s in self._wanted() if self.fast_lane(s))
-            if not want:
+            wanted = self._wanted()
+            want = sorted(s for s in wanted if self.fast_lane(s))
+            if not want and not any(self.is_alias(s) for s in wanted):
                 time.sleep(1.0)
                 continue
             live = False
             try:
+                self._refresh_aliases(wanted)
+            except Exception as e:
+                # Its own failure: retried on the next refresh (_alias_at). A
+                # rate limit holds the whole lane back, like the index poll's.
+                if "too many requests" in str(e).lower() or "rate limit" in str(e).lower():
+                    self._limited_until = time.monotonic() + self.RATE_LIMIT_BACKOFF_S[0]
+                print(f"[yf-fastpoll] futures alias map failed: {e}", file=sys.stderr, flush=True)
+            try:
                 rows = _v7_quotes(want, "regularMarketPrice,regularMarketPreviousClose,regularMarketTime,"
-                                        "regularMarketVolume,marketState", self.FAST_CHUNK)
+                                        "regularMarketVolume,marketState", self.FAST_CHUNK) if want else []
                 backoff = 0.0
                 for q in rows:
                     live = live or q.get("marketState") == "REGULAR"
@@ -6009,17 +6093,23 @@ class _QuoteStreamer:
                         last = self._fast_last.get(tick["id"])
                         # ...except every FAST_RESEND_S: the host keeps a snapshot's
                         # previous close as the baseline only while it is fresh
-                        # (kSnapshotPrevMs), and a quiet index or a halted future
-                        # must not fall back to the poll's own baseline (CHG flip).
+                        # (kSnapshotPrevMs), and a quiet index must not fall
+                        # back to the poll's own baseline (CHG flip).
                         if last and last[0] == key and now - last[1] < self.FAST_RESEND_S:
                             continue
                         self._fast_last[tick["id"]] = (key, now)
                         self._pending[tick["id"]] = tick
             except Exception as e:
-                backoff = min(max(backoff * 2, self.FAST_POLL_S * 2), 120.0)
+                limited = "too many requests" in str(e).lower() or "rate limit" in str(e).lower()
+                lo, hi = self.RATE_LIMIT_BACKOFF_S if limited else (self.FAST_POLL_S * 2, 120.0)
+                backoff = min(max(backoff * 2, lo), hi)
+                if limited:
+                    self._limited_until = time.monotonic() + backoff
                 print(f"[yf-fastpoll] quote poll failed: {e} — retry in {backoff:.0f}s", file=sys.stderr,
                       flush=True)
-            self._fast_wake.wait(backoff or (self.FAST_POLL_S if live else self.FAST_IDLE_S))
+            wait = backoff or (self.FAST_POLL_S if live else self.FAST_IDLE_S)
+            wait = max(wait, self._limited_until - time.monotonic())
+            self._fast_wake.wait(wait)
             self._fast_wake.clear()
 
     def _wanted(self):
@@ -6030,7 +6120,7 @@ class _QuoteStreamer:
         from websockets.sync.client import connect
         backoff = 1.0
         while True:
-            if not any(not self.fast_lane(x) for x in self._wanted()):
+            if not self._stream_set(self._wanted()):
                 time.sleep(1.0)  # nothing to stream: no connection held open
                 continue
             try:
@@ -6045,7 +6135,7 @@ class _QuoteStreamer:
             idle_close = False
             try:
                 while True:
-                    want = {x for x in self._wanted() if not self.fast_lane(x)}
+                    want = self._stream_set(self._wanted())
                     if not want:
                         idle_close = True  # our own close: nothing on screen
                         break
@@ -6071,6 +6161,9 @@ class _QuoteStreamer:
                         with self._lock:
                             if sym in self._want:
                                 self._pending[sym] = {k: msg[k] for k in _STREAM_TICK_KEYS if k in msg}
+                            for alias, contract in self._alias.items():
+                                if contract == sym and alias in self._want:
+                                    self._pending[alias] = self.alias_tick(alias, msg)
             except Exception as e:
                 print(f"[yf-stream] connection dropped: {e}", file=sys.stderr, flush=True)
             finally:

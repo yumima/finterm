@@ -124,11 +124,14 @@ void PolymarketScreen::showEvent(QShowEvent* e) {
         if (auto* a = active_adapter())
             a->subscribe_market(subscribed_asset_ids_);
     }
+    if (!browse_markets_.isEmpty())
+        stream_browse(QVector<pred::PredictionMarket>(browse_markets_));
 }
 
 void PolymarketScreen::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     refresh_timer_->stop();
+    unstream_browse();
 }
 
 // ── UI Build ────────────────────────────────────────────────────────────────
@@ -552,6 +555,9 @@ void PolymarketScreen::on_exchange_changed(const QString& exchange_id) {
 
     // Drop the current market subscription before swapping adapters — the
     // old adapter is the one that owns that WS channel.
+    unstream_browse();
+    browse_markets_.clear();
+    browse_index_.clear();
     unsubscribe_current();
     has_selection_ = false;
     selected_market_ = {};
@@ -738,9 +744,54 @@ void PolymarketScreen::subscribe_to_market(const pred::PredictionMarket& market)
 void PolymarketScreen::unsubscribe_current() {
     if (subscribed_asset_ids_.isEmpty())
         return;
-    if (auto* a = active_adapter())
-        a->unsubscribe_market(subscribed_asset_ids_);
+    // The socket keeps ONE set of ids: leave the ones the browse list streams.
+    QStringList drop;
+    for (const auto& id : subscribed_asset_ids_)
+        if (!browse_asset_ids_.contains(id))
+            drop << id;
+    if (auto* a = active_adapter(); a && !drop.isEmpty())
+        a->unsubscribe_market(drop);
     subscribed_asset_ids_.clear();
+}
+
+void PolymarketScreen::stream_browse(const QVector<pred::PredictionMarket>& markets) {
+    static constexpr int kMaxStreamed = 200; // outcome ids; a page shows far fewer markets
+    browse_markets_ = markets;
+    browse_index_.clear();
+    QStringList want;
+    for (int i = 0; i < browse_markets_.size() && want.size() < kMaxStreamed; ++i)
+        for (const auto& o : browse_markets_[i].outcomes)
+            if (!o.asset_id.isEmpty()) {
+                browse_index_.insert(o.asset_id, i);
+                want << o.asset_id;
+            }
+    auto* a = active_adapter();
+    if (!a || !isVisible()) {
+        browse_asset_ids_.clear();
+        return;
+    }
+    QStringList drop, add;
+    for (const auto& id : browse_asset_ids_)
+        if (!want.contains(id) && !subscribed_asset_ids_.contains(id))
+            drop << id;
+    for (const auto& id : want)
+        if (!browse_asset_ids_.contains(id))
+            add << id;
+    if (!drop.isEmpty())
+        a->unsubscribe_market(drop);
+    if (!add.isEmpty())
+        a->subscribe_market(add);
+    browse_asset_ids_ = want;
+}
+
+void PolymarketScreen::unstream_browse() {
+    QStringList drop;
+    for (const auto& id : browse_asset_ids_)
+        if (!subscribed_asset_ids_.contains(id))
+            drop << id;
+    if (auto* a = active_adapter(); a && !drop.isEmpty())
+        a->unsubscribe_market(drop);
+    browse_asset_ids_.clear();
 }
 
 // ── Adapter response handlers ───────────────────────────────────────────────
@@ -749,6 +800,7 @@ void PolymarketScreen::on_markets_ready(const QVector<pred::PredictionMarket>& m
     command_bar_->set_loading(false);
     browse_panel_->set_loading(false);
     browse_panel_->set_markets(markets);
+    stream_browse(markets);
     command_bar_->set_market_count(markets.size());
     status_bar_->set_count(markets.size(), "markets");
 
@@ -779,6 +831,7 @@ void PolymarketScreen::on_events_ready(const QVector<pred::PredictionEvent>& eve
     command_bar_->set_loading(false);
     browse_panel_->set_loading(false);
     browse_panel_->set_events(events);
+    stream_browse({});
     command_bar_->set_market_count(events.size());
     status_bar_->set_count(events.size(), "events");
 }
@@ -789,6 +842,7 @@ void PolymarketScreen::on_search_results_ready(const QVector<pred::PredictionMar
     browse_panel_->set_loading(false);
     if (!markets.isEmpty()) {
         browse_panel_->set_markets(markets);
+        stream_browse(markets);
         command_bar_->set_market_count(markets.size());
         status_bar_->set_count(markets.size(), "markets");
     } else if (!events.isEmpty()) {
@@ -839,6 +893,14 @@ void PolymarketScreen::on_adapter_error(const QString& ctx, const QString& msg) 
 // ── WebSocket handlers ──────────────────────────────────────────────────────
 
 void PolymarketScreen::on_ws_price_updated(const QString& asset_id, double price) {
+    if (auto it = browse_index_.constFind(asset_id); it != browse_index_.constEnd() && browse_panel_) {
+        auto& m = browse_markets_[it.value()];
+        for (auto& o : m.outcomes)
+            if (o.asset_id == asset_id && o.price != price) {
+                o.price = price;
+                browse_panel_->update_market_row(m);
+            }
+    }
     if (!detail_panel_ || !has_selection_)
         return;
     for (int i = 0; i < selected_market_.outcomes.size(); ++i) {
@@ -850,8 +912,10 @@ void PolymarketScreen::on_ws_price_updated(const QString& asset_id, double price
     }
 }
 
-void PolymarketScreen::on_ws_orderbook_updated(const QString& /*asset_id*/, const pred::PredictionOrderBook& book) {
-    if (detail_panel_)
+void PolymarketScreen::on_ws_orderbook_updated(const QString& asset_id, const pred::PredictionOrderBook& book) {
+    // The socket also carries the browse list's outcomes (their prices move
+    // the cards): only the SELECTED market's books belong in the detail panel.
+    if (detail_panel_ && has_selection_ && subscribed_asset_ids_.contains(asset_id))
         detail_panel_->set_order_book(book);
 }
 

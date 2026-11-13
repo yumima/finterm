@@ -20,6 +20,7 @@
 
 #include "core/result/Result.h"
 #include "screens/pre_ipo/PreIpoTypes.h"
+#include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
 
 #include <QDate>
@@ -62,6 +63,8 @@ class IpoWatchView : public QWidget {
     void refresh();
 
   protected:
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
     /// Click handler for KPI cells — wraps each cell as a left-click target
     /// that switches the time-window filter (e.g. clicking "THIS WEEK"
     /// selects TW_ThisWeek). Cells store the target window in property
@@ -225,6 +228,11 @@ class IpoWatchView : public QWidget {
     static Entry entry_from_json(const QJsonObject& o);
     void on_fetch_done();
     void enrich_priced_with_quotes(); // queues priced tickers for quotes (pop_pct)
+    /// Priced tickers follow the tape while pop % is on screen (PERFORMANCE /
+    /// WATCHLIST): last price and pop % move with every print.
+    void follow_priced();
+    services::LiveQuoteFollower* live_ = nullptr;
+    QTimer* live_render_ = nullptr; // ≤ one table render per 500 ms of prints
     void enrich_with_profiles();      // queues priced tickers for profiles (sector/industry)
     // Yahoo is asked for IPO tickers in chunks, one at a time (run_pump).
     struct ChunkPump {

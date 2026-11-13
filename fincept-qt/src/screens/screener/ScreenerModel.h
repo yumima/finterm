@@ -256,8 +256,8 @@ struct ColumnDef {
 
 inline const QVector<ColumnDef>& column_defs() {
     static const QVector<ColumnDef> defs = {
-        {"price", "Price", Kind::Money, "Last close"},
-        {"chg_1d", "1D", Kind::PctSigned, "Change on the last session"},
+        {"price", "Price", Kind::Money, "Last price — live while the market trades"},
+        {"chg_1d", "1D", Kind::PctSigned, "Change on the current (or last) session — live"},
         {"mcap", "Mkt cap", Kind::Compact, "Market capitalisation"},
         {"rs", "RS", Kind::Int,
          "Relative-strength rating 1-99: percentile of 0.4·3M + 0.2·6M + 0.2·9M + 0.2·12M return "
