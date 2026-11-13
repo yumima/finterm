@@ -43,6 +43,8 @@ NOT_CREDENTIALS = {
     "FINTERM_USER_DIR", "FINTERM_USER_DATA_DIR", "FINTERM_CACHE_DIR",
     # Logging switches some scripts read; configuration, not credentials.
     "LOGURU_AUTOINIT", "LOGURU_LEVEL",
+    # Which vendor answers prices (Settings › Data Sources); a choice, not a key.
+    "FINTERM_PRICE_SOURCE",
 }
 
 # Human labels for the providers users are most likely to configure. Anything
@@ -65,7 +67,10 @@ LABELS = {
     "NASDAQ_DATA_LINK_API_KEY": "Nasdaq Data Link (Quandl)",
     "NEWSAPI_KEY": "NewsAPI",
     "NEWS_API_KEY": "NewsAPI (alternate variable)",
-    "POLYGON_API_KEY": "Polygon.io",
+    "POLYGON_API_KEY": "Polygon.io / Massive",
+    "ALPACA_API_KEY_ID": "Alpaca market data — key ID",
+    "ALPACA_API_SECRET_KEY": "Alpaca market data — secret key",
+    "FMP_API_KEY": "Financial Modeling Prep",
     "QUANDL_API_KEY": "Quandl",
     "TIINGO_API_KEY": "Tiingo",
 }
@@ -103,6 +108,7 @@ GROUPS = [
         "FINTERM_CONTACT_EMAIL", "ACLED_EMAIL", "CROSSREF_EMAIL", "KAGGLE_USERNAME",
     }),
     ("Market data", {
+        "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
         "ALPHA_SPREAD_API_KEY", "ALPHA_VANTAGE_API_KEY", "CBOE_API_KEY", "CME_API_KEY",
         "DATABENTO_API_KEY", "EODHD_API_KEY", "FINANCIAL_DATASETS_API_KEY", "FINNHUB_API_KEY",
         "FMP_API_KEY", "GFD_API_KEY", "GLEIF_API_KEY", "ICE_API_KEY", "IEX_CLOUD_API_KEY",

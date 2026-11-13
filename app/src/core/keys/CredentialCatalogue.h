@@ -39,7 +39,7 @@ inline const QStringList& groups() {
     return kGroups;
 }
 
-// 145 credentials.
+// 147 credentials.
 inline const QVector<CredentialDef>& catalogue() {
     static const QVector<CredentialDef> kAll = {
         {"ACLED_API_KEY", "Acled", "Economics & government", true},
@@ -48,6 +48,8 @@ inline const QVector<CredentialDef>& catalogue() {
         {"AFDB_API_KEY", "Afdb", "Economics & government", true},
         {"AFRICA_API_KEY", "Africa", "Economics & government", true},
         {"AISSTREAM_API_KEY", "Aisstream", "Energy, climate & geospatial", true},
+        {"ALPACA_API_KEY_ID", "Alpaca market data — key ID", "Market data", true},
+        {"ALPACA_API_SECRET_KEY", "Alpaca market data — secret key", "Market data", true},
         {"ALPHA_SPREAD_API_KEY", "Alpha Spread", "Market data", true},
         {"ALPHA_VANTAGE_API_KEY", "Alpha Vantage", "Market data", true},
         {"ARXIV_API_KEY", "Arxiv", "Research & datasets", true},
@@ -91,7 +93,7 @@ inline const QVector<CredentialDef>& catalogue() {
         {"FINANCIAL_DATASETS_API_KEY", "Financial Datasets (financialdatasets.ai)", "Market data", true},
         {"FINNHUB_API_KEY", "Finnhub", "Market data", true},
         {"FINTERM_CONTACT_EMAIL", "Contact email (declared to SEC, FINRA, OpenStreetMap)", "Your identity", false},
-        {"FMP_API_KEY", "Fmp", "Market data", true},
+        {"FMP_API_KEY", "Financial Modeling Prep", "Market data", true},
         {"FRED_API_KEY", "FRED (Federal Reserve)", "Economics & government", true},
         {"GFD_API_KEY", "Gfd", "Market data", true},
         {"GFW_API_KEY", "Gfw", "Energy, climate & geospatial", true},
@@ -143,7 +145,7 @@ inline const QVector<CredentialDef>& catalogue() {
         {"OPEN_OWNERSHIP_API_KEY", "Open Ownership", "Economics & government", true},
         {"OPSD_API_KEY", "Opsd", "Energy, climate & geospatial", true},
         {"PLATTS_API_KEY", "Platts", "Market data", true},
-        {"POLYGON_API_KEY", "Polygon.io", "Market data", true},
+        {"POLYGON_API_KEY", "Polygon.io / Massive", "Market data", true},
         {"PORTCHAIN_API_KEY", "Portchain", "Energy, climate & geospatial", true},
         {"PRS_API_KEY", "Prs", "Economics & government", true},
         {"PUBLIC_APIS_FINANCE_KEY", "Public Apis Finance", "Market data", true},

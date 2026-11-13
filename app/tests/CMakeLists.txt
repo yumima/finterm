@@ -996,6 +996,13 @@ if(Python3_Interpreter_FOUND)
         NAME ipo_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ipo_calendar.py
     )
+    # Vendor price sources → the daemon's payload (NY-midnight bars, total-return
+    # basis, Yahoo fallback). Runs the daemon-merge case only where yfinance is
+    # importable; the venv interpreter is preferred when present (see _TALIPP_TEST_PY).
+    add_test(
+        NAME price_sources
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_price_sources.py
+    )
 endif()
 
 # ── Credential catalogue sync ────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import heapq
 import concurrent.futures
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from finterm_identity import user_agent
 
 # ── yfinance timezone-cache hardening ─────────────────────────────────────────
@@ -805,6 +805,10 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
         interval: Data interval - valid values: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo
                   Note: Intraday data (< 1d) is only available for last 60 days
     """
+    vendor = _vendor_bars(symbol, lambda: (date.fromisoformat(start_date),
+                                           date.fromisoformat(end_date) - timedelta(days=1)), interval, True)
+    if vendor is not None:
+        return [{"symbol": symbol, **b, "adj_close": b["close"]} for b in vendor]
     try:
         import io, contextlib
         ticker = yf.Ticker(symbol)
@@ -1877,7 +1881,48 @@ def _quote_from_intraday(symbol, daily, intra):
     }
 
 
+# ── Another price source (price_sources.py) ──────────────────────────────────
+# When the user picked a vendor and its key is set, daily/weekly/monthly bars
+# and stock quotes come from it; Yahoo answers everything else and whatever the
+# vendor can't (index/FX/crypto symbols, intraday, a refused or rate-limited
+# request). One series always comes from one source.
+
+def _vendor_bars(symbol, start_end, interval, adjusted):
+    try:
+        import price_sources as ps
+        if not ps.configured():
+            return None
+        start, end = start_end()
+        bars = ps.daily_bars(symbol, start, end, interval, adjusted)
+        return bars or None
+    except Exception as e:
+        print(f"[price_source] bars {symbol}: {type(e).__name__}: {e} — using Yahoo", file=sys.stderr)
+        return None
+
+
 def get_batch_quotes(symbols):
+    """Quotes for `symbols`: from the user's price source where it can, the
+    rest from Yahoo, in the caller's order."""
+    vendor = {}
+    try:
+        import price_sources as ps
+        if ps.configured():
+            vendor = ps.quotes(list(symbols))
+    except Exception as e:
+        print(f"[price_source] quotes: {type(e).__name__}: {e} — using Yahoo", file=sys.stderr)
+        vendor = {}
+    if not vendor:
+        return _yahoo_batch_quotes(symbols)
+    rest = [s for s in symbols if s.upper() not in vendor]
+    yahoo = _yahoo_batch_quotes(rest) if rest else []
+    if isinstance(yahoo, dict):  # Yahoo refused the rest: keep what the vendor priced
+        yahoo = [{"symbol": s, **yahoo} for s in rest]
+    by_sym = {q.get("symbol", "").upper(): q for q in yahoo if isinstance(q, dict)}
+    by_sym.update(vendor)
+    return [by_sym[s.upper()] for s in symbols if s.upper() in by_sym]
+
+
+def _yahoo_batch_quotes(symbols):
     """Fetch quotes for multiple symbols at once using yfinance batch download"""
     try:
         import io, contextlib
@@ -4334,6 +4379,18 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
     range form drives yfinance's start/end parameters so the C++ side can
     pass any user-chosen window through the same daemon action."""
     _trace_reset()
+
+    def _window():
+        import price_sources as ps
+        start, end = ps.period_to_range(period)
+        # yfinance's range end is exclusive; the vendors' are inclusive.
+        if isinstance(period, str) and period.startswith("range:"):
+            end = end - timedelta(days=1)
+        return start, end
+
+    vendor = _vendor_bars(symbol, _window, interval, auto_adjust)
+    if vendor is not None:
+        return vendor
     try:
         import io, contextlib
         ticker = yf.Ticker(symbol)

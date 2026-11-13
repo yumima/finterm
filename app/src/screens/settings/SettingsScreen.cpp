@@ -4,6 +4,8 @@
 
 #include "screens/settings/SettingsScreen.h"
 
+#include "screens/settings/PriceSourceSection.h"
+
 #include "core/config/ScreenVisibility.h"
 
 #include "ai_chat/LlmService.h"
@@ -1827,6 +1829,10 @@ QWidget* SettingsScreen::build_data_sources() {
     info->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(info);
     vl->addSpacing(4);
+
+    // Which vendor answers prices before Yahoo (scripts/price_sources.py).
+    vl->addWidget(new PriceSourceSection(page));
+    vl->addSpacing(8);
 
     // ── Stats strip ──────────────────────────────────────────────────────────
     auto result = DataSourceRepository::instance().list_all();

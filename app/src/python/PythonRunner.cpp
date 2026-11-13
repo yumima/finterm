@@ -1,5 +1,6 @@
 #include "python/PythonRunner.h"
 
+#include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/keys/CredentialCatalogue.h"
 #include "core/logging/Logger.h"
@@ -8,6 +9,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QSettings>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -130,6 +132,14 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     env.insert("FINTERM_USER_DATA_DIR", finterm::AppPaths::data());
     // The active profile's regenerable cache (finterm_paths.cache_dir()).
     env.insert("FINTERM_CACHE_DIR", finterm::AppPaths::cache());
+
+    // Which vendor answers daily bars and quotes before Yahoo (price_sources.py;
+    // Settings › Data Sources). A local QSettings, not AppConfig's shared one:
+    // this can run off the GUI thread, and a QSettings instance is not shared-safe.
+    const QString source = QSettings(AppIdentity::kOrg, AppIdentity::kApp)
+                               .value(QStringLiteral("market_data/price_source"), QStringLiteral("yahoo"))
+                               .toString();
+    env.insert("FINTERM_PRICE_SOURCE", source);
 
     // FINAGENT_DATA_DIR: per-persona agent memory is personal, so it lives in
     // user/agents. Always overwrite so we match what resources.py expects
