@@ -9,14 +9,18 @@
 // The project defines WIN32_LEAN_AND_MEAN globally, which strips winsock from
 // <windows.h>. Pull the pieces we need explicitly in the right order so
 // MIB_IF_ROW2 / GetIfTable2 (declared in netioapi.h) compile cleanly.
-#    ifndef _WINSOCKAPI_
-#        define _WINSOCKAPI_ // prevent windows.h from including winsock1
-#    endif
-#    include <iphlpapi.h>
-#    include <netioapi.h>
-#    include <windows.h>
+// ORDER MATTERS — winsock2 before windows.h, both before the IP helper
+// headers that use their types. A formatter sorting these alphabetically put
+// iphlpapi.h first and broke every Windows build ("missing ';' before
+// IFTYPE"); the guards stop that, and the file is kept out of unity batches
+// (CMakeLists) so no other file's <windows.h> can come first.
+// clang-format off
 #    include <winsock2.h>
 #    include <ws2tcpip.h>
+#    include <windows.h>
+#    include <iphlpapi.h>
+#    include <netioapi.h>
+// clang-format on
 #    pragma comment(lib, "iphlpapi.lib")
 #elif defined(Q_OS_MACOS)
 #    include <ifaddrs.h>

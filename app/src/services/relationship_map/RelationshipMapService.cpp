@@ -63,8 +63,8 @@ RelationshipMapService::RelationshipMapService() {
     // fetch(ticker) hits warm in-memory cache and emits instantly. Deferred to
     // the next event-loop tick so the file I/O stays off the startup path
     // (nothing reads relmap:* before a panel navigates). The singleton lives
-    // for the process lifetime, so the captured `this` can't dangle.
-    QTimer::singleShot(0, [this]() {
+    // for the process lifetime; the work touches only the disk and CacheManager.
+    QTimer::singleShot(0, []() {
         const QStringList files = disk_cache().files();
         for (const QString& fname : files) {
             const QJsonDocument doc = disk_cache().load(fname);

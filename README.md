@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`645fdc12c`](https://github.com/yumima/finterm/commit/645fdc12c) screens: every screen listed again — the hiding switch is gone
 - [`243296cc0`](https://github.com/yumima/finterm/commit/243296cc0) install: free installers documented per platform; updates only on request
 - [`1d43e33fd`](https://github.com/yumima/finterm/commit/1d43e33fd) tooltips: bounded everywhere, and cut to what a reader needs
 - [`0191b5b7e`](https://github.com/yumima/finterm/commit/0191b5b7e) data: your own price source — Tiingo, Polygon/Massive, Alpaca, Finnhub, FMP

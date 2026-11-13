@@ -1288,47 +1288,6 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
     return result;
 }
 
-// Build a compact tool catalog string for injection into the system prompt.
-// This allows models that don't support structured tool_calls to still
-// emit text-based tool invocations that try_extract_and_execute_text_tool_calls
-// can detect and execute.
-static QString build_tool_catalog_for_prompt() {
-    auto all_tools = mcp::McpService::instance().get_all_tools();
-    if (all_tools.empty())
-        return {};
-
-    // Only include the most useful tools (navigation, market data, portfolio, etc.)
-    // to keep prompt size reasonable. Skip very niche tools.
-    QString catalog;
-    catalog += "You have access to the following tools. To use a tool, emit a <tool_call> block:\n";
-    catalog += "<tool_call>{\"name\": \"TOOL_NAME\", \"arguments\": {\"param\": \"value\"}}</tool_call>\n\n";
-    catalog += "Available tools:\n";
-
-    int count = 0;
-    for (const auto& tool : all_tools) {
-        // Build qualified name: server_id__tool_name
-        QString fn_name = tool.server_id + "__" + tool.name;
-        catalog += "- " + fn_name + ": " + tool.description;
-
-        // Add parameter hints from schema
-        QJsonObject props = tool.input_schema["properties"].toObject();
-        if (!props.isEmpty()) {
-            QStringList params;
-            for (auto it = props.constBegin(); it != props.constEnd(); ++it)
-                params.append(it.key());
-            catalog += " (params: " + params.join(", ") + ")";
-        }
-        catalog += "\n";
-        ++count;
-        // Cap at 60 tools to avoid overwhelming the prompt
-        if (count >= 60) {
-            catalog += "... and " + QString::number(all_tools.size() - 60) + " more tools available.\n";
-            break;
-        }
-    }
-    return catalog;
-}
-
 // ============================================================================
 // Non-streaming request
 // ============================================================================

@@ -1764,6 +1764,10 @@ set_source_files_properties(
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
 )
 
+# NetSpeedMeter needs winsock2.h before <windows.h>; in a unity batch another
+# file's <windows.h> would come first and the IP helper headers fail to parse.
+set_source_files_properties(src/core/net/NetSpeedMeter.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
+
 # ADS files use anonymous namespaces and heavy Qt meta-object includes —
 # exclude from unity to avoid ODR / symbol clashes in large batches
 set_source_files_properties(

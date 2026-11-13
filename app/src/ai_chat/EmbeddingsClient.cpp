@@ -18,7 +18,7 @@ namespace finterm {
 
 namespace {
 
-constexpr const char* kTag = "EmbeddingsClient";
+constexpr const char* kEmbeddingsTag = "EmbeddingsClient";
 constexpr int kTimeoutMs = 20000; // local + tiny model, but allow a cold load
 
 // File-local QNAM parented to qApp — same lifetime discipline as the other
@@ -75,7 +75,7 @@ void EmbeddingsClient::embed(const QString& text, std::function<void(std::option
         reply->deleteLater();
 
         if (err != QNetworkReply::NoError) {
-            LOG_DEBUG(kTag, QString("embeddings request failed: %1").arg(static_cast<int>(err)));
+            LOG_DEBUG(kEmbeddingsTag, QString("embeddings request failed: %1").arg(static_cast<int>(err)));
             done(std::nullopt);
             return;
         }
