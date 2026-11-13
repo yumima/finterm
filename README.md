@@ -6,6 +6,8 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`92970b021`](https://github.com/yumima/finterm/commit/92970b021) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
+- [`0f6918c80`](https://github.com/yumima/finterm/commit/0f6918c80) rename: C++ namespace fincept → finterm
 - [`20260a553`](https://github.com/yumima/finterm/commit/20260a553) trim: experimental screens hidden by default; upstream strategy fixtures removed
 - [`a08b118ee`](https://github.com/yumima/finterm/commit/a08b118ee) portfolio: import holdings from a broker CSV export
 - [`225e7b1cc`](https://github.com/yumima/finterm/commit/225e7b1cc) account: local-only — the upstream SaaS account layer is gone
@@ -167,7 +169,7 @@ When something's wrong, reach for `finterm repair` — it fixes the common break
 
 What `finterm start` does:
 
-1. **Strips Qt window/dock layout state** from `~/.config/finterm/finterm.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
+1. **Strips Qt window/dock layout state** from `~/.config/finterm/finterm.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINTERM_KEEP_WINDOW=1 finterm`.
 2. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell.
 
 ### Auth & user accounts

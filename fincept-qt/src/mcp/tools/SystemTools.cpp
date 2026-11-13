@@ -78,7 +78,7 @@ std::vector<ToolDef> get_system_tools() {
         t.handler = [](const QJsonObject&) -> ToolResult {
             return ToolResult::ok_data(
                 // Was a hardcoded "4.0.0" that matched no release. The build's
-                // version is set on the QApplication from FINCEPT_VERSION_STRING.
+                // version is set on the QApplication from FINTERM_VERSION_STRING.
                 QJsonObject{{"name", QString::fromLatin1(AppIdentity::kDisplayName)},
                             {"version", QCoreApplication::applicationVersion()},
                             {"qt_version", QString::fromLatin1(qVersion())},

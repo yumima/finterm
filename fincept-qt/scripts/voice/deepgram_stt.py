@@ -12,9 +12,9 @@ parse either transparently:
 
 Environment variables (injected by DeepgramSttProvider in C++):
     DEEPGRAM_API_KEY       — required
-    FINCEPT_STT_MODEL      — default "nova-3"
-    FINCEPT_STT_LANGUAGE   — default "en"
-    FINCEPT_STT_KEYTERMS   — comma-separated boosted terms (optional)
+    FINTERM_STT_MODEL      — default "nova-3"
+    FINTERM_STT_LANGUAGE   — default "en"
+    FINTERM_STT_KEYTERMS   — comma-separated boosted terms (optional)
 
 The process runs until stdin is closed, a fatal error occurs, or it receives
 SIGTERM (Windows: QProcess::kill sends taskkill which terminates anyway).
@@ -39,9 +39,9 @@ def main() -> None:
         emit({"fatal": "DEEPGRAM_API_KEY not set — configure it in Settings → Voice"})
         sys.exit(1)
 
-    model = os.environ.get("FINCEPT_STT_MODEL", "nova-3").strip() or "nova-3"
-    language = os.environ.get("FINCEPT_STT_LANGUAGE", "en").strip() or "en"
-    keyterms_raw = os.environ.get("FINCEPT_STT_KEYTERMS", "").strip()
+    model = os.environ.get("FINTERM_STT_MODEL", "nova-3").strip() or "nova-3"
+    language = os.environ.get("FINTERM_STT_LANGUAGE", "en").strip() or "en"
+    keyterms_raw = os.environ.get("FINTERM_STT_KEYTERMS", "").strip()
     keyterms = [t.strip() for t in keyterms_raw.split(",") if t.strip()]
 
     # Required deps — fail fast with clear install hints

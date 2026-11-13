@@ -13,7 +13,7 @@ canonical path.
 - **CMake ≥ 3.27 + Ninja**
 - **Qt 6.8+** — system-sourced (distro `qt6-*` packages / Homebrew `qt`),
   not vendored. Ship builds can pin the tested version via
-  `FINCEPT_QT_STRICT`.
+  `FINTERM_QT_STRICT`.
 - **Python 3.11** — the data daemon's venv is provisioned by
   `finterm setup` under `~/.local/share/finterm/`.
 

@@ -3,7 +3,7 @@
 SEC EDGAR, FINRA, OpenStreetMap, Wikipedia and Crossref ask every client to
 name a contact in its User-Agent (SEC refuses requests without one). That
 contact is the USER's, so it is configured — Settings › Credentials ›
-"Contact email" (FINCEPT_CONTACT_EMAIL, kept in the OS keyring and injected
+"Contact email" (FINTERM_CONTACT_EMAIL, kept in the OS keyring and injected
 by PythonRunner) — and never written into the source tree.
 """
 
@@ -28,7 +28,7 @@ def valid_contact(e: str) -> bool:
 def contact_email() -> str:
     """The configured contact, or "" when unset or not a plain address (an
     invalid value is not sent — it would be refused or break the header)."""
-    e = os.environ.get("FINCEPT_CONTACT_EMAIL", "").strip()
+    e = os.environ.get("FINTERM_CONTACT_EMAIL", "").strip()
     return e if valid_contact(e) else ""
 
 

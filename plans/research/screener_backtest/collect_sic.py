@@ -28,7 +28,7 @@ for i, cik in enumerate(ciks):
     except urllib.error.HTTPError as e:
         if e.code == 403:
             pickle.dump(sic, open(out_path, "wb"))  # keep what was fetched
-            raise SystemExit("SEC 403 -- set FINCEPT_CONTACT_EMAIL")
+            raise SystemExit("SEC 403 -- set FINTERM_CONTACT_EMAIL")
         if e.code == 404:
             sic[cik] = None
         # anything else is transient: left absent, so the next run retries it

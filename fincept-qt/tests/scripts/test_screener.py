@@ -600,9 +600,9 @@ def _fake_download(tickers, **kw):
     one = pd.DataFrame({"Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.5, "Volume": 1e6,
                         "Dividends": 0.0, "Stock Splits": 0.0}, index=idx)
     return pd.concat({t: one for t in tickers}, axis=1)
-_prior_cache_dir = os.environ.get("FINCEPT_CACHE_DIR")
+_prior_cache_dir = os.environ.get("FINTERM_CACHE_DIR")
 with tempfile.TemporaryDirectory() as tmp:
-    os.environ["FINCEPT_CACHE_DIR"] = tmp
+    os.environ["FINTERM_CACHE_DIR"] = tmp
     yf.download = _fake_download
     try:
         got, oldest, stale = sd.load_prices(["AAA", "BBB"], now=datetime.now(timezone.utc))
@@ -613,9 +613,9 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         yf.download = _real_download
         if _prior_cache_dir is None:
-            os.environ.pop("FINCEPT_CACHE_DIR", None)
+            os.environ.pop("FINTERM_CACHE_DIR", None)
         else:
-            os.environ["FINCEPT_CACHE_DIR"] = _prior_cache_dir
+            os.environ["FINTERM_CACHE_DIR"] = _prior_cache_dir
 
 if failures:
     print(f"{len(failures)} failure(s)")

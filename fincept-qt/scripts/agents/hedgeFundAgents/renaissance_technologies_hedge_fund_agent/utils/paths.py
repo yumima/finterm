@@ -148,7 +148,7 @@ def get_frontend_db_path() -> Optional[Path]:
         Path to fincept.db if found, None otherwise
     """
     # Check environment variable first
-    env_path = os.getenv("FINCEPT_DB_PATH")
+    env_path = os.getenv("FINTERM_DB_PATH")
     if env_path:
         path = Path(env_path)
         if path.exists():

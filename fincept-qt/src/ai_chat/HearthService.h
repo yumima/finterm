@@ -16,7 +16,7 @@ namespace finterm {
 ///
 /// `resolve()` is the deterministic, **I/O-free** base resolver used on the hot
 /// path (never blocks a UI thread or a held lock):
-///   1. env `FINCEPT_ENGINE_BASE_URL`  (explicit override — remote/custom)
+///   1. env `FINTERM_ENGINE_BASE_URL`  (explicit override — remote/custom)
 ///   2. hearth's default `http://127.0.0.1:11435` (bare root, no /v1)
 ///
 /// `detect()` is a separate, **async** discovery overlay used for UI status +

@@ -11,14 +11,14 @@ parse either transparently:
     {"fatal": "..."}            — unrecoverable error (process exits)
 
 Environment variables (injected by WhisperSttProvider in C++):
-    FINCEPT_STT_MODEL       — faster-whisper model id; default "medium"
+    FINTERM_STT_MODEL       — faster-whisper model id; default "medium"
                               ("tiny" / "base" / "small" / "medium" /
                                "large-v3" / "large-v3-turbo")
-    FINCEPT_STT_LANGUAGE    — ISO 639-1 code; default "en"; empty = auto-detect
-    FINCEPT_STT_DEVICE      — "cuda" / "cpu" / "auto" (default)
-    FINCEPT_STT_COMPUTE     — "int8" / "int8_float16" / "float16" / "float32" /
+    FINTERM_STT_LANGUAGE    — ISO 639-1 code; default "en"; empty = auto-detect
+    FINTERM_STT_DEVICE      — "cuda" / "cpu" / "auto" (default)
+    FINTERM_STT_COMPUTE     — "int8" / "int8_float16" / "float16" / "float32" /
                               "auto" (default)
-    FINCEPT_STT_VAD_AGGR    — webrtcvad aggressiveness 0–3; default 2
+    FINTERM_STT_VAD_AGGR    — webrtcvad aggressiveness 0–3; default 2
 
 First run downloads the model into ~/.cache/huggingface/hub (medium ≈ 1.5 GB,
 large-v3 ≈ 3 GB).  Subsequent runs are offline.
@@ -68,12 +68,12 @@ def main() -> None:
     import pyaudio
     import webrtcvad
 
-    model_name = os.environ.get("FINCEPT_STT_MODEL", "medium").strip() or "medium"
-    language = os.environ.get("FINCEPT_STT_LANGUAGE", "en").strip() or None
-    device = os.environ.get("FINCEPT_STT_DEVICE", "auto").strip() or "auto"
-    compute_type = os.environ.get("FINCEPT_STT_COMPUTE", "auto").strip() or "auto"
+    model_name = os.environ.get("FINTERM_STT_MODEL", "medium").strip() or "medium"
+    language = os.environ.get("FINTERM_STT_LANGUAGE", "en").strip() or None
+    device = os.environ.get("FINTERM_STT_DEVICE", "auto").strip() or "auto"
+    compute_type = os.environ.get("FINTERM_STT_COMPUTE", "auto").strip() or "auto"
     try:
-        vad_aggr = int(os.environ.get("FINCEPT_STT_VAD_AGGR", "2"))
+        vad_aggr = int(os.environ.get("FINTERM_STT_VAD_AGGR", "2"))
     except ValueError:
         vad_aggr = 2
     vad_aggr = max(0, min(3, vad_aggr))

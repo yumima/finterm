@@ -22,13 +22,13 @@ for e, want in [("me@example.com", True), ("a.b+c@sub.example.co", True),
     if fi.valid_contact(e) != want:
         fails.append(f"valid_contact({e!r}) should be {want}")
 
-os.environ["FINCEPT_CONTACT_EMAIL"] = "  me@example.com  "
+os.environ["FINTERM_CONTACT_EMAIL"] = "  me@example.com  "
 if fi.user_agent() != "finterm (me@example.com)":
     fails.append(f"configured contact -> {fi.user_agent()!r}")
-os.environ["FINCEPT_CONTACT_EMAIL"] = "me@"
+os.environ["FINTERM_CONTACT_EMAIL"] = "me@"
 if fi.user_agent() != "finterm (https://github.com/yumima/finterm)":
     fails.append(f"an invalid contact must not be sent: {fi.user_agent()!r}")
-os.environ.pop("FINCEPT_CONTACT_EMAIL")
+os.environ.pop("FINTERM_CONTACT_EMAIL")
 if fi.user_agent() != "finterm (https://github.com/yumima/finterm)":
     fails.append("unset -> the project identity")
 

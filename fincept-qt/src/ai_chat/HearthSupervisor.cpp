@@ -41,7 +41,7 @@ HearthSupervisor::HearthSupervisor(QObject* parent) : QObject(parent) {
 
 // static
 QString HearthSupervisor::hearth_binary() {
-    const QByteArray env = qgetenv("FINCEPT_HEARTH_BIN");
+    const QByteArray env = qgetenv("FINTERM_HEARTH_BIN");
     if (!env.isEmpty() && QFile::exists(QString::fromUtf8(env)))
         return QString::fromUtf8(env);
 
@@ -84,7 +84,7 @@ void HearthSupervisor::start_process() {
     const QString bin = hearth_binary();
     if (bin.isEmpty()) {
         LOG_WARN(kHearthSupTag, "hearth binary not found — install with `pip install hearth` "
-                                "or set FINCEPT_HEARTH_BIN. Supervision disabled.");
+                                "or set FINTERM_HEARTH_BIN. Supervision disabled.");
         // Sync enabled_ back to false AND re-persist so the checkbox reflects
         // reality (prevents the checkbox/enabled_ desync bug).
         enabled_ = false;

@@ -535,7 +535,7 @@ bool TtsService::start_piper(const QString& text) {
 
     // Resolve the voice once and reuse it for the env var + the log line. Guards
     // the TOCTOU where the .onnx vanished between is_available() and here — an
-    // empty FINCEPT_TTS_MODEL would otherwise launch piper with no model.
+    // empty FINTERM_TTS_MODEL would otherwise launch piper with no model.
     const QString model = resolve_model_path();
     if (model.isEmpty()) {
         set_reading(false); // before fail(): see speak_via_engine
@@ -554,13 +554,13 @@ bool TtsService::start_piper(const QString& text) {
         env.insert("PATH", lbin);
     else if (!cur_path.split(QLatin1Char(':')).contains(lbin))
         env.insert("PATH", lbin + QLatin1Char(':') + cur_path);
-    env.insert("FINCEPT_TTS_MODEL", model);
+    env.insert("FINTERM_TTS_MODEL", model);
     const QString length = get_setting("tts.length");
     if (!length.isEmpty())
-        env.insert("FINCEPT_TTS_LENGTH", length);
+        env.insert("FINTERM_TTS_LENGTH", length);
     const QString noise = get_setting("tts.noise");
     if (!noise.isEmpty())
-        env.insert("FINCEPT_TTS_NOISE", noise);
+        env.insert("FINTERM_TTS_NOISE", noise);
 
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(env);

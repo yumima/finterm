@@ -74,8 +74,8 @@ endif()
 # launcher script) and at build time (when the launcher actually runs),
 # so we wrap ccache in a CMake-generated script that exports the env vars
 # unconditionally.
-find_program(FINCEPT_CCACHE_PROGRAM NAMES ccache sccache)
-if(FINCEPT_CCACHE_PROGRAM)
+find_program(FINTERM_CCACHE_PROGRAM NAMES ccache sccache)
+if(FINTERM_CCACHE_PROGRAM)
     # Expose the same env vars to interactive `ccache -s` runs by writing a
     # ccache.conf in the cache dir. This is idempotent — ccache reads it on
     # every invocation, so changes here propagate without a clean rebuild.
@@ -109,7 +109,7 @@ if(FINCEPT_CCACHE_PROGRAM)
             "set CCACHE_PCH_EXTSUM=true\r\n"
             "set CCACHE_DEPEND=1\r\n"
             "set CCACHE_COMPILERCHECK=content\r\n"
-            "\"${FINCEPT_CCACHE_PROGRAM}\" %*\r\n")
+            "\"${FINTERM_CCACHE_PROGRAM}\" %*\r\n")
     else()
         set(_fincept_ccache_launcher "${CMAKE_BINARY_DIR}/ccache_launcher.sh")
         file(WRITE "${_fincept_ccache_launcher}"
@@ -118,13 +118,13 @@ if(FINCEPT_CCACHE_PROGRAM)
             "export CCACHE_PCH_EXTSUM=true\n"
             "export CCACHE_DEPEND=1\n"
             "export CCACHE_COMPILERCHECK=content\n"
-            "exec \"${FINCEPT_CCACHE_PROGRAM}\" \"$@\"\n")
+            "exec \"${FINTERM_CCACHE_PROGRAM}\" \"$@\"\n")
         execute_process(COMMAND chmod +x "${_fincept_ccache_launcher}")
     endif()
 
     set(CMAKE_CXX_COMPILER_LAUNCHER "${_fincept_ccache_launcher}")
     set(CMAKE_C_COMPILER_LAUNCHER   "${_fincept_ccache_launcher}")
-    message(STATUS "Compiler cache enabled: ${FINCEPT_CCACHE_PROGRAM} (PCH-aware launcher)")
+    message(STATUS "Compiler cache enabled: ${FINTERM_CCACHE_PROGRAM} (PCH-aware launcher)")
 endif()
 
 # ── macOS rpath configuration ────────────────────────────────────────────────
@@ -170,11 +170,11 @@ set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Skip FetchContent update st
 # link a full whole-program rebuild over 400+ object files — easily 30-90s per
 # link on a developer machine. Default OFF so daily iteration is fast; CI and
 # explicit release builds opt in.
-option(FINCEPT_ENABLE_LTO
+option(FINTERM_ENABLE_LTO
     "Enable MSVC /GL + /LTCG and equivalent on GCC/Clang (slow link, smaller/faster binary)"
     OFF)
 if(DEFINED ENV{CI})
-    set(FINCEPT_ENABLE_LTO ON CACHE BOOL "" FORCE)
+    set(FINTERM_ENABLE_LTO ON CACHE BOOL "" FORCE)
 endif()
 
 # MSVC compiler flags for maximum build throughput:
@@ -206,9 +206,9 @@ if(MSVC)
 
     # Whole-program optimisation. /GL marks each .obj as IL; /LTCG merges at
     # link time. Both required together — using one without the other warns
-    # and silently disables. Gated behind FINCEPT_ENABLE_LTO so incremental
+    # and silently disables. Gated behind FINTERM_ENABLE_LTO so incremental
     # dev links stay fast (incremental linking is incompatible with /LTCG).
-    if(FINCEPT_ENABLE_LTO)
+    if(FINTERM_ENABLE_LTO)
         add_compile_options($<$<CONFIG:Release>:/GL>)
         add_link_options($<$<CONFIG:Release>:/LTCG:incremental>)
     else()
@@ -248,10 +248,10 @@ add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 # OFF by default so a normal build is unchanged. Turn on with
 # -DFINCEPT_BUILD_TESTS=ON to compile the Qt Test executables under
 # fincept-qt/tests/. Run via `ctest` in the build directory.
-option(FINCEPT_BUILD_TESTS "Build the finterm test suite" OFF)
+option(FINTERM_BUILD_TESTS "Build the finterm test suite" OFF)
 
 # ── Qt packages ──────────────────────────────────────────────────────────────
-# FINCEPT_QT_VERSION is the version the project is *tested and shipped* against.
+# FINTERM_QT_VERSION is the version the project is *tested and shipped* against.
 # By default the build accepts any Qt >= that major.minor (so a system/distro
 # Qt — e.g. apt's qt6-* or Homebrew's qt6 — is used as-is, no vendored copy).
 # Release/installer builds set -DFINCEPT_QT_STRICT=ON to lock the exact tested
@@ -259,15 +259,15 @@ option(FINCEPT_BUILD_TESTS "Build the finterm test suite" OFF)
 # The Dockerfile and release CI set STRICT; dev boxes and PR CI do not.
 # (The old -DFINCEPT_ALLOW_QT_DRIFT flag is gone — the floor IS the default now;
 #  pass -DFINCEPT_QT_STRICT=ON for the exact pin instead.)
-set(FINCEPT_QT_VERSION 6.8.3 CACHE STRING "Qt version the project is tested/shipped against")
-option(FINCEPT_QT_STRICT "Require exactly FINCEPT_QT_VERSION (release/ship builds)" OFF)
+set(FINTERM_QT_VERSION 6.8.3 CACHE STRING "Qt version the project is tested/shipped against")
+option(FINTERM_QT_STRICT "Require exactly FINTERM_QT_VERSION (release/ship builds)" OFF)
 
 # Resolve the version constraint passed to every find_package(Qt6 ...) below.
 # STRICT  -> exact patch pin (ship builds).  Default -> major.minor floor.
-if(FINCEPT_QT_STRICT)
-    set(_fincept_qt_match ${FINCEPT_QT_VERSION} EXACT)
+if(FINTERM_QT_STRICT)
+    set(_fincept_qt_match ${FINTERM_QT_VERSION} EXACT)
 else()
-    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _fincept_qt_floor "${FINCEPT_QT_VERSION}")
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _fincept_qt_floor "${FINTERM_QT_VERSION}")
     set(_fincept_qt_match ${_fincept_qt_floor})
 endif()
 
@@ -353,9 +353,9 @@ set(CMAKE_SKIP_INSTALL_RULES TRUE CACHE BOOL "" FORCE)
 # When private headers are absent, QXlsx is disabled and Excel export shows
 # a "not available" message rather than crashing or failing to build.
 if(TARGET Qt6::GuiPrivate)
-    set(FINCEPT_HAS_PRIVATE_HEADERS TRUE)
+    set(FINTERM_HAS_PRIVATE_HEADERS TRUE)
 else()
-    set(FINCEPT_HAS_PRIVATE_HEADERS FALSE)
+    set(FINTERM_HAS_PRIVATE_HEADERS FALSE)
     message(WARNING
         "\n"
         "  Qt6::GuiPrivate not found — Excel export (QXlsx) will be disabled.\n"
@@ -372,7 +372,7 @@ endif()
 # Only fetched and built when Qt6::GuiPrivate is available.
 # A stub INTERFACE target is created when unavailable so all
 # target_link_libraries(... QXlsx::QXlsx) calls still compile cleanly.
-if(FINCEPT_HAS_PRIVATE_HEADERS)
+if(FINTERM_HAS_PRIVATE_HEADERS)
     FetchContent_Declare(
         QXlsx
         GIT_REPOSITORY https://github.com/QtExcel/QXlsx.git
@@ -406,7 +406,7 @@ else()
     add_library(QXlsx_stub INTERFACE)
     add_library(QXlsx::QXlsx ALIAS QXlsx_stub)
 endif()
-# NOTE: FINCEPT_HAS_QXLSX compile definition is applied to FinceptTerminal
+# NOTE: FINTERM_HAS_QXLSX compile definition is applied to FinceptTerminal
 # after add_executable() — see the target_compile_definitions block below.
 
 # ── Auto-update service ─────────────────────────────────────────────────────
@@ -1854,9 +1854,9 @@ if(WIN32)
     # resource is 0.0.0.0 and Windows Error Reporting cannot triage crashes
     # by app version (see issue #215). The .ico reference is relative to the
     # generated file's directory, so copy fincept.ico next to it.
-    set(FINCEPT_VER_MAJOR ${PROJECT_VERSION_MAJOR})
-    set(FINCEPT_VER_MINOR ${PROJECT_VERSION_MINOR})
-    set(FINCEPT_VER_PATCH ${PROJECT_VERSION_PATCH})
+    set(FINTERM_VER_MAJOR ${PROJECT_VERSION_MAJOR})
+    set(FINTERM_VER_MINOR ${PROJECT_VERSION_MINOR})
+    set(FINTERM_VER_PATCH ${PROJECT_VERSION_PATCH})
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.rc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/app.rc"
@@ -2201,7 +2201,7 @@ if(UNIX AND NOT APPLE)
         pkg_check_modules(LIBSECRET IMPORTED_TARGET libsecret-1)
         if(LIBSECRET_FOUND)
             target_link_libraries(FinceptTerminal PRIVATE PkgConfig::LIBSECRET)
-            target_compile_definitions(FinceptTerminal PRIVATE FINCEPT_HAVE_LIBSECRET)
+            target_compile_definitions(FinceptTerminal PRIVATE FINTERM_HAVE_LIBSECRET)
             message(STATUS "libsecret found — Linux SecureStorage will use Secret Service backend")
         else()
             message(WARNING
@@ -2267,14 +2267,14 @@ if(WIN32)
 endif()
 
 # ── Application version (single source of truth) ─────────────────────────────
-# FINCEPT_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()
+# FINTERM_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()
 # always matches the project() VERSION declared at the top of this file.
 target_compile_definitions(FinceptTerminal PRIVATE
-    FINCEPT_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
+    FINTERM_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
 
 # ── Optional feature compile definitions (applied after add_executable) ──────
-if(FINCEPT_HAS_PRIVATE_HEADERS)
-    target_compile_definitions(FinceptTerminal PRIVATE FINCEPT_HAS_QXLSX)
+if(FINTERM_HAS_PRIVATE_HEADERS)
+    target_compile_definitions(FinceptTerminal PRIVATE FINTERM_HAS_QXLSX)
 endif()
 
 if(HAS_WEBSOCKETS)
@@ -2393,50 +2393,50 @@ add_custom_command(TARGET FinceptTerminal POST_BUILD
 
 # Bundle yt-dlp for dashboard YouTube playback on all platforms.
 # Override path with: -DFINCEPT_YTDLP_EXE=/abs/path/to/yt-dlp[.exe]
-set(FINCEPT_YTDLP_EXE "" CACHE FILEPATH "Path to yt-dlp executable to bundle with FinceptTerminal")
+set(FINTERM_YTDLP_EXE "" CACHE FILEPATH "Path to yt-dlp executable to bundle with FinceptTerminal")
 # Default OFF so builds on CI / macOS / Linux succeed without yt-dlp pre-installed.
 # Set ON only for official release builds where yt-dlp must be present.
-option(FINCEPT_REQUIRE_BUNDLED_YTDLP "Fail configure if yt-dlp is missing" OFF)
+option(FINTERM_REQUIRE_BUNDLED_YTDLP "Fail configure if yt-dlp is missing" OFF)
 
-set(FINCEPT_YTDLP_TO_BUNDLE "")
-if(FINCEPT_YTDLP_EXE)
-    set(FINCEPT_YTDLP_TO_BUNDLE "${FINCEPT_YTDLP_EXE}")
+set(FINTERM_YTDLP_TO_BUNDLE "")
+if(FINTERM_YTDLP_EXE)
+    set(FINTERM_YTDLP_TO_BUNDLE "${FINTERM_YTDLP_EXE}")
 else()
-    find_program(FINCEPT_YTDLP_AUTO_EXE NAMES yt-dlp yt-dlp.exe)
-    if(FINCEPT_YTDLP_AUTO_EXE)
-        set(FINCEPT_YTDLP_TO_BUNDLE "${FINCEPT_YTDLP_AUTO_EXE}")
+    find_program(FINTERM_YTDLP_AUTO_EXE NAMES yt-dlp yt-dlp.exe)
+    if(FINTERM_YTDLP_AUTO_EXE)
+        set(FINTERM_YTDLP_TO_BUNDLE "${FINTERM_YTDLP_AUTO_EXE}")
     endif()
 endif()
 
-if(FINCEPT_YTDLP_TO_BUNDLE AND EXISTS "${FINCEPT_YTDLP_TO_BUNDLE}")
+if(FINTERM_YTDLP_TO_BUNDLE AND EXISTS "${FINTERM_YTDLP_TO_BUNDLE}")
     if(WIN32)
-        set(FINCEPT_YTDLP_OUTPUT_NAME "yt-dlp.exe")
+        set(FINTERM_YTDLP_OUTPUT_NAME "yt-dlp.exe")
     else()
-        set(FINCEPT_YTDLP_OUTPUT_NAME "yt-dlp")
+        set(FINTERM_YTDLP_OUTPUT_NAME "yt-dlp")
     endif()
 
     add_custom_command(TARGET FinceptTerminal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${FINCEPT_YTDLP_TO_BUNDLE}"
-            "$<TARGET_FILE_DIR:FinceptTerminal>/${FINCEPT_YTDLP_OUTPUT_NAME}"
+            "${FINTERM_YTDLP_TO_BUNDLE}"
+            "$<TARGET_FILE_DIR:FinceptTerminal>/${FINTERM_YTDLP_OUTPUT_NAME}"
         COMMENT "Copying yt-dlp for dashboard video playback..."
     )
 
     if(UNIX)
         add_custom_command(TARGET FinceptTerminal POST_BUILD
-            COMMAND chmod +x "$<TARGET_FILE_DIR:FinceptTerminal>/${FINCEPT_YTDLP_OUTPUT_NAME}"
+            COMMAND chmod +x "$<TARGET_FILE_DIR:FinceptTerminal>/${FINTERM_YTDLP_OUTPUT_NAME}"
             COMMENT "Setting executable permission on bundled yt-dlp..."
         )
     endif()
 else()
-    set(FINCEPT_YTDLP_MISSING_MSG
-        "yt-dlp not found. Set FINCEPT_YTDLP_EXE or install yt-dlp on build machine. "
+    set(FINTERM_YTDLP_MISSING_MSG
+        "yt-dlp not found. Set FINTERM_YTDLP_EXE or install yt-dlp on build machine. "
         "Bundling is required so end users need no setup."
     )
-    if(FINCEPT_REQUIRE_BUNDLED_YTDLP)
-        message(FATAL_ERROR "${FINCEPT_YTDLP_MISSING_MSG}")
+    if(FINTERM_REQUIRE_BUNDLED_YTDLP)
+        message(FATAL_ERROR "${FINTERM_YTDLP_MISSING_MSG}")
     else()
-        message(WARNING "${FINCEPT_YTDLP_MISSING_MSG}")
+        message(WARNING "${FINTERM_YTDLP_MISSING_MSG}")
     endif()
 endif()
 
@@ -2498,8 +2498,8 @@ else()
             DESTINATION "share/metainfo" COMPONENT core)
 
     # yt-dlp (if bundled)
-    if(FINCEPT_YTDLP_TO_BUNDLE AND EXISTS "${FINCEPT_YTDLP_TO_BUNDLE}")
-        install(PROGRAMS "${FINCEPT_YTDLP_TO_BUNDLE}"
+    if(FINTERM_YTDLP_TO_BUNDLE AND EXISTS "${FINTERM_YTDLP_TO_BUNDLE}")
+        install(PROGRAMS "${FINTERM_YTDLP_TO_BUNDLE}"
                 DESTINATION "bin"
                 RENAME "yt-dlp" COMPONENT core)
     endif()
@@ -2514,9 +2514,9 @@ endif()
 # Requires: Qt Installer Framework (binarycreator on PATH or in Qt install)
 # Output:   finterm-<ver>-<platform>-<arch>-setup.exe/.run/.app
 
-option(FINCEPT_BUILD_INSTALLER "Generate QtIFW installer via CPack" OFF)
+option(FINTERM_BUILD_INSTALLER "Generate QtIFW installer via CPack" OFF)
 
-if(FINCEPT_BUILD_INSTALLER)
+if(FINTERM_BUILD_INSTALLER)
 
     # ── Windows: capture windeployqt output for the installer ────────────────
     if(WIN32 AND DEPLOY_QT)
@@ -2690,7 +2690,7 @@ if(FINCEPT_BUILD_INSTALLER)
         DEFAULT TRUE
         DEPENDS "com.fincept.terminal.core")
 
-endif() # FINCEPT_BUILD_INSTALLER
+endif() # FINTERM_BUILD_INSTALLER
 
 # ── Build configuration summary ──────────────────────────────────────────────
 message(STATUS "")
@@ -2702,7 +2702,7 @@ message(STATUS "  Build type        : ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Platform          : ${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "  Compiler          : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "------------------------------------------------------------")
-message(STATUS "  Excel export      : ${FINCEPT_HAS_PRIVATE_HEADERS}  (Qt6::GuiPrivate / QXlsx)")
+message(STATUS "  Excel export      : ${FINTERM_HAS_PRIVATE_HEADERS}  (Qt6::GuiPrivate / QXlsx)")
 if(DEFINED HAS_WEBSOCKETS)
 message(STATUS "  WebSockets        : ${HAS_WEBSOCKETS}")
 endif()
@@ -2712,11 +2712,11 @@ endif()
 if(DEFINED HAS_TTS)
 message(STATUS "  TextToSpeech      : ${HAS_TTS}")
 endif()
-message(STATUS "  Tests             : ${FINCEPT_BUILD_TESTS}")
+message(STATUS "  Tests             : ${FINTERM_BUILD_TESTS}")
 message(STATUS "============================================================")
 message(STATUS "")
 
 # ── Test suite (opt-in; see fincept-qt/tests/CMakeLists.txt) ─────────────────
-if(FINCEPT_BUILD_TESTS)
+if(FINTERM_BUILD_TESTS)
     add_subdirectory(tests)
 endif()

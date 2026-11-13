@@ -16,9 +16,9 @@ Stdout protocol (JSON-lines, one per line, flushed):
     {"fatal":  "..."}        engine could not be initialised
 
 Environment variables (optional, all set by TtsService):
-    FINCEPT_TTS_RATE     — words/min override (default = engine default).
-    FINCEPT_TTS_VOLUME   — 0.0…1.0 (default 1.0).
-    FINCEPT_TTS_VOICE    — substring match against voice id/name; first hit wins.
+    FINTERM_TTS_RATE     — words/min override (default = engine default).
+    FINTERM_TTS_VOLUME   — 0.0…1.0 (default 1.0).
+    FINTERM_TTS_VOICE    — substring match against voice id/name; first hit wins.
 """
 
 import json
@@ -64,21 +64,21 @@ def main() -> int:
         return 1
 
     # Optional tuning from env
-    rate_env = os.environ.get("FINCEPT_TTS_RATE", "").strip()
+    rate_env = os.environ.get("FINTERM_TTS_RATE", "").strip()
     if rate_env:
         try:
             engine.setProperty("rate", int(rate_env))
         except Exception as e:
             diag(f"set rate failed: {e}")
 
-    vol_env = os.environ.get("FINCEPT_TTS_VOLUME", "").strip()
+    vol_env = os.environ.get("FINTERM_TTS_VOLUME", "").strip()
     if vol_env:
         try:
             engine.setProperty("volume", max(0.0, min(1.0, float(vol_env))))
         except Exception as e:
             diag(f"set volume failed: {e}")
 
-    voice_pref = os.environ.get("FINCEPT_TTS_VOICE", "").strip().lower()
+    voice_pref = os.environ.get("FINTERM_TTS_VOICE", "").strip().lower()
     if voice_pref:
         try:
             for v in engine.getProperty("voices") or []:

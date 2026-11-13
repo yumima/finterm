@@ -10,7 +10,7 @@
 #   1  one or more fixture assertions failed
 #   2  setup error (pip / venv / pytest invocation)
 #
-# Logs land in $FINCEPT_EVAL_RESULTS or ~/.fincept/eval_runs.jsonl
+# Logs land in $FINTERM_EVAL_RESULTS or ~/.fincept/eval_runs.jsonl
 # via the existing result_store; the CI just exits with the code.
 
 set -euo pipefail
@@ -22,8 +22,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 AGENTS_DIR="$REPO_ROOT/fincept-qt/scripts/agents"
 
 # Venv lives outside the tree so CI can cache it.  Override via
-# FINCEPT_EVAL_VENV.
-VENV="${FINCEPT_EVAL_VENV:-/tmp/finterm-eval-venv}"
+# FINTERM_EVAL_VENV.
+VENV="${FINTERM_EVAL_VENV:-/tmp/finterm-eval-venv}"
 
 echo "→ Repo root: $REPO_ROOT"
 echo "→ Agents dir: $AGENTS_DIR"

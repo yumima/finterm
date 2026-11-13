@@ -110,7 +110,7 @@ QString PythonRunner::scripts_dir() const {
 // ── Standard Python environment ──────────────────────────────────────────────
 // Shared by PythonRunner::run() and external direct-QProcess callers
 // (e.g., AgentService's stdin/stream paths). Anything every Python spawn needs
-// — encoding pins, FINCEPT_DATA_DIR, FINAGENT_DATA_DIR, base PYTHONPATH — lives
+// — encoding pins, FINTERM_DATA_DIR, FINAGENT_DATA_DIR, base PYTHONPATH — lives
 // here. Script-specific path additions (parent-of-pkg) stay in run().
 QProcessEnvironment PythonRunner::build_python_env() const {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -119,17 +119,17 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     env.insert("PYTHONUNBUFFERED", "1");
 
     const QString install_dir = PythonSetupManager::instance().install_dir();
-    env.insert("FINCEPT_DATA_DIR", install_dir);
+    env.insert("FINTERM_DATA_DIR", install_dir);
 
-    // FINCEPT_USER_DIR: the active profile's user/ folder — where every
-    // script keeps PERSONAL data (finterm_paths.user_root()). FINCEPT_DATA_DIR
+    // FINTERM_USER_DIR: the active profile's user/ folder — where every
+    // script keeps PERSONAL data (finterm_paths.user_root()). FINTERM_DATA_DIR
     // above stays the app root for system data (cache, market_data, models).
-    env.insert("FINCEPT_USER_DIR", finterm::AppPaths::user());
+    env.insert("FINTERM_USER_DIR", finterm::AppPaths::user());
     // The user's database folder exactly as the app resolves it (old layout
     // until LayoutMigrations has moved it) — so scripts and app never disagree.
-    env.insert("FINCEPT_USER_DATA_DIR", finterm::AppPaths::data());
+    env.insert("FINTERM_USER_DATA_DIR", finterm::AppPaths::data());
     // The active profile's regenerable cache (finterm_paths.cache_dir()).
-    env.insert("FINCEPT_CACHE_DIR", finterm::AppPaths::cache());
+    env.insert("FINTERM_CACHE_DIR", finterm::AppPaths::cache());
 
     // FINAGENT_DATA_DIR: per-persona agent memory is personal, so it lives in
     // user/agents. Always overwrite so we match what resources.py expects
@@ -462,7 +462,7 @@ void PythonRunner::start_next() {
             }
         }
 
-        // Start from the shared base env (encoding pins, FINCEPT_DATA_DIR,
+        // Start from the shared base env (encoding pins, FINTERM_DATA_DIR,
         // FINAGENT_DATA_DIR, base PYTHONPATH = scripts_dir_).
         QProcessEnvironment env = build_python_env();
 

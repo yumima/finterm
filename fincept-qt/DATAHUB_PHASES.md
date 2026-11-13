@@ -31,7 +31,7 @@ This document lists the phases to build and migrate to the DataHub. Each phase i
 **Goal:** set up the ground before touching architecture.
 
 ### Deliverables — all landed
-- ✅ `FINCEPT_DATAHUB_ENABLED` CMake option added (`CMakeLists.txt:123`), default ON, compiles to `-DFINCEPT_DATAHUB_ENABLED=1`.
+- ✅ `FINTERM_DATAHUB_ENABLED` CMake option added (`CMakeLists.txt:123`), default ON, compiles to `-DFINCEPT_DATAHUB_ENABLED=1`.
 - ✅ `Q_DECLARE_METATYPE` for `QuoteData`, `HistoryPoint`, `InfoData`, `NewsArticle`, `EconomicsResult` in `src/datahub/DataHubMetaTypes.h`.
 - ✅ `qRegisterMetaType<...>()` calls in `src/datahub/DataHubMetaTypes.cpp::register_metatypes()`, invoked from `main.cpp` after `QApplication` construction, gated on the feature flag.
 - ✅ Logger: the project uses free-form string tags (no registered categories), so we standardised on the tag string `"DataHub"` — zero changes to `Logger.h`.
@@ -62,7 +62,7 @@ This document lists the phases to build and migrate to the DataHub. Each phase i
   abstraction at ~300 lines).
 - ✅ `src/datahub/Producer.h` — virtual interface.
 - ✅ `src/datahub/TopicPolicy.h` — struct + defaults.
-- ✅ Test harness: `FINCEPT_BUILD_TESTS` CMake option (default OFF),
+- ✅ Test harness: `FINTERM_BUILD_TESTS` CMake option (default OFF),
   `tests/CMakeLists.txt` wired in via `add_subdirectory(tests)`.
 - ✅ `tests/datahub/test_datahub.cpp` (Qt Test) — 9 cases covering:
   - subscribe → publish → slot invoked
@@ -321,14 +321,14 @@ IBKR, Alpaca, Tradier, Saxo.
 ### Deliverables
 - **CLAUDE.md updates:** ✅ rules D1–D5 added (`fincept-qt/CLAUDE.md` §D). D4 was refined after audit to distinguish streaming data (hub-only) from one-shot catalog/info lookups (callback APIs may stay).
 - **Lint / CI rule:** ✅ `datahub-discipline` job added to `.github/workflows/lint.yml`. Fails on `src/screens/**/*.cpp` containing `PythonRunner::instance().run(` (D1) or `(MarketData|News|Economics|DBnomics|GovData)Service::instance().fetch_` (D4).
-- **Delete deprecated APIs:** ✅ compile-time-disabled legacy branches removed across 60 files (1043 lines) by stripping `#ifdef FINCEPT_DATAHUB_ENABLED` guards. Streaming callback APIs (`fetch_quotes`, `fetch_sparklines`, `fetch_history`) remain as one-shot internal-use methods; the hub is the only supported consumer path.
-- **`FINCEPT_DATAHUB_ENABLED` CMake flag** removed from `CMakeLists.txt`. DataHub is the only supported data path.
+- **Delete deprecated APIs:** ✅ compile-time-disabled legacy branches removed across 60 files (1043 lines) by stripping `#ifdef FINTERM_DATAHUB_ENABLED` guards. Streaming callback APIs (`fetch_quotes`, `fetch_sparklines`, `fetch_history`) remain as one-shot internal-use methods; the hub is the only supported consumer path.
+- **`FINTERM_DATAHUB_ENABLED` CMake flag** removed from `CMakeLists.txt`. DataHub is the only supported data path.
 - **docs/DATAHUB_TOPICS.md** — ✅ full topic registry for Phases 2–9 (markets, ws, news, econ, dbnomics, govdata, broker, geopolitics, maritime, M&A, agents, LLM sessions).
 - **Inspector screen** ✅ promoted to Settings → Developer section (`SettingsScreen::build_developer()`).
 
 ### Success check
 - `git grep PythonRunner::instance().run src/screens` — clean.
-- `git grep FINCEPT_DATAHUB_ENABLED src/` — only documentation comments remain (no build-gating).
+- `git grep FINTERM_DATAHUB_ENABLED src/` — only documentation comments remain (no build-gating).
 - CI rule in place and green.
 - Topic registry doc matches `hub.stats()` output at runtime.
 
@@ -340,7 +340,7 @@ Every phase is reversible until Phase 10. If any phase causes a regression in pr
 
 1. **Phases 2–9:** consumer migrations are local — revert the affected widget/screen commits. Producer keeps working, no data loss.
 2. **Phase 4 (WebSocket):** if hub push-only coalescing causes tick drops, revert to direct-signal path; producers can emit both hub `publish()` and their legacy signals in parallel during transition.
-3. **Phase 1 (hub itself):** controlled by `FINCEPT_DATAHUB_ENABLED` compile flag. If a critical bug surfaces before Phase 2 ships, flip flag off — nothing depends on it yet.
+3. **Phase 1 (hub itself):** controlled by `FINTERM_DATAHUB_ENABLED` compile flag. If a critical bug surfaces before Phase 2 ships, flip flag off — nothing depends on it yet.
 4. **Phase 10:** irreversible (deletes deprecated APIs). Only run after 2+ weeks of stable Phase 9.
 
 ---
@@ -369,7 +369,7 @@ Dates are indicative; adjust based on actual velocity. Treat as relative orderin
 
 1. **Topic key format** — `domain:subdomain:id[:modifier]`.
 2. **Typed `subscribe<T>()` API** — ships in Phase 1 alongside the `QVariant` variant.
-3. **Inspector screen** — dev-only under `FINCEPT_DATAHUB_ENABLED` for Phases 1–9. Promoted to user-visible Developer-mode tab in Phase 10.
+3. **Inspector screen** — dev-only under `FINTERM_DATAHUB_ENABLED` for Phases 1–9. Promoted to user-visible Developer-mode tab in Phase 10.
 4. **Persistence on restart** — hub starts cold. `CacheManager` still persists for warm restart within TTL. `rehydrate_on_start` becomes an opt-in per-topic policy flag, added when the first long-TTL producer asks for it.
 5. **Rate limits** — hub-level. `Producer::max_requests_per_sec()` returns a producer-level cap; scheduler paces refresh calls accordingly.
 

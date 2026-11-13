@@ -30,7 +30,7 @@ hearth start          # brings up the bundled Ollama + the gateway
 
 Chat then works with zero config (it addresses the `primary_chat`
 role; hearth picks the model). Override the base with
-`FINCEPT_ENGINE_BASE_URL` or in **Settings → LLM Config**.
+`FINTERM_ENGINE_BASE_URL` or in **Settings → LLM Config**.
 
 **Bare Ollama (no hearth)?** Ollama defaults to `localhost:11434`,
 not hearth's `:11435` — so set the base URL explicitly:

@@ -12,7 +12,7 @@ tree, or /tmp. PERSONAL data and the app's own data are kept apart:
     cache/           regenerable downloads, safe to delete
     models/          trained/cached ML models (qlib, vision)
 
-PythonRunner sets FINCEPT_DATA_DIR (the root) and FINCEPT_USER_DIR (the
+PythonRunner sets FINTERM_DATA_DIR (the root) and FINTERM_USER_DIR (the
 active profile's user/); the fallbacks mirror AppPaths so a script run by
 hand writes to the same places.
 """
@@ -35,7 +35,7 @@ def _data_base() -> Path:
 
 
 def data_root() -> Path:
-    env = os.environ.get("FINCEPT_DATA_DIR")
+    env = os.environ.get("FINTERM_DATA_DIR")
     if env:
         return Path(env)
     base = _data_base()
@@ -49,13 +49,13 @@ def data_root() -> Path:
 
 
 def user_root() -> Path:
-    env = os.environ.get("FINCEPT_USER_DIR")
+    env = os.environ.get("FINTERM_USER_DIR")
     return Path(env) if env else data_root() / "user"
 
 
 def user_data_dir() -> Path:
     """The user's database folder, as the app resolves it."""
-    env = os.environ.get("FINCEPT_USER_DATA_DIR")
+    env = os.environ.get("FINTERM_USER_DATA_DIR")
     return Path(env) if env else user_root() / "data"
 
 
@@ -78,7 +78,7 @@ def agents_dir(*parts: str) -> Path:
 def cache_dir(*parts: str) -> Path:
     # The active profile's cache (AppPaths::cache()), so Settings › Storage
     # clears it with the rest; root/cache when run by hand.
-    env = os.environ.get("FINCEPT_CACHE_DIR")
+    env = os.environ.get("FINTERM_CACHE_DIR")
     p = (Path(env) if env else data_root() / "cache").joinpath(*parts)
     p.mkdir(parents=True, exist_ok=True)
     return p

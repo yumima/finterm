@@ -38,7 +38,7 @@ QString EmbeddingsClient::base_url() {
     // An embeddings-specific override still wins (lets you send embeddings
     // somewhere other than chat); otherwise use the one engine base that the
     // chat path also resolves through — so chat and embeddings never diverge.
-    const QByteArray env = qgetenv("FINCEPT_EMBEDDINGS_BASE_URL");
+    const QByteArray env = qgetenv("FINTERM_EMBEDDINGS_BASE_URL");
     if (!env.isEmpty())
         return normalize_llm_base(QString::fromUtf8(env));
     return HearthService::instance().engine_base_url();

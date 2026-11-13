@@ -46,13 +46,13 @@ $RegApp      = "$RegOrg\finterm"
 $UserDir     = Join-Path $Root 'user'
 $DataDir     = Join-Path $UserDir 'data'
 # Portable data snapshots — outside the wiped trees so `reset` never deletes them.
-$BackupDir   = if ($env:FINCEPT_BACKUP_DIR) { $env:FINCEPT_BACKUP_DIR } `
+$BackupDir   = if ($env:FINTERM_BACKUP_DIR) { $env:FINTERM_BACKUP_DIR } `
                else { Join-Path $env:LOCALAPPDATA 'finterm-backups' }
 
 # Pinned build inputs (Windows keeps a pinned Qt — there is no system Qt here).
 $QtVersion   = '6.8.3'
 $QtArch      = 'win64_msvc2022_64'
-$QtRoot      = if ($env:FINCEPT_QT_ROOT) { $env:FINCEPT_QT_ROOT } else { 'C:\Qt' }
+$QtRoot      = if ($env:FINTERM_QT_ROOT) { $env:FINTERM_QT_ROOT } else { 'C:\Qt' }
 $QtPrefix    = Join-Path $QtRoot "$QtVersion\msvc2022_64"
 
 # ── Output helpers ────────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ function Cmd-Start {
         }
     }
     # GPU note: on Windows, NVIDIA Optimus selects the GPU automatically; no glvnd
-    # juggling needed, so there is no FINCEPT_GPU equivalent here.
+    # juggling needed, so there is no FINTERM_GPU equivalent here.
     Start-Process -FilePath $Bin -WorkingDirectory $BuildDir
     Write-Host "Launched finterm."
 }

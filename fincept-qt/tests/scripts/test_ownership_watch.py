@@ -36,7 +36,7 @@ def check(name, cond, detail=""):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="own_watch")
-    os.environ["FINCEPT_DATA_DIR"] = tmp
+    os.environ["FINTERM_DATA_DIR"] = tmp
     import ownership_watch as w
     import sec_form4_market as form4
     import finra_short_interest as finra

@@ -296,7 +296,7 @@ jobs:
           cache-key-prefix: qt-linux-x64-release
 
       # ── Configure + Build ─────────────────────────────────────────────────
-      # No FINCEPT_BUILD_INSTALLER / no QtIFW on Linux — we ship an AppImage
+      # No FINTERM_BUILD_INSTALLER / no QtIFW on Linux — we ship an AppImage
       # instead (see "Build AppImage" step below).
       - name: Configure CMake
         working-directory: fincept-qt
@@ -575,7 +575,7 @@ jobs:
           fi
 
       # ── Configure + Build ─────────────────────────────────────────────────
-      # No FINCEPT_BUILD_INSTALLER on macOS — we ship a DMG built from the
+      # No FINTERM_BUILD_INSTALLER on macOS — we ship a DMG built from the
       # post-processed bundle (see "Generate Installer (DMG)" step below).
       - name: Configure CMake
         working-directory: fincept-qt

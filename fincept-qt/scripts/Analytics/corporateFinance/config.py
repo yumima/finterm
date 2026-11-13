@@ -14,9 +14,9 @@ def get_database_dir() -> Path:
     return feature_dir("ma")
 
 DATABASE_DIR = get_database_dir()
-# FINCEPT_MA_DB_PATH overrides the deal-database file itself (tests point it
+# FINTERM_MA_DB_PATH overrides the deal-database file itself (tests point it
 # at a throwaway file so the user's real database is never opened).
-MA_DATABASE = (Path(os.environ["FINCEPT_MA_DB_PATH"]) if os.environ.get("FINCEPT_MA_DB_PATH")
+MA_DATABASE = (Path(os.environ["FINTERM_MA_DB_PATH"]) if os.environ.get("FINTERM_MA_DB_PATH")
                else DATABASE_DIR / "ma_deals.db")
 
 # Ensure database directory exists

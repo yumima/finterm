@@ -35,7 +35,7 @@ def check(name, cond, detail=""):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="form4m")
-    os.environ["FINCEPT_DATA_DIR"] = tmp
+    os.environ["FINTERM_DATA_DIR"] = tmp
 
     # ── an old-schema store, as shipped before the flags existed ───────────
     # Where the store lives (market_data/ since the 2026-10-14 layout move) —

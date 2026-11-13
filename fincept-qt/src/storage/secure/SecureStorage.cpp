@@ -40,7 +40,7 @@
 #    include <QCryptographicHash>
 #    include <QSettings>
 #    include <QSysInfo>
-#    ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINTERM_HAVE_LIBSECRET
 // glib's gio/gdbusintrospection.h declares a struct field named `signals`,
 // which collides with Qt's `signals` macro (#define signals public) brought
 // in via the precompiled header. Push/pop the macro around the libsecret
@@ -75,7 +75,7 @@ QString SecureStorage::backend_name() {
     return QStringLiteral("Windows Credential Manager");
 #elif defined(Q_OS_MAC)
     return QStringLiteral("macOS Keychain");
-#elif defined(FINCEPT_HAVE_LIBSECRET)
+#elif defined(FINTERM_HAVE_LIBSECRET)
     return QStringLiteral("libsecret (Secret Service)");
 #else
     return QStringLiteral("obfuscated file (NOT SECURE)");
@@ -85,7 +85,7 @@ QString SecureStorage::backend_name() {
 SecureStorage& SecureStorage::instance() {
     static SecureStorage s;
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINTERM_HAVE_LIBSECRET)
     // Warn once at startup when running on Linux without libsecret. Operators
     // should install libsecret-1-dev and rebuild for production deployments.
     static bool warned_once = false;
@@ -105,7 +105,7 @@ SecureStorage& SecureStorage::instance() {
 // ─────────────────────────────────────────────────────────────────────────────
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC)
 
-#    ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINTERM_HAVE_LIBSECRET
 
 // Schema describing the structure of secrets we store. The single attribute
 // (KeyringIdentity::attr) holds the per-secret name (e.g. FRED_API_KEY) so we
@@ -182,7 +182,7 @@ static QByteArray xor_obfuscate(const QByteArray& data, const KeyringIdentity& i
     return out;
 }
 
-#    endif // FINCEPT_HAVE_LIBSECRET
+#    endif // FINTERM_HAVE_LIBSECRET
 #endif     // Linux helpers
 
 // Every secret is namespaced by the active profile so a non-default `--profile`
@@ -274,7 +274,7 @@ static Result<void> backend_store(const QString& key, const QString& value, cons
     return Result<void>::ok();
 
 #else
-#    ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINTERM_HAVE_LIBSECRET
     // Linux — Secret Service (GNOME Keyring / KWallet compatibility layer).
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
@@ -358,7 +358,7 @@ static Result<QString> backend_retrieve(const QString& key, const KeyringIdentit
     return Result<QString>::ok(value);
 
 #else
-#    ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINTERM_HAVE_LIBSECRET
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
 
@@ -433,7 +433,7 @@ static Result<void> backend_remove(const QString& key, const KeyringIdentity& id
     return Result<void>::ok();
 
 #else
-#    ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINTERM_HAVE_LIBSECRET
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
 
@@ -497,7 +497,7 @@ SecretCache& secret_cache() {
 
 const Result<QString> kNotFound = Result<QString>::err("Not found");
 
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINTERM_HAVE_LIBSECRET)
 // One Secret Service search returning every finterm item with its secret.
 // Leaves the cache incomplete (per-key lookups take over) if the search fails
 // or any item's secret could not be read, e.g. a collection that stayed locked.
@@ -638,11 +638,15 @@ void SecureStorage::migrate_legacy_ids() {
     // Once per profile: after it runs nothing writes the legacy ids again,
     // so repeating it would only cost keyring round-trips on every launch.
     QSettings flags(AppIdentity::kOrg, AppIdentity::kApp);
-    const QString flag = QStringLiteral("migration/secure_legacy_ids_v1/") + ProfileManager::instance().active();
+    // v2: adds the contact-email rename (v1 pairs are re-checked — a no-op
+    // once moved, one keyring read each).
+    const QString flag = QStringLiteral("migration/secure_legacy_ids_v2/") + ProfileManager::instance().active();
     if (flags.value(flag).toBool())
         return;
     static const char* const kLegacy[][2] = {
         {"DATABENTO_API_KEY", "databento.api_key"},
+        // The SEC/FINRA/OSM contact, stored under the old product prefix.
+        {"FINTERM_CONTACT_EMAIL", "FINCEPT_CONTACT_EMAIL"},
         {"FINANCIAL_DATASETS_API_KEY", "mcp.tools.financial-datasets"},
     };
     bool all_ok = true;
@@ -715,7 +719,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
             out.append({QString::fromUtf8(buf), std::nullopt}); // Keychain reads are local and fast
     }
     CFRelease(result);
-#elif defined(FINCEPT_HAVE_LIBSECRET)
+#elif defined(FINTERM_HAVE_LIBSECRET)
     GError* err = nullptr;
     const int flags = SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS;
     GList* items =
@@ -753,7 +757,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
 // Keys already filed under the current identity, in one search where the
 // backend can list (Secret Service); nullopt elsewhere — ask per key.
 std::optional<QSet<QString>> current_keys() {
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINTERM_HAVE_LIBSECRET)
     GError* err = nullptr;
     GList* items = secret_password_search_sync(schema_for(kCurrentId), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
     if (err) {
@@ -784,7 +788,7 @@ void SecureStorage::migrate_identity() {
 
     auto& c = secret_cache();
     QMutexLocker lock(&c.mutex);
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINTERM_HAVE_LIBSECRET)
     // The obfuscated-file store an even older build kept under kAppSecureLegacy:
     // fold whatever it has that the legacy store lacks into that store first,
     // so this one pass moves both (the legacy store wins on a clash).
@@ -854,7 +858,7 @@ void SecureStorage::migrate_identity() {
         if (backend_remove(e.key, kLegacyId).is_err())
             all_ok = false;
     }
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && !defined(FINTERM_HAVE_LIBSECRET)
     if (all_ok) {
         QSettings old_store(kLegacyId.settings_org, AppIdentity::kAppSecure);
         if (old_store.allKeys().isEmpty()) {
@@ -878,7 +882,7 @@ void SecureStorage::migrate_identity() {
 }
 
 bool SecureStorage::can_enumerate() {
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINTERM_HAVE_LIBSECRET)
     return true;
 #else
     return false;
@@ -886,7 +890,7 @@ bool SecureStorage::can_enumerate() {
 }
 
 Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
-#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINTERM_HAVE_LIBSECRET)
     QMutexLocker lock(&secret_cache().mutex); // serialized with every other keyring call
     QStringList out;
     const QString scope = ProfileManager::instance().secure_key_prefix();

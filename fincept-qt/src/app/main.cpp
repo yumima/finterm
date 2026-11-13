@@ -164,10 +164,10 @@ int main(int argc, char* argv[]) {
     // Desktop-entry / WM_CLASS (X11) / app_id (Wayland) association — matches the
     // installed finterm.desktop so the taskbar groups windows under the brand.
     app.setDesktopFileName(finterm::AppIdentity::kDisplayName);
-#ifndef FINCEPT_VERSION_STRING
-#    define FINCEPT_VERSION_STRING "0.0.0-dev"
+#ifndef FINTERM_VERSION_STRING
+#    define FINTERM_VERSION_STRING "0.0.0-dev"
 #endif
-    app.setApplicationVersion(QStringLiteral(FINCEPT_VERSION_STRING));
+    app.setApplicationVersion(QStringLiteral(FINTERM_VERSION_STRING));
 
     // Tooltips: instant, at the pointer, wrapped into a box. Installed here
     // rather than with the theme because it swaps the application style, and

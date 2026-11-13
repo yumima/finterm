@@ -15,7 +15,7 @@ namespace finterm {
 /// of the active chat profile.
 ///
 /// Resolution order for the base URL:
-///   1. env `FINCEPT_EMBEDDINGS_BASE_URL` (embeddings-specific override)
+///   1. env `FINTERM_EMBEDDINGS_BASE_URL` (embeddings-specific override)
 ///   2. the shared engine root from `HearthService` (env override → hearth
 ///      default :11435, no /v1) — the same root the chat path uses, so the
 ///      two never diverge. The client appends /v1/embeddings itself.

@@ -68,7 +68,7 @@ class PythonRunner : public QObject {
 
     /// Build the standard Python process environment used by all finagent/PyFincept
     /// subprocess spawns. Sets PYTHONIOENCODING, PYTHONDONTWRITEBYTECODE,
-    /// PYTHONUNBUFFERED, FINCEPT_DATA_DIR, FINAGENT_DATA_DIR,
+    /// PYTHONUNBUFFERED, FINTERM_DATA_DIR, FINAGENT_DATA_DIR,
     /// FINAGENT_RUNTIME_CACHE_SIZE, and PYTHONPATH (derived from scripts_dir()).
     /// Callers that run a script inside a sub-package may still need to prepend
     /// a "parent-of-pkg" directory to PYTHONPATH themselves — this helper only

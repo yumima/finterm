@@ -42,7 +42,7 @@ class LocalRuntimeUnavailable(RuntimeError):
 
 
 # Default base URL — Ollama's OpenAI-compat endpoint.  Override via
-# the FINCEPT_LOCAL_BASE_URL env var or by passing `base_url=` to
+# the FINTERM_LOCAL_BASE_URL env var or by passing `base_url=` to
 # run_text().  Production reads it from LlmConfigRepository on the
 # C++ side and passes it through.
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
@@ -56,9 +56,9 @@ def _resolve_endpoint(base_url: str | None, model: str | None, api_key: str | No
     """Resolve URL / model / key with env-var fallbacks.  Centralised so
     run_text and run_with_tools agree on the precedence (caller-supplied
     kwarg > env var > module default)."""
-    url = (base_url or os.environ.get("FINCEPT_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
-    model_id = model or os.environ.get("FINCEPT_LOCAL_MODEL") or DEFAULT_MODEL
-    key = api_key or os.environ.get("FINCEPT_LOCAL_API_KEY") or "sk-no-key"
+    url = (base_url or os.environ.get("FINTERM_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    model_id = model or os.environ.get("FINTERM_LOCAL_MODEL") or DEFAULT_MODEL
+    key = api_key or os.environ.get("FINTERM_LOCAL_API_KEY") or "sk-no-key"
     return url, model_id, key
 
 
@@ -537,11 +537,11 @@ def probe(base_url: str | None = None, timeout_s: float = 5.0) -> list[str]:
     Raises LocalRuntimeUnavailable on connection failure so the caller
     can surface a clear error — no empty-list-equals-success ambiguity.
     """
-    url = (base_url or os.environ.get("FINCEPT_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    url = (base_url or os.environ.get("FINTERM_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     req = request.Request(
         f"{url}/models",
         headers={
-            "Authorization": f"Bearer {os.environ.get('FINCEPT_LOCAL_API_KEY', 'sk-no-key')}",
+            "Authorization": f"Bearer {os.environ.get('FINTERM_LOCAL_API_KEY', 'sk-no-key')}",
         },
     )
     try:

@@ -14,15 +14,15 @@ Why Piper: ONNX-shaped, ~30 MB model, runs at >real-time on CPU,
 clean Apache-2.0 + MIT licence, native CLI.  No GPU required.
 
 Environment variables (injected by TtsService):
-    FINCEPT_TTS_MODEL    Piper model path (.onnx) — required.
+    FINTERM_TTS_MODEL    Piper model path (.onnx) — required.
                           See https://github.com/rhasspy/piper#voices
                           for the catalogue.  Example:
                           ~/.local/share/finterm/piper/en_US-amy-medium.onnx
-    FINCEPT_TTS_LENGTH   Speech length scale (default 1.0; <1 = faster).
-    FINCEPT_TTS_NOISE    Noise scale (default 0.667; controls expressiveness).
+    FINTERM_TTS_LENGTH   Speech length scale (default 1.0; <1 = faster).
+    FINTERM_TTS_NOISE    Noise scale (default 0.667; controls expressiveness).
 
 First-run: user must download a Piper voice model and point
-FINCEPT_TTS_MODEL at it.  We don't bundle voices because the smallest
+FINTERM_TTS_MODEL at it.  We don't bundle voices because the smallest
 en-US voice alone is ~30 MB and finterm would balloon if we shipped
 every locale.
 
@@ -83,10 +83,10 @@ def stream_play(model: str, text: str, piper_bin: str) -> int:
         write_status({"fatal": "no raw audio player (paplay/pw-play/aplay) for streaming"})
         return 2
 
-    length = os.environ.get("FINCEPT_TTS_LENGTH", "1.08")
-    noise = os.environ.get("FINCEPT_TTS_NOISE", "0.667")
-    noise_w = os.environ.get("FINCEPT_TTS_NOISE_W", "0.9")
-    sent_sil = os.environ.get("FINCEPT_TTS_SENTENCE_SILENCE", "0.35")
+    length = os.environ.get("FINTERM_TTS_LENGTH", "1.08")
+    noise = os.environ.get("FINTERM_TTS_NOISE", "0.667")
+    noise_w = os.environ.get("FINTERM_TTS_NOISE_W", "0.9")
+    sent_sil = os.environ.get("FINTERM_TTS_SENTENCE_SILENCE", "0.35")
     pipeline = (f"{shlex.quote(piper_bin)} --model {shlex.quote(model)} --output_raw "
                 f"--length_scale {shlex.quote(length)} --noise_scale {shlex.quote(noise)} "
                 f"--noise_w {shlex.quote(noise_w)} --sentence_silence {shlex.quote(sent_sil)} | {player}")
@@ -127,9 +127,9 @@ def main() -> int:
         write_status({"fatal": "no text on stdin"})
         return 2
 
-    model = os.environ.get("FINCEPT_TTS_MODEL", "").strip()
+    model = os.environ.get("FINTERM_TTS_MODEL", "").strip()
     if not model:
-        write_status({"fatal": "FINCEPT_TTS_MODEL not set — point at a Piper .onnx voice"})
+        write_status({"fatal": "FINTERM_TTS_MODEL not set — point at a Piper .onnx voice"})
         return 2
     if not Path(model).exists():
         write_status({"fatal": f"model not found: {model}"})
@@ -160,10 +160,10 @@ def main() -> int:
         piper_bin,
         "--model", model,
         "--output_file", args.output,
-        "--length_scale", os.environ.get("FINCEPT_TTS_LENGTH", "1.08"),
-        "--noise_scale", os.environ.get("FINCEPT_TTS_NOISE", "0.667"),
-        "--noise_w", os.environ.get("FINCEPT_TTS_NOISE_W", "0.9"),
-        "--sentence_silence", os.environ.get("FINCEPT_TTS_SENTENCE_SILENCE", "0.35"),
+        "--length_scale", os.environ.get("FINTERM_TTS_LENGTH", "1.08"),
+        "--noise_scale", os.environ.get("FINTERM_TTS_NOISE", "0.667"),
+        "--noise_w", os.environ.get("FINTERM_TTS_NOISE_W", "0.9"),
+        "--sentence_silence", os.environ.get("FINTERM_TTS_SENTENCE_SILENCE", "0.35"),
     ]
 
     try:

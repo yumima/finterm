@@ -57,7 +57,7 @@ except ImportError:
 # Port utilities
 # ---------------------------------------------------------------------------
 
-DEFAULT_PORT = int(os.environ.get("FINCEPT_MCP_PORT", "18765"))
+DEFAULT_PORT = int(os.environ.get("FINTERM_MCP_PORT", "18765"))
 
 
 def _is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
@@ -87,7 +87,7 @@ def get_mcp_toolset(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> Any:
 
     Args:
         host: Server host (default 127.0.0.1)
-        port: Server port (default 18765 or FINCEPT_MCP_PORT env var)
+        port: Server port (default 18765 or FINTERM_MCP_PORT env var)
 
     Returns:
         MCPServerStreamableHTTP instance for use as a pydantic-ai toolset,

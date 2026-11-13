@@ -34,7 +34,7 @@ The point is not breadth — it is to validate that a production data path actua
     fetch; nothing to close).
 - Registers itself with the hub at app-startup:
   `DataHub::instance().register_producer(&MarketDataService::instance())`
-  — gated on `FINCEPT_DATAHUB_ENABLED`.
+  — gated on `FINTERM_DATAHUB_ENABLED`.
 - Registers default topic policy:
   ```cpp
   TopicPolicy p;

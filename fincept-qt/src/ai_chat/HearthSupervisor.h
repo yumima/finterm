@@ -27,7 +27,7 @@ class HearthSupervisor : public QObject {
     State state() const { return state_; }
 
     /// Resolved path to the hearth CLI binary. Resolution order:
-    ///   1. env FINCEPT_HEARTH_BIN
+    ///   1. env FINTERM_HEARTH_BIN
     ///   2. ~/.local/bin/hearth       (pip / pipx install)
     ///   3. ~/fin/hearth/.venv/bin/hearth  (dev checkout)
     ///   4. ~/.hearth/bin/hearth

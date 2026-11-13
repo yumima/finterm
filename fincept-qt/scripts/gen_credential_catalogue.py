@@ -38,9 +38,9 @@ NOT_CREDENTIALS = {
     "NO_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "CI",
     # finterm's own data directory, used by scripts that keep a local index
     # (the 13F SQLite store). A path, not a secret.
-    "FINCEPT_DATA_DIR",
+    "FINTERM_DATA_DIR",
     # The per-user data and cache homes (scripts/finterm_paths.py). Paths too.
-    "FINCEPT_USER_DIR", "FINCEPT_USER_DATA_DIR", "FINCEPT_CACHE_DIR",
+    "FINTERM_USER_DIR", "FINTERM_USER_DATA_DIR", "FINTERM_CACHE_DIR",
     # Logging switches some scripts read; configuration, not credentials.
     "LOGURU_AUTOINIT", "LOGURU_LEVEL",
 }
@@ -59,7 +59,7 @@ LABELS = {
     "DATABENTO_API_KEY": "Databento",
     "EIA_API_KEY": "EIA (Energy Information Administration)",
     "FINANCIAL_DATASETS_API_KEY": "Financial Datasets (financialdatasets.ai)",
-    "FINCEPT_CONTACT_EMAIL": "Contact email (declared to SEC, FINRA, OpenStreetMap)",
+    "FINTERM_CONTACT_EMAIL": "Contact email (declared to SEC, FINRA, OpenStreetMap)",
     "FINNHUB_API_KEY": "Finnhub",
     "FRED_API_KEY": "FRED (Federal Reserve)",
     "NASDAQ_DATA_LINK_API_KEY": "Nasdaq Data Link (Quandl)",
@@ -100,7 +100,7 @@ def scan():
 # "Other data sources". Order here is the display order.
 GROUPS = [
     ("Your identity", {
-        "FINCEPT_CONTACT_EMAIL", "ACLED_EMAIL", "CROSSREF_EMAIL", "KAGGLE_USERNAME",
+        "FINTERM_CONTACT_EMAIL", "ACLED_EMAIL", "CROSSREF_EMAIL", "KAGGLE_USERNAME",
     }),
     ("Market data", {
         "ALPHA_SPREAD_API_KEY", "ALPHA_VANTAGE_API_KEY", "CBOE_API_KEY", "CME_API_KEY",

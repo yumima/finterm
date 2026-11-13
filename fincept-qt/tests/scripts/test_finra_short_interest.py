@@ -34,7 +34,7 @@ def check(name, cond, detail=""):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="finra_si")
-    os.environ["FINCEPT_DATA_DIR"] = tmp
+    os.environ["FINTERM_DATA_DIR"] = tmp
     import finra_short_interest as si
 
     # ── row decode ──────────────────────────────────────────────────────────

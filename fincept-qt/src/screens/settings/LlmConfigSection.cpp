@@ -438,7 +438,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
     engine_status_lbl_->setToolTip("Local AI engine (hearth) detected at the resolved base URL.\n"
                                    "Chat + embeddings default to hearth on 127.0.0.1:11435 with no config;\n"
-                                   "set Base URL above (or $FINCEPT_ENGINE_BASE_URL) to override.");
+                                   "set Base URL above (or $FINTERM_ENGINE_BASE_URL) to override.");
     form->addRow(eng_lbl, engine_status_lbl_);
     connect(&HearthService::instance(), &HearthService::detected, this, &LlmConfigSection::refresh_engine_status);
     HearthService::instance().detect();

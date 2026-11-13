@@ -94,7 +94,7 @@ HearthService& HearthService::instance() {
 }
 
 HearthService::Resolution HearthService::resolve() const {
-    const QByteArray env = qgetenv("FINCEPT_ENGINE_BASE_URL");
+    const QByteArray env = qgetenv("FINTERM_ENGINE_BASE_URL");
     const QString base = env.isEmpty() ? normalize_llm_base(QString::fromLatin1(kDefaultBase))
                                        : normalize_llm_base(QString::fromUtf8(env));
     // Treat hearth's default port as hearth even before any probe, so the

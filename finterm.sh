@@ -33,13 +33,13 @@ REPO_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
 APP_DIR="$REPO_DIR/fincept-qt"
 
 case "$(uname -s)" in
-    Darwin*) FINCEPT_OS="macos" ;;
-    *)       FINCEPT_OS="linux" ;;
+    Darwin*) FINTERM_OS="macos" ;;
+    *)       FINTERM_OS="linux" ;;
 esac
 
 # Per-OS build preset, binary, and state dirs. State dirs mirror the app's
 # AppPaths::root() / QSettings locations (see fincept-qt/src/core/config/AppPaths.cpp).
-if [[ "$FINCEPT_OS" == "macos" ]]; then
+if [[ "$FINTERM_OS" == "macos" ]]; then
     BUILD_PRESET="macos-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
     FINTERM_BIN="$BUILD_DIR/finterm.app/Contents/MacOS/finterm"
@@ -48,7 +48,7 @@ if [[ "$FINCEPT_OS" == "macos" ]]; then
     LEGACY_SHARE_DIR="$HOME/Library/Application Support/com.fincept.terminal"
     CONFIG_DIR="$HOME/Library/Preferences"   # SHARED dir — QSettings writes a plist here
     LEGACY_CONFIG_DIR="$CONFIG_DIR"
-    BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/Library/Application Support/finterm-backups}"
+    BACKUP_DIR="${FINTERM_BACKUP_DIR:-$HOME/Library/Application Support/finterm-backups}"
 else
     BUILD_PRESET="linux-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
@@ -58,7 +58,7 @@ else
     LEGACY_SHARE_DIR="$HOME/.local/share/com.fincept.terminal"
     CONFIG_DIR="$HOME/.config/finterm"       # app-specific dir (safe to wipe wholesale)
     LEGACY_CONFIG_DIR="$HOME/.config/Fincept"
-    BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/.local/share/finterm-backups}"
+    BACKUP_DIR="${FINTERM_BACKUP_DIR:-$HOME/.local/share/finterm-backups}"
 fi
 # An older build's folders, until the app's first launch moves them
 # (AppPaths::migrate_root / LayoutMigrations).
@@ -134,7 +134,7 @@ SETUP
     Qt, configures the CMake preset, builds the binary, and fetches the yt-dlp
     helper. Re-runnable; safe to invoke on an already-provisioned checkout.
       --ci    Non-interactive (skip the "launch now?" prompt). For CI.
-    Qt resolution honours Qt6_DIR and FINCEPT_QT_ROOT overrides; otherwise the
+    Qt resolution honours Qt6_DIR and FINTERM_QT_ROOT overrides; otherwise the
     distro/Homebrew Qt on CMake's default search path is used.
 
 START
@@ -142,25 +142,25 @@ START
     watchlists, theme, workspaces), then exec's the Qt binary in the
     foreground. Auth runs in-process; there is no stub server.
 
-    Set FINCEPT_KEEP_WINDOW=1 to skip the window-state cleanup if you
+    Set FINTERM_KEEP_WINDOW=1 to skip the window-state cleanup if you
     want Qt to remember a hand-arranged layout across launches.
 
     GPU selection (hybrid laptops):
-      FINCEPT_GPU=auto    (default) iGPU; auto-avoids a wedged NVIDIA dGPU
-      FINCEPT_GPU=igpu    Force the integrated GPU (Mesa)
-      FINCEPT_GPU=nvidia  Render on the discrete NVIDIA GPU (PRIME offload;
+      FINTERM_GPU=auto    (default) iGPU; auto-avoids a wedged NVIDIA dGPU
+      FINTERM_GPU=igpu    Force the integrated GPU (Mesa)
+      FINTERM_GPU=nvidia  Render on the discrete NVIDIA GPU (PRIME offload;
                           needs a working driver, else falls back to iGPU)
 
-    Set FINCEPT_GDB=1 to run under gdb --batch and capture a backtrace
+    Set FINTERM_GDB=1 to run under gdb --batch and capture a backtrace
     in $SHARE_DIR/crashdumps/ on crash. Off by default — ptrace overhead
     hurts the QtMultimedia FFmpeg pipeline, audio, and GPU sync timing.
     Kernel core files (apport / systemd-coredump) stay enabled regardless.
 
     Video hwaccel diagnostics:
-      FINCEPT_VIDEO_DEBUG=1     Enable QtMultimedia FFmpeg-backend logging
+      FINTERM_VIDEO_DEBUG=1     Enable QtMultimedia FFmpeg-backend logging
                                 (hwaccel attempt, texture-converter, etc.)
-      FINCEPT_HWACCEL=vaapi     Force VAAPI decode (Intel iGPU on Linux).
-      FINCEPT_HWACCEL=off       Force CPU-only decode (baseline test).
+      FINTERM_HWACCEL=vaapi     Force VAAPI decode (Intel iGPU on Linux).
+      FINTERM_HWACCEL=off       Force CPU-only decode (baseline test).
     Qt 6.8.3's plugin does NOT support NVDEC for decode — only VAAPI on
     Linux. NVIDIA-only systems fall back to CPU decode regardless.
 
@@ -240,13 +240,13 @@ EOF
     # Strip Qt window/toolbar/dock-layout state from finterm.conf
     # so every launch starts with a clean default layout. Surgical —
     # preserves portfolio, workspaces, theme, component-usage stats, and
-    # every other setting. Set FINCEPT_KEEP_WINDOW=1 to skip.
-    if [[ "${FINCEPT_KEEP_WINDOW:-0}" != "1" ]]; then
+    # every other setting. Set FINTERM_KEEP_WINDOW=1 to skip.
+    if [[ "${FINTERM_KEEP_WINDOW:-0}" != "1" ]]; then
         do_window_only_reset
     fi
 
     # ── GPU selection (hybrid laptops, Linux) ────────────────────────────────
-    # FINCEPT_GPU picks which GPU finterm renders on:
+    # FINTERM_GPU picks which GPU finterm renders on:
     #   auto   (default) — use the iGPU; if a discrete NVIDIA card is present but
     #                      its driver is wedged (GSP/FSP bring-up failing, etc.),
     #                      pin glvnd to Mesa so the dead dGPU can't hang startup
@@ -280,8 +280,8 @@ EOF
         export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
     }
     # glvnd/PRIME is a Linux concept; macOS selects the GPU itself (skip there).
-    if [[ "$FINCEPT_OS" == "linux" ]]; then
-        case "${FINCEPT_GPU:-auto}" in
+    if [[ "$FINTERM_OS" == "linux" ]]; then
+        case "${FINTERM_GPU:-auto}" in
             igpu|intel|mesa)
                 _use_mesa ;;
             nvidia|dgpu)
@@ -307,10 +307,10 @@ EOF
 
     # ── Crash capture ────────────────────────────────────────────────────────
     # Kernel core file (apport / systemd-coredump) is always enabled.
-    # The GDB wrapper is opt-in via FINCEPT_GDB=1 — by default we plain-exec
+    # The GDB wrapper is opt-in via FINTERM_GDB=1 — by default we plain-exec
     # so timing-sensitive subsystems (QtMultimedia FFmpeg pipeline, audio,
     # GPU sync) don't suffer ptrace overhead on every signal/vfork/thread
-    # event. Use FINCEPT_GDB=1 only when investigating a specific crash.
+    # event. Use FINTERM_GDB=1 only when investigating a specific crash.
     local CRASHDUMP_DIR="$SHARE_DIR/crashdumps"
     mkdir -p "$CRASHDUMP_DIR"
     ulimit -c unlimited
@@ -323,23 +323,23 @@ EOF
     # env vars to diagnose or force the path when Qt's auto-detect isn't
     # doing what you'd expect.
     #
-    # FINCEPT_VIDEO_DEBUG=1 — enables FFmpeg-backend logging
+    # FINTERM_VIDEO_DEBUG=1 — enables FFmpeg-backend logging
     #   QT_FFMPEG_DEBUG=1 and qt.multimedia.ffmpeg.* logging rules so the
     #   hwaccel attempt + texture-converter outcome is visible on stderr.
-    # FINCEPT_HWACCEL=vaapi|off — overrides Qt's auto-detection
+    # FINTERM_HWACCEL=vaapi|off — overrides Qt's auto-detection
     #   "vaapi" forces VAAPI decode (QT_FFMPEG_DECODING_HW_DEVICE_TYPES).
     #   "off"   disables all hwaccel (forces software decode — slow but
     #            useful as a baseline to confirm CPU is decode-bound).
-    if [[ "${FINCEPT_VIDEO_DEBUG:-0}" == "1" ]]; then
+    if [[ "${FINTERM_VIDEO_DEBUG:-0}" == "1" ]]; then
         export QT_FFMPEG_DEBUG=1
         export QT_LOGGING_RULES="${QT_LOGGING_RULES:+$QT_LOGGING_RULES;}qt.multimedia.ffmpeg.*=true"
     fi
-    case "${FINCEPT_HWACCEL:-}" in
+    case "${FINTERM_HWACCEL:-}" in
         vaapi) export QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi ;;
         off)   export QT_FFMPEG_DECODING_HW_DEVICE_TYPES=     ;;
     esac
 
-    if [[ "${FINCEPT_GDB:-0}" == "1" ]] && command -v gdb >/dev/null 2>&1; then
+    if [[ "${FINTERM_GDB:-0}" == "1" ]] && command -v gdb >/dev/null 2>&1; then
         local GDB_LOG="$CRASHDUMP_DIR/gdb-$(date +%Y%m%d-%H%M%S).log"
         # Pass non-crash signals through to Qt so they are not intercepted.
         exec gdb --batch \
@@ -478,7 +478,7 @@ _snapshot_data() {
     mkdir -p "$dest/config"
     # Settings: every store in the app's settings folder on Linux (current and
     # older names alike); macOS keeps QSettings plists under ~/Library/Preferences.
-    if [[ "$FINCEPT_OS" == "macos" ]]; then
+    if [[ "$FINTERM_OS" == "macos" ]]; then
         # Current names, and an older build's until its first launch moves them.
         cp -p "$HOME/Library/Preferences/"com.finterm.*.plist "$HOME/Library/Preferences/"com.fincept.*.plist \
             "$dest/config/" 2>/dev/null || true
@@ -577,7 +577,7 @@ cmd_reset() {
     # Everything except the voice models hearth shares with this folder
     # (piper/, kokoro/): re-downloadable, but not this app's to wipe.
     find "$SHARE_DIR" -mindepth 1 -maxdepth 1 ! -name piper ! -name kokoro -exec rm -rf {} +
-    if [[ "$FINCEPT_OS" == "macos" ]]; then
+    if [[ "$FINTERM_OS" == "macos" ]]; then
         # CONFIG_DIR is the SHARED ~/Library/Preferences — only remove OUR plist(s),
         # never the whole directory. Kill cfprefsd FIRST so it flushes its in-memory
         # cache and can't immediately rewrite the plist we're about to delete.
@@ -595,7 +595,7 @@ cmd_reset() {
     echo "  To recover it after relaunching, stop the app and copy it back:"
     echo "    finterm stop"
     echo "    find \"$snap\" -mindepth 1 -maxdepth 1 ! -name config -exec cp -a {} \"$SHARE_DIR/\" \\;"
-    if [[ "$FINCEPT_OS" == "macos" ]]; then
+    if [[ "$FINTERM_OS" == "macos" ]]; then
         echo "    cp -a \"$snap/config/.\"     \"$HOME/Library/Preferences/\"   # settings + keys"
     else
         echo "    cp -a \"$snap/config/.\"     \"$CONFIG_DIR/\"   # settings + keys"
@@ -828,15 +828,15 @@ cmd_setup() {
     # Qt serves every checkout and gets security updates for free. QT_PREFIX is
     # left empty when Qt is on CMake's default search path (Linux distro case)
     # so find_package(Qt6) discovers it. It is set only for an explicit override
-    # or a non-default prefix (Homebrew). Overrides: Qt6_DIR, FINCEPT_QT_ROOT.
+    # or a non-default prefix (Homebrew). Overrides: Qt6_DIR, FINTERM_QT_ROOT.
     local QT_PREFIX="" QMAKE SYS_QT_VER
     echo "[6/8] Locating system Qt (>= ${QT_VERSION%.*}) ..."
     if [ -n "${Qt6_DIR:-}" ] && [ -f "$Qt6_DIR/lib/cmake/Qt6/Qt6Config.cmake" ]; then
         QT_PREFIX="$Qt6_DIR"
         info "Using Qt from Qt6_DIR env: $QT_PREFIX"
-    elif [ -n "${FINCEPT_QT_ROOT:-}" ] && [ -f "$FINCEPT_QT_ROOT/$QT_VERSION/$QT_KIT/lib/cmake/Qt6/Qt6Config.cmake" ]; then
-        QT_PREFIX="$FINCEPT_QT_ROOT/$QT_VERSION/$QT_KIT"
-        info "Using pinned Qt from FINCEPT_QT_ROOT: $QT_PREFIX"
+    elif [ -n "${FINTERM_QT_ROOT:-}" ] && [ -f "$FINTERM_QT_ROOT/$QT_VERSION/$QT_KIT/lib/cmake/Qt6/Qt6Config.cmake" ]; then
+        QT_PREFIX="$FINTERM_QT_ROOT/$QT_VERSION/$QT_KIT"
+        info "Using pinned Qt from FINTERM_QT_ROOT: $QT_PREFIX"
     elif [ "$PLATFORM" = "macos" ]; then
         QT_PREFIX="$(brew --prefix qt 2>/dev/null || true)"
         [ -n "$QT_PREFIX" ] && [ -d "$QT_PREFIX" ] \
@@ -943,7 +943,7 @@ DESKTOP_FILE="$DESKTOP_DIR/finterm.desktop"
 MACOS_APP_LINK="$HOME/Applications/finterm.app"
 
 cmd_install() {
-    if [[ "$FINCEPT_OS" == "macos" ]]; then
+    if [[ "$FINTERM_OS" == "macos" ]]; then
         local app="$BUILD_DIR/finterm.app"
         [[ -d "$app" ]] || { echo "Error: app bundle not found at $app — run 'finterm setup' first." >&2; exit 1; }
         mkdir -p "$HOME/Applications"
@@ -980,7 +980,7 @@ EOF
 }
 
 cmd_uninstall() {
-    if [[ "$FINCEPT_OS" == "macos" ]]; then
+    if [[ "$FINTERM_OS" == "macos" ]]; then
         if [[ -L "$MACOS_APP_LINK" || -e "$MACOS_APP_LINK" ]]; then
             rm -f "$MACOS_APP_LINK"; echo "Removed: $MACOS_APP_LINK"
         else

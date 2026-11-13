@@ -41,7 +41,7 @@ def get(url):
             if e.code == 404:
                 return None
             if e.code == 403:  # undeclared identity: retrying only records empty frames
-                raise SystemExit("SEC 403 -- set FINCEPT_CONTACT_EMAIL")
+                raise SystemExit("SEC 403 -- set FINTERM_CONTACT_EMAIL")
             time.sleep(2 + attempt * 3)
         except Exception:
             time.sleep(2 + attempt * 3)

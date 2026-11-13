@@ -94,7 +94,7 @@ Every agent dispatch picks one runtime:
 | Runtime | When | What |
 |---|---|---|
 | **anthropic** | `provider == "anthropic"` | claude-agent-sdk (Apache-2.0) wrapping the `claude` CLI. Native MCP, native skills, server-side tool use, prompt caching, optional thinking. |
-| **local** | `provider in {openai, ollama, groq, gemini, deepseek, openrouter}` | Plain OpenAI-compat chat completions via `urllib`. Default base URL `http://localhost:11434/v1` (Ollama); env overrides via `FINCEPT_LOCAL_{BASE_URL,MODEL,API_KEY}`. |
+| **local** | `provider in {openai, ollama, groq, gemini, deepseek, openrouter}` | Plain OpenAI-compat chat completions via `urllib`. Default base URL `http://localhost:11434/v1` (Ollama); env overrides via `FINTERM_LOCAL_{BASE_URL,MODEL,API_KEY}`. |
 | **agno** *(opt-in legacy)* | `advanced_config["runtime"] = "agno"` explicit | Pre-Track-12 path. Exists as an escape hatch for alpha-arena agents that haven't migrated. New code should not target this. |
 
 No silent failover. When the active runtime is down the chat
@@ -299,7 +299,7 @@ forces an immediate tick.
 | **Prompt-injection guard** | `mcp::UntrustedContent::wrap()` brackets externally-sourced text with `<untrusted>…</untrusted>` markers and entity-encodes `<`/`>` so attackers can't close the tag early. Every agent's system prompt carries a v031 directive instructing the model to treat marked content as data. Applied to NewsTools (headline + summary) and ForumTools (post / comment / profile fields). |
 | **Per-agent budget** | `BudgetService::check_dispatch(agent_id)` runs ahead of every dispatch. Reads `agent_configs.config_json.budget.max_usd_per_day`; sums `cost_usd` from same-day traces; refuses dispatch when the cap is hit. Missing / non-positive cap = enforcement off. |
 | **Auth gate** | Destructive tools (`paper.place_order`, settings mutators, …) declare `is_destructive = true`. `McpProvider::call_tool` routes through `ctx.elicit` then falls back to the registered `AuthChecker`. |
-| **Eval result store** | Append-only JSON Lines at `~/.fincept/eval_runs.jsonl` (override via `FINCEPT_EVAL_RESULTS`). `result_store.record_run()` wired into the runner's run / run-all commands. Survives the trace-schema evolution window without migrations. |
+| **Eval result store** | Append-only JSON Lines at `~/.fincept/eval_runs.jsonl` (override via `FINTERM_EVAL_RESULTS`). `result_store.record_run()` wired into the runner's run / run-all commands. Survives the trace-schema evolution window without migrations. |
 
 ### 5.1 Acceptance checklist
 
@@ -423,7 +423,7 @@ code that runs single-threaded at startup.
 ### 7.3 Eval result store
 
 `~/.fincept/eval_runs.jsonl` (override via
-`FINCEPT_EVAL_RESULTS`). One JSON line per `(fixture × runtime)`
+`FINTERM_EVAL_RESULTS`). One JSON line per `(fixture × runtime)`
 execution: started_at, runtime, fixture_path, status,
 failed_assertions, trace summary (turn_id, model, iterations,
 latency_ms, output_preview, tool_call_count).

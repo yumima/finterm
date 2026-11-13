@@ -72,17 +72,17 @@ class Logger {
 // Existing call sites LOG_INFO("Tag", some_qstring) keep working unchanged.
 // If the level is filtered out, `msg` is never evaluated, so callers can pass
 // `QString("...").arg(expensive())` without paying for it in production.
-#define FINCEPT_LOG_IMPL(level_enum, level_fn, tag, msg)                                                               \
+#define FINTERM_LOG_IMPL(level_enum, level_fn, tag, msg)                                                               \
     do {                                                                                                               \
         if (finterm::Logger::instance().is_enabled(finterm::LogLevel::level_enum, tag))                                \
             finterm::Logger::instance().level_fn(tag, msg);                                                            \
     } while (0)
 
-#define LOG_TRACE(tag, msg) FINCEPT_LOG_IMPL(Trace, trace, tag, msg)
-#define LOG_DEBUG(tag, msg) FINCEPT_LOG_IMPL(Debug, debug, tag, msg)
-#define LOG_INFO(tag, msg) FINCEPT_LOG_IMPL(Info, info, tag, msg)
-#define LOG_WARN(tag, msg) FINCEPT_LOG_IMPL(Warn, warn, tag, msg)
-#define LOG_ERROR(tag, msg) FINCEPT_LOG_IMPL(Error, error, tag, msg)
+#define LOG_TRACE(tag, msg) FINTERM_LOG_IMPL(Trace, trace, tag, msg)
+#define LOG_DEBUG(tag, msg) FINTERM_LOG_IMPL(Debug, debug, tag, msg)
+#define LOG_INFO(tag, msg) FINTERM_LOG_IMPL(Info, info, tag, msg)
+#define LOG_WARN(tag, msg) FINTERM_LOG_IMPL(Warn, warn, tag, msg)
+#define LOG_ERROR(tag, msg) FINTERM_LOG_IMPL(Error, error, tag, msg)
 
 // LOG_FATAL writes the line, then aborts in debug builds (P3.20).
 #ifndef NDEBUG
@@ -93,7 +93,7 @@ class Logger {
             qFatal("FATAL [%s] %s", qUtf8Printable(QString(tag)), qUtf8Printable(QString(msg)));                       \
         } while (0)
 #else
-#    define LOG_FATAL(tag, msg) FINCEPT_LOG_IMPL(Fatal, fatal, tag, msg)
+#    define LOG_FATAL(tag, msg) FINTERM_LOG_IMPL(Fatal, fatal, tag, msg)
 #endif
 
 // ── LOG_*_F variadic helpers (P2.12) ────────────────────────────────────────
@@ -149,14 +149,14 @@ inline QString log_fmt(const QString& fmt, A1&& a1, A2&& a2, A3&& a3, A4&& a4, A
 }
 } // namespace finterm::detail
 
-#define FINCEPT_LOG_F_IMPL(level_enum, level_fn, tag, fmt, ...)                                                        \
+#define FINTERM_LOG_F_IMPL(level_enum, level_fn, tag, fmt, ...)                                                        \
     do {                                                                                                               \
         if (finterm::Logger::instance().is_enabled(finterm::LogLevel::level_enum, tag))                                \
             finterm::Logger::instance().level_fn(tag, finterm::detail::log_fmt(fmt, ##__VA_ARGS__));                   \
     } while (0)
 
-#define LOG_TRACE_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Trace, trace, tag, fmt, ##__VA_ARGS__)
-#define LOG_DEBUG_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Debug, debug, tag, fmt, ##__VA_ARGS__)
-#define LOG_INFO_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Info, info, tag, fmt, ##__VA_ARGS__)
-#define LOG_WARN_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Warn, warn, tag, fmt, ##__VA_ARGS__)
-#define LOG_ERROR_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Error, error, tag, fmt, ##__VA_ARGS__)
+#define LOG_TRACE_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Trace, trace, tag, fmt, ##__VA_ARGS__)
+#define LOG_DEBUG_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Debug, debug, tag, fmt, ##__VA_ARGS__)
+#define LOG_INFO_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Info, info, tag, fmt, ##__VA_ARGS__)
+#define LOG_WARN_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Warn, warn, tag, fmt, ##__VA_ARGS__)
+#define LOG_ERROR_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Error, error, tag, fmt, ##__VA_ARGS__)

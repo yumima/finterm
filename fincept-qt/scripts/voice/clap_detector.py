@@ -11,17 +11,17 @@ Stdout protocol (one JSON line per event, flushed):
     {"fatal":  "..."}                    unrecoverable, process exits
 
 Environment variables (set by ClapDetectorService in C++):
-    FINCEPT_CLAP_MODE         "double" (default) | "single"
-    FINCEPT_CLAP_PEAK_MIN     int 0..32768  — min peak amplitude to count as a
+    FINTERM_CLAP_MODE         "double" (default) | "single"
+    FINTERM_CLAP_PEAK_MIN     int 0..32768  — min peak amplitude to count as a
                               candidate. Default 12000 (~ -8 dBFS). Lower = more
                               sensitive, more false positives.
-    FINCEPT_CLAP_PR_RATIO     float — min peak/rms ratio. Claps are sharp; this
+    FINTERM_CLAP_PR_RATIO     float — min peak/rms ratio. Claps are sharp; this
                               filters out steady loud noise like music or a fan.
                               Default 4.0.
-    FINCEPT_CLAP_MAX_GAP_MS   int — max ms between two candidates to count as a
+    FINTERM_CLAP_MAX_GAP_MS   int — max ms between two candidates to count as a
                               double-clap. Default 1500.
-    FINCEPT_CLAP_DEBOUNCE_MS  int — silence window after a fired event. Default 1500.
-    FINCEPT_STT_DEVICE        same key as STT — input device name substring.
+    FINTERM_CLAP_DEBOUNCE_MS  int — silence window after a fired event. Default 1500.
+    FINTERM_STT_DEVICE        same key as STT — input device name substring.
 """
 
 import json
@@ -107,27 +107,27 @@ def rms_peak_int16(buf: bytes):
 def main() -> None:
     diag("script started — pid=" + str(os.getpid()))
 
-    mode = os.environ.get("FINCEPT_CLAP_MODE", "double").strip().lower() or "double"
+    mode = os.environ.get("FINTERM_CLAP_MODE", "double").strip().lower() or "double"
     if mode not in ("single", "double"):
         mode = "double"
 
     try:
-        peak_min = int(os.environ.get("FINCEPT_CLAP_PEAK_MIN", "12000"))
+        peak_min = int(os.environ.get("FINTERM_CLAP_PEAK_MIN", "12000"))
     except ValueError:
         peak_min = 12000
     try:
-        pr_ratio = float(os.environ.get("FINCEPT_CLAP_PR_RATIO", "4.0"))
+        pr_ratio = float(os.environ.get("FINTERM_CLAP_PR_RATIO", "4.0"))
     except ValueError:
         pr_ratio = 4.0
     try:
-        max_gap_ms = int(os.environ.get("FINCEPT_CLAP_MAX_GAP_MS", "1500"))
+        max_gap_ms = int(os.environ.get("FINTERM_CLAP_MAX_GAP_MS", "1500"))
     except ValueError:
         max_gap_ms = 1500
     try:
-        debounce_ms = int(os.environ.get("FINCEPT_CLAP_DEBOUNCE_MS", "1500"))
+        debounce_ms = int(os.environ.get("FINTERM_CLAP_DEBOUNCE_MS", "1500"))
     except ValueError:
         debounce_ms = 1500
-    device_pref = os.environ.get("FINCEPT_STT_DEVICE", "").strip()
+    device_pref = os.environ.get("FINTERM_STT_DEVICE", "").strip()
 
     diag(f"config mode={mode} peak_min={peak_min} pr_ratio={pr_ratio} "
          f"max_gap_ms={max_gap_ms} debounce_ms={debounce_ms} device='{device_pref}'")

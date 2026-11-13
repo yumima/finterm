@@ -128,15 +128,15 @@ Inspector**. Behind the existing "Developer mode" setting toggle
 change to the inspector code itself; the Phase 1 implementation
 is production-ready.
 
-Remove the `#ifdef FINCEPT_DATAHUB_ENABLED` guard from the
+Remove the `#ifdef FINTERM_DATAHUB_ENABLED` guard from the
 inspector's inclusion in `SCREEN_SOURCES`; the feature flag no
 longer gates anything (hub is now the only data path).
 
 ### 6. Flag removal
 
-Remove `FINCEPT_DATAHUB_ENABLED` CMake option. The hub is no
+Remove `FINTERM_DATAHUB_ENABLED` CMake option. The hub is no
 longer optional. Delete the flag from `CMakeLists.txt:123`, all
-its `#ifdef FINCEPT_DATAHUB_ENABLED` blocks (roughly: `main.cpp`
+its `#ifdef FINTERM_DATAHUB_ENABLED` blocks (roughly: `main.cpp`
 metatype registration, any Producer registration calls), and
 update `CMakePresets.json` if it references the flag.
 
@@ -169,7 +169,7 @@ update `CMakePresets.json` if it references the flag.
   data rendering identical to the last pre-Phase-10 release.
 - `docs/DATAHUB_TOPICS.md` table row count matches
   `hub.stats().size()` at runtime after opening every screen.
-- `FINCEPT_DATAHUB_ENABLED` no longer appears anywhere in
+- `FINTERM_DATAHUB_ENABLED` no longer appears anywhere in
   `git grep`.
 
 ---

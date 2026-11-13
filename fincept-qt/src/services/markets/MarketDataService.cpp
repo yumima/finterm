@@ -1627,7 +1627,7 @@ SecContact sec_contact() {
     const qint64 ttl = cache.contact.email.isEmpty() ? 10'000 : 60'000;
     if (cache.read_at && now - cache.read_at < ttl)
         return cache.contact;
-    const auto r = finterm::SecureStorage::instance().retrieve(QStringLiteral("FINCEPT_CONTACT_EMAIL"));
+    const auto r = finterm::SecureStorage::instance().retrieve(QStringLiteral("FINTERM_CONTACT_EMAIL"));
     SecContact c;
     if (r.is_ok()) {
         const QString e = r.value().trimmed();

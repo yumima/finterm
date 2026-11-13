@@ -1,18 +1,18 @@
-"""Strip FINCEPT_DATAHUB_ENABLED preprocessor guards.
+"""Strip FINTERM_DATAHUB_ENABLED preprocessor guards.
 
 Phase 10 task: the hub is now the only supported data path; the compile-time
 flag is being removed. This tool rewrites source files to:
 
-  - `#ifdef FINCEPT_DATAHUB_ENABLED` ... `#endif`               -> keep body, drop guard lines
-  - `#ifdef FINCEPT_DATAHUB_ENABLED` ... `#else` ... `#endif`   -> keep "if" branch, drop else branch + guard lines
-  - `#ifndef FINCEPT_DATAHUB_ENABLED` ... `#endif`              -> drop whole block (legacy-only)
-  - `#ifndef FINCEPT_DATAHUB_ENABLED` ... `#else` ... `#endif`  -> keep "else" branch, drop legacy + guard lines
+  - `#ifdef FINTERM_DATAHUB_ENABLED` ... `#endif`               -> keep body, drop guard lines
+  - `#ifdef FINTERM_DATAHUB_ENABLED` ... `#else` ... `#endif`   -> keep "if" branch, drop else branch + guard lines
+  - `#ifndef FINTERM_DATAHUB_ENABLED` ... `#endif`              -> drop whole block (legacy-only)
+  - `#ifndef FINTERM_DATAHUB_ENABLED` ... `#else` ... `#endif`  -> keep "else" branch, drop legacy + guard lines
 
 Handles nested `#if` / `#ifdef` / `#ifndef` / `#endif` for unrelated macros by
 tracking depth only when inside a matching FINCEPT block. Preserves indentation
 (only strips the preprocessor directive lines themselves).
 
-Does NOT handle `#if defined(FINCEPT_DATAHUB_ENABLED)` / `#elif` variants; the
+Does NOT handle `#if defined(FINTERM_DATAHUB_ENABLED)` / `#elif` variants; the
 current codebase uses only `#ifdef`/`#ifndef` (verified by grep).
 
 Usage:
@@ -29,7 +29,7 @@ import re
 import sys
 from pathlib import Path
 
-MACRO = "FINCEPT_DATAHUB_ENABLED"
+MACRO = "FINTERM_DATAHUB_ENABLED"
 
 # Preprocessor directive regexes — tolerate leading whitespace and whitespace
 # between `#` and the keyword.

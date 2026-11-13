@@ -16,7 +16,7 @@ class DatabaseManager:
         """Initialize database manager"""
         if db_path is None:
             # The app's features folder (finterm_paths) — same place whether
-            # the host set FINCEPT_DATA_DIR or the script runs by hand.
+            # the host set FINTERM_DATA_DIR or the script runs by hand.
             db_dir = str(feature_dir("alpha_arena"))
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, 'agno_trading.db')

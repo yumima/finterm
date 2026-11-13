@@ -18,12 +18,12 @@ namespace {
 constexpr const char* kCapTag = "CapabilityRegistry";
 
 /// Resolve the capabilities.json path.  Tries (in order):
-///   1. $FINCEPT_CAPABILITIES_JSON env var (CI / tests)
+///   1. $FINTERM_CAPABILITIES_JSON env var (CI / tests)
 ///   2. <app dir>/resources/ai/capabilities.json (installed)
 ///   3. <app dir>/../fincept-qt/resources/ai/capabilities.json (dev build)
 ///   4. <cwd>/fincept-qt/resources/ai/capabilities.json (repo-root run)
 QString resolve_path() {
-    if (const QByteArray env = qgetenv("FINCEPT_CAPABILITIES_JSON"); !env.isEmpty())
+    if (const QByteArray env = qgetenv("FINTERM_CAPABILITIES_JSON"); !env.isEmpty())
         return QString::fromUtf8(env);
 
     const QString app = QCoreApplication::applicationDirPath();

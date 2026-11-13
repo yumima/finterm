@@ -12,9 +12,9 @@ from finterm_paths import feature_dir
 warnings.filterwarnings("ignore")
 
 # ── Persistence paths ─────────────────────────────────────────────────────────
-FINCEPT_DIR = feature_dir("qlib_rolling")  # the user's own schedules/configs
-SCHEDULES_FILE = FINCEPT_DIR / "rolling_schedules.json"
-CONFIGS_DIR = FINCEPT_DIR / "configs"
+FINTERM_DIR = feature_dir("qlib_rolling")  # the user's own schedules/configs
+SCHEDULES_FILE = FINTERM_DIR / "rolling_schedules.json"
+CONFIGS_DIR = FINTERM_DIR / "configs"
 
 # ── Qlib import ───────────────────────────────────────────────────────────────
 try:
@@ -98,7 +98,7 @@ def load_schedules() -> Dict[str, Any]:
 
 
 def save_schedules(schedules: Dict[str, Any]):
-    FINCEPT_DIR.mkdir(parents=True, exist_ok=True)
+    FINTERM_DIR.mkdir(parents=True, exist_ok=True)
     with open(SCHEDULES_FILE, "w") as f:
         json.dump(schedules, f, indent=2)
 

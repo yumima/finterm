@@ -123,7 +123,7 @@ def run_ingest(bulk, payload):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="f13test")
-    os.environ["FINCEPT_DATA_DIR"] = tmp
+    os.environ["FINTERM_DATA_DIR"] = tmp
     try:
         import sec_13f_bulk as bulk
 
@@ -306,7 +306,7 @@ def main():
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.
         tmp2 = tempfile.mkdtemp(prefix="f13units")
-        os.environ["FINCEPT_DATA_DIR"] = tmp2
+        os.environ["FINTERM_DATA_DIR"] = tmp2
         import importlib
         importlib.reload(bulk)
         res2 = run_ingest(bulk, make_dataset(value_scale=0.001))

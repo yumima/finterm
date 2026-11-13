@@ -6,7 +6,7 @@ loadable into the Workbench System tab later without any schema
 migration.
 
 Default location is `~/.fincept/eval_runs.jsonl`; override with
-the FINCEPT_EVAL_RESULTS env var (e.g. for CI to write under the
+the FINTERM_EVAL_RESULTS env var (e.g. for CI to write under the
 workspace).  Persistence failures are logged, never raised — a
 broken results file mustn't sink a CI run.
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 def results_path() -> Path:
-    override = os.environ.get("FINCEPT_EVAL_RESULTS")
+    override = os.environ.get("FINTERM_EVAL_RESULTS")
     if override:
         return Path(override)
     return agents_dir() / "eval_runs.jsonl"

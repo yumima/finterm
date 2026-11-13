@@ -37,7 +37,7 @@ constexpr const char* kAgenticMemoryTag = "AgenticMemoryTools";
 
 QString db_path() {
     // The same file Python's task_state.py writes (finterm_paths.agents_dir()
-    // under FINCEPT_USER_DIR == AppPaths::user()). The two used to disagree —
+    // under FINTERM_USER_DIR == AppPaths::user()). The two used to disagree —
     // <scripts>/agent_tasks.db vs <scripts>/agents/agent_tasks.db — so the
     // tools never saw a task the agents had recorded, and both sat in the
     // source tree.

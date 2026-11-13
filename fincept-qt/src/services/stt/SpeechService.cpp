@@ -68,7 +68,7 @@ class PythonSttProvider : public SttProvider {
         env.insert("PYTHONIOENCODING", "utf-8");
         env.insert("PYTHONDONTWRITEBYTECODE", "1");
         env.insert("PYTHONUNBUFFERED", "1");
-        env.insert("FINCEPT_DATA_DIR", python::PythonSetupManager::instance().install_dir());
+        env.insert("FINTERM_DATA_DIR", python::PythonSetupManager::instance().install_dir());
 
         const QString scripts_dir = python::PythonRunner::instance().scripts_dir();
         const QString existing_pypath = env.value("PYTHONPATH");
@@ -235,11 +235,11 @@ class WhisperSttProvider final : public PythonSttProvider {
 
     void extend_environment(QProcessEnvironment& env) const override {
         auto& cfg = AppConfig::instance();
-        env.insert("FINCEPT_STT_MODEL", cfg.get("voice/whisper/model", "medium").toString());
-        env.insert("FINCEPT_STT_LANGUAGE", cfg.get("voice/whisper/language", "en").toString());
-        env.insert("FINCEPT_STT_DEVICE", cfg.get("voice/whisper/device", "auto").toString());
-        env.insert("FINCEPT_STT_COMPUTE", cfg.get("voice/whisper/compute", "auto").toString());
-        env.insert("FINCEPT_STT_VAD_AGGR", cfg.get("voice/whisper/vad_aggressiveness", "2").toString());
+        env.insert("FINTERM_STT_MODEL", cfg.get("voice/whisper/model", "medium").toString());
+        env.insert("FINTERM_STT_LANGUAGE", cfg.get("voice/whisper/language", "en").toString());
+        env.insert("FINTERM_STT_DEVICE", cfg.get("voice/whisper/device", "auto").toString());
+        env.insert("FINTERM_STT_COMPUTE", cfg.get("voice/whisper/compute", "auto").toString());
+        env.insert("FINTERM_STT_VAD_AGGR", cfg.get("voice/whisper/vad_aggressiveness", "2").toString());
     }
 };
 
@@ -266,9 +266,9 @@ class DeepgramSttProvider final : public PythonSttProvider {
         env.insert("DEEPGRAM_API_KEY", api_key);
 
         auto& cfg = AppConfig::instance();
-        env.insert("FINCEPT_STT_MODEL", cfg.get("voice/deepgram/model", "nova-3").toString());
-        env.insert("FINCEPT_STT_LANGUAGE", cfg.get("voice/deepgram/language", "en").toString());
-        env.insert("FINCEPT_STT_KEYTERMS", cfg.get("voice/deepgram/keyterms", "").toString());
+        env.insert("FINTERM_STT_MODEL", cfg.get("voice/deepgram/model", "nova-3").toString());
+        env.insert("FINTERM_STT_LANGUAGE", cfg.get("voice/deepgram/language", "en").toString());
+        env.insert("FINTERM_STT_KEYTERMS", cfg.get("voice/deepgram/keyterms", "").toString());
     }
 };
 

@@ -19,7 +19,7 @@
 //
 // Piper voices are user-supplied (~30 MB each).  finterm doesn't
 // bundle them — the Settings → Voice surface tells the user where
-// to download and points at the FINCEPT_TTS_MODEL slot.
+// to download and points at the FINTERM_TTS_MODEL slot.
 
 #include <QByteArray>
 #include <QElapsedTimer>

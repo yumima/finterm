@@ -50,7 +50,7 @@ def test_runtime_local_skips_when_server_down(monkeypatch) -> None:
     reachable the harness sees RuntimeNotReady (not a hard failure)."""
     # Point at an unreachable URL so the wired path raises Unavailable
     # → adapter translates to RuntimeNotReady.
-    monkeypatch.setenv("FINCEPT_LOCAL_BASE_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("FINTERM_LOCAL_BASE_URL", "http://127.0.0.1:1")
     fixture = load_fixture(_HELLO_WORLD)
     with pytest.raises(RuntimeNotReady, match="not reachable"):
         run_turn(fixture, Runtime.LOCAL)

@@ -111,7 +111,7 @@ FUND_FAMILIES = [
 #     a single CompanyDossier in the C++ layer.
 #
 # This should become user-editable (Settings → "Pre-IPO Watchlist", JSON in
-# FINCEPT_DATA_DIR). Until then this hardcoded set IS the universe.
+# FINTERM_DATA_DIR). Until then this hardcoded set IS the universe.
 PRIVATE_NAMES = {
     # cid:         { aliases (substring-anchored to word boundary), known_cik }
     "stripe":      {"aliases": ["Stripe"],                    "cik": "0001691342"},

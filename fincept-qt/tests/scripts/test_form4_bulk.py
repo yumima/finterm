@@ -80,7 +80,7 @@ def make_zip():
 
 def main():
     tmp = tempfile.mkdtemp(prefix="f4bulk")
-    os.environ["FINCEPT_DATA_DIR"] = tmp
+    os.environ["FINTERM_DATA_DIR"] = tmp
     import sec_form4_bulk as fb
 
     r = fb.ingest_dataset("2026q1", "unused", data=make_zip())

@@ -502,7 +502,7 @@ A dev-only screen (behind a feature flag) shows live topic table — useful for 
 5. **Rate limits** — enforced **hub-level, per producer**. `Producer` interface adds `max_requests_per_sec() const` (default: unlimited). The scheduler honours it when grouping refresh calls. Keeps rate-limit policy in one place, visible and uniform.
 
 ### Remaining open item
-**Inspector screen visibility** — during Phase 1 it lives behind the `FINCEPT_DATAHUB_ENABLED` compile flag only. Promote to a user-visible "Developer mode" tab in Phase 10, once the topic registry is stable.
+**Inspector screen visibility** — during Phase 1 it lives behind the `FINTERM_DATAHUB_ENABLED` compile flag only. Promote to a user-visible "Developer mode" tab in Phase 10, once the topic registry is stable.
 
 ---
 
