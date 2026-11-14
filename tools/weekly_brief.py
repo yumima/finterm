@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Weekly brief: insider-buying clusters from SEC Form 4 filings, as Markdown.
+"""Weekly brief: insider-buying clusters from SEC Form 4 filings, the week's
+top-tier US macro releases and the top name from each strategy screen, as
+Markdown.
 
 Built from finterm's own pipeline (sec_form4_market — what the Ownership
 screen's market-wide scan runs), so the published rows are the ones the app
@@ -7,8 +9,12 @@ shows. Open-market purchases (code P) filed in the last 7 days, grouped per
 issuer, two or more distinct insiders, 10%-owners and 10b5-1 plan trades
 excluded, sorted by total dollars reported.
 
-Public output uses SEC EDGAR data only (public information, freely
-redistributable; cite "U.S. SEC, EDGAR"). The IPO section built from
+Public output: SEC EDGAR data (public information, freely redistributable;
+cite "U.S. SEC, EDGAR"); the week's release SCHEDULE (day, time, name — dates
+the agencies publish; the feed's consensus figures are never written); and the
+top-ranked TICKER of each screen with the screen's rule and finterm's own
+backtest record — no TradingView or Yahoo number is reproduced (their terms
+forbid redistribution). The IPO section built from
 Nasdaq's calendar is for personal use only — Nasdaq's terms forbid
 redistribution — so it is available locally with --include-ipo and never
 written to the public site.
@@ -21,7 +27,9 @@ Modes:
 
 Wording rules (publisher's exclusion — impersonal, bona fide, regular): the
 same template every week including empty weeks, neutral verbs ("filed",
-"reported"), a mechanical sort key stated in the text, no recommendations.
+"reported"), a mechanical sort key stated in the text, no recommendations —
+the screen names are labelled screen output, each beside a record that shows
+no screen beat the index with significance.
 
 SEC refuses clients that don't identify themselves: the contact email is read
 from FINTERM_CONTACT_EMAIL, else from finterm's keyring entry. It is never
@@ -38,10 +46,56 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from weekly_brief_core import (  # noqa: E402,F401 — the shared brief; re-exported for callers
-    CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, METHOD_URL, SITE_URL, WINDOW_DAYS,
+    CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, ISSUE_DISCLAIMER, METHOD_URL, SITE_URL, WINDOW_DAYS,
     clusters_data, clusters_section, contact_from_keyring, issue_day, issue_key, issue_url,
-    md_escape, money, page, social_posts,
+    fetch_macro_rows, macro_coverage, macro_events, macro_section, md_escape, money, page, picks_section, screen_picks,
+    social_posts, week_ahead,
 )
+
+
+def screener_doc(timeout=900):
+    """One scan of the strategy screens, run in finterm's analytics Python
+    (pandas, yfinance) — this script runs under the system Python. Returns
+    (doc, error-or-None)."""
+    import json
+    import subprocess
+
+    import finterm_paths
+
+    root = finterm_paths.data_root() / "venv-numpy2"
+    py = root / ("Scripts/python.exe" if sys.platform.startswith("win") else "bin/python3")
+    if not py.exists():
+        return None, "finterm's analytics Python is not installed"
+    try:
+        r = subprocess.run([str(py), str(SCRIPTS / "screener_data.py"), "scan", "{}"],
+                           capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, "the scan timed out"
+    try:
+        doc = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+    except ValueError:
+        doc = {}
+    if not isinstance(doc, dict):  # a stray last line must not take the issue down
+        doc = {}
+    if not doc or doc.get("error"):
+        return None, doc.get("error") or f"the scan failed (exit {r.returncode})"
+    return doc, None
+
+
+def extra_sections(today):
+    """The week ahead (top-tier US macro) and the top name from each screen.
+    Either one failing is said on the page; neither holds the issue back."""
+    mon, fri = week_ahead(today)
+    rows, failed = fetch_macro_rows()
+    macro_err = macro_coverage(rows, mon, fri, failed)
+    out = macro_section(macro_events(rows, mon, fri), mon, fri, error=macro_err)
+    doc, scr_err = screener_doc()
+    out += picks_section(screen_picks(doc) if doc else [], asof=(doc or {}).get("asof"), error=scr_err,
+                         stale=int((doc or {}).get("stale_prices") or 0))
+    for err in (macro_err, scr_err):
+        if err:
+            print(f"warning: {err}", file=sys.stderr)
+    return out
 
 
 def ipo_sections(today):
@@ -110,7 +164,7 @@ def ipo_sections(today):
     return out
 
 
-def write_site(site_dir, rows, notes, today):
+def write_site(site_dir, rows, notes, today, extra=()):
     import json
 
     key, url = issue_key(today), issue_url(today)
@@ -119,7 +173,8 @@ def write_site(site_dir, rows, notes, today):
     # A rerun this week replaces the week's issue rather than adding a second.
     for old in posts.glob("*-insider-buying.md"):
         try:
-            if issue_key(date.fromisoformat(old.name[:10])) == key:
+            # file names carry issue_day (the week's Monday), not a run day
+            if old.name[:10] == issue_day(today).isoformat():
                 old.unlink()
         except ValueError:
             pass
@@ -131,25 +186,34 @@ def write_site(site_dir, rows, notes, today):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     # {% raw %}: EDGAR text is data — a "{{" or "{%" in a filer's name must
     # never reach Liquid (it would break the build).
-    body = [f"<!-- issue {key} stamp {stamp} -->", "", "{% raw %}"] + clusters_section(rows, notes) + ["{% endraw %}", ""]
+    insider = ["{% raw %}"] + clusters_section(rows, notes) + ["{% endraw %}", ""]
+    # The issue: insider clusters, then the week ahead and the screens. The
+    # evergreen insider page keeps the clusters alone.
+    body = [f"<!-- issue {key} stamp {stamp} -->", ""] + insider + (
+        ["{% raw %}"] + list(extra) + ["{% endraw %}", ""] if extra else [])
+    # The file name stays "-insider-buying": it is how a rerun finds the
+    # week's issue, and the announced URL does not depend on it.
     post = posts / f"{issue_day(today).isoformat()}-insider-buying.md"
     post.write_text(page({
-        "title": f"Insider buying clusters — {span}",
+        "title": f"Weekly brief: insider buying, the week ahead, screen leaders — {span}",
         "description": (f"{n} {'company' if n == 1 else 'companies'} where two or more insiders reported "
                         f"open-market purchases in SEC Form 4 filings, {span}." if n else
-                        f"No insider-buying clusters in SEC Form 4 filings, {span}."),
+                        f"No insider-buying clusters in SEC Form 4 filings, {span}.")
+                       + (" Plus the week's top-tier US releases and the top name from each strategy screen."
+                          if extra else ""),
         # The week's Monday, date only: Jekyll reads it as midnight UTC, so it
         # is never in the future; the post layout shows `updated`.
         "date": issue_day(today),
         "updated": today,
-    }, body), encoding="utf-8")
+    }, body, ISSUE_DISCLAIMER if extra else DISCLAIMER), encoding="utf-8")
 
     (site_dir / "insider-cluster-buys.md").write_text(page({
         "title": "Insider buying clusters this week (SEC Form 4)",
         "description": "Companies where two or more insiders reported open-market purchases in the last 7 days "
                        "of SEC Form 4 filings. Updated weekly.",
         "permalink": "/insider-cluster-buys/",
-    }, [f"_Updated {today:%B %-d, %Y} · [this week's issue]({url}) · [all issues]({SITE_URL}/brief/)_", ""] + body),
+    }, [f"_Updated {today:%B %-d, %Y} · [this week's issue]({url}) · [all issues]({SITE_URL}/brief/)_", ""]
+        + [f"<!-- issue {key} stamp {stamp} -->", ""] + insider),
         encoding="utf-8")
 
     issue = {"issue": key, "date": today.isoformat(), "stamp": stamp, "count": n,
@@ -170,6 +234,9 @@ def main():
     ap.add_argument("--include-ipo", action="store_true",
                     help="local mode only: add the IPO pipeline (Nasdaq calendar data — personal use only)")
     ap.add_argument("--no-scan", action="store_true", help="use the Form 4 data already scanned; don't fetch")
+    ap.add_argument("--no-extras", action="store_true",
+                    help="leave out the week-ahead calendar and the screens (they fetch: the screener scan "
+                         "takes minutes) — e.g. for a quick offline rebuild with --no-scan")
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="site mode: publish even when some days of filings could not be read")
     args = ap.parse_args()
@@ -196,7 +263,7 @@ def main():
                 print(f"error: {n}", file=sys.stderr)
             print("error: not publishing an incomplete issue (--allow-incomplete overrides)", file=sys.stderr)
             sys.exit(2)
-        print(write_site(Path(args.site), rows, notes, today))
+        print(write_site(Path(args.site), rows, notes, today, () if args.no_extras else extra_sections(today)))
         return
 
     import finterm_paths
@@ -208,9 +275,11 @@ def main():
                  + (" and Nasdaq's IPO calendar (personal use only)._" if args.include_ipo else "._"))
     lines.append("")
     lines += clusters_section(rows, notes)
+    if not args.no_extras:
+        lines += extra_sections(today)
     if args.include_ipo:
         lines += ipo_sections(today)
-    lines += ["---", "", f"_{DISCLAIMER}_", ""]
+    lines += ["---", "", f"_{DISCLAIMER if args.no_extras else ISSUE_DISCLAIMER}_", ""]
     path = out_dir / f"weekly-{week_of.isoformat()}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     print(path)

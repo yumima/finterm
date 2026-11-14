@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Install (or update) the systemd user timer that runs tools/weekly_publish.sh
-# every Saturday morning. Persistent: a Saturday missed while the computer was
-# off runs at the next start. Remove with:
+# every Sunday morning. Persistent: a Sunday missed while the computer was
+# off runs at the next start. Sunday, not Saturday: the week-ahead macro list
+# comes from the calendar feed's Sunday–Saturday "this week" file — its "next
+# week" file is a 404 on Saturdays — and the insider window (7 days back) holds
+# the same Monday–Friday filings either day, in the same issue. A catch-up on
+# Monday–Wednesday files under the week just ended (ISSUE_LAG_DAYS in
+# app/scripts/weekly_brief_core.py), so it never takes next Sunday's issue.
+# Remove with:
 #   systemctl --user disable --now finterm-weekly.timer
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,10 +26,10 @@ TimeoutStartSec=3h
 UNIT
 cat > "$UNIT/finterm-weekly.timer" <<UNIT
 [Unit]
-Description=finterm weekly brief, Saturdays
+Description=finterm weekly brief, Sundays
 
 [Timer]
-OnCalendar=Sat *-*-* 09:00:00
+OnCalendar=Sun *-*-* 09:00:00
 Persistent=true
 RandomizedDelaySec=15min
 

@@ -102,7 +102,7 @@ def _published_issue():
 def _brief(_payload):
     issue = _published_issue()
     if not issue:
-        return {"error": "No published issue found yet — the weekly run publishes one each Saturday."}
+        return {"error": "No published issue found yet — the weekly run publishes one each Sunday."}
     texts = {n: issue[n] for n, _, _ in sp.NETWORKS if n in issue}
     return {
         "issue": issue["issue"], "url": issue["url"], "date": issue.get("date", ""),

@@ -1010,6 +1010,11 @@ if(Python3_Interpreter_FOUND)
         NAME ipo_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ipo_calendar.py
     )
+    # Weekly brief: week-ahead macro + top name per screen; no vendor figures published
+    add_test(
+        NAME weekly_brief
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_weekly_brief.py
+    )
     # News › WHAT'S ON company events: refusal ≠ quiet day, absent ≠ 0, own names kept
     add_test(
         NAME whats_on_calendar
