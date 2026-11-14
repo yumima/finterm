@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c087d3807`](https://github.com/yumima/finterm/commit/c087d3807) social: shared posting backend for an in-app Social screen; publishes issue.json
 - [`78e578f88`](https://github.com/yumima/finterm/commit/78e578f88) **ui:** nine screenshot bugs fixed; News gets a WHAT'S ON panel; chat panel resizable
 - [`6362065e8`](https://github.com/yumima/finterm/commit/6362065e8) brief: weekly insider-buying site + X announcements; Form 4 scan stops writing off refusals
 - [`b5751017e`](https://github.com/yumima/finterm/commit/b5751017e) **ci:** clean under clang and MSVC too; garbled UTF-8 labels fixed everywhere

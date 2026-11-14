@@ -136,6 +136,7 @@ ISSUE_JSON_URL = f"{SITE_URL}/issue.json"  # the published issue, as data (write
 # Per network: (character limit, what any link counts as; None = its real
 # length). The one copy: the generated texts and the app's counters both use it.
 NETWORK_LIMITS = {"x": (280, 23), "bluesky": (300, None), "mastodon": (500, 23)}
+MAX_CASHTAGS = {"x": 1}  # X: "Posts are limited to a maximum of one cashtag"
 
 
 def issue_key(d):
@@ -188,20 +189,30 @@ def social_posts(rows, today, url):
                 f"with 2+ insiders buying on the open market.")
     else:
         head = f"Insider buying, {span} (SEC Form 4): no company had 2+ insiders buying on the open market."
-    items = []
-    for r in rows:
-        if len(items) == 3:
-            break
-        tag = f"${r['symbol']}" if r.get("symbol") else (r.get("issuer") or "")[:24].rstrip(" ,.")
-        if not tag:
-            continue  # a row with no name says nothing in a post
-        items.append(f"{tag} {money(r['value'])} ({r['insiders']} insiders)")
+    def items_for(max_cashtags):
+        out = []
+        for r in rows:
+            if len(out) == 3:
+                break
+            sym = r.get("symbol") or ""
+            if sym:
+                tag = f"${sym}" if len(out) < max_cashtags else sym
+            else:
+                tag = (r.get("issuer") or "")[:24].rstrip(" ,.")
+            if not tag:
+                continue  # a row with no name says nothing in a post
+            out.append(f"{tag} {money(r['value'])} ({r['insiders']} insiders)")
+        return out
+
+    # X refuses a post with more than one cashtag (HTTP 403); the others take any.
+    items = items_for(3)
+    x_items = items_for(MAX_CASHTAGS["x"])
     tail = f"Full list, method and base rate: {url}"
     short = f"Full list: {url}"
     masto_tail = f"{tail}\n\nNot investment advice. #investing #stocks #insidertrading #opensource"
     return {
         "url": url,
-        "x": fit_post(head, items, tail, short, url, *_limit("x", url)),
+        "x": fit_post(head, x_items, tail, short, url, *_limit("x", url)),
         "bluesky": fit_post(head, items, tail, short, url, *_limit("bluesky", url)),
         "mastodon": fit_post(head, items, masto_tail, short, url, *_limit("mastodon", url)),
     }
