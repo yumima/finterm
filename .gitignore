@@ -116,6 +116,7 @@ dist-ssr/
 
 # ── Claude Code — never commit ───────────────────────────────
 .claude/settings.local.json
+.claude/worktrees/
 CLAUDE.md
 app/DESIGN_SYSTEM.md
 
