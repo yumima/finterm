@@ -688,6 +688,7 @@ void NewsScreen::on_refresh() {
 }
 
 void NewsScreen::on_article_clicked(const services::NewsArticle& article) {
+    close_peek(); // the detail pane needs its room back
     // Any previous TL;DR brief belongs to the feed snapshot the user clicked
     // it for — once they navigate to a specific article, the brief is stale.
     // Hide it so the detail pane reflects the chosen article cleanly.
@@ -757,6 +758,7 @@ void NewsScreen::on_article_clicked(const services::NewsArticle& article) {
 }
 
 void NewsScreen::on_cluster_clicked(const services::NewsCluster& cluster) {
+    close_peek(); // the detail pane needs its room back
     detail_panel_->show_article(cluster.lead_article);
 
     QVector<services::NewsArticle> related;
@@ -919,6 +921,10 @@ void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) 
         return;
     }
     if (!was_open) {
+        // The article detail steps aside while the pane is open: drawer +
+        // pane + headlines + detail left the headlines a column of source
+        // names. Reading an article (or ×) brings it back.
+        detail_panel_->hide();
         // Room for a research view: ~45% of the content area, the drawer kept
         // at its width, the feed takes what is left; a wider view scrolls
         // inside the pane (NewsPeekPane).
@@ -936,6 +942,7 @@ void NewsScreen::close_peek() {
         return;
     const int drawer = content_splitter_->sizes().value(0);
     peek_->hide();
+    detail_panel_->show();
     set_content_sizes(drawer, 0);
 }
 
