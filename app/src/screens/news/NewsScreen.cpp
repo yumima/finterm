@@ -2,16 +2,21 @@
 
 #include "ai_chat/Degeneracy.h"
 #include "ai_chat/LlmService.h"
+#include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/news/NewsCommandBar.h"
 #include "screens/news/NewsDetailPanel.h"
 #include "screens/news/NewsFeedPanel.h"
+#include "screens/news/NewsPeekPane.h"
 #include "screens/news/NewsSidePanel.h"
 #include "screens/news/WhatsOnPanel.h"
 #include "screens/news/NewsTickerStrip.h"
+#include "screens/pre_ipo/IpoWatchView.h"
+#include "screens/social/SocialScreen.h"
 #include "services/news/NewsCategories.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
@@ -178,6 +183,12 @@ void NewsScreen::build_ui() {
     side_panel_->set_whats_on(whats_on_);
     content_splitter_->addWidget(side_panel_);
 
+    // Peek pane (hidden until a WHAT'S ON row opens something): right of the
+    // drawer, so the opened view sits beside the list it came from.
+    peek_ = new NewsPeekPane(content_widget);
+    peek_->hide();
+    content_splitter_->addWidget(peek_);
+
     // Feed panel (fills remaining space). It hosts a two-pane splitter:
     // the headline list on the left, the article reading pane permanently
     // docked on the right. Previously the feed fanned headlines across two
@@ -195,7 +206,8 @@ void NewsScreen::build_ui() {
     // drifted apart as soon as the window changed size. Stretch factors are
     // not a lock: dragging the handle still overrides them.
     content_splitter_->setStretchFactor(0, 1);
-    content_splitter_->setStretchFactor(1, 4);
+    content_splitter_->setStretchFactor(1, 3); // peek pane, when shown
+    content_splitter_->setStretchFactor(2, 4);
     content_layout_->addWidget(content_splitter_);
 
     root->addWidget(content_widget, 1);
@@ -307,6 +319,8 @@ void NewsScreen::connect_signals() {
 
     // Side panel (drawer)
     connect(whats_on_, &WhatsOnPanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
+    connect(whats_on_, &WhatsOnPanel::open_beside, this, &NewsScreen::open_beside);
+    connect(peek_, &NewsPeekPane::close_requested, this, &NewsScreen::close_peek);
     connect(side_panel_, &NewsSidePanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
     connect(side_panel_, &NewsSidePanel::monitor_added, this, &NewsScreen::on_monitor_added);
     connect(side_panel_, &NewsSidePanel::monitor_toggled, this, &NewsScreen::on_monitor_toggled);
@@ -833,8 +847,98 @@ void NewsScreen::ensure_drawer_open_for_digest() {
     if (total <= want + 200 || current >= want)
         return;
     drawer_width_ = want;
-    content_splitter_->setSizes({want, total - want});
+    set_content_sizes(want);
 }
+
+void NewsScreen::set_content_sizes(int drawer_w, int peek_w) {
+    // Always the full list [drawer, peek, feed]: a short list leaves the
+    // trailing sizes to Qt's guess. A closed pane's entry is ignored. The
+    // pane's OWN state (isHidden), not isVisible(): this can run while the
+    // News screen itself is off screen.
+    const int total = content_splitter_->width();
+    const bool peek_on = peek_ && !peek_->isHidden();
+    if (peek_w < 0)
+        peek_w = peek_on ? content_splitter_->sizes().value(1) : 0;
+    if (!peek_on)
+        peek_w = 0;
+    content_splitter_->setSizes({drawer_w, peek_w, std::max(0, total - drawer_w - peek_w)});
+}
+
+namespace {
+// FULL SCREEN: open the real screen beside News, then point it at the
+// subject. The follow-up is queued so it lands after the split has
+// materialized the screen (its subscriptions exist by then).
+void open_full(const QString& screen_id, const char* event, const QVariantMap& payload, QObject* ctx) {
+    EventBus::instance().publish("nav.split_alongside", QVariantMap{{"screen_id", screen_id}});
+    if (!event)
+        return;
+    const QString ev = QString::fromLatin1(event);
+    QMetaObject::invokeMethod(
+        ctx, [ev, payload]() { EventBus::instance().publish(ev, payload); }, Qt::QueuedConnection);
+}
+} // namespace
+
+void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) {
+    const bool was_open = !peek_->isHidden();
+    if (screen_id == QLatin1String("equity_research")) {
+        const QString sym = args.value("symbol").toString();
+        if (sym.isEmpty())
+            return;
+        // A hosted instance: it follows this pane (and its own search box)
+        // only — not the app-wide load_symbol event, not the Finnhub ticks.
+        QPointer<EquityResearchScreen> er = static_cast<EquityResearchScreen*>(peek_->show_view(
+            QStringLiteral("equity_research"), QStringLiteral("EQUITY RESEARCH"),
+            []() { return new EquityResearchScreen(nullptr, /*hosted=*/true); }, {}));
+        // FULL SCREEN opens whatever the pane shows now (its search may have
+        // moved on from the row's symbol).
+        peek_->set_pop_out([this, er]() {
+            if (!er || er->current_symbol().symbol.isEmpty())
+                return;
+            open_full(QStringLiteral("equity_research"), "equity_research.load_symbol",
+                      QVariantMap{{"symbol", er->current_symbol().symbol}}, this);
+        });
+        // Not broadcast: the pane is not a linked panel and must not drive the
+        // user's symbol groups.
+        er->show_symbol(sym);
+    } else if (screen_id == QLatin1String("pre_ipo")) {
+        const QString deal = args.value("deal_id").toString(), key = args.value("key").toString();
+        auto* ipo = static_cast<widgets::IpoWatchView*>(peek_->show_view(
+            QStringLiteral("pre_ipo"), QStringLiteral("IPO WATCH"), []() { return new widgets::IpoWatchView; },
+            [this, deal, key]() {
+                open_full(QStringLiteral("pre_ipo"), "ipo_watch.select", QVariantMap{{"deal_id", deal}, {"key", key}},
+                          this);
+            }));
+        ipo->select_deal(deal, key);
+    } else if (screen_id == QLatin1String("social")) {
+        peek_->show_view(QStringLiteral("social"), QStringLiteral("WEEKLY BRIEF — SOCIAL"),
+                         []() { return new SocialScreen; },
+                         []() {
+                             EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "social"}});
+                         });
+    } else {
+        return;
+    }
+    if (!was_open) {
+        // Room for a research view: ~45% of the content area, the drawer kept
+        // at its width, the feed takes what is left; a wider view scrolls
+        // inside the pane (NewsPeekPane).
+        const int total = content_splitter_->width();
+        const int drawer = content_splitter_->sizes().value(0);
+        // What the feed can give up without squeezing the drawer: Qt would
+        // otherwise take an over-request out of the drawer too.
+        const int room = total - drawer - feed_panel_->minimumSizeHint().width();
+        set_content_sizes(drawer, std::max(360, std::min(total * 45 / 100, room)));
+    }
+}
+
+void NewsScreen::close_peek() {
+    if (peek_->isHidden())
+        return;
+    const int drawer = content_splitter_->sizes().value(0);
+    peek_->hide();
+    set_content_sizes(drawer, 0);
+}
+
 
 // Single owner of the shared brief gate. Both TL;DR and DIGEST route through
 // it so the busy state of the two buttons and the flag can never disagree,
@@ -870,7 +974,9 @@ void NewsScreen::on_drawer_toggle() {
         const int total = content_splitter_->width();
         const int w = drawer_width_ > 0 ? drawer_width_ : default_drawer_width();
         if (total > w + 200)
-            content_splitter_->setSizes({w, total - w});
+            set_content_sizes(w);
+    } else {
+        close_peek(); // it belongs to the drawer's rows
     }
     // Keep the INTEL toggle button's checked state in sync — the in-drawer
     // close button reaches here too, and otherwise the button would go stale.

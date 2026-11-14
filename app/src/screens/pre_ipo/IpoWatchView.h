@@ -60,6 +60,11 @@ class IpoWatchView : public QWidget {
     explicit IpoWatchView(QWidget* parent = nullptr);
     ~IpoWatchView() override;
 
+    /// Open one deal's dossier (by deal id, else ticker/company key) — the
+    /// same as the "ipo_watch.select" event, for a view hosted directly
+    /// (News › WHAT'S ON peek pane). Waits for the calendar if not loaded.
+    void select_deal(const QString& deal_id, const QString& key);
+
   public slots:
     void refresh();
 

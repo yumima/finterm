@@ -147,7 +147,7 @@ class SearchResultDelegate : public QStyledItemDelegate {
 
 } // namespace
 
-EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
+EquityResearchScreen::EquityResearchScreen(QWidget* parent, bool hosted) : QWidget(parent), hosted_(hosted) {
     build_ui();
 
     // Refresh timer — only started in showEvent
@@ -324,15 +324,18 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
             inline_search_input_->clear();
     });
 
-    // Listen for navigation from CommandBar asset search
-    EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
-        const QString symbol = payload.value("symbol").toString();
-        if (!symbol.isEmpty())
-            load_symbol(symbol, false, payload.value("propagate", true).toBool());
-    });
-
-    // Default symbol
-    load_symbol("AAPL");
+    // Listen for navigation from CommandBar asset search. Kept and released in
+    // the destructor: more than one instance can exist (FinGPT) and a closed
+    // one must not be called. A hosted instance listens to its host only.
+    if (!hosted_) {
+        load_sub_ = EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
+            const QString symbol = payload.value("symbol").toString();
+            if (!symbol.isEmpty())
+                load_symbol(symbol, false, payload.value("propagate", true).toBool());
+        });
+        // Default symbol (a hosted view is pointed at one right away)
+        load_symbol("AAPL");
+    }
 
     // Drop any dragged symbol onto the screen to jump the research view
     // to that ticker. Uses the existing load_symbol path so caching,
@@ -341,6 +344,11 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
         if (ref.is_valid())
             load_symbol(ref.symbol);
     });
+}
+
+EquityResearchScreen::~EquityResearchScreen() {
+    if (load_sub_ >= 0)
+        EventBus::instance().unsubscribe(load_sub_);
 }
 
 void EquityResearchScreen::showEvent(QShowEvent* e) {
@@ -996,7 +1004,10 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
     // Switch the live-tick websocket subscription to the new symbol. The
     // service no-ops when no Finnhub key is set, so we don't need to gate
     // the call here.
-    services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
+    // The service holds ONE subscription for the app: a hosted instance must
+    // not take it from the docked screen.
+    if (!hosted_)
+        services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
 
     // Follow the shared live quote too (the Yahoo price stream moves it between
     // polls) — works without a Finnhub key and moves change/change% with the

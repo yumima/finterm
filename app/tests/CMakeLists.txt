@@ -1134,6 +1134,13 @@ target_link_libraries(test_whats_on_model PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_whats_on_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME whats_on_model COMMAND test_whats_on_model)
 set_tests_properties(whats_on_model PROPERTIES ENVIRONMENT "TZ=America/New_York")
+# The drawer's labels mix ET clocks with the viewer's local day: the same
+# expectations must hold west of, far east of, and at a half-hour offset to ET.
+foreach(_wo_tz IN ITEMS America/Los_Angeles Asia/Tokyo Asia/Kolkata)
+    string(REPLACE "/" "_" _wo_tz_name "${_wo_tz}")
+    add_test(NAME whats_on_model_${_wo_tz_name} COMMAND test_whats_on_model)
+    set_tests_properties(whats_on_model_${_wo_tz_name} PROPERTIES ENVIRONMENT "TZ=${_wo_tz}")
+endforeach()
 
 # ── Market-structure dates (NYSE holidays, early closes, opex, month ends) ────
 add_executable(test_market_calendar services/test_market_calendar.cpp)

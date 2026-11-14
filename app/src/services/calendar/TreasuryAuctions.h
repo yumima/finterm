@@ -148,13 +148,14 @@ inline QString money_b(double usd) {
     return QStringLiteral("$%1B").arg(QString::number(usd / 1e9, 'f', usd >= 1e10 ? 0 : 1));
 }
 
-/// "High 5.441% · BTC 2.36" (result), "$42B" (announced), "" (tentative).
+/// "Yield 5.441% · bid-to-cover 2.36" (coupon result: the high yield; bills: "Discount rate …"), "$42B" (announced), "" (tentative).
 inline QString figures(const Auction& a) {
     QStringList parts;
     if (std::isfinite(a.high_yield))
-        parts << QStringLiteral("High %1%").arg(QString::number(a.high_yield, 'f', 3));
+        parts << QStringLiteral("%1 %2%").arg(a.coupon ? QStringLiteral("Yield") : QStringLiteral("Discount rate"),
+                                               QString::number(a.high_yield, 'f', 3));
     if (std::isfinite(a.bid_to_cover))
-        parts << QStringLiteral("BTC %1").arg(QString::number(a.bid_to_cover, 'f', 2));
+        parts << QStringLiteral("bid-to-cover %1").arg(QString::number(a.bid_to_cover, 'f', 2));
     if (parts.isEmpty() && a.announced)
         parts << money_b(a.offering);
     return parts.join(QStringLiteral(" · "));
