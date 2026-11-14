@@ -112,6 +112,28 @@ inline bool is_pending(const IndexFutureQuote& q) {
     return !std::isfinite(q.pct) || !(q.price > 0);
 }
 
+/// Lay a fresh fetch over the quotes on screen, in place in `fresh`, which
+/// then replaces them. Replace, don't merge: a row that lost its sound reading
+/// goes back to a dash rather than keeping a quote against an old settle. A
+/// live print newer than the fetched quote (the daemon caches the answer)
+/// stays — same contract, same previous close. A REFUSED row never blanks one
+/// the stream filled (a row declined on purpose does). Returns the first
+/// refusal's reason, empty when nothing was refused.
+inline QString merge_fetched_futures(const QHash<QString, IndexFutureQuote>& current,
+                                     QHash<QString, IndexFutureQuote>& fresh) {
+    QString refused_why;
+    for (auto it = fresh.begin(); it != fresh.end(); ++it) {
+        if (it->refused && refused_why.isEmpty())
+            refused_why = it->reason;
+        const auto cur = current.constFind(it.key());
+        if (cur == current.constEnd() || cur->contract != it->contract || is_pending(*cur))
+            continue;
+        if (it->refused || (cur->ref_price == it->ref_price && cur->ts > it->ts))
+            it.value() = cur.value();
+    }
+    return refused_why;
+}
+
 /// "ESZ26" from "ESZ26.CME".
 QString contract_label(const IndexFutureQuote& q);
 

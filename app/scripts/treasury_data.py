@@ -111,6 +111,76 @@ def get_record_debt(start_date: str = None, end_date: str = None) -> Any:
     return _make_request("v1/accounting/od/record_setting_auction", params)
 
 
+PAR_CURVE_URL = (
+    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+    "daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve"
+    "&field_tdr_date_value={year}&page&_format=csv"
+)
+# CSV column -> output key. Only the tenors the Markets WORLD board reads.
+_PAR_TENORS = {"2 Yr": "y2", "5 Yr": "y5", "10 Yr": "y10", "30 Yr": "y30"}
+
+
+def parse_par_curve_csv(text: str) -> List[Dict[str, Any]]:
+    """Rows of the Treasury daily par yield curve CSV, newest first.
+
+    A blank or non-numeric cell is None (absent), never 0.0 — a missing
+    tenor must not read as a 0% yield downstream.
+    """
+    import csv
+    import io
+    from datetime import datetime as _dt
+
+    rows: List[Dict[str, Any]] = []
+    reader = csv.DictReader(io.StringIO(text))
+    for rec in reader:
+        raw_date = (rec.get("Date") or "").strip()
+        try:
+            day = _dt.strptime(raw_date, "%m/%d/%Y").date()
+        except ValueError:
+            continue
+        row: Dict[str, Any] = {"date": day.isoformat()}
+        for col, key in _PAR_TENORS.items():
+            cell = (rec.get(col) or "").strip()
+            try:
+                val = float(cell)
+                row[key] = val if val > 0 else None
+            except ValueError:
+                row[key] = None
+        rows.append(row)
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows
+
+
+def get_par_curve(limit: int = 5) -> Dict[str, Any]:
+    """Latest rows of the daily par yield curve (end of day, keyless).
+
+    Reads the current year's file, and the previous year's too when the
+    current one has fewer than two rows (early January), so a day-over-day
+    change is always available. A refused/failed fetch is {"error": ...}.
+    """
+    from datetime import date as _date
+
+    year = _date.today().year
+    rows: List[Dict[str, Any]] = []
+    failure = None
+    for y in (year, year - 1):
+        try:
+            resp = session.get(PAR_CURVE_URL.format(year=y), timeout=20)
+            resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            # Early January the new year's file may not exist yet: last
+            # year's still answers. A failure is reported only if nothing does.
+            failure = failure or f"Treasury par curve request failed: {e}"
+            continue
+        rows.extend(parse_par_curve_csv(resp.text))
+        if len(rows) >= 2:
+            break
+    if not rows:
+        return {"error": failure or "Treasury par curve returned no rows"}
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return {"source": "US Treasury daily par yield curve", "rows": rows[:limit]}
+
+
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -138,6 +208,8 @@ def main(args=None):
         start_date = args[1] if len(args) > 1 else None
         end_date = args[2] if len(args) > 2 else None
         result = get_avg_interest_rates(start_date, end_date)
+    elif command == "par_curve":
+        result = get_par_curve()
     elif command == "record_debt":
         start_date = args[1] if len(args) > 1 else None
         end_date = args[2] if len(args) > 2 else None

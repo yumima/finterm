@@ -552,15 +552,22 @@ def _price_dp(value):
     stocks, and every change and spread derived from them.
 
     Scale precision to the magnitude rather than guessing from the ticker:
-    roughly six significant figures for sub-unit values, and the two
-    decimals everything already expects for normal prices.
+    roughly six significant figures below 100, and the two decimals
+    everything already expects for prices from 100 up.
+
+    1-100 needs five decimals too: EURUSD=X at 1.105021 rounded to 2dp is
+    1.11 — the Markets WORLD board showed EUR/USD 1.1100 and, against an
+    unrounded reference, +0.42% on a day it fell 0.29% (2026-11-14). GBP/USD,
+    USD/CNH and every other pair between 1 and 100 had the same error.
     """
     try:
         v = abs(float(value))
     except (TypeError, ValueError):
         return 2
-    if v >= 1.0 or v == 0.0:
+    if v >= 100.0 or v == 0.0:
         return 2
+    if v >= 1.0:
+        return 5
     if v >= 0.01:
         return 6
     return 10

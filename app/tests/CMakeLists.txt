@@ -1043,6 +1043,39 @@ set_target_properties(test_live_tick PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME live_tick COMMAND test_live_tick)
 set_tests_properties(live_tick PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── Markets › WORLD: sessions, overnight line, rates maths, row status ───────
+# Session state is computed in each exchange's own zone (DST, lunch breaks,
+# Globex across midnight); the overnight line is fixed rules; a vendor null
+# stays absent (a 0% yield / a −488bp spread is the bug class guarded).
+add_executable(test_world_markets screens/test_world_markets.cpp)
+target_include_directories(test_world_markets PRIVATE ../src)
+target_link_libraries(test_world_markets PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_world_markets PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME world_markets COMMAND test_world_markets)
+
+if(Python3_Interpreter_FOUND)
+    # Treasury par curve decode: blank tenor = None, refusal = error, newest first.
+    add_test(
+        NAME treasury_par_curve
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_treasury_par_curve.py
+    )
+    set_tests_properties(treasury_par_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # Futures / FX day change: the settle BEFORE the last reopen (a Saturday
+    # ES=F read +0.11% against Friday's own settle while it was down 0.42%),
+    # and Columbus / Veterans Day are trading days. 77 without pandas.
+    add_test(
+        NAME day_change_reference
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_day_change_reference.py
+    )
+    set_tests_properties(day_change_reference PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # Quote prices from 1 to 100 keep 5 decimals (EUR/USD read 1.11).
+    add_test(
+        NAME price_precision
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_price_precision.py
+    )
+    set_tests_properties(price_precision PROPERTIES TIMEOUT 60)
+endif()
+
 # ── AI assistant panel size (default 2x, clamped to 60% of the window) ───────
 add_executable(test_chat_panel_size ai_chat/test_chat_panel_size.cpp)
 target_include_directories(test_chat_panel_size PRIVATE ../src)

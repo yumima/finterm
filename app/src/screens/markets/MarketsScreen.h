@@ -7,15 +7,25 @@
 #include <QLabel>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVector>
 #include <QWidget>
 
+class QPushButton;
+
 namespace finterm::screens {
 
-/// Markets terminal — workstation with QSplitter panel layout.
-/// Panels fill screen height; horizontal and vertical handles are user-resizable.
-/// Splitter state is persisted to SettingsRepository.
+namespace world {
+class WorldMarketsView;
+}
+
+/// Markets terminal. Two modes behind a WORLD / PANELS toggle (the last choice
+/// is remembered):
+///  - WORLD (default): a fixed one-screen overview of global markets
+///    (world::WorldMarketsView).
+///  - PANELS: the user-configurable workstation of quote panels in a
+///    QSplitter layout; splitter state is persisted to SettingsRepository.
 class MarketsScreen : public QWidget {
     Q_OBJECT
   public:
@@ -48,10 +58,25 @@ class MarketsScreen : public QWidget {
 
     // Refresh
     void refresh_all();
+    void refresh_panels();
+
+    // Mode
+    enum class Mode { World, Panels };
+    void set_mode(Mode m, bool persist);
+    void update_mode_buttons();
 
     // Data
     QVector<MarketPanelConfig> configs_;
     QVector<MarketPanel*> panels_;
+
+    // Pages
+    QStackedWidget* stack_ = nullptr;
+    world::WorldMarketsView* world_ = nullptr;
+    QWidget* panels_page_ = nullptr;
+    Mode mode_ = Mode::World;
+    QPushButton* world_btn_ = nullptr;
+    QPushButton* panels_btn_ = nullptr;
+    QVector<QWidget*> panel_only_controls_; // hidden in WORLD mode
 
     // Splitter tree
     QSplitter* h_splitter_ = nullptr;   // horizontal — columns

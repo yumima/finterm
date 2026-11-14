@@ -3,6 +3,7 @@
 #include "screens/markets/MarketChartDialog.h"
 #include "screens/markets/MarketPanelEditor.h"
 #include "screens/markets/MarketPanelStore.h"
+#include "screens/markets/world/WorldMarketsView.h"
 #include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
@@ -49,10 +50,22 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     header_bar_ = build_header_bar();
     root->addWidget(header_bar_);
 
+    stack_ = new QStackedWidget(this);
+    world_ = new world::WorldMarketsView(stack_);
+    connect(world_, &world::WorldMarketsView::symbol_activated, this,
+            [this](const QString& sym, const QString& name) { MarketChartDialog::show_for(sym, name, this); });
+    stack_->addWidget(world_);
+
+    panels_page_ = new QWidget(stack_);
+    auto* pl = new QVBoxLayout(panels_page_);
+    pl->setContentsMargins(0, 0, 0, 0);
+    pl->setSpacing(0);
     configs_ = MarketPanelStore::instance().load();
     build_splitter_layout();
-    root->addWidget(h_splitter_, 1);
+    pl->addWidget(h_splitter_, 1);
     restore_splitter_state();
+    stack_->addWidget(panels_page_);
+    root->addWidget(stack_, 1);
 
     auto_refresh_timer_ = new QTimer(this);
     auto_refresh_timer_->setInterval(update_interval_ms_);
@@ -75,6 +88,60 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
             [this](const ui::ThemeTokens&) { refresh_theme(); });
     refresh_theme();
+
+    // WORLD unless the user last chose PANELS.
+    const auto saved = SettingsRepository::instance().get("markets_view_mode");
+    set_mode(saved.is_ok() && saved.value() == QLatin1String("panels") ? Mode::Panels : Mode::World, false);
+}
+
+// ---------------------------------------------------------------------------
+// Mode (WORLD overview / user PANELS)
+// ---------------------------------------------------------------------------
+
+void MarketsScreen::set_mode(Mode m, bool persist) {
+    const bool changed = m != mode_ || stack_->currentIndex() != (m == Mode::World ? 0 : 1);
+    mode_ = m;
+    // Switching pages hides the other one, so WORLD unsubscribes and stops
+    // its timers by itself (WorldMarketsView::hideEvent).
+    stack_->setCurrentIndex(m == Mode::World ? 0 : 1);
+    for (QWidget* w : panel_only_controls_)
+        w->setVisible(m == Mode::Panels);
+    update_mode_buttons();
+    if (persist)
+        SettingsRepository::instance().set("markets_view_mode", m == Mode::World ? "world" : "panels");
+    if (!changed || !isVisible())
+        return;
+    if (m == Mode::Panels) {
+        if (auto_update_)
+            auto_refresh_timer_->start();
+        refresh_panels();
+    } else {
+        auto_refresh_timer_->stop();
+        save_splitter_state();
+        // The hidden panels stop holding their quote topics (refresh_panels
+        // subscribes them again on the way back).
+        for (auto* p : panels_)
+            p->hub_unsubscribe_all();
+    }
+}
+
+void MarketsScreen::update_mode_buttons() {
+    auto style = [](QPushButton* b, bool on) {
+        if (!b)
+            return;
+        b->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
+                                 "font-size:%4px;font-family:'%5';font-weight:700;padding:0 8px;}"
+                                 "QPushButton:hover{color:%6;}")
+                             .arg(on ? ui::colors::AMBER() : QString("transparent"),
+                                  on ? ui::colors::TEXT_ON_ACCENT() : ui::colors::TEXT_SECONDARY(),
+                                  on ? ui::colors::AMBER() : ui::colors::BORDER_MED())
+                             .arg(ui::fonts::font_px(-3))
+                             .arg(ui::fonts::DATA_FAMILY())
+                             .arg(on ? ui::colors::TEXT_ON_ACCENT() : ui::colors::TEXT_PRIMARY()));
+        b->setChecked(on);
+    };
+    style(world_btn_, mode_ == Mode::World);
+    style(panels_btn_, mode_ == Mode::Panels);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,8 +225,7 @@ void MarketsScreen::rebuild_splitter_layout() {
 
     build_splitter_layout();
 
-    auto* root = qobject_cast<QVBoxLayout*>(layout());
-    root->insertWidget(1, h_splitter_, 1);
+    panels_page_->layout()->addWidget(h_splitter_);
     restore_splitter_state();
 }
 
@@ -317,17 +383,44 @@ QWidget* MarketsScreen::build_header_bar() {
 
     add_sep();
 
-    // Session status
+    // WORLD / PANELS — two-state toggle; the choice is remembered.
+    world_btn_ = new QPushButton("WORLD");
+    panels_btn_ = new QPushButton("PANELS");
+    for (auto* b : {world_btn_, panels_btn_}) {
+        b->setFixedHeight(22);
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        h->addWidget(b);
+    }
+    world_btn_->setToolTip("World overview: sessions, indices by region, futures, rates, FX, commodities, crypto, "
+                           "volatility.");
+    panels_btn_->setToolTip("Your configurable quote panels.");
+    connect(world_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::World, true); });
+    connect(panels_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::Panels, true); });
+
+    add_sep();
+
+    // Session status + clocks. PANELS only: WORLD has its own sessions strip.
+    auto* clocks_box = new QWidget;
+    auto* ch = new QHBoxLayout(clocks_box);
+    ch->setContentsMargins(0, 0, 0, 0);
+    ch->setSpacing(0);
+    auto add_box_sep = [&]() {
+        auto* s = new QLabel("|");
+        s->setStyleSheet(lbl_ss(ui::colors::BORDER_DIM()));
+        s->setContentsMargins(10, 0, 10, 0);
+        ch->addWidget(s);
+    };
     session_label_ = new QLabel;
     session_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), true, 11));
-    h->addWidget(session_label_);
+    ch->addWidget(session_label_);
     update_session_status();
 
     session_timer_ = new QTimer(this);
     session_timer_->setInterval(60000);
     connect(session_timer_, &QTimer::timeout, this, &MarketsScreen::update_session_status);
 
-    add_sep();
+    add_box_sep();
 
     // Clocks
     ny_label_ = new QLabel;
@@ -335,18 +428,19 @@ QWidget* MarketsScreen::build_header_bar() {
     tok_label_ = new QLabel;
     for (auto* lbl : {ny_label_, lon_label_, tok_label_})
         lbl->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), false, 11));
-    h->addWidget(ny_label_);
-    h->addWidget(new QLabel("   "));
-    h->addWidget(lon_label_);
-    h->addWidget(new QLabel("   "));
-    h->addWidget(tok_label_);
+    ch->addWidget(ny_label_);
+    ch->addWidget(new QLabel("   "));
+    ch->addWidget(lon_label_);
+    ch->addWidget(new QLabel("   "));
+    ch->addWidget(tok_label_);
     update_clocks();
 
     clock_timer_ = new QTimer(this);
     clock_timer_->setInterval(1000);
     connect(clock_timer_, &QTimer::timeout, this, &MarketsScreen::update_clocks);
 
-    add_sep();
+    add_box_sep();
+    h->addWidget(clocks_box);
 
     // Controls — all uniform dim style
     auto make_ctrl_btn = [&](const QString& label) -> QPushButton* {
@@ -384,7 +478,7 @@ QWidget* MarketsScreen::build_header_bar() {
     connect(auto_btn, &QPushButton::clicked, this, [this, update_auto_style]() {
         auto_update_ = !auto_update_;
         update_auto_style();
-        if (!isVisible())
+        if (!isVisible() || mode_ != Mode::Panels)
             return;
         if (auto_update_)
             auto_refresh_timer_->start();
@@ -421,6 +515,7 @@ QWidget* MarketsScreen::build_header_bar() {
     h->addWidget(iv);
 
     // [+] PANEL — column picker menu
+    panel_only_controls_ = {clocks_box, auto_btn, iv};
     auto* add_btn = make_ctrl_btn("[+] PANEL");
     connect(add_btn, &QPushButton::clicked, this, [this, add_btn]() {
         auto* menu = new QMenu(this);
@@ -440,6 +535,7 @@ QWidget* MarketsScreen::build_header_bar() {
         menu->deleteLater();
     });
     h->addWidget(add_btn);
+    panel_only_controls_.append(add_btn);
 
     // RESET
     auto* reset_btn = make_ctrl_btn("RESET");
@@ -457,12 +553,14 @@ QWidget* MarketsScreen::build_header_bar() {
         refresh_all();
     });
     h->addWidget(reset_btn);
+    panel_only_controls_.append(reset_btn);
 
     h->addStretch();
 
     last_upd_label_ = new QLabel("LAST UPDATE  --:--:--");
     last_upd_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), false, 11));
     h->addWidget(last_upd_label_);
+    panel_only_controls_.append(last_upd_label_); // WORLD shows its own "quotes HH:mm:ss"
 
     h->addWidget(new QLabel("   "));
 
@@ -541,7 +639,7 @@ void MarketsScreen::showEvent(QShowEvent* event) {
         }
     }
 
-    if (auto_update_ && auto_refresh_timer_)
+    if (auto_update_ && auto_refresh_timer_ && mode_ == Mode::Panels)
         auto_refresh_timer_->start();
     if (session_timer_)
         session_timer_->start();
@@ -554,7 +652,9 @@ void MarketsScreen::showEvent(QShowEvent* event) {
     // Markets→Portfolio→Markets round-trip every quote was re-fetched
     // unnecessarily; with scoped invalidation each screen only drops its
     // own cohort. The DataHub min_interval (2s) still rate-limits actual
-    // outbound calls.
+    // outbound calls. WORLD manages its own subscriptions (WorldMarketsView).
+    if (mode_ != Mode::Panels)
+        return;
     QStringList panel_syms;
     for (auto* p : panels_) {
         for (const QString& s : p->symbols()) {
@@ -583,6 +683,15 @@ void MarketsScreen::hideEvent(QHideEvent* event) {
 // ---------------------------------------------------------------------------
 
 void MarketsScreen::refresh_all() {
+    if (mode_ == Mode::World) {
+        if (world_)
+            world_->refresh(/*force=*/true);
+        return;
+    }
+    refresh_panels();
+}
+
+void MarketsScreen::refresh_panels() {
     if (refresh_in_progress_)
         return;
     if (panels_.isEmpty())
@@ -641,6 +750,8 @@ void MarketsScreen::refresh_theme() {
 
     for (auto* vs : col_splitters_)
         vs->setStyleSheet(handle_ss);
+
+    update_mode_buttons();
 }
 
 } // namespace finterm::screens
