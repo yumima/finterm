@@ -10,6 +10,7 @@
 #include "screens/news/NewsDetailPanel.h"
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsSidePanel.h"
+#include "screens/news/WhatsOnPanel.h"
 #include "screens/news/NewsTickerStrip.h"
 #include "services/news/NewsCategories.h"
 #include "services/news/NewsCorrelationService.h"
@@ -46,9 +47,9 @@ namespace {
 // is protected separately by the per-category guarantee in the selection.
 constexpr int kBriefStoryCount = 20;
 
-// Company-name and product aliases for a given ticker. The news-tagging
-// regex in NewsService is `\b[A-Z]{2,5}\b`, which only catches all-caps
-// tickers ("AAPL") inside article text — but financial reporting almost
+// Company-name and product aliases for a given ticker. The news tagger
+// (services/news/NewsTickers.h) only tags on evidence — a cashtag, exchange
+// context or a short list of well-known symbols — and financial reporting almost
 // always uses the company name ("Apple") instead, so the tagger misses
 // the bulk of real signal. The PTF filter therefore augments the tag
 // intersection with a regex pass over headline+summary using these
@@ -173,6 +174,8 @@ void NewsScreen::build_ui() {
 
     // Intel drawer (left, hidden by default; opens to ~280px, resizable).
     side_panel_ = new NewsSidePanel(content_widget);
+    whats_on_ = new WhatsOnPanel;
+    side_panel_->set_whats_on(whats_on_);
     content_splitter_->addWidget(side_panel_);
 
     // Feed panel (fills remaining space). It hosts a two-pane splitter:
@@ -303,7 +306,7 @@ void NewsScreen::connect_signals() {
     connect(feed_panel_, &NewsFeedPanel::near_bottom, this, &NewsScreen::on_near_bottom);
 
     // Side panel (drawer)
-    connect(side_panel_, &NewsSidePanel::category_clicked, this, &NewsScreen::on_sidebar_category_clicked);
+    connect(whats_on_, &WhatsOnPanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
     connect(side_panel_, &NewsSidePanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
     connect(side_panel_, &NewsSidePanel::monitor_added, this, &NewsScreen::on_monitor_added);
     connect(side_panel_, &NewsSidePanel::monitor_toggled, this, &NewsScreen::on_monitor_toggled);
@@ -759,13 +762,6 @@ void NewsScreen::on_near_bottom() {
     LOG_INFO("NewsScreen", QString("Lazy-loaded to %1 articles").arg(visible.size()));
 }
 
-void NewsScreen::on_sidebar_category_clicked(const QString& category) {
-    active_category_ = category;
-    command_bar_->set_active_category(category);
-    visible_article_count_ = PAGE_SIZE;
-    apply_filters_async();
-}
-
 void NewsScreen::on_sidebar_article_clicked(const services::NewsArticle& article) {
     on_article_clicked(article);
 }
@@ -1010,7 +1006,6 @@ void NewsScreen::apply_filters_async() {
         const QRegularExpression ptf_text_re =
             ptf_active ? build_portfolio_text_regex(ptf_tickers) : QRegularExpression{};
 
-        QMap<QString, int> category_counts;
         int bullish = 0, bearish = 0, neutral = 0;
 
         // Per-stage rejection counters — surface the cause when we silently
@@ -1109,7 +1104,6 @@ void NewsScreen::apply_filters_async() {
             }
 
             filtered.append(a);
-            category_counts[a.category]++;
 
             if (a.sentiment == services::Sentiment::BULLISH)
                 bullish++;
@@ -1159,22 +1153,21 @@ void NewsScreen::apply_filters_async() {
 
         QMetaObject::invokeMethod(
             self,
-            [self, gen, filtered, clusters, category_counts, bullish, bearish, neutral]() {
+            [self, gen, filtered, clusters, bullish, bearish, neutral]() {
                 if (!self)
                     return;
                 if (gen < self->filter_generation_.load(std::memory_order_relaxed)) {
                     LOG_INFO("NewsScreen", QString("Rejected stale filter gen %1").arg(gen));
                     return;
                 }
-                self->update_ui_from_filtered(gen, filtered, clusters, category_counts, bullish, bearish, neutral);
+                self->update_ui_from_filtered(gen, filtered, clusters, bullish, bearish, neutral);
             },
             Qt::QueuedConnection);
     });
 }
 
 void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<services::NewsArticle>& filtered,
-                                         const QVector<services::NewsCluster>& clusters,
-                                         const QMap<QString, int>& category_counts, int bullish, int bearish,
+                                         const QVector<services::NewsCluster>& clusters, int bullish, int bearish,
                                          int neutral) {
 
     LOG_INFO("NewsScreen",
@@ -1292,12 +1285,10 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     // (the side panel had no-op stubs for these; the intel strip in the
     // command bar is where they actually render)
 
-    // Top 5 stories
-    QVector<services::NewsArticle> top5;
-    for (int i = 0; i < std::min(5, static_cast<int>(filtered.size())); i++)
-        top5.append(filtered[i]);
-    side_panel_->update_top_stories(top5);
-    side_panel_->update_categories(category_counts);
+    // WHAT'S ON → TOP HEADLINES: the head of the ranked feed (priority, then
+    // recency), minus coupon/promo posts — set_headlines() skips those, so it
+    // gets a few spare rows to fill from.
+    whats_on_->set_headlines(filtered.mid(0, 20));
 
     // Claim future-dated items before anything below can alert on them.
     const int64_t now = QDateTime::currentSecsSinceEpoch();

@@ -356,7 +356,7 @@ int main(int argc, char* argv[]) {
                 log.set_tag_level(tag, lvl_map.value(level));
         }
     }
-    LOG_INFO("App", "finterm v4.0.2 starting...");
+    LOG_INFO("App", QStringLiteral("finterm v%1 starting...").arg(QCoreApplication::applicationVersion()));
 
     // Initialize config (HttpClient base URL kept for non-auth third-party requests)
     auto& config = finterm::AppConfig::instance();

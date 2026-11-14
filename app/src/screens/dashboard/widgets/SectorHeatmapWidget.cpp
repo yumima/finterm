@@ -3,6 +3,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
+#include "screens/dashboard/widgets/SectorHeatmapStyle.h"
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
@@ -126,19 +127,11 @@ void SectorHeatmapWidget::rebuild_from_cache() {
 }
 
 namespace {
-// One styling rule for both paths of populate() (fresh cells and live retints).
-QString heatmap_cell_bg(double change_pct) {
-    // Unknown change (NaN, no previous close) → neutral, untinted cell.
-    const bool known = std::isfinite(change_pct);
-    const int intensity = known ? static_cast<int>(std::min(std::abs(change_pct) * 60.0, 200.0)) : 0;
-    QColor tint(!known              ? ui::colors::TEXT_TERTIARY()
-                : change_pct >= 0 ? ui::colors::POSITIVE()
-                                  : ui::colors::NEGATIVE());
-    tint.setAlpha(40 + intensity);
-    return tint.name(QColor::HexArgb);
-}
+// Scoped to the cell: a selector-less sheet on the frame also reached its
+// labels, drawing a second bordered box around the name and the percentage.
 QString heatmap_frame_style(const QString& bg) {
-    return QString("background: %1; border: 1px solid %2; border-radius: 2px;").arg(bg, ui::colors::BORDER_DIM());
+    return QString("QFrame#heatmapCell { background: %1; border: 1px solid %2; border-radius: 2px; }")
+        .arg(bg, ui::colors::BORDER_DIM());
 }
 QString heatmap_label_style(const QString& color) {
     return QString("color: %1; font-weight: bold; background: transparent;").arg(color);
@@ -154,17 +147,15 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
         // when its tint actually changes (setStyleSheet is the expensive part).
         for (const auto& q : quotes) {
             Cell& c = cells_[q.symbol];
-            const QString bg = heatmap_cell_bg(q.change_pct);
+            const QString bg = heatmap::cell_bg(q.change_pct);
             if (bg != c.bg) {
                 c.bg = bg;
                 c.frame->setStyleSheet(heatmap_frame_style(bg));
+                const auto lc = heatmap::label_colors(bg, q.change_pct);
+                c.name->setStyleSheet(heatmap_label_style(lc.name));
+                c.chg->setStyleSheet(heatmap_label_style(lc.chg));
             }
             c.chg->setText(ui::formatting::format_percent(q.change_pct, 2, true));
-            const QString cc = ui::change_color(q.change_pct);
-            if (cc != c.chg_color) {
-                c.chg_color = cc;
-                c.chg->setStyleSheet(heatmap_label_style(cc));
-            }
         }
         return;
     }
@@ -183,24 +174,25 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
     int idx = 0;
     for (const auto& q : quotes) {
         auto* cell = new QFrame;
+        cell->setObjectName("heatmapCell");
         cell->setMinimumSize(80, 40);
 
-        const QString bg_color = heatmap_cell_bg(q.change_pct);
+        const QString bg_color = heatmap::cell_bg(q.change_pct);
         cell->setStyleSheet(heatmap_frame_style(bg_color));
 
         auto* cl = new QVBoxLayout(cell);
         cl->setContentsMargins(4, 2, 4, 2);
         cl->setSpacing(0);
 
+        const auto lc = heatmap::label_colors(bg_color, q.change_pct);
         auto* name = new QLabel(labels.value(q.symbol, q.symbol));
-        name->setStyleSheet(heatmap_label_style(ui::colors::TEXT_PRIMARY()));
+        name->setStyleSheet(heatmap_label_style(lc.name));
         name->setAlignment(Qt::AlignCenter);
         cl->addWidget(name);
 
         auto* chg = new QLabel(ui::formatting::format_percent(q.change_pct, 2, true));
-        const QString cc = ui::change_color(q.change_pct);
-        chg->setStyleSheet(heatmap_label_style(cc));
-        cells_.insert(q.symbol, Cell{cell, chg, bg_color, cc});
+        chg->setStyleSheet(heatmap_label_style(lc.chg));
+        cells_.insert(q.symbol, Cell{cell, name, chg, bg_color});
         chg->setAlignment(Qt::AlignCenter);
         cl->addWidget(chg);
 

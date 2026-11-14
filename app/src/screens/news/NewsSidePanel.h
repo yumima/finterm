@@ -13,16 +13,17 @@
 
 namespace finterm::screens {
 
-/// Intelligence drawer — slides in from the left over the feed panel.
-/// Contains all advanced intelligence sections: monitors, top stories,
-/// categories, entities, signals, bookmarks.
+/// Left drawer of the News screen — WHAT'S ON (set_whats_on(); NewsScreen owns
+/// the view so this widget stays free of its network dependencies), the
+/// DIGEST output, and a collapsed MORE group holding monitors, deviations,
+/// entities, locations, signals and bookmarks.
 /// Toggled via the INTEL button in the command bar.
 class NewsSidePanel : public QWidget {
     Q_OBJECT
   public:
     explicit NewsSidePanel(QWidget* parent = nullptr);
-    void update_top_stories(const QVector<services::NewsArticle>& top);
-    void update_categories(const QMap<QString, int>& counts);
+    /// Puts the WHAT'S ON view at the top of the drawer (reparented).
+    void set_whats_on(QWidget* w);
     void update_monitors(const QVector<services::NewsMonitor>& monitors,
                          const QMap<QString, QVector<services::NewsArticle>>& matches);
     void update_deviations(const QVector<QPair<QString, double>>& deviations);
@@ -43,7 +44,6 @@ class NewsSidePanel : public QWidget {
     bool is_drawer_open() const { return drawer_open_; }
 
   signals:
-    void category_clicked(const QString& category);
     void article_clicked(const services::NewsArticle& article);
     void monitor_added(const QString& label, const QStringList& keywords);
     void monitor_toggled(const QString& id);
@@ -61,8 +61,6 @@ class NewsSidePanel : public QWidget {
     /// Defers reelide_rows() to the next event-loop turn, for use right after
     /// populating rows (which have no width until the layout has run).
     void schedule_reelide();
-    void build_top_stories_section(QVBoxLayout* parent);
-    void build_categories_section(QVBoxLayout* parent);
     void build_monitors_section(QVBoxLayout* parent);
     void build_deviations_section(QVBoxLayout* parent);
 
@@ -73,11 +71,9 @@ class NewsSidePanel : public QWidget {
     QLabel* digest_title_ = nullptr;
     QLabel* digest_label_ = nullptr;
 
-    // Top stories
-    QVBoxLayout* top_stories_layout_ = nullptr;
-
-    // Categories
-    QVBoxLayout* categories_layout_ = nullptr;
+    QVBoxLayout* content_layout_ = nullptr;
+    QPushButton* more_btn_ = nullptr;
+    QWidget* more_container_ = nullptr;
 
     // Monitors
     QVBoxLayout* monitors_layout_ = nullptr;

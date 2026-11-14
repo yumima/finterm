@@ -316,7 +316,7 @@ QWidget* SettingsScreen::build_appearance() {
     chat_bubble_toggle_->setChecked(true);
     chat_bubble_toggle_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(
-        make_row("AI Chat Bubble", chat_bubble_toggle_, "Floating chat assistant in the bottom-right corner."));
+        make_row("AI Chat Bubble", chat_bubble_toggle_, "AI assistant button in the status bar (bottom-right)."));
 
     ticker_bar_toggle_ = new QCheckBox("Show Ticker Bar");
     ticker_bar_toggle_->setChecked(true);

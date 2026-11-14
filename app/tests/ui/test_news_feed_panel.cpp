@@ -140,7 +140,7 @@ void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
 }
 
 
-// Drawer rows are elided to the pane width. Widening the drawer must lengthen
+// Drawer rows (bookmarks, under MORE) are elided to the pane width. Widening the drawer must lengthen
 // them immediately rather than waiting for the next feed update, and — the
 // part that is easy to get wrong — narrowing then widening again must recover
 // the full length. Re-eliding an already-elided string would ratchet down and
@@ -159,7 +159,12 @@ void TestNewsFeedPanel::drawer_rows_reelide_when_width_changes() {
         "the group outlook and European exporters brace for a slower second half");
     a.source = QStringLiteral("SRC");
     top.push_back(a);
-    panel.update_top_stories(top);
+    // Bookmark rows are the elided rows now that WHAT'S ON (word-wrapped)
+    // replaced TOP STORIES; they live in the collapsed MORE group.
+    auto* more = panel.findChild<QPushButton*>(QStringLiteral("newsDrawerMoreBtn"));
+    QVERIFY(more);
+    more->setChecked(true);
+    panel.update_saved(top);
     // Elision is deferred to the next event-loop turn (rows have no width at
     // populate time), so let it run before sampling.
     QCoreApplication::processEvents();

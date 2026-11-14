@@ -2,6 +2,10 @@
 
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/widgets/NotifBell.h"
+#include "ui/widgets/NotifPanel.h"
+
+#include <QCoreApplication>
 
 namespace finterm::ui {
 
@@ -10,6 +14,7 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
     setObjectName("appStatusBar");
 
     auto* hl = new QHBoxLayout(this);
+    layout_ = hl;
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(0);
 
@@ -19,7 +24,9 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
         return l;
     };
 
-    hl->addWidget(mk("v4.0.2", "sbVersion"));
+    // One source for the version: main.cpp sets it from the build's
+    // CMAKE_PROJECT_VERSION (FINTERM_VERSION_STRING).
+    hl->addWidget(mk(QStringLiteral("v") + QCoreApplication::applicationVersion(), "sbVersion"));
     hl->addWidget(mk("  |  ", "sbSep"));
     const char* feeds[] = {"EQ", "FX", "CM", "FI", "CR"};
     for (auto& f : feeds) {
@@ -29,6 +36,11 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
     hl->addStretch();
     ready_label_ = mk("READY", "sbReady");
     hl->addWidget(ready_label_);
+    hl->addWidget(mk("  |  ", "sbSep"));
+
+    notif_bell_ = new NotifBell(this);
+    hl->addWidget(notif_bell_);
+    connect(notif_bell_, &NotifBell::bell_clicked, this, &StatusBar::toggle_notif_panel);
 
     connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
             [this](const ThemeTokens&) { refresh_theme(); });
@@ -46,6 +58,26 @@ void StatusBar::refresh_theme() {
                       .arg(colors::BORDER_DIM())
                       .arg(colors::TEXT_SECONDARY())
                       .arg(colors::POSITIVE()));
+}
+
+void StatusBar::toggle_notif_panel() {
+    // Lazy-create; the panel is a Qt::Popup parented to the window.
+    if (!notif_panel_) {
+        QWidget* root = window();
+        notif_panel_ = new NotifPanel(root ? root : this);
+    }
+    if (notif_panel_->isVisible()) {
+        notif_panel_->hide();
+    } else {
+        notif_panel_->anchor_to(notif_bell_);
+        notif_panel_->show();
+        notif_panel_->raise();
+    }
+}
+
+void StatusBar::add_trailing_widget(QWidget* w) {
+    layout_->addSpacing(8);
+    layout_->addWidget(w, 0, Qt::AlignVCenter);
 }
 
 void StatusBar::set_ready(bool ready) {

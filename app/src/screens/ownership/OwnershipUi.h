@@ -7,6 +7,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QDate>
+#include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -15,6 +16,8 @@
 #include <QTableWidgetItem>
 #include <QWidget>
 
+#include <algorithm>
+#include <initializer_list>
 #include <optional>
 
 namespace finterm::screens::ownership_ui {
@@ -66,6 +69,87 @@ inline QTableWidget* make_table(const QStringList& headers) {
     t->horizontalHeader()->setStretchLastSection(false);
     t->setWordWrap(false);
     return t;
+}
+
+namespace detail {
+/// Gives a table's spare width to its text columns; see fill_width().
+class ColumnFiller : public QObject {
+  public:
+    explicit ColumnFiller(QTableWidget* t) : QObject(t), table_(t) {
+        setObjectName(QStringLiteral("ownershipColumnFiller"));
+        t->viewport()->installEventFilter(this);
+        // The header is Interactive: a column the reader sizes by hand is
+        // theirs until the next refill (fill_width() after new data), and
+        // resizing any other column re-balances the rest.
+        QObject::connect(t->horizontalHeader(), &QHeaderView::sectionResized, this,
+                         [this](int logical, int, int) {
+                             if (applying_)
+                                 return;
+                             if (const auto i = columns_.indexOf(logical); i >= 0) {
+                                 columns_.removeAt(i);
+                                 natural_.removeAt(i);
+                             }
+                             apply();
+                         });
+    }
+    void set(QList<int> columns, QList<int> natural) {
+        columns_ = std::move(columns);
+        natural_ = std::move(natural);
+        apply();
+    }
+    void apply() {
+        if (columns_.isEmpty())
+            return;
+        applying_ = true;
+        auto* h = table_->horizontalHeader();
+        int others = 0;
+        for (int c = 0; c < h->count(); ++c)
+            if (!columns_.contains(c) && !h->isSectionHidden(c))
+                others += h->sectionSize(c);
+        int natural_sum = 0;
+        for (int n : natural_)
+            natural_sum += n;
+        // Spare width is shared equally; a column never goes below its sized width.
+        const int spare = std::max(0, table_->viewport()->width() - others - natural_sum);
+        for (int i = 0; i < columns_.size(); ++i) {
+            if (columns_[i] < 0 || columns_[i] >= h->count())
+                continue;
+            const int share = spare / int(columns_.size()) + (i < spare % int(columns_.size()) ? 1 : 0);
+            h->resizeSection(columns_[i], natural_[i] + share);
+        }
+        applying_ = false;
+    }
+
+  protected:
+    bool eventFilter(QObject* o, QEvent* e) override {
+        if (o == table_->viewport() && e->type() == QEvent::Resize)
+            apply();
+        return false;
+    }
+
+  private:
+    QTableWidget* table_;
+    QList<int> columns_;
+    QList<int> natural_;
+    bool applying_ = false;
+};
+} // namespace detail
+
+/// After sizing columns to content, share the table's spare width among the
+/// text `columns` (Company, Roles …) and keep doing so as the panel resizes.
+/// Content-width columns alone left a wide pane ~470px of empty grid on the
+/// right; stretching the LAST column instead put a numeric header adrift
+/// across the gap. A column never shrinks below its sized width — a narrow
+/// pane scrolls rather than eliding names.
+inline void fill_width(QTableWidget* t, std::initializer_list<int> columns) {
+    // No Q_OBJECT on the filler (header-only), so look it up by name and
+    // static_cast — the name is only ever given to a ColumnFiller.
+    auto* found = t->findChild<QObject*>(QStringLiteral("ownershipColumnFiller"), Qt::FindDirectChildrenOnly);
+    auto* f = found ? static_cast<detail::ColumnFiller*>(found) : new detail::ColumnFiller(t);
+    QList<int> cols(columns), natural;
+    for (int c : cols)
+        natural << t->columnWidth(c);
+    f->set(cols, natural);
 }
 
 inline QTableWidgetItem* cell(const QString& text, const QString& colour = {},

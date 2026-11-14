@@ -94,10 +94,6 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
 
     vl->addWidget(content_split_, 1);
 
-    // ── Bottom Status Bar ──
-    status_bar_ = new DashboardStatusBar;
-    vl->addWidget(status_bar_);
-
     // ── In-app notification toast (overlay, not in layout) ────────────────────
     notif_toast_ = new finterm::ui::NotifToast(this);
     connect(&finterm::notifications::NotificationService::instance(),
@@ -112,7 +108,6 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
 
     // ── Canvas signals → toolbar/statusbar ──
     connect(canvas_, &DashboardCanvas::widget_count_changed, toolbar_, &DashboardToolBar::set_widget_count);
-    connect(canvas_, &DashboardCanvas::widget_count_changed, status_bar_, &DashboardStatusBar::set_widget_count);
     connect(canvas_, &DashboardCanvas::layout_changed, this, [this](const GridLayout&) { save_timer_->start(); });
 
     // ── Toolbar buttons ──

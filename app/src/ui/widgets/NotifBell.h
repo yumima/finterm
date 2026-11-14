@@ -3,7 +3,7 @@
 
 namespace finterm::ui {
 
-/// Bell button with unread badge — lives in DashboardStatusBar.
+/// Bell button with unread badge — lives in the app StatusBar.
 /// Connects to NotificationService::unread_count_changed to update badge.
 class NotifBell : public QPushButton {
     Q_OBJECT

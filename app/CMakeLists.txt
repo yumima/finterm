@@ -861,6 +861,7 @@ set(TRADING_SOURCES
 
 # Services
 set(SERVICE_SOURCES
+    src/services/calendar/MacroCalendarFeed.cpp
     src/services/akshare/AkShareService.cpp
     src/services/alpha_arena/AlphaArenaService.cpp
     src/services/asia_markets/AsiaMarketsService.cpp
@@ -1089,7 +1090,6 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketChartDialog.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
-    src/screens/dashboard/DashboardStatusBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
     src/screens/dashboard/TickerBar.cpp
     src/screens/dashboard/canvas/DashboardCanvas.cpp
@@ -1139,6 +1139,7 @@ set(SCREEN_SOURCES
     src/screens/news/NewsScreen.cpp
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsSidePanel.cpp
+    src/screens/news/WhatsOnPanel.cpp
     src/screens/news/NewsFeedPanel.cpp
     src/screens/news/NewsFeedModel.cpp
     src/screens/news/NewsFeedDelegate.cpp
@@ -1494,7 +1495,6 @@ set_source_files_properties(
     src/screens/data_sources/connectors/AlternativeData.cpp
     src/screens/data_sources/connectors/OpenBanking.cpp
     src/screens/dashboard/DashboardScreen.cpp
-    src/screens/dashboard/DashboardStatusBar.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
     src/screens/dashboard/TickerBar.cpp
@@ -1509,6 +1509,7 @@ set_source_files_properties(
     src/screens/dashboard/widgets/BaseWidget.cpp
     src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
     src/screens/dashboard/widgets/EconomicCalendarWidget.cpp
+    src/services/calendar/MacroCalendarFeed.cpp
     src/screens/dashboard/widgets/IpoCalendarWidget.cpp
     src/screens/dashboard/widgets/OwnershipCalendarWidget.cpp
     src/screens/dashboard/widgets/MarketSentimentWidget.cpp
@@ -1611,6 +1612,7 @@ set_source_files_properties(
     src/screens/news/NewsFeedPanel.cpp
     src/screens/news/NewsScreen.cpp
     src/screens/news/NewsSidePanel.cpp
+    src/screens/news/WhatsOnPanel.cpp
     src/screens/news/NewsTickerStrip.cpp
     src/screens/node_editor/NodeEditorScreen.cpp
     src/screens/node_editor/canvas/EdgeItem.cpp

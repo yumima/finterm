@@ -44,9 +44,10 @@ class SectorHeatmapWidget : public BaseWidget {
     /// rebuilding 33 styled widgets per live tick was the heatmap's whole cost.
     struct Cell {
         QWidget* frame = nullptr;
+        QLabel* name = nullptr;
         QLabel* chg = nullptr;
-        QString bg;        ///< tint last applied (restyle only when it changes)
-        QString chg_color; ///< change colour last applied
+        QString bg; ///< tint last applied (restyle only when it changes; the
+                    ///< label colours are a function of it)
     };
     QStringList cell_syms_; ///< symbols the grid holds, in order; empty = rebuild
     QHash<QString, Cell> cells_;

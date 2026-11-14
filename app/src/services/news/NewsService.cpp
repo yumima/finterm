@@ -12,6 +12,8 @@
 #include "services/news/NewsBriefPrompts.h"
 #include "services/news/NewsBriefSelection.h"
 #include "services/news/NewsCategories.h"
+#include "services/news/NewsPromo.h"
+#include "services/news/NewsTickers.h"
 #include "services/news/NewsClusterService.h"
 #include "services/news/NewsFeedMerge.h"
 #include "storage/cache/CacheManager.h"
@@ -140,8 +142,15 @@ static NewsArticle article_from_json(const QJsonObject& o) {
     a.sentiment = sentiment_from_string(o["sentiment"].toString());
     a.impact = impact_from_string(o["impact"].toString());
     a.lang = o["lang"].toString();
-    for (const auto& t : o["tickers"].toArray())
-        a.tickers << t.toString();
+    // Tickers and the MARKETS default are re-derived rather than trusted from
+    // the cache: both rules changed (all-caps words were tagged as tickers;
+    // sport filed under MARKETS), and both are pure functions of the text, so
+    // re-deriving keeps an old cache from showing the old answers.
+    const QString combined = a.headline + " " + a.summary;
+    a.tickers = news::extract_tickers(combined);
+    a.category = news::refine_category(a.category, combined.toLower());
+    if (news::is_promo_spam(a.headline))
+        a.priority = Priority::ROUTINE; // as enrich_article(); old caches carry FLASH
     a.similar = o["similar"].toInt(0);
     for (const auto& s : o["also_sources"].toArray())
         a.also_sources << s.toString();
@@ -1382,6 +1391,11 @@ void NewsService::enrich_article(NewsArticle& article) {
         article.priority = Priority::FLASH;
     else if (matches_any(text, urgent_res))
         article.priority = Priority::URGENT;
+    // Coupon / promo-code posts are adverts: a "deal alert" in the blurb made
+    // "Chatbooks Promo Code: 40% Off" a FLASH — banner, top of the RELEVANCE
+    // sort, #3 in the drawer's top stories. They are never urgent.
+    if (news::is_promo_spam(article.headline))
+        article.priority = Priority::ROUTINE;
 
     // Weighted sentiment
     struct WordWeight {
@@ -1458,22 +1472,12 @@ void NewsService::enrich_article(NewsArticle& article) {
     // model merges two headings, and it would be guessing differently from the
     // classifier if it carried its own copy. No match leaves the feed's own
     // category in place, which is the behaviour the if-chain here had.
-    if (const QString cat = news::classify(text); !cat.isEmpty())
-        article.category = cat;
+    // A feed default of MARKETS only stands on market evidence (refine_category).
+    article.category = news::refine_category(article.category, text);
 
-    // Extract tickers: uppercase 2-5 letter words
-    static QRegularExpression ticker_re("\\b[A-Z]{2,5}\\b");
-    static QSet<QString> common_words = {"THE",  "FOR",  "AND",  "BUT",  "NOT",  "FROM", "WITH", "THIS", "THAT", "HAVE",
-                                         "WILL", "BEEN", "THEY", "WERE", "SAID", "HAS",  "ITS",  "NEW",  "ARE",  "WAS"};
-    auto it = ticker_re.globalMatch(combined); // reuse already-built string
-    QSet<QString> found;
-    while (it.hasNext() && found.size() < 5) {
-        auto m = it.next();
-        QString t = m.captured();
-        if (!common_words.contains(t))
-            found.insert(t);
-    }
-    article.tickers = found.values();
+    // Tickers only on evidence: cashtag, exchange context or a known symbol —
+    // never "any all-caps word" (that tagged $CEO, $EU, $FAA, …).
+    article.tickers = news::extract_tickers(combined);
 
     // Language detection — check for CJK, Cyrillic, Arabic, Devanagari characters
     auto detect_lang = [](const QString& s) -> QString {

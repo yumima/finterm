@@ -21,6 +21,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QTimer>
 #include <QMenu>
 #include <QVBoxLayout>
 
@@ -100,6 +101,40 @@ DockScreenRouter::DockScreenRouter(ads::CDockManager* manager, QObject* parent) 
     // for source-suppression (skip re-delivery to the publisher).
     connect(&SymbolContext::instance(), &SymbolContext::group_symbol_changed, this,
             &DockScreenRouter::on_group_symbol_changed_external);
+
+    // Clicking a panel or a dock tab changes the screen in front without any
+    // navigate(); follow it so the nav highlight and current_id_ stay true.
+    // Deferred: during navigate()/split the focus passes through intermediate
+    // widgets — read it once the operation has settled.
+    connect(manager_, &ads::CDockManager::focusedDockWidgetChanged, this,
+            [this](ads::CDockWidget*, ads::CDockWidget*) {
+                QTimer::singleShot(0, this, [this]() { sync_current_from_view(); });
+            });
+}
+
+void DockScreenRouter::sync_current_from_view() {
+    if (!manager_)
+        return;
+    // The focused panel's AREA is where the user is; within it, the current
+    // tab is what is shown. ADS keeps the last-focused widget as "focused"
+    // after navigate() makes another tab of the same area current (it raises
+    // without moving focus), so the focused widget alone can be a hidden tab.
+    ads::CDockWidget* dw = manager_->focusedDockWidget();
+    ads::CDockAreaWidget* area = (dw && !dw->isClosed()) ? dw->dockAreaWidget() : nullptr;
+    if (!area) {
+        const auto areas = manager_->openedDockAreas();
+        if (!areas.isEmpty())
+            area = areas.first();
+    }
+    dw = area ? area->currentDockWidget() : nullptr;
+    if (!dw || dw->isClosed())
+        return;
+    const QString id = dw->objectName();
+    if (id.isEmpty() || id == current_id_ || find_dock_widget(id) != dw)
+        return;
+    current_id_ = id;
+    SessionManager::instance().set_last_screen(id);
+    emit screen_changed(id);
 }
 
 void DockScreenRouter::on_group_symbol_changed_external(SymbolGroup g, const SymbolRef& ref, QObject* source) {

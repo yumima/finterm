@@ -57,7 +57,7 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     header_layout->setContentsMargins(10, 0, 6, 0);
     header_layout->setSpacing(0);
 
-    auto* title = new QLabel("INTELLIGENCE", header);
+    auto* title = new QLabel("WHAT'S ON", header);
     title->setObjectName("newsDrawerTitle");
     header_layout->addWidget(title);
     header_layout->addStretch();
@@ -87,11 +87,10 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(10);
-
-    build_top_stories_section(layout);
-    build_categories_section(layout);
-    build_monitors_section(layout);
-    build_deviations_section(layout);
+    content_layout_ = layout;
+    // set_whats_on() inserts the WHAT'S ON view at index 0. It replaced the
+    // old TOP STORIES / CATEGORIES view (the category pills in the command bar
+    // already do the latter); the rarer tools below sit behind MORE.
 
     // ── DIGEST ────────────────────────────────────────────────────────────
     // Output of the INTEL strip's DIGEST button lands here rather than in the
@@ -124,6 +123,40 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
 
     layout->addWidget(digest_section_);
 
+    // ── MORE: monitors, deviations, entities, locations, signals, bookmarks ──
+    // Kept (they hold user state — monitors and bookmarks live nowhere else)
+    // but collapsed by default: WHAT'S ON is the drawer's job now.
+    more_btn_ = new QPushButton(content);
+    more_btn_->setObjectName("newsDrawerMoreBtn");
+    more_btn_->setCheckable(true);
+    more_btn_->setCursor(Qt::PointingHandCursor);
+    more_btn_->setStyleSheet(QString("QPushButton#newsDrawerMoreBtn { text-align:left; background:transparent; "
+                                     "border:none; border-bottom:1px solid %1; color:%2; font-weight:700; "
+                                     "padding:4px 0 2px; }"
+                                     "QPushButton#newsDrawerMoreBtn:hover { color:%3; }")
+                                 .arg(ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+    layout->addWidget(more_btn_);
+    more_container_ = new QWidget(content);
+    auto* more_layout = new QVBoxLayout(more_container_);
+    more_layout->setContentsMargins(0, 0, 0, 0);
+    more_layout->setSpacing(10);
+    more_container_->hide();
+    layout->addWidget(more_container_);
+    auto set_more_label = [this](bool open) {
+        more_btn_->setText(QString::fromUtf8(open ? "▾ MONITORS · BOOKMARKS · SIGNALS"
+                                                  : "▸ MONITORS · BOOKMARKS · SIGNALS"));
+    };
+    set_more_label(false);
+    connect(more_btn_, &QPushButton::toggled, this, [this, set_more_label](bool open) {
+        set_more_label(open);
+        more_container_->setVisible(open);
+        if (open)
+            schedule_reelide();
+    });
+
+    build_monitors_section(more_layout);
+    build_deviations_section(more_layout);
+
     // Hidden intelligence sections
     auto build_hidden_section = [&](const QString& section_title, QVBoxLayout*& out_layout) -> QWidget* {
         auto* section = new QWidget(this);
@@ -139,7 +172,7 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
         out_layout->setContentsMargins(0, 0, 0, 0);
         out_layout->setSpacing(1);
         inner->addWidget(container);
-        layout->addWidget(section);
+        more_layout->addWidget(section);
         return section;
     };
 
@@ -213,28 +246,11 @@ void NewsSidePanel::toggle_drawer() {
     setVisible(drawer_open_);
 }
 
-void NewsSidePanel::build_top_stories_section(QVBoxLayout* parent) {
-    auto* title = new QLabel("TOP STORIES", this);
-    title->setObjectName("newsDrawerSectionTitle");
-    parent->addWidget(title);
-
-    auto* container = new QWidget(this);
-    top_stories_layout_ = new QVBoxLayout(container);
-    top_stories_layout_->setContentsMargins(0, 0, 0, 0);
-    top_stories_layout_->setSpacing(2);
-    parent->addWidget(container);
-}
-
-void NewsSidePanel::build_categories_section(QVBoxLayout* parent) {
-    auto* title = new QLabel("CATEGORIES", this);
-    title->setObjectName("newsDrawerSectionTitle");
-    parent->addWidget(title);
-
-    auto* container = new QWidget(this);
-    categories_layout_ = new QVBoxLayout(container);
-    categories_layout_->setContentsMargins(0, 0, 0, 0);
-    categories_layout_->setSpacing(1);
-    parent->addWidget(container);
+void NewsSidePanel::set_whats_on(QWidget* w) {
+    if (!w || !content_layout_)
+        return;
+    w->setParent(content_layout_->parentWidget());
+    content_layout_->insertWidget(0, w);
 }
 
 void NewsSidePanel::build_monitors_section(QVBoxLayout* parent) {
@@ -312,66 +328,6 @@ void NewsSidePanel::build_deviations_section(QVBoxLayout* parent) {
 }
 
 // ── Update methods ──────────────────────────────────────────────────────────
-
-void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top) {
-    // Clear existing
-    while (top_stories_layout_->count() > 0) {
-        auto* item = top_stories_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    for (int i = 0; i < top.size(); ++i) {
-        const auto& article = top[i];
-        auto* btn = new QPushButton(this);
-        btn->setObjectName("newsTopStoryBtn");
-        // The layout sets the width, not the text: a button showing a long
-        // headline otherwise reports that width as its minimum, and the drawer
-        // could never narrow it again (nor re-elide it shorter).
-        btn->setSizePolicy(QSizePolicy::Ignored, btn->sizePolicy().verticalPolicy());
-        btn->setCursor(Qt::PointingHandCursor);
-
-        QString pcolor = services::priority_color(article.priority);
-        // Fill the pane. This used to chop every headline at a blind 50 chars
-        // regardless of how wide the drawer was, so a widened drawer showed a
-        // short stub with dead space beside it. Elide against the actual
-        // available width instead, and keep the full text in the tooltip.
-        const QString full = QString("%1. %2").arg(i + 1).arg(article.headline);
-        btn->setProperty(kFullTextProp, full);
-        btn->setText(full); // elided by schedule_reelide() once laid out
-        btn->setToolTip(article.headline);
-
-        // Priority dot via left border color
-        btn->setStyleSheet(QString("border-left: 3px solid %1;").arg(pcolor));
-
-        connect(btn, &QPushButton::clicked, this, [this, article]() { emit article_clicked(article); });
-
-        top_stories_layout_->addWidget(btn);
-    }
-    schedule_reelide();
-}
-
-void NewsSidePanel::update_categories(const QMap<QString, int>& counts) {
-    while (categories_layout_->count() > 0) {
-        auto* item = categories_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    for (auto it = counts.begin(); it != counts.end(); ++it) {
-        auto* btn = new QPushButton(this);
-        btn->setObjectName("newsCategoryBtn");
-        btn->setCursor(Qt::PointingHandCursor);
-        btn->setText(QString("%1  %2").arg(it.key(), -10).arg(it.value()));
-
-        QString cat = it.key();
-        connect(btn, &QPushButton::clicked, this, [this, cat]() { emit category_clicked(cat); });
-
-        categories_layout_->addWidget(btn);
-    }
-}
 
 void NewsSidePanel::update_monitors(const QVector<services::NewsMonitor>& monitors,
                                     const QMap<QString, QVector<services::NewsArticle>>& matches) {

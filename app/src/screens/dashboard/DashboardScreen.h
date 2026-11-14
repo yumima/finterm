@@ -1,6 +1,5 @@
 #pragma once
 #include "ui/RenderCoalescer.h"
-#include "screens/dashboard/DashboardStatusBar.h"
 #include "screens/dashboard/DashboardToolBar.h"
 #include "screens/dashboard/MarketPulsePanel.h"
 #include "screens/dashboard/TickerBar.h"
@@ -21,7 +20,8 @@ class NotifToast;
 
 namespace finterm::screens {
 
-/// Main dashboard screen — toolbar, ticker, draggable widget grid, market pulse, status bar.
+/// Main dashboard screen — toolbar, ticker, draggable widget grid, market pulse.
+/// (No status bar of its own: the main window's StatusBar is on every screen.)
 ///
 /// The ticker driver subscribes to `market:quote:<sym>` on the DataHub for
 /// every user-configured ticker symbol. A cached per-symbol QuoteData is
@@ -55,7 +55,6 @@ class DashboardScreen : public QWidget {
     DashboardCanvas* canvas_ = nullptr;
     QSplitter* content_split_ = nullptr;
     MarketPulsePanel* market_pulse_ = nullptr;
-    DashboardStatusBar* status_bar_ = nullptr;
     finterm::ui::NotifToast* notif_toast_ = nullptr;
     QTimer* save_timer_ = nullptr;
     bool pulse_visible_ = true;

@@ -18,6 +18,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstddef>
 #include <iterator>
 
 namespace finterm::news {
@@ -174,6 +175,91 @@ inline QString classify(const QString& lowered, const QSet<QString>& allowed = {
         }
     }
     return {};
+}
+
+/// Words that make a story a markets/business story. Used only to decide
+/// whether a feed's DEFAULT category of MARKETS may stand when no category
+/// keyword matched (see refine_category()). Space-delimited entries match whole
+/// words, the rest are substrings — same convention as kCategoryRules.
+inline constexpr const char* kMarketEvidence[] = {
+    "stock",      "shares",      " share ",    "investor",   "wall street", " bond",      "yield",
+    "treasur",    " index ",     "futures",    " ipo ",      "merger",      "acquisition", "acquire",
+    "takeover",   "dividend",    "buyback",    "valuation",  "revenue",     "profit",      " sales ",
+    "forecast",   "analyst",     "trading",    " trader",    " market",     " markets ",   "dollar",
+    "currency",   "forex",       " euro ",     " yen ",      " yuan ",      "commodit",    " gold ",
+    "copper",     "economy",     "economic",   " bank ",     " banks ",     "lender",      "credit",
+    "debt",       " rates ",     " tariff",    "price",      " ceo ",       " company ",   "companies",
+    " firm ",     " startup",    "funding",    "investment", "fund ",       " etf",        " imf ",
+    " earnings ", " layoff",     " job cuts ", "bankrupt",   "regulator",   "antitrust",   " sec ",
+};
+
+/// Evidence strong enough to keep a sport/entertainment-flavoured story in
+/// MARKETS ("Manchester United shares fall", "NFL media-rights deal lifts
+/// Disney revenue").
+inline constexpr const char* kStrongMarketEvidence[] = {
+    "stock",  "shares",  "investor",  "wall street", " ipo ",    "merger",     "acquisition",
+    "takeover", "revenue", "profit", "valuation",    " earnings ", "bankrupt",
+};
+
+/// Words that mark a story as sport, entertainment or celebrity — the
+/// non-market content general "business"/"latest" feeds also carry.
+inline constexpr const char* kNonMarketMarkers[] = {
+    // Only words with no ordinary business sense: "match", "coach", "actor"
+    // and "episode" all occur in market copy ("fails to match gains",
+    // "state actor", "volatility episode").
+    " football ",   " soccer ",      " nba ",       " nfl ",        " nhl ",       " mlb ",
+    "premier league", " cricket ",   " rugby ",     " tennis ",     " golf ",      " olympic",
+    " world cup ",  " championship ", " goalkeeper ", " striker ",  " quarterback ", " touchdown ",
+    " grand slam ", " album ",       " singer ",    " concert ",    " tour dates ", " grammy",
+    " oscar",       " celebrity ",   " pop star ",  " rapper ",     " music video ", " box set ",
+    " tv series ",  " actress ",     " red carpet ", " eurovision ", " k pop ",    " horoscope ",
+    " recipe ",     " fashion week ",
+};
+
+namespace detail {
+template <std::size_t N>
+inline bool any_keyword(const char* const (&list)[N], const QString& lowered, const QString& bounded) {
+    for (const char* k : list) {
+        const QLatin1String kw(k);
+        const bool bounded_kw = kw.front() == QLatin1Char(' ') || kw.back() == QLatin1Char(' ');
+        if (bounded_kw ? bounded.contains(kw) : lowered.contains(kw))
+            return true;
+    }
+    return false;
+}
+} // namespace detail
+
+/// The general bucket for stories no category claims.
+inline constexpr QLatin1StringView kGeneralCategory{"GENERAL"};
+
+/// The category an article is filed under, given the category its FEED
+/// declares and the article's lowercased headline + summary.
+///
+/// MKT used to be "category == MARKETS", and MARKETS was simply the feed's
+/// label whenever no keyword matched — so a CNA or Guardian Business sport or
+/// pop-music item passed the MKT filter.
+///
+/// A keyword match wins (classify()). Otherwise the feed's own category stands
+/// — EXCEPT a feed default of MARKETS, which business and "latest news" feeds
+/// apply to everything they carry, sport and pop music included: that default
+/// only stands when the text shows market/business evidence and no
+/// sport/entertainment marker. Anything else is GENERAL — still in ALL, no
+/// longer in MKT. Idempotent, so it can be re-applied to cached articles.
+inline QString refine_category(const QString& feed_category, const QString& lowered) {
+    if (const QString cat = classify(lowered); !cat.isEmpty())
+        return cat;
+    if (feed_category != QLatin1String("MARKETS"))
+        return feed_category;
+    // Partial-word keywords with ONE bounding space (" bond", " etf") are
+    // matched in the bounded view too: there a leading space means "starts a
+    // word", which is what they are for (bonds, ETFs; not "vagabond").
+    const QString bounded = word_bounded_view(lowered);
+    if (detail::any_keyword(kNonMarketMarkers, lowered, bounded) &&
+        !detail::any_keyword(kStrongMarketEvidence, lowered, bounded))
+        return QString(kGeneralCategory);
+    if (!detail::any_keyword(kMarketEvidence, lowered, bounded))
+        return QString(kGeneralCategory);
+    return feed_category;
 }
 
 /// The categories a heading names, in the order the heading writes them.

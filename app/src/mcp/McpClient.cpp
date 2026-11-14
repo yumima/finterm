@@ -5,6 +5,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonSetupManager.h"
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -168,7 +169,7 @@ Result<QJsonObject> McpClient::initialize() {
 
     QJsonObject client_info;
     client_info["name"] = "finterm";
-    client_info["version"] = "4.0.2";
+    client_info["version"] = QCoreApplication::applicationVersion();
     params["clientInfo"] = client_info;
 
     QJsonObject capabilities;

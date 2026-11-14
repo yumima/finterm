@@ -3,6 +3,7 @@
 
 #include "ui/theme/Theme.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QHBoxLayout>
 #include <QTimeZone>
@@ -41,7 +42,7 @@ PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
     add_divider();
 
     auto* version_lbl = make_label(ui::colors::TEXT_TERTIARY);
-    version_lbl->setText("PORTFOLIO TERMINAL v4.0");
+    version_lbl->setText(QStringLiteral("PORTFOLIO TERMINAL v") + QCoreApplication::applicationVersion());
 
     add_divider();
 

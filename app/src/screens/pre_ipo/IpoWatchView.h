@@ -58,6 +58,7 @@ class IpoWatchView : public QWidget {
     Q_OBJECT
   public:
     explicit IpoWatchView(QWidget* parent = nullptr);
+    ~IpoWatchView() override;
 
   public slots:
     void refresh();
@@ -422,6 +423,12 @@ class IpoWatchView : public QWidget {
     /// from then on; automatic weighting stops.
     bool splitter_user_sized_ = false;
     QString detail_symbol_;
+    /// "ipo_watch.select" (News › WHAT'S ON): a ticker or company to open,
+    /// held until entries_ can resolve it.
+    QString pending_select_;
+    QString pending_select_deal_;
+    int select_sub_ = -1;
+    void apply_pending_select();
     QString detail_deal_id_; // the open dossier's deal (tickers repeat across re-filings)
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or

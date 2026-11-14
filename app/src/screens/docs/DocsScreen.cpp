@@ -3,6 +3,7 @@
 
 #include "ui/theme/Theme.h"
 
+#include <QCoreApplication>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -223,7 +224,8 @@ QWidget* DocsScreen::page_welcome() {
     vl->setSpacing(12);
 
     vl->addWidget(make_heading("FINTERM  —  DOCUMENTATION"));
-    vl->addWidget(make_muted_label("v4.0.0  |  Native C++ Financial Intelligence Terminal"));
+    vl->addWidget(make_muted_label(QStringLiteral("v%1  |  Native C++ Financial Intelligence Terminal")
+                                         .arg(QCoreApplication::applicationVersion())));
 
     auto* sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
@@ -876,8 +878,8 @@ QWidget* DocsScreen::page_ai_chat() {
     return make_page(
         "AI ASSISTANT", "AI-powered financial assistance, everywhere it is needed",
         {
-            {"OVERVIEW", "AI is a lens on whatever you are looking at, not a destination. The floating "
-                         "chat bubble (bottom-right) is the global assistant with live data tools; "
+            {"OVERVIEW", "AI is a lens on whatever you are looking at, not a destination. The ⬡ button "
+                         "at the right end of the status bar opens the global assistant with live data tools; "
                          "the FinGPT tab in Equity Research carries both per-stock forecast engines, headline "
                          "sentiment and a stock-scoped chat; the Portfolio Insights panel answers over "
                          "your real holdings."},
@@ -1545,7 +1547,7 @@ DocsScreen::DocsScreen(QWidget* parent) : QWidget(parent) {
                            .arg(ui::colors::BORDER_BRIGHT()));
     cmd_hl->addWidget(sep);
 
-    breadcrumb_ = new QLabel("FINTERM v4.0.0");
+    breadcrumb_ = new QLabel(QStringLiteral("FINTERM v") + QCoreApplication::applicationVersion());
     breadcrumb_->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold;"
                                        " background: transparent; letter-spacing: 0.5px;"
                                        " font-family: 'Consolas','Courier New',monospace;")

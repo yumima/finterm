@@ -129,6 +129,13 @@ class DockScreenRouter : public QObject {
     /// Returns the currently focused/active screen id.
     QString current_screen_id() const { return current_id_; }
 
+    /// Re-derive the current screen from what the dock actually shows (the
+    /// focused panel, else the current tab of the first open area) and emit
+    /// screen_changed if it differs. For layouts that appear without a
+    /// navigate() — a restored or pre-login layout, a tab clicked in ADS — so
+    /// the top nav highlight does not stay on a screen that is not shown.
+    void sync_current_from_view();
+
     /// Pre-create CDockWidgets (with placeholder content) for ALL registered
     /// factories. Required before calling CDockManager::restoreState() since
     /// ADS needs all dock widgets to exist by objectName.

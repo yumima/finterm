@@ -1042,3 +1042,34 @@ target_link_libraries(test_live_tick PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6
 set_target_properties(test_live_tick PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME live_tick COMMAND test_live_tick)
 set_tests_properties(live_tick PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# ── AI assistant panel size (default 2x, clamped to 60% of the window) ───────
+add_executable(test_chat_panel_size ai_chat/test_chat_panel_size.cpp)
+target_include_directories(test_chat_panel_size PRIVATE ../src)
+target_link_libraries(test_chat_panel_size PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_chat_panel_size PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME chat_panel_size COMMAND test_chat_panel_size)
+
+# ── News tagging: tickers on evidence, MKT on market evidence ────────────────
+add_executable(test_news_tagging services/test_news_tagging.cpp)
+target_include_directories(test_news_tagging PRIVATE ../src)
+target_link_libraries(test_news_tagging PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_news_tagging PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME news_tagging COMMAND test_news_tagging)
+
+# ── Macro calendar (ECONOMIC CALENDAR widget + News WHAT'S ON) ───────────────
+add_executable(test_macro_calendar services/test_macro_calendar.cpp)
+target_include_directories(test_macro_calendar PRIVATE ../src)
+target_link_libraries(test_macro_calendar PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_macro_calendar PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME macro_calendar COMMAND test_macro_calendar)
+# "Today" is a local-calendar notion; pin the zone the fixtures are written in.
+set_tests_properties(macro_calendar PROPERTIES ENVIRONMENT "TZ=America/New_York")
+
+# ── News › WHAT'S ON model (merge, filter, de-dupe, bucket) ──────────────────
+add_executable(test_whats_on_model screens/test_whats_on_model.cpp)
+target_include_directories(test_whats_on_model PRIVATE ../src)
+target_link_libraries(test_whats_on_model PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_whats_on_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME whats_on_model COMMAND test_whats_on_model)
+set_tests_properties(whats_on_model PROPERTIES ENVIRONMENT "TZ=America/New_York")

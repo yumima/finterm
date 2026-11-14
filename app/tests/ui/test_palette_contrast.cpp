@@ -14,6 +14,8 @@
 
 #include <QTest>
 
+#include "screens/dashboard/widgets/SectorHeatmapStyle.h"
+#include "ui/theme/Contrast.h"
 #include "ui/theme/QssSlots.h"
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
@@ -73,6 +75,33 @@ private slots:
             QVERIFY2(contrast(c, bg) >= 3.0,
                      qPrintable(QStringLiteral("%1 is %2:1").arg(n).arg(contrast(c, bg))));
         }
+    }
+
+    void heatmap_labels_read_on_every_tile_intensity() {
+        // Regression: a -8% sector ("Semis") was filled at ~94% red and its
+        // percentage drawn in the same red — unreadable. Every move, both signs,
+        // up to and past the saturation point, must keep both labels legible.
+        namespace hm = finterm::screens::widgets::heatmap;
+        namespace cx = finterm::ui::contrast;
+        const QColor surface(finterm::ui::colors::BG_SURFACE());
+        for (int bp = -1500; bp <= 1500; bp += 5) {
+            const double pct = bp / 100.0;
+            const QString bg = hm::cell_bg(pct);
+            const QColor fill = cx::over(QColor(bg), surface);
+            const auto lc = hm::label_colors(bg, pct);
+            const struct { QString c; double floor; } labels[] = {{lc.name, 4.5}, {lc.chg, 3.0}};
+            for (const auto& l : labels) {
+                const double r = cx::ratio(QColor(l.c), fill);
+                QVERIFY2(r >= l.floor, qPrintable(QStringLiteral("%1%% tile %2: label %3 is %4:1")
+                                                      .arg(pct).arg(fill.name(), l.c).arg(r, 0, 'f', 2)));
+            }
+        }
+        // While the tint is faint the sign colour itself must survive — the
+        // fallback is for saturated tiles, not a blanket recolour.
+        QCOMPARE(hm::label_colors(hm::cell_bg(-0.10), -0.10).chg,
+                 QColor(finterm::ui::colors::NEGATIVE()).name());
+        QCOMPARE(hm::label_colors(hm::cell_bg(0.10), 0.10).chg,
+                 QColor(finterm::ui::colors::POSITIVE()).name());
     }
 
     void qss_slots_fill_by_number() {

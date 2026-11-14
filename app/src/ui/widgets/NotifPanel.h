@@ -9,7 +9,7 @@
 namespace finterm::ui {
 
 /// Dropdown notification history panel.
-/// Shown/hidden by DashboardStatusBar when the bell is clicked.
+/// Shown/hidden by the app StatusBar when the bell is clicked.
 /// Anchored just above the status bar, right-aligned.
 class NotifPanel : public QFrame {
     Q_OBJECT

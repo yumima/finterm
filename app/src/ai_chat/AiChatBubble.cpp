@@ -1,5 +1,7 @@
 #include "ai_chat/AiChatBubble.h"
 
+#include "ai_chat/ChatPanelSize.h"
+
 #include "ai_chat/ChatPersonas.h"
 #include "services/stt/SpeechService.h"
 #include "storage/repositories/ChatRepository.h"
@@ -16,6 +18,8 @@
 #include <QPalette>
 #include <QRegularExpression>
 #include <QResizeEvent>
+#include <QShowEvent>
+#include <QHideEvent>
 #include <QScrollBar>
 #include <QUrl>
 #include <QUuid>
@@ -42,15 +46,24 @@ static void apply_obsidian_palette(QTextEdit* edit) {
 namespace fnt = finterm::ui::fonts;
 
 // ── Layout constants ──────────────────────────────────────────────────────────
-static constexpr int PANEL_W = 320;
-static constexpr int PANEL_H = 440;
-static constexpr int BTN_SIZE = 42;
-static constexpr int MARGIN = 16;
+using ai_chat::panel_size::BASE_PANEL_H;
+using ai_chat::panel_size::BASE_PANEL_W;
+using ai_chat::panel_size::MIN_PANEL_H;
+using ai_chat::panel_size::MIN_PANEL_W;
+using ai_chat::panel_size::clamp_panel_size;
+using ai_chat::panel_size::default_panel_size;
+// Launcher: sized to sit inside the 26px status bar.
+static constexpr int BTN_W = 30;
+static constexpr int BTN_H = 22;
+static constexpr int MARGIN = 8;
+static constexpr int GRIP = 14;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
-AiChatBubble::AiChatBubble(QWidget* parent) : QWidget(parent) {
+AiChatBubble::AiChatBubble(QWidget* panel_host, QWidget* parent) : QWidget(parent), panel_host_(panel_host) {
     setAttribute(Qt::WA_NoSystemBackground, true);
     setAttribute(Qt::WA_TranslucentBackground, true);
+    setFixedSize(BTN_W, BTN_H);
+    setToolTip(QStringLiteral("AI assistant"));
 
     tts_player_ = new QMediaPlayer(this);
     auto* ao = new QAudioOutput(this);
@@ -75,26 +88,24 @@ AiChatBubble::AiChatBubble(QWidget* parent) : QWidget(parent) {
     connect(&stt, &services::SpeechService::listening_changed, this, &AiChatBubble::on_stt_listening_changed);
     connect(&stt, &services::SpeechService::error_occurred, this, &AiChatBubble::on_stt_error);
 
-    if (parent)
-        parent->installEventFilter(this);
-
-    // Restore custom drag position from settings if the user had moved it.
-    {
-        const auto rx = SettingsRepository::instance().get("ui.chat_bubble.x");
-        const auto ry = SettingsRepository::instance().get("ui.chat_bubble.y");
-        if (rx.is_ok() && ry.is_ok()) {
-            bool ok_x = false, ok_y = false;
-            const int x = rx.value().toInt(&ok_x);
-            const int y = ry.value().toInt(&ok_y);
-            if (ok_x && ok_y) {
-                custom_pos_ = QPoint(x, y);
-                has_custom_pos_ = true;
-            }
-        }
+    if (panel_host_) {
+        panel_host_->installEventFilter(this);
+        chat_panel_->setParent(panel_host_);
+        chat_panel_->hide();
     }
 
-    reposition();
-    raise();
+    // Restore the user's panel size, if they ever resized it.
+    {
+        const auto rw = SettingsRepository::instance().get("ui.chat_panel.w");
+        const auto rh = SettingsRepository::instance().get("ui.chat_panel.h");
+        if (rw.is_ok() && rh.is_ok()) {
+            bool ok_w = false, ok_h = false;
+            const int w = rw.value().toInt(&ok_w);
+            const int h = rh.value().toInt(&ok_h);
+            if (ok_w && ok_h && w > 0 && h > 0)
+                user_panel_size_ = QSize(w, h);
+        }
+    }
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
             [this](const ui::ThemeTokens&) { refresh_theme(); });
@@ -103,7 +114,7 @@ AiChatBubble::AiChatBubble(QWidget* parent) : QWidget(parent) {
 // ── Theme refresh ─────────────────────────────────────────────────────────────
 void AiChatBubble::refresh_theme() {
     if (bubble_btn_)
-        bubble_btn_->setStyleSheet(QString("background:%1;border:2px solid %2;border-radius:0px;")
+        bubble_btn_->setStyleSheet(QString("background:%1;border:1px solid %2;border-radius:0px;")
                                        .arg(col::BG_SURFACE(), col::BORDER_BRIGHT()));
     if (chat_panel_)
         chat_panel_->setStyleSheet(
@@ -139,66 +150,92 @@ void AiChatBubble::refresh_theme() {
 }
 
 // ── Reposition ────────────────────────────────────────────────────────────────
-// If the user has dragged the bubble, custom_pos_ holds their chosen
-// top-left and we honor it (clamped to the parent's current rect, in case
-// the window has shrunk since the last drag). Otherwise default to
-// bottom-right with MARGIN inset.
-//
-// Panel anchors above-and-aligned-to-right-of the bubble — clamped to the
-// parent rect so it stays on-screen regardless of where the bubble lives.
+// The launcher lives in a layout (the status bar), so only the panel is
+// placed here: bottom-right of the host with a MARGIN inset, at the user's
+// size (or the default), clamped to the host's current size.
 void AiChatBubble::reposition() {
-    if (!parentWidget())
+    if (!panel_host_ || !chat_panel_)
         return;
-
-    const QRect pr = parentWidget()->rect();
-
-    int bx, by;
-    if (has_custom_pos_) {
-        bx = std::clamp(custom_pos_.x(), 0, std::max(0, pr.width() - BTN_SIZE));
-        by = std::clamp(custom_pos_.y(), 0, std::max(0, pr.height() - BTN_SIZE));
-    } else {
-        bx = pr.width() - BTN_SIZE - MARGIN;
-        by = pr.height() - BTN_SIZE - MARGIN;
+    const QRect pr = panel_host_->rect();
+    const QSize sz = user_panel_size_.isValid() ? clamp_panel_size(user_panel_size_, pr.size())
+                                                : default_panel_size(pr.size());
+    const int px = std::max(0, pr.width() - sz.width() - MARGIN);
+    const int py = std::max(0, pr.height() - sz.height() - MARGIN);
+    chat_panel_->setGeometry(px, py, sz.width(), sz.height());
+    if (resize_grip_) {
+        resize_grip_->move(0, 0);
+        resize_grip_->raise();
     }
-    setGeometry(bx, by, BTN_SIZE, BTN_SIZE);
-    bubble_btn_->setGeometry(0, 0, BTN_SIZE, BTN_SIZE);
-
-    // Panel: anchor right-edge to bubble's right-edge, sit above with 10 px gap.
-    int px = bx + BTN_SIZE - PANEL_W;
-    int py = by - PANEL_H - 10;
-    // Clamp so the panel stays on-screen even when the bubble is near an edge.
-    px = std::clamp(px, 4, std::max(4, pr.width() - PANEL_W - 4));
-    if (py < 4)
-        py = 4;
-    if (chat_panel_->parentWidget() != parentWidget())
-        chat_panel_->setParent(parentWidget());
-    chat_panel_->setGeometry(px, py, PANEL_W, PANEL_H);
-    if (is_open_) {
+    // Only while the launcher is on screen: reposition() also runs on host
+    // resizes, and an open panel whose launcher is hidden (lock, workbench,
+    // focus mode) must not come back without the button that closes it.
+    if (is_open_ && isVisible()) {
         chat_panel_->show();
         chat_panel_->raise();
     }
-    raise();
+    rewrap_messages();
+}
+
+int AiChatBubble::msg_col_width() const {
+    const int w = chat_panel_ ? chat_panel_->width() : BASE_PANEL_W;
+    return static_cast<int>(w * 0.82);
+}
+
+void AiChatBubble::rewrap_messages() {
+    const int col_w = msg_col_width();
+    const int inner_w = col_w - 16; // bubble h-padding, 8px each side
+    std::erase_if(msg_cols_, [](const MsgCol& m) { return m.col.isNull(); });
+    for (auto& m : msg_cols_) {
+        if (m.col->maximumWidth() == col_w)
+            continue;
+        m.col->setMaximumWidth(col_w);
+        if (m.body) {
+            // Fixed-height bodies with no scrollbar: re-measure, or a narrower
+            // panel cuts the last lines off (and a wider one leaves a gap).
+            m.body->document()->setTextWidth(inner_w);
+            m.body->setFixedHeight(qMax(static_cast<int>(m.body->document()->size().height()), m.min_h));
+        }
+    }
+}
+
+void AiChatBubble::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    // The panel is a sibling overlay in the host, so it does not follow the
+    // launcher's visibility on its own.
+    if (is_open_ && chat_panel_) {
+        reposition();
+        chat_panel_->show();
+        chat_panel_->raise();
+    }
+}
+
+void AiChatBubble::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
+    // Lock screen / workbench / setting off hide the launcher: the open panel
+    // must go with it (it stays "open", and comes back on the next show).
+    if (!e->spontaneous() && chat_panel_)
+        chat_panel_->hide();
 }
 
 // ── Bubble button ─────────────────────────────────────────────────────────────
 void AiChatBubble::build_bubble_button() {
     bubble_btn_ = new QWidget(this);
-    bubble_btn_->setFixedSize(BTN_SIZE, BTN_SIZE);
+    bubble_btn_->setFixedSize(BTN_W, BTN_H);
     bubble_btn_->setCursor(Qt::PointingHandCursor);
     bubble_btn_->setStyleSheet(
-        QString("background:%1;border:2px solid %2;border-radius:0px;").arg(col::BG_SURFACE(), col::BORDER_BRIGHT()));
+        QString("background:%1;border:1px solid %2;border-radius:0px;").arg(col::BG_SURFACE(), col::BORDER_BRIGHT()));
 
     auto* lbl = new QLabel("⬡", bubble_btn_);
     lbl->setAlignment(Qt::AlignCenter);
-    lbl->setGeometry(0, 0, BTN_SIZE, BTN_SIZE);
-    lbl->setStyleSheet(QString("color:%1;font-size:24px;background:transparent;").arg(col::TEXT_PRIMARY()));
+    lbl->setGeometry(0, 0, BTN_W, BTN_H);
+    lbl->setStyleSheet(QString("color:%1;font-size:16px;background:transparent;border:none;").arg(col::TEXT_PRIMARY()));
 
     unread_badge_ = new QLabel(bubble_btn_);
-    unread_badge_->setFixedSize(18, 18);
+    unread_badge_->setFixedSize(14, 12);
     unread_badge_->setAlignment(Qt::AlignCenter);
-    unread_badge_->move(BTN_SIZE - 16, -2);
+    unread_badge_->move(BTN_W - 14, 0);
     unread_badge_->setStyleSheet(QString("background:%1;color:white;border-radius:0px;"
-                                         "font-size:12px;font-weight:bold;")
+                                         "font-size:9px;font-weight:bold;")
                                      .arg(col::NEGATIVE()));
     unread_badge_->hide();
 
@@ -208,7 +245,8 @@ void AiChatBubble::build_bubble_button() {
 // ── Chat panel ────────────────────────────────────────────────────────────────
 void AiChatBubble::build_chat_panel() {
     chat_panel_ = new QWidget(nullptr);
-    chat_panel_->setFixedSize(PANEL_W, PANEL_H);
+    chat_panel_->setMinimumSize(MIN_PANEL_W, MIN_PANEL_H);
+    chat_panel_->resize(2 * BASE_PANEL_W, 2 * BASE_PANEL_H);
     chat_panel_->setStyleSheet(QString("QWidget#chatPanel{background:%1;border:1px solid %2;border-radius:0px;}")
                                    .arg(col::BG_SURFACE(), col::BORDER_MED()));
     chat_panel_->setObjectName("chatPanel");
@@ -265,6 +303,16 @@ void AiChatBubble::build_chat_panel() {
 
     vl->addWidget(build_input_row());
     vl->addWidget(build_voice_status_bar());
+
+    // Resize grip, top-left: the panel is anchored bottom-right, so that is
+    // the corner that moves. Not in the layout — floats over the header.
+    resize_grip_ = new QWidget(chat_panel_);
+    resize_grip_->setFixedSize(GRIP, GRIP);
+    resize_grip_->setCursor(Qt::SizeFDiagCursor);
+    resize_grip_->setToolTip(QStringLiteral("Drag to resize"));
+    resize_grip_->setStyleSheet(QString("background:transparent;border-top:2px solid %1;border-left:2px solid %1;")
+                                    .arg(col::BORDER_BRIGHT()));
+    resize_grip_->installEventFilter(this);
 }
 
 QWidget* AiChatBubble::build_panel_header() {
@@ -671,7 +719,7 @@ void AiChatBubble::add_bubble(const QString& role, const QString& text) {
 
     auto* col_w = new QWidget;
     col_w->setStyleSheet("background:transparent;");
-    col_w->setMaximumWidth(static_cast<int>(PANEL_W * 0.82));
+    col_w->setMaximumWidth(msg_col_width());
     auto* cvl = new QVBoxLayout(col_w);
     cvl->setContentsMargins(0, 0, 0, 0);
     cvl->setSpacing(3);
@@ -695,7 +743,7 @@ void AiChatBubble::add_bubble(const QString& role, const QString& text) {
     body->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     body->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // inner_w = max bubble width minus h-padding (8px each side)
-    const int inner_w = static_cast<int>(PANEL_W * 0.82) - 16;
+    const int inner_w = msg_col_width() - 16;
     body->document()->setTextWidth(inner_w);
     body->setStyleSheet(QString("QTextEdit{background:transparent;color:%1;border:none;"
                                 "font-size:13px;padding:0px;}")
@@ -703,6 +751,7 @@ void AiChatBubble::add_bubble(const QString& role, const QString& text) {
     // Use ideal height — document already laid out at inner_w, no extra fudge needed
     const int doc_h = static_cast<int>(body->document()->size().height());
     body->setFixedHeight(qMax(doc_h, 18));
+    msg_cols_.push_back({col_w, body, 18});
 
     auto* bubble_frame = new QWidget;
     bubble_frame->setStyleSheet(QString("background:%1;border:1px solid %2;border-radius:0px;")
@@ -730,7 +779,7 @@ QTextEdit* AiChatBubble::add_streaming_bubble() {
 
     auto* col_w = new QWidget;
     col_w->setStyleSheet("background:transparent;");
-    col_w->setMaximumWidth(static_cast<int>(PANEL_W * 0.82));
+    col_w->setMaximumWidth(msg_col_width());
     auto* cvl = new QVBoxLayout(col_w);
     cvl->setContentsMargins(0, 0, 0, 0);
     cvl->setSpacing(3);
@@ -757,9 +806,8 @@ QTextEdit* AiChatBubble::add_streaming_bubble() {
                             .arg(col::BG_SURFACE(), col::TEXT_PRIMARY(), col::BORDER_DIM()));
 
     // Dynamic height as content streams in — recalc at viewport width, no fudge factor
-    connect(body->document(), &QTextDocument::contentsChanged, body, [body, col_w, row]() {
-        const int vw =
-            body->viewport()->width() > 0 ? body->viewport()->width() : (static_cast<int>(PANEL_W * 0.82) - 16);
+    connect(body->document(), &QTextDocument::contentsChanged, body, [this, body, col_w, row]() {
+        const int vw = body->viewport()->width() > 0 ? body->viewport()->width() : (msg_col_width() - 16);
         body->document()->setTextWidth(vw);
         const int h = qMax(static_cast<int>(body->document()->size().height()), 20);
         body->setFixedHeight(h);
@@ -770,6 +818,7 @@ QTextEdit* AiChatBubble::add_streaming_bubble() {
     cvl->addWidget(body);
     rl->addWidget(col_w);
     rl->addStretch();
+    msg_cols_.push_back({col_w, body, 20});
 
     msg_layout_->insertWidget(msg_layout_->count() - 1, row);
     scroll_to_bottom();
@@ -995,55 +1044,36 @@ void AiChatBubble::animate_pulse() {
 // ── Event filter ──────────────────────────────────────────────────────────────
 bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
     if (obj == bubble_btn_) {
-        // Distinguish click (open panel) from drag (move bubble). Movement
-        // beyond DRAG_THRESHOLD pixels between press and release switches
-        // the gesture from "click" to "drag" and suppresses the toggle.
-        constexpr int DRAG_THRESHOLD = 5;
+        if (e->type() == QEvent::MouseButtonPress && static_cast<QMouseEvent*>(e)->button() == Qt::LeftButton)
+            return true;
+        if (e->type() == QEvent::MouseButtonRelease && static_cast<QMouseEvent*>(e)->button() == Qt::LeftButton) {
+            on_toggle_open();
+            return true;
+        }
+    }
+    if (obj == resize_grip_) {
+        // Bottom-right stays put; dragging the top-left corner up/left grows.
         if (e->type() == QEvent::MouseButtonPress) {
             auto* me = static_cast<QMouseEvent*>(e);
             if (me->button() == Qt::LeftButton) {
-                drag_press_pos_ = me->globalPosition().toPoint();
-                drag_widget_origin_ = pos();
-                dragging_ = false;
+                resizing_ = true;
+                resize_press_pos_ = me->globalPosition().toPoint();
+                resize_start_size_ = chat_panel_->size();
                 return true;
             }
-        } else if (e->type() == QEvent::MouseMove) {
+        } else if (e->type() == QEvent::MouseMove && resizing_) {
             auto* me = static_cast<QMouseEvent*>(e);
-            if (me->buttons() & Qt::LeftButton) {
-                const QPoint delta = me->globalPosition().toPoint() - drag_press_pos_;
-                if (!dragging_ && (std::abs(delta.x()) > DRAG_THRESHOLD || std::abs(delta.y()) > DRAG_THRESHOLD)) {
-                    dragging_ = true;
-                    setCursor(Qt::ClosedHandCursor);
-                }
-                if (dragging_ && parentWidget()) {
-                    QPoint target = drag_widget_origin_ + delta;
-                    // Clamp to parent rect so the bubble can't be dragged
-                    // off-screen and become unreachable.
-                    const QRect pr = parentWidget()->rect();
-                    target.setX(std::clamp(target.x(), 0, pr.width() - width()));
-                    target.setY(std::clamp(target.y(), 0, pr.height() - height()));
-                    move(target);
-                    custom_pos_ = target;
-                    has_custom_pos_ = true;
-                    if (chat_panel_ && is_open_)
-                        reposition(); // re-anchor panel
-                }
-                return true;
-            }
-        } else if (e->type() == QEvent::MouseButtonRelease) {
-            auto* me = static_cast<QMouseEvent*>(e);
-            unsetCursor();
-            if (dragging_) {
-                dragging_ = false;
-                // Persist position so it survives launches.
-                SettingsRepository::instance().set("ui.chat_bubble.x", QString::number(custom_pos_.x()));
-                SettingsRepository::instance().set("ui.chat_bubble.y", QString::number(custom_pos_.y()));
-                return true; // suppress click — this was a drag
-            }
-            if (me->button() == Qt::LeftButton) {
-                on_toggle_open();
-                return true;
-            }
+            const QPoint d = me->globalPosition().toPoint() - resize_press_pos_;
+            user_panel_size_ = QSize(resize_start_size_.width() - d.x(), resize_start_size_.height() - d.y());
+            if (panel_host_)
+                user_panel_size_ = clamp_panel_size(user_panel_size_, panel_host_->size());
+            reposition();
+            return true;
+        } else if (e->type() == QEvent::MouseButtonRelease && resizing_) {
+            resizing_ = false;
+            SettingsRepository::instance().set("ui.chat_panel.w", QString::number(user_panel_size_.width()));
+            SettingsRepository::instance().set("ui.chat_panel.h", QString::number(user_panel_size_.height()));
+            return true;
         }
     }
     if (obj == input_box_ && e->type() == QEvent::KeyPress) {
@@ -1053,7 +1083,7 @@ bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
             return true;
         }
     }
-    if (obj == parentWidget() && e->type() == QEvent::Resize) {
+    if (obj == panel_host_ && e->type() == QEvent::Resize) {
         reposition();
         return false;
     }

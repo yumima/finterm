@@ -19,6 +19,7 @@ namespace finterm::screens {
 
 class NewsCommandBar;
 class NewsSidePanel;
+class WhatsOnPanel;
 class NewsFeedPanel;
 class NewsDetailPanel;
 class NewsTickerStrip;
@@ -66,7 +67,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     void on_cluster_clicked(const services::NewsCluster& cluster);
     void on_near_bottom();
 
-    void on_sidebar_category_clicked(const QString& category);
     void on_sidebar_article_clicked(const services::NewsArticle& article);
     void on_monitor_added(const QString& label, const QStringList& keywords);
     void on_monitor_toggled(const QString& id);
@@ -95,8 +95,7 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     void refresh_data(bool force);
     void apply_filters_async();
     void update_ui_from_filtered(int generation, const QVector<services::NewsArticle>& filtered,
-                                 const QVector<services::NewsCluster>& clusters,
-                                 const QMap<QString, int>& category_counts, int bullish, int bearish, int neutral);
+                                 const QVector<services::NewsCluster>& clusters, int bullish, int bearish, int neutral);
     void update_monitors();
     void compute_deviations();
 
@@ -105,6 +104,7 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Panels
     NewsCommandBar* command_bar_ = nullptr;
     NewsSidePanel* side_panel_ = nullptr;
+    WhatsOnPanel* whats_on_ = nullptr; ///< top of the drawer; owned by side_panel_
     NewsFeedPanel* feed_panel_ = nullptr;
     NewsDetailPanel* detail_panel_ = nullptr;
     NewsTickerStrip* ticker_strip_ = nullptr;

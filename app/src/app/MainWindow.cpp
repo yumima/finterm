@@ -337,13 +337,16 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     connect(this, &QObject::destroyed, this, [this]() { WorkspaceManager::instance().remove_window(this); });
 
-    // Chat bubble — floats over dock_manager_ content area
     // Elicitation surface — one per process, qApp-owned, so a tool question
     // (or the destructive-tool confirmation gate) works from ANY chat surface
     // or agent run, in any window, for the life of the application.
     ai_chat::ElicitPrompter::ensure_mounted();
 
+    // The launcher is docked in the status bar (reserved space — it used to
+    // float over every screen's bottom-right corner, covering content); its
+    // chat panel overlays the dock area only while open.
     chat_bubble_ = new AiChatBubble(dock_manager_);
+    dock_status_bar_->inner()->add_trailing_widget(chat_bubble_);
     {
         auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
         bool show = !r.is_ok() || r.value() != "false";
@@ -1493,6 +1496,12 @@ void MainWindow::on_terminal_unlocked() {
         }
     }
     WorkspaceManager::instance().load_last_workspace();
+    // The dock may already be showing a screen no navigate() announced (a
+    // layout restored before sign-in, when the tab-bar sync in the startup
+    // path did not run): the top nav sat on its default DASHBOARD while
+    // another screen was in front. Re-derive it from the dock.
+    if (dock_router_)
+        dock_router_->sync_current_from_view();
     QTimer::singleShot(3000, this, [this]() {
         services::UpdateService::instance().set_dialog_parent(this);
         services::UpdateService::instance().check_for_updates(true);

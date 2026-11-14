@@ -1,6 +1,7 @@
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 
-#include "network/http/HttpClient.h"
+#include "services/calendar/MacroCalendar.h"
+#include "services/calendar/MacroCalendarFeed.h"
 #include "ui/theme/Theme.h"
 
 #include <QDate>
@@ -9,7 +10,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QPointer>
 
 namespace finterm::screens::widgets {
 
@@ -32,9 +32,9 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
     };
     make_hdr("EVENT", 4);
     make_hdr("CTY", 1);
-    make_hdr("DATE", 2);
-    make_hdr("ACT", 1, Qt::AlignRight);
+    make_hdr("WHEN", 2);
     make_hdr("FCST", 1, Qt::AlignRight);
+    make_hdr("PREV", 1, Qt::AlignRight);
     make_hdr("IMP", 1, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -62,7 +62,8 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
     scroll_area_->setWidget(list_widget);
     vl->addWidget(scroll_area_, 1);
 
-    connect(this, &BaseWidget::refresh_requested, this, &EconomicCalendarWidget::refresh_data);
+    // The refresh button means "now": skip the 30-minute fresh cache.
+    connect(this, &BaseWidget::refresh_requested, this, [this]() { refresh_data(true); });
 
     apply_styles();
     set_loading(true);
@@ -91,107 +92,50 @@ void EconomicCalendarWidget::on_theme_changed() {
         populate(last_events_);
 }
 
-void EconomicCalendarWidget::refresh_data() {
-    if (pending_fetches_ > 0)
-        return; // prior fetch still in flight — callbacks will populate
-
-    // ForexFactory public JSON calendar — no API key required.
-    // Two requests: this week + next week, merged and sorted before display.
-    static const char* kUrls[] = {
-        "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
-        "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
-    };
-
+void EconomicCalendarWidget::refresh_data(bool force) {
     set_loading(true);
-    pending_merge_ = QJsonArray{};
-    pending_fetches_ = 2;
-    ok_fetches_ = 0;
-
-    QPointer<EconomicCalendarWidget> self = this;
-    for (const auto* url : kUrls) {
-        HttpClient::instance().get(QString(url), [self](Result<QJsonDocument> res) {
-            if (!self)
-                return;
-            if (res.is_ok() && res.value().isArray()) {
-                ++self->ok_fetches_;
-                self->on_fetch_done(res.value().array());
-            } else {
-                self->on_fetch_done({});
-            }
-        });
-    }
+    // Shared with News › WHAT'S ON; cached, coalesced, last-good on refusal.
+    finterm::macro_calendar::fetch_week(this, [this](const finterm::macro_calendar::FeedResult& r) {
+        if (!r.ok) {
+            // A failed fetch is not an empty calendar: say so, keep last_events_
+            // so a theme change still re-renders previously loaded rows.
+            set_loading(false);
+            scroll_area_->setVisible(false);
+            status_label_->setText("Couldn't load economic calendar");
+            status_label_->setVisible(true);
+            return;
+        }
+        on_fetch_done(r.rows, r.stale);
+    }, force);
 }
 
-void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
-    for (const auto& v : week_events)
-        pending_merge_.append(v);
-
-    if (--pending_fetches_ > 0)
-        return; // still waiting for the other week
-
-    // Every HTTP call failed (feed down / offline) — distinguish this from a
-    // successful-but-empty calendar. Surface an error via the persistent status
-    // label instead of populate()'s "No events available", which would wrongly
-    // imply the feed loaded fine with nothing scheduled. last_events_ is kept so
-    // a theme change still re-renders any previously-loaded rows.
-    if (ok_fetches_ == 0) {
-        set_loading(false);
-        scroll_area_->setVisible(false);
-        status_label_->setText("Couldn't load economic calendar");
-        status_label_->setVisible(true);
-        return;
-    }
-
-    // Parse "MMM d yyyy" dates so we can sort chronologically.
-    // ForexFactory date examples: "May 14 2026", "Jun 2 2026"
-    static const char* kMonths[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-
-    auto parse_ff_date = [&](const QString& s) -> QDate {
-        const QStringList parts = s.split(' ', Qt::SkipEmptyParts);
-        if (parts.size() < 3)
-            return {};
-        int mon = 0;
-        for (int i = 1; i <= 12; ++i)
-            if (parts[0].startsWith(kMonths[i], Qt::CaseInsensitive)) {
-                mon = i;
-                break;
-            }
-        return QDate(parts[2].toInt(), mon, parts[1].toInt());
-    };
-
-    // Sort by date, then convert to the format populate() expects.
-    QVector<QJsonObject> sorted;
-    sorted.reserve(pending_merge_.size());
-    for (const auto& v : std::as_const(pending_merge_))
-        sorted.append(v.toObject());
-    std::stable_sort(sorted.begin(), sorted.end(), [&](const QJsonObject& a, const QJsonObject& b) {
-        return parse_ff_date(a["date"].toString()) < parse_ff_date(b["date"].toString());
-    });
-
-    // Map ForexFactory fields → populate() schema.
+void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events, bool stale) {
+    // ForexFactory "date" is an ISO instant with offset; parse_ff() reads it
+    // (it used to be parsed as "MMM d yyyy", which failed for every row: the
+    // raw ISO string was shown and nothing sorted or filtered). Show today
+    // onward, chronologically — the feed is Sunday-to-Saturday, so without
+    // the filter Friday still opened on Sunday's events.
+    namespace mc = finterm::macro_calendar;
+    const auto events = mc::today_onward(mc::parse_ff(week_events), QDateTime::currentDateTime());
+    const QDate today = QDate::currentDate();
     QJsonArray out;
-    for (const auto& e : sorted) {
-        const QDate d = parse_ff_date(e["date"].toString());
-        const QString impact = e["impact"].toString();
-        int imp = impact.startsWith("H", Qt::CaseInsensitive)   ? 3
-                  : impact.startsWith("M", Qt::CaseInsensitive) ? 2
-                  : impact.startsWith("L", Qt::CaseInsensitive) ? 1
-                                                                : 0;
+    for (const auto& e : events) {
         QJsonObject mapped;
-        mapped["event"] = e["title"].toString();
-        mapped["country"] = e["country"].toString();
-        mapped["date"] = d.isValid() ? d.toString(Qt::ISODate) : e["date"].toString();
-        mapped["time"] = e["time"].toString();
-        mapped["importance"] = imp;
-        mapped["actual"] = e["actual"].toString();
-        mapped["forecast"] = e["forecast"].toString();
-        mapped["previous"] = e["previous"].toString();
+        mapped["event"] = e.title;
+        mapped["country"] = e.country;
+        mapped["when"] = mc::short_when(e.when, e.timed, today);
+        mapped["when_full"] = e.when.toLocalTime().toString(QStringLiteral("ddd d MMM yyyy HH:mm t"));
+        mapped["importance"] = e.importance;
+        mapped["actual"] = e.actual;
+        mapped["forecast"] = e.forecast;
+        mapped["previous"] = e.previous;
         out.append(mapped);
     }
 
     set_loading(false);
     populate(out);
+    setToolTip(stale ? QStringLiteral("ForexFactory refused the refresh; showing the last copy fetched.")
+                     : QString());
 }
 
 void EconomicCalendarWidget::populate(const QJsonArray& events) {
@@ -206,7 +150,7 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
     }
 
     if (events.isEmpty()) {
-        status_label_->setText("No events available");
+        status_label_->setText("No more events this week");
         status_label_->setVisible(true);
         scroll_area_->setVisible(false);
         list_layout_->addStretch();
@@ -230,26 +174,11 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
             continue;
 
         QString country = e["country"].toString().toUpper();
-        QString date = e["date"].toString();
-        QString time_str = e["time"].toString().trimmed();
+        const QString date_display = e["when"].toString();
         QString actual = e["actual"].toString().trimmed();
         QString forecast = e["forecast"].toString().trimmed();
+        QString previous = e["previous"].toString().trimmed();
         int imp_int = e["importance"].toInt(0);
-
-        // Date: show as MMM-DD
-        QString date_display = date;
-        if (date.length() == 10) { // YYYY-MM-DD
-            QStringList parts = date.split('-');
-            if (parts.size() == 3) {
-                static const char* months[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-                int m = parts[1].toInt();
-                if (m >= 1 && m <= 12)
-                    date_display = QString("%1-%2").arg(months[m]).arg(parts[2]);
-            }
-        }
-        if (!time_str.isEmpty())
-            date_display += " " + time_str.left(5);
 
         // Importance color: 0=dim, 1=low/dim, 2=medium/amber, 3=high/red
         QString imp_color = imp_int >= 3   ? ui::colors::NEGATIVE()
@@ -276,19 +205,25 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
         rl->addWidget(cty_lbl, 1);
 
         auto* date_lbl = new QLabel(date_display);
+        date_lbl->setToolTip(e["when_full"].toString());
         date_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(date_lbl, 2);
 
-        auto* act_lbl = new QLabel(actual.isEmpty() ? "--" : actual);
-        act_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        act_lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                   .arg(actual.isEmpty() ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_PRIMARY()));
-        rl->addWidget(act_lbl, 1);
-
-        auto* fcst_lbl = new QLabel(forecast.isEmpty() ? "--" : forecast);
+        // The feed carries forecast and previous; an actual (when a source
+        // supplies one) replaces the forecast, in bold.
+        auto* fcst_lbl = new QLabel(!actual.isEmpty() ? actual : forecast.isEmpty() ? "--" : forecast);
         fcst_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        fcst_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        if (!actual.isEmpty())
+            fcst_lbl->setToolTip(QStringLiteral("Actual (forecast %1)").arg(forecast.isEmpty() ? "--" : forecast));
+        fcst_lbl->setStyleSheet(QString("color: %1; %2 background: transparent;")
+                                    .arg(actual.isEmpty() ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_PRIMARY(),
+                                         actual.isEmpty() ? "" : "font-weight: bold;"));
         rl->addWidget(fcst_lbl, 1);
+
+        auto* prev_lbl = new QLabel(previous.isEmpty() ? "--" : previous);
+        prev_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        prev_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        rl->addWidget(prev_lbl, 1);
 
         auto* imp_lbl = new QLabel(imp_text);
         imp_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);

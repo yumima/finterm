@@ -215,6 +215,7 @@ void InsiderBuysPanel::render() {
     table_->resizeColumnsToContents();
     table_->setColumnWidth(1, qMin(qMax(table_->columnWidth(1), 160), 260));
     table_->setColumnWidth(3, qMin(table_->columnWidth(3), 200));
+    fill_width(table_, {1, 3}); // Company and the (capped) Roles share the spare width
 
     QStringList notes;
     notes << QStringLiteral("%1 issuers").arg(ib.rows.size());
@@ -321,6 +322,7 @@ void ShortRankPanel::render() {
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();
     table_->setColumnWidth(1, qMin(qMax(table_->columnWidth(1), 160), 260));
+    fill_width(table_, {1});
 
     foot_->setText(QStringLiteral("%1 symbols on the settlement date · %2 joined to a 13F denominator · "
                                   "%3 funds and ETFs dropped by name · holders ≥ 50 · a risk screen, not a "
@@ -443,6 +445,7 @@ void MoversPanel::render() {
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();
     table_->setColumnWidth(1, qMin(qMax(table_->columnWidth(1), 160), 260));
+    fill_width(table_, {1});
 
     foot_->setText(QStringLiteral("%1 securities with 20 or more holders · funds and ETFs dropped by name · "
                                   "breadth change is one of two ownership signals that replicates (Chen, Hong "
@@ -691,6 +694,7 @@ void LargestFundsPanel::render() {
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();
     table_->setColumnWidth(kManager, qMin(qMax(table_->columnWidth(kManager), 180), 280));
+    fill_width(table_, {kManager});
     // Keep the open fund's row and its book in step across a reload. After an
     // EDGAR pull the row can describe a newer quarter; set_firm follows it
     // there (and is a no-op when nothing changed). A fund that has left the

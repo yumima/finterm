@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 
+#include <QCoreApplication>
 #include <QUrl>
 
 namespace finterm {
@@ -21,7 +22,7 @@ QNetworkRequest HttpClient::build_request(const QString& url) const {
     QUrl qurl(full_url);
     QNetworkRequest req{qurl};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    req.setHeader(QNetworkRequest::UserAgentHeader, "finterm/4.0");
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("finterm/") + QCoreApplication::applicationVersion());
 
     // Bound hang time. Without this, a half-open or stalled connection
     // leaves the QNetworkReply pending until the OS TCP timeout (minutes),

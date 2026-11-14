@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`6362065e8`](https://github.com/yumima/finterm/commit/6362065e8) brief: weekly insider-buying site + X announcements; Form 4 scan stops writing off refusals
 - [`b5751017e`](https://github.com/yumima/finterm/commit/b5751017e) **ci:** clean under clang and MSVC too; garbled UTF-8 labels fixed everywhere
 - [`259f40edb`](https://github.com/yumima/finterm/commit/259f40edb) **ci:** compile without Qt WebEngine; standard __VA_OPT__; wincred include order
 - [`ea9ff379a`](https://github.com/yumima/finterm/commit/ea9ff379a) **ci:** builds clean under -Werror again; Windows IP-helper include order
