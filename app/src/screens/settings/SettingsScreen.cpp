@@ -715,7 +715,8 @@ QWidget* SettingsScreen::build_notifications() {
     vl->addWidget(make_row("News Alerts", trigger_news_, "Enable news notifications (configure which types below)."));
     vl->addWidget(make_row("Insider Buys on Holdings", trigger_ownership_,
                            "An open-market insider purchase (Form 4, code P) at a company in your portfolio "
-                           "or watchlists — a filing, not a call. 10% owners and 10b5-1 plan trades excluded."));
+                           "or watchlists — a filing, not a call. 10% owners and 10b5-1 plan trades excluded. Names "
+                           "with an insider-cluster alert (ALERTS) get that rule's alerts instead."));
 
     // ── News alert sub-options ────────────────────────────────────────────────
     news_subopts_frame_ = new QFrame;

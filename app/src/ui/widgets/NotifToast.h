@@ -25,8 +25,13 @@ class NotifToast : public QWidget {
   public slots:
     void show_notification(const finterm::notifications::NotificationRecord& record);
 
+  signals:
+    /// The toast was clicked; `symbol` is the notification's security ("" if none).
+    void clicked(const QString& symbol, int record_id);
+
   protected:
     void paintEvent(QPaintEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
     void showEvent(QShowEvent* e) override;
     void hideEvent(QHideEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
@@ -34,6 +39,12 @@ class NotifToast : public QWidget {
   private:
     void reposition();
     void dismiss();
+    /// Top-left of the shown toast, in GLOBAL coordinates: the toast is its
+    /// own top-level (Qt::ToolTip) window, so move() takes screen positions.
+    QPoint shown_pos() const;
+
+    QString symbol_;
+    int record_id_ = 0;
 
     QLabel* level_dot_ = nullptr;
     QLabel* title_lbl_ = nullptr;
@@ -44,10 +55,10 @@ class NotifToast : public QWidget {
 
     finterm::notifications::NotifLevel current_level_{finterm::notifications::NotifLevel::Info};
 
-    static constexpr int TOAST_W = 320;
-    static constexpr int TOAST_H = 72;
+    static constexpr int TOAST_W = 360;
+    static constexpr int TOAST_H = 96;
     static constexpr int MARGIN = 12;
-    static constexpr int AUTO_DISMISS_MS = 4000;
+    static constexpr int AUTO_DISMISS_MS = 6000;
     static constexpr int ANIM_MS = 250;
 };
 

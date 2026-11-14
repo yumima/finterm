@@ -97,6 +97,10 @@ class OwnershipService : public QObject {
     /// a small stamp file.
     void check_holdings_alerts();
 
+    /// Holdings and watchlist symbols (upper-case, deduplicated), read from
+    /// the signed-in user's store on the GUI thread.
+    QStringList own_symbols() const;
+
     // ── Filers ──────────────────────────────────────────────────────────────
 
     /// The largest filers by 13F book, with each one's quarter-over-quarter
@@ -138,6 +142,8 @@ class OwnershipService : public QObject {
     void short_rank_updated();
     void movers_updated();
     void form4_status_changed(QString status);
+    /// A Form 4 scan cycle finished and read new filings into the store.
+    void form4_store_updated();
     void watch_updated();
     void calendar_updated();
     void book_updated(QString cik);
@@ -188,8 +194,6 @@ class OwnershipService : public QObject {
     ownership::OwnershipCalendar calendar_;
     bool calendar_loading_ = false;
     bool alerts_checking_ = false;
-    /// Holdings and watchlist symbols, gathered on the GUI thread.
-    QStringList own_symbols() const;
 
     bool form4_scanning_ = false;
     QString form4_status_;

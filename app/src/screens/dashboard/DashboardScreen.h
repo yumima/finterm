@@ -7,7 +7,6 @@
 #include "services/markets/MarketDataService.h"
 
 namespace finterm::ui {
-class NotifToast;
 } // namespace finterm::ui
 
 #include <QHash>
@@ -55,7 +54,6 @@ class DashboardScreen : public QWidget {
     DashboardCanvas* canvas_ = nullptr;
     QSplitter* content_split_ = nullptr;
     MarketPulsePanel* market_pulse_ = nullptr;
-    finterm::ui::NotifToast* notif_toast_ = nullptr;
     QTimer* save_timer_ = nullptr;
     bool pulse_visible_ = true;
     bool layout_restored_ = false;

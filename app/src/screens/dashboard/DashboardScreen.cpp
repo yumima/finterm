@@ -11,7 +11,6 @@
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/widgets/NotifToast.h"
 
 #include <QDataStream>
 #include <QEvent>
@@ -94,11 +93,8 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
 
     vl->addWidget(content_split_, 1);
 
-    // ── In-app notification toast (overlay, not in layout) ────────────────────
-    notif_toast_ = new finterm::ui::NotifToast(this);
-    connect(&finterm::notifications::NotificationService::instance(),
-            &finterm::notifications::NotificationService::notification_received, notif_toast_,
-            &finterm::ui::NotifToast::show_notification);
+    // The in-app notification toast lives with the bell on the app status bar,
+    // so it shows on every screen, not only while the dashboard exists.
 
     // ── Debounced save timer (P3: not started in constructor) ──
     save_timer_ = new QTimer(this);

@@ -4,6 +4,7 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QHBoxLayout>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QShowEvent>
@@ -45,6 +46,7 @@ NotifToast::NotifToast(QWidget* parent) : QWidget(parent, Qt::ToolTip | Qt::Fram
     msg_lbl_->setStyleSheet(
         QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY.get()));
     msg_lbl_->setWordWrap(true);
+    msg_lbl_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     tvl->addWidget(msg_lbl_);
 
     outer->addWidget(text_col, 1);
@@ -86,10 +88,28 @@ void NotifToast::show_notification(const NotificationRecord& record) {
 
     level_dot_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px;").arg(dot_color));
 
+    symbol_ = record.request.symbol;
+    record_id_ = record.id;
+    setCursor(symbol_.isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);
+    setToolTip(symbol_.isEmpty() ? QString() : QString("Open %1 in Equity Research").arg(symbol_));
     title_lbl_->setText(record.request.title.left(50));
-    msg_lbl_->setText(record.request.message.left(80));
+    // Three lines fit; the full text is one click away in the bell's list.
+    const QString msg = record.request.message;
+    msg_lbl_->setText(msg.size() > 150 ? msg.left(149) + QStringLiteral("…") : msg);
     time_lbl_->setText(record.request.timestamp.toString("hh:mm:ss"));
 
+    // A slide-out in progress (dismiss) left a one-shot finished→hide
+    // connection; drop it so it cannot hide THIS toast when the slide-in ends.
+    disconnect(slide_anim_, &QPropertyAnimation::finished, this, &NotifToast::hide);
+    if (isVisible()) {
+        // Already up: show() would be a no-op, so restart the clock here.
+        slide_anim_->stop();
+        reposition();
+        auto_dismiss_->start();
+        raise();
+        update();
+        return;
+    }
     reposition();
     show();
     raise();
@@ -99,12 +119,11 @@ void NotifToast::show_notification(const NotificationRecord& record) {
 
 void NotifToast::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    // Slide in from right
+    // Slide in from the right edge of the window.
     if (parentWidget()) {
-        const QPoint hidden_pos(parentWidget()->width(), y());
-        const QPoint shown_pos(parentWidget()->width() - TOAST_W - MARGIN, y());
-        slide_anim_->setStartValue(hidden_pos);
-        slide_anim_->setEndValue(shown_pos);
+        const QPoint to = shown_pos();
+        slide_anim_->setStartValue(QPoint(to.x() + TOAST_W / 2, to.y()));
+        slide_anim_->setEndValue(to);
         slide_anim_->start();
     }
     auto_dismiss_->start();
@@ -155,12 +174,29 @@ void NotifToast::paintEvent(QPaintEvent*) {
 
 // ── Private ───────────────────────────────────────────────────────────────────
 
+QPoint NotifToast::shown_pos() const {
+    const QWidget* p = parentWidget();
+    if (!p)
+        return pos();
+    // Below the window's menu/tool bars, at its right edge.
+    return p->mapToGlobal(QPoint(p->width() - TOAST_W - MARGIN, MARGIN + 64));
+}
+
 void NotifToast::reposition() {
     if (!parentWidget())
         return;
-    const int x = parentWidget()->width() - TOAST_W - MARGIN;
-    const int y = MARGIN;
-    move(x, y);
+    move(shown_pos());
+}
+
+void NotifToast::mousePressEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        emit clicked(symbol_, record_id_);
+        auto_dismiss_->stop();
+        disconnect(slide_anim_, &QPropertyAnimation::finished, this, &NotifToast::hide);
+        hide();
+        return;
+    }
+    QWidget::mousePressEvent(e);
 }
 
 void NotifToast::dismiss() {
@@ -169,10 +205,10 @@ void NotifToast::dismiss() {
         return;
     }
     // Slide back out to the right
-    const QPoint shown_pos(parentWidget()->width() - TOAST_W - MARGIN, y());
-    const QPoint hidden_pos(parentWidget()->width() + 10, y());
-    slide_anim_->setStartValue(shown_pos);
-    slide_anim_->setEndValue(hidden_pos);
+    const QPoint from = shown_pos();
+    const QPoint to(from.x() + TOAST_W / 2, from.y());
+    slide_anim_->setStartValue(from);
+    slide_anim_->setEndValue(to);
     connect(slide_anim_, &QPropertyAnimation::finished, this, &NotifToast::hide, Qt::SingleShotConnection);
     slide_anim_->start();
 }

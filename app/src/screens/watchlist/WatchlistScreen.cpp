@@ -7,6 +7,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "services/ownership/OwnershipService.h"
+#include "ui/alerts/AlertsDialog.h"
 #include "ui/formatting/CsvWriter.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -17,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QInputDialog>
+#include <QMenu>
 #include <QMessageBox>
 #include <QSet>
 #include <QShowEvent>
@@ -272,6 +274,31 @@ QWidget* WatchlistScreen::build_main_panel() {
     // Use itemSelectionChanged rather than cellClicked so keyboard navigation
     // also propagates.
     connect(table_, &QTableWidget::itemSelectionChanged, this, &WatchlistScreen::publish_selection_to_group);
+
+    // Right-click a row: set an alert on it (prefilled with its price), or
+    // open it in Equity Research.
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        const int row = table_->rowAt(pos.y());
+        if (row < 0 || row >= stocks_.size())
+            return;
+        table_->selectRow(row);
+        const QString sym = stocks_[row].symbol;
+        QMenu menu(this);
+        QAction* add = menu.addAction(QStringLiteral("Add alert on %1…").arg(sym));
+        QAction* manage = menu.addAction(QStringLiteral("Manage alerts…"));
+        menu.addSeparator();
+        QAction* research = menu.addAction(QStringLiteral("Open %1 in Equity Research").arg(sym));
+        QAction* chosen = menu.exec(table_->viewport()->mapToGlobal(pos));
+        if (chosen == add) {
+            const auto it = row_cache_.constFind(sym);
+            ui::open_add_alert(this, sym, it != row_cache_.constEnd() ? it->price : qQNaN());
+        } else if (chosen == manage) {
+            ui::open_alerts_manager(this);
+        } else if (chosen == research) {
+            ui::open_in_equity_research(sym);
+        }
+    });
 
     // Drag-out: hold-and-drag a symbol row to broadcast the ticker to any
     // panel. The provider callback reads the current row at drag-start so

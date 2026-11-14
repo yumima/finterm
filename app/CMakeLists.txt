@@ -965,6 +965,9 @@ set(SERVICE_SOURCES
 
     # Modular notification system — service + 15 providers
     src/services/notifications/NotificationService.cpp
+    # User alerts (price crossings, day moves, insider clusters) — delivered
+    # through NotificationService; pure rules in services/alerts/AlertRules.h
+    src/services/alerts/AlertService.cpp
     src/services/notifications/providers/TelegramProvider.cpp
     src/services/notifications/providers/DiscordProvider.cpp
     src/services/notifications/providers/SlackProvider.cpp
@@ -1027,6 +1030,7 @@ set(UI_SOURCES
     src/ui/widgets/NotifToast.cpp
     src/ui/widgets/NotifBell.cpp
     src/ui/widgets/NotifPanel.cpp
+    src/ui/alerts/AlertsDialog.cpp
 )
 
 # Screens
@@ -1779,6 +1783,10 @@ set_source_files_properties(
 # NetSpeedMeter needs winsock2.h before <windows.h>; in a unity batch another
 # file's <windows.h> would come first and the IP helper headers fail to parse.
 set_source_files_properties(src/core/net/NetSpeedMeter.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
+
+# User alerts: file-local helpers in anonymous namespaces (kCategory, money…).
+set_source_files_properties(src/services/alerts/AlertService.cpp src/ui/alerts/AlertsDialog.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
 
 # ADS files use anonymous namespaces and heavy Qt meta-object includes —
 # exclude from unity to avoid ODR / symbol clashes in large batches
