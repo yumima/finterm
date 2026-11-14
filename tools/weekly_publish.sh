@@ -41,7 +41,7 @@ done
 [ -n "$ok" ] || { echo "not published this run; the timer retries next time"; exit 1; }
 
 cd "$WT"
-git add -A site/_posts site/insider-cluster-buys.md site/_data/announce.json
+git add -A site/_posts site/insider-cluster-buys.md site/_data/announce.json site/issue.json
 if ! git diff --cached --quiet; then
     issue=$(python3 -c "import json;print(json.load(open('site/_data/announce.json'))['issue'])")
     git commit --quiet -m "brief: $issue"
