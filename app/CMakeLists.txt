@@ -1152,6 +1152,7 @@ set(SCREEN_SOURCES
     src/screens/news/NewsDetailPanel.cpp
     src/screens/news/NewsTickerStrip.cpp
     src/screens/social/SocialScreen.cpp
+    src/screens/social/BriefsPanel.cpp
     src/screens/crypto_trading/CryptoTradingScreen.cpp
     src/screens/crypto_trading/CryptoTickerBar.cpp
     src/screens/crypto_trading/CryptoWatchlist.cpp
@@ -1680,6 +1681,7 @@ set_source_files_properties(
     src/screens/settings/SettingsScreen.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/social/SocialScreen.cpp
+    src/screens/social/BriefsPanel.cpp
     src/screens/surface_analytics/Surface3DWidget.cpp
     src/screens/surface_analytics/SurfaceAnalyticsScreen.cpp
     src/screens/surface_analytics/SurfaceControlPanel.cpp

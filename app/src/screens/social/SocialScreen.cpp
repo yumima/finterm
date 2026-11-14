@@ -1,5 +1,8 @@
 #include "screens/social/SocialScreen.h"
 
+#include "screens/social/BriefsPanel.h"
+#include "screens/social/SocialBackend.h"
+
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "screens/ownership/OwnershipUi.h"
@@ -45,28 +48,11 @@
 
 namespace finterm::screens {
 
+namespace social_backend {
 namespace {
-namespace so = finterm::social;
-namespace ou = finterm::screens::ownership_ui;
-namespace fmt = finterm::ui::formatting;
-
 constexpr const char* kScript = "social_app.py";
-// issue.json (15s) then the page itself (10s), plus interpreter start-up.
-constexpr int kBriefTimeoutMs = 60'000;
-// A post is fetch issue.json + fetch page + the network's API. Killing the
-// process mid-post would leave the outcome unknown, so it gets room.
-constexpr int kPublishTimeoutMs = 120'000;
-constexpr int kConnectTimeoutMs = 60'000;
-constexpr qint64 kStaleAfterMs = 10 * 60 * 1000;
+} // namespace
 
-/// How a backend call ended. For a post the difference matters: a process
-/// that never started posted nothing; one that ran and gave no answer
-/// (killed, crashed) may have posted before it could say so.
-enum class Outcome { Answered, NoAnswer, NotStarted };
-
-/// @p done gets the answer object, an error (the backend's own {error}, or
-/// why there was none) and how the call ended.
-using Done = std::function<void(const QJsonObject& answer, const QString& error, Outcome outcome)>;
 
 /// The interpreter for social_app.py. The backend reads the posting
 /// credentials through libsecret's PyGObject binding (finterm_keyring.py),
@@ -163,6 +149,25 @@ void call_backend(QObject* ctx, const QString& action, const QJsonObject& payloa
         timer->start(timeout_ms);
 }
 
+} // namespace social_backend
+
+namespace {
+namespace so = finterm::social;
+namespace ou = finterm::screens::ownership_ui;
+namespace fmt = finterm::ui::formatting;
+
+// issue.json (15s) then the page itself (10s), plus interpreter start-up.
+constexpr int kBriefTimeoutMs = 60'000;
+// A post is fetch issue.json + fetch page + the network's API. Killing the
+// process mid-post would leave the outcome unknown, so it gets room.
+constexpr int kPublishTimeoutMs = 120'000;
+constexpr int kConnectTimeoutMs = 60'000;
+constexpr qint64 kStaleAfterMs = 10 * 60 * 1000;
+
+using social_backend::Done;
+using social_backend::Outcome;
+using social_backend::call_backend;
+
 QString esc(const QString& s) { return s.toHtmlEscaped(); }
 
 QString link_html(const QString& url, const QString& text) {
@@ -201,7 +206,46 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
     split->setObjectName("socialSplitter");
     split->setChildrenCollapsible(false);
     split->addWidget(build_channels_pane());
-    split->addWidget(build_issue_pane());
+    // BRIEFS (generate · review · correct · schedule · publish) and the
+    // PUBLISHED issue (what is live, and what was posted) share the middle.
+    auto* middle = new QWidget;
+    auto* mv = new QVBoxLayout(middle);
+    mv->setContentsMargins(8, 8, 8, 0);
+    mv->setSpacing(4);
+    auto* tabs = new QHBoxLayout;
+    tabs->setSpacing(6);
+    auto* briefs_btn = small_button(QStringLiteral("BRIEFS"));
+    auto* published_btn = small_button(QStringLiteral("PUBLISHED"));
+    briefs_btn->setToolTip(QStringLiteral("Your briefs: this week's (last week + next week) and theme briefs — "
+                                          "read, correct, schedule, publish"));
+    published_btn->setToolTip(QStringLiteral("The issue that is live on the site, and everything posted"));
+    for (auto* b : {briefs_btn, published_btn}) {
+        b->setCheckable(true);
+        tabs->addWidget(b);
+    }
+    tabs->addStretch(1);
+    mv->addLayout(tabs);
+    auto* stack = new QStackedWidget;
+    briefs_ = new BriefsPanel;
+    stack->addWidget(briefs_);
+    stack->addWidget(build_issue_pane());
+    mv->addWidget(stack, 1);
+    briefs_btn->setChecked(true);
+    connect(briefs_btn, &QPushButton::clicked, this, [stack, briefs_btn, published_btn]() {
+        stack->setCurrentIndex(0);
+        briefs_btn->setChecked(true);
+        published_btn->setChecked(false);
+    });
+    connect(published_btn, &QPushButton::clicked, this, [stack, briefs_btn, published_btn]() {
+        stack->setCurrentIndex(1);
+        briefs_btn->setChecked(false);
+        published_btn->setChecked(true);
+    });
+    connect(briefs_, &BriefsPanel::published, this, [this]() {
+        load_brief();
+        load_history();
+    });
+    split->addWidget(middle);
     split->addWidget(build_composer_pane());
     split->setStretchFactor(0, 1);
     split->setStretchFactor(1, 3);
@@ -281,7 +325,7 @@ QWidget* SocialScreen::build_channels_pane() {
 QWidget* SocialScreen::build_issue_pane() {
     auto* pane = new QWidget;
     auto* v = new QVBoxLayout(pane);
-    v->setContentsMargins(8, 8, 8, 8);
+    v->setContentsMargins(0, 4, 0, 8); // inside the middle pane's margins
     v->setSpacing(6);
 
     issue_title_ = new QLabel;

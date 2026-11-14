@@ -5,6 +5,8 @@
 //   CHANNELS  the networks, which are connected and as whom; Connect (X's
 //             PIN, Mastodon's code, Bluesky's app password) and Disconnect.
 //             Networks the backend has not enabled are "coming soon".
+//   BRIEFS    (BriefsPanel) generate this week's brief or a theme brief,
+//             read it, correct it, schedule it or publish it now
 //   ISSUE     the PUBLISHED weekly brief (its rows, whether its page is live,
 //             what has been posted) and the posting HISTORY
 //   COMPOSER  per-network draft prefilled with the generated text, a live
@@ -12,7 +14,8 @@
 //             asks first and is the only way this screen posts. For Reddit
 //             and Hacker News: the launch drafts, copied by hand and recorded
 //             once posted — nothing is submitted by the app.
-// The weekly timer posts on its own; this screen never does. Pure logic:
+// The composer posts only on Publish; a brief scheduled or published from
+// BRIEFS with "post to X" ticked is posted once its page is live. Pure logic:
 // SocialModel.h.
 
 #include "screens/social/SocialModel.h"
@@ -32,6 +35,10 @@ class QStackedWidget;
 class QPushButton;
 class QTableWidget;
 class QVBoxLayout;
+
+namespace finterm::screens {
+class BriefsPanel;
+}
 
 namespace finterm::screens {
 
@@ -114,6 +121,7 @@ class SocialScreen : public QWidget {
     bool launch_busy_ = false, mark_busy_ = false;
     QDateTime last_refresh_;
 
+    BriefsPanel* briefs_ = nullptr;
     // CHANNELS
     QVBoxLayout* channels_box_ = nullptr;
     // ISSUE

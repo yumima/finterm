@@ -1015,6 +1015,11 @@ if(Python3_Interpreter_FOUND)
         NAME weekly_brief
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_weekly_brief.py
     )
+    # Social › BRIEFS: drafts — correct, schedule, publish; private sections never published
+    add_test(
+        NAME brief_drafts
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_brief_drafts.py
+    )
     # News › WHAT'S ON company events: refusal ≠ quiet day, absent ≠ 0, own names kept
     add_test(
         NAME whats_on_calendar

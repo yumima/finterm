@@ -515,3 +515,84 @@ def picks_section(picks, asof=None, error=None, stale=0):
                        f"_Record: {md_escape(record_text(st.get('evidence')))}_")
     out.append("")
     return out
+
+
+# ── private sections ─────────────────────────────────────────────────────────
+#
+# A draft is read by its owner first: it may carry sections built from data
+# that must not be redistributed (Nasdaq's IPO calendar). They sit between
+# these markers and strip_private() removes them from anything published —
+# brief_drafts.publish() calls it on every file it copies.
+
+PRIVATE_OPEN, PRIVATE_CLOSE = "<!-- private -->", "<!-- /private -->"
+
+
+def private_block(lines):
+    return [PRIVATE_OPEN] + list(lines) + [PRIVATE_CLOSE, ""]
+
+
+def strip_private(text):
+    """@text without its private blocks. An unclosed block runs to the end:
+    a marker the reader damaged must fail closed, never publish the rest."""
+    out, hidden = [], False
+    for ln in text.split("\n"):
+        s = ln.strip()
+        if s == PRIVATE_OPEN:
+            hidden = True
+            continue
+        if s == PRIVATE_CLOSE:
+            hidden = False
+            continue
+        if not hidden:
+            out.append(ln)
+    return "\n".join(out)
+
+
+# ── the week in brief ────────────────────────────────────────────────────────
+
+def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=None):
+    """Three lines a reader can stop at: last week (insider clusters), next
+    week (the releases), and the screens. Built from the sections below it,
+    so it can never say something they don't."""
+    out = ["## The week in brief", ""]
+    n = len(rows or [])
+    if n:
+        top = []
+        for r in rows[:3]:
+            name = r.get("symbol") or (r.get("issuer") or "")[:30]
+            if name:
+                top.append(f"{md_escape(name)} ({money(r.get('value'))})")
+        # The clusters below are filtered at $50K reported: the summary says so,
+        # or "no company" would be false of a smaller cluster.
+        out.append(f"- **Last week:** {n} {'company' if n == 1 else 'companies'} had two or more insiders "
+                   f"buying on the open market, $50K or more in all (SEC Form 4)"
+                   + (f"; largest by dollars reported: {', '.join(top)}." if top else "."))
+    else:
+        out.append("- **Last week:** no company had two or more insiders buying $50K or more on the open market "
+                   "(SEC Form 4).")
+    if macro_err:
+        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** the release calendar was not available.")
+    elif not events:
+        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** no top-tier US release is scheduled.")
+    else:
+        days = {}
+        for ev in events:
+            days.setdefault(ev["when"].date(), []).extend(ev["titles"])
+        parts = []
+        for d in sorted(days):
+            names = []
+            for t in days[d]:
+                short = re.sub(r"\s+[my]/[my]$", "", t)  # "CPI m/m" and "CPI y/y" read as one CPI
+                if short not in names:
+                    names.append(short)
+            parts.append(f"{d:%a} {', '.join(md_escape(x) for x in names[:3])}"
+                         + (f" +{len(names) - 3}" if len(names) > 3 else ""))
+        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** " + "; ".join(parts) + ".")
+    if picks:
+        names = [f"{md_escape(sym)} ({md_escape(st.get('name', '').split(' (')[0])})" for st, sym, _, _ in picks if sym]
+        if names:
+            out.append(f"- **Screens:** the top name on each — {', '.join(names)}. Screen output, not a recommendation.")
+    elif scr_err:
+        out.append("- **Screens:** not run this week.")
+    out.append("")
+    return out

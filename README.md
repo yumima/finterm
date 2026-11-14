@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a59f702c9`](https://github.com/yumima/finterm/commit/a59f702c9) weekly brief: the week ahead (top-tier US macro) and the top name from each screen
 - [`6da1116e8`](https://github.com/yumima/finterm/commit/6da1116e8) ipo watch: labelled filters that can't cancel out, the open deal stays selected, dossier shows only what an unlisted deal has
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

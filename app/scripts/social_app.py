@@ -25,6 +25,18 @@ Actions:
   bsky_connect {handle, app_password}
   mastodon_connect_start {instance} / mastodon_connect_finish {code}
   disconnect {network}         remove that network's stored sign-in
+  drafts                       every brief draft (brief_drafts.py), newest first;
+                               also runs a tick: what is due is published
+  draft {id}                   one draft: its editable body, X text, log
+  draft_build_weekly {force}   (re)build this week's brief in the background
+  theme_facts {tickers}        EDGAR facts for a theme brief's companies
+  theme_create {title, overview, facts}
+                               a theme brief draft in the fixed structure
+  draft_save {id, body?, x_text?, post_x?}
+  draft_revert {id}            back to the generated text
+  draft_schedule {id, at, accept_incomplete}   at = ISO time, "" = unschedule
+  draft_publish {id, accept_incomplete}        publish now (the UI confirms)
+  draft_delete {id}            discard an unpublished draft
   launch {issue, rows}         the Reddit / HN launch drafts (launch_posts.py)
                                filled from the issue rows the screen shows,
                                with what was already posted
@@ -45,6 +57,7 @@ import finterm_keyring
 import launch_posts as lp
 import social_post as sp
 import weekly_brief_core as wb
+import brief_drafts as bd
 
 
 
@@ -182,6 +195,37 @@ def _launch_mark(payload):
     return {"ok": True, "target": t["id"], "record": record}
 
 
+def _drafts(_payload):
+    tick = {}
+    try:
+        tick = bd.tick(log=lambda *_: None)  # a due schedule publishes even if the timer is off
+    except RuntimeError:
+        pass  # someone else is publishing; the next refresh shows it
+    out = bd.list_drafts()
+    out["acted"] = tick.get("acted", [])
+    return out
+
+
+def _sid(p):
+    return str(p.get("id") or "")
+
+
+DRAFT_ACTIONS = {
+    "drafts": _drafts,
+    "draft": lambda p: bd.get(_sid(p)),
+    "draft_build_weekly": lambda p: bd.start_weekly_build(force=bool(p.get("force"))),
+    "theme_facts": lambda p: bd.theme_facts(p.get("tickers") or ""),
+    "theme_create": lambda p: bd.theme_create(p.get("title"), None, p.get("overview") or "", p.get("facts") or {}),
+    "draft_save": lambda p: bd.save(_sid(p), body=p.get("body"), x_text=p.get("x_text"),
+                                    post_x=p.get("post_x")),
+    "draft_revert": lambda p: bd.revert(_sid(p)),
+    "draft_schedule": lambda p: bd.schedule(_sid(p), str(p.get("at") or ""),
+                                            accept_incomplete=bool(p.get("accept_incomplete"))),
+    "draft_publish": lambda p: bd.publish(_sid(p), accept_incomplete=bool(p.get("accept_incomplete"))),
+    "draft_delete": lambda p: bd.delete(_sid(p)),
+}
+
+
 # Connect actions, by the network they connect (gated by ENABLED_NETWORKS).
 CONNECT_ACTIONS = {"x_connect_start": "x", "x_connect_finish": "x", "bsky_connect": "bluesky",
                    "mastodon_connect_start": "mastodon", "mastodon_connect_finish": "mastodon"}
@@ -203,6 +247,8 @@ def handle_action(act, payload):
         return _launch(payload)
     if act == "launch_mark":
         return _launch_mark(payload)
+    if act in DRAFT_ACTIONS:
+        return DRAFT_ACTIONS[act](payload)
     if act == "disconnect":
         if payload.get("network") not in sp.DISCONNECT_KEYS:
             return {"error": f"unknown network: {payload.get('network')}"}

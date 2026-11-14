@@ -150,6 +150,20 @@ def test_issue_disclaimer_names_every_source_insider_page_keeps_its_own():
     assert "Dated Co.." not in "\n".join(wb.picks_section([({"name": "S", "evidence": {}}, "DC", "Dated Co.", 1)]))
 
 
+def test_week_in_brief_summarises_last_and_next_week():
+    rows = [{"symbol": "AAA", "issuer": "Alpha", "value": 2.5e6}, {"symbol": "", "issuer": "Beta Holdings", "value": 1e6}]
+    ev = wb.macro_events([ff("CPI m/m", "2026-11-18T08:30:00-05:00"), ff("CPI y/y", "2026-11-18T08:30:00-05:00"),
+                          ff("Unemployment Claims", "2026-11-19T08:30:00-05:00", impact="Medium")],
+                         date(2026, 11, 16), date(2026, 11, 20))
+    picks = wb.screen_picks(_doc())
+    text = "\n".join(wb.week_summary(rows, ev, date(2026, 11, 16), date(2026, 11, 20), None, picks))
+    assert "2 companies had two or more insiders buying on the open market, $50K or more" in text and "AAA ($2.5M)" in text and "Beta Holdings" in text
+    assert "Wed CPI; Thu Unemployment Claims" in text, text  # m/m and y/y read as one CPI
+    assert "AAA (RS Leaders)" in text and "not a recommendation" in text
+    text = "\n".join(wb.week_summary([], [], date(2026, 11, 16), date(2026, 11, 20), "feed down", [], "x"))
+    assert "no company had" in text and "not available" in text and "not run" in text
+
+
 def test_screen_failure_is_said():
     text = "\n".join(wb.picks_section([], error="the scan timed out"))
     assert "could not be run" in text and "timed out" in text
