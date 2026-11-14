@@ -2,45 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-11-13)
+## Today's commits (2026-11-14)
 
 Latest first.
 
-- [`7081ed37d`](https://github.com/yumima/finterm/commit/7081ed37d) news: WHAT'S ON impact selector (HIGH default / MED+ / ALL); YOUR NAMES → MY STOCKS
-- [`05c2ba7cd`](https://github.com/yumima/finterm/commit/05c2ba7cd) news: article detail steps aside while the WHAT'S ON pane is open
-- [`ef7d0a193`](https://github.com/yumima/finterm/commit/ef7d0a193) news: WHAT'S ON reads without a legend — explicit dates, notable IPOs, trimmed top tier, peek pane
-- [`f95c5297e`](https://github.com/yumima/finterm/commit/f95c5297e) markets: PANELS first and default; quote panels keep every row when refreshes are refused
-- [`b79673391`](https://github.com/yumima/finterm/commit/b79673391) alerts: user ALERTS — price crossings, day moves, insider cluster buys
-- [`0904cd928`](https://github.com/yumima/finterm/commit/0904cd928) markets: WORLD overview as the Markets screen's default mode
-- [`fce45aba8`](https://github.com/yumima/finterm/commit/fce45aba8) news: WHAT'S ON review fixes — ET-dated earnings, FRED gap guard, per-endpoint auction errors, cache finality
-- [`9f92c1205`](https://github.com/yumima/finterm/commit/9f92c1205) news: WHAT'S ON becomes a calendar — earnings, printed numbers, auctions, market dates, your names
-- [`983d8f938`](https://github.com/yumima/finterm/commit/983d8f938) social: phase 2 — Bluesky/Mastodon connect, Reddit/HN launch drafts; only X enabled
-- [`60bc20eb9`](https://github.com/yumima/finterm/commit/60bc20eb9) social: SOCIAL screen — publish the weekly brief by hand, with confirmation
-- [`263b40d11`](https://github.com/yumima/finterm/commit/263b40d11) brief: X posts carry one cashtag (X refuses more)
-- [`c087d3807`](https://github.com/yumima/finterm/commit/c087d3807) social: shared posting backend for an in-app Social screen; publishes issue.json
-- [`78e578f88`](https://github.com/yumima/finterm/commit/78e578f88) **ui:** nine screenshot bugs fixed; News gets a WHAT'S ON panel; chat panel resizable
-- [`6362065e8`](https://github.com/yumima/finterm/commit/6362065e8) brief: weekly insider-buying site + X announcements; Form 4 scan stops writing off refusals
-- [`b5751017e`](https://github.com/yumima/finterm/commit/b5751017e) **ci:** clean under clang and MSVC too; garbled UTF-8 labels fixed everywhere
-- [`259f40edb`](https://github.com/yumima/finterm/commit/259f40edb) **ci:** compile without Qt WebEngine; standard __VA_OPT__; wincred include order
-- [`ea9ff379a`](https://github.com/yumima/finterm/commit/ea9ff379a) **ci:** builds clean under -Werror again; Windows IP-helper include order
-- [`645fdc12c`](https://github.com/yumima/finterm/commit/645fdc12c) screens: every screen listed again — the hiding switch is gone
-- [`243296cc0`](https://github.com/yumima/finterm/commit/243296cc0) install: free installers documented per platform; updates only on request
-- [`1d43e33fd`](https://github.com/yumima/finterm/commit/1d43e33fd) tooltips: bounded everywhere, and cut to what a reader needs
-- [`0191b5b7e`](https://github.com/yumima/finterm/commit/0191b5b7e) data: your own price source — Tiingo, Polygon/Massive, Alpaca, Finnhub, FMP
-- [`07c4255e7`](https://github.com/yumima/finterm/commit/07c4255e7) news: drawer headlines shrink again when the drawer narrows
-- [`d195c3201`](https://github.com/yumima/finterm/commit/d195c3201) rename: fincept-qt/ → app/
-- [`3c2b0e3c8`](https://github.com/yumima/finterm/commit/3c2b0e3c8) rename: product names, IDs and file names off "fincept"
-- [`ca8b5235f`](https://github.com/yumima/finterm/commit/ca8b5235f) tools: weekly brief — insider-buying clusters and the IPO pipeline as Markdown
-- [`4dabec3dc`](https://github.com/yumima/finterm/commit/4dabec3dc) ipo: a $10.00 unit ticker marks a SPAC even when EDGAR's SIC isn't 6770
-- [`4587eabbf`](https://github.com/yumima/finterm/commit/4587eabbf) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
-- [`0f6918c80`](https://github.com/yumima/finterm/commit/0f6918c80) rename: C++ namespace fincept → finterm
-- [`20260a553`](https://github.com/yumima/finterm/commit/20260a553) trim: experimental screens hidden by default; upstream strategy fixtures removed
-- [`a08b118ee`](https://github.com/yumima/finterm/commit/a08b118ee) portfolio: import holdings from a broker CSV export
-- [`225e7b1cc`](https://github.com/yumima/finterm/commit/225e7b1cc) account: local-only — the upstream SaaS account layer is gone
-- [`09d9de90f`](https://github.com/yumima/finterm/commit/09d9de90f) remove dead upstream cloud features: Forum, Support, hosted LLM provider
-- [`42b960aee`](https://github.com/yumima/finterm/commit/42b960aee) identity: data, settings and keyring move off the old com.fincept names
-- [`e5c33d835`](https://github.com/yumima/finterm/commit/e5c33d835) license: full AGPL text, NOTICE carries the one required attribution
-- [`5dd3c1183`](https://github.com/yumima/finterm/commit/5dd3c1183) chat: untagged sessions bind '' not NULL — bubble "Session error" fixed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

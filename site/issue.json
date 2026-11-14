@@ -1,26 +1,47 @@
 {
   "issue": "2026-W46",
-  "date": "2026-11-13",
-  "stamp": "20261114T013353Z",
-  "count": 37,
+  "date": "2026-11-14",
+  "stamp": "20261114T171435Z",
+  "count": 45,
   "rows": [
     {
       "symbol": "FUN",
       "issuer": "Six Flags Entertainment Corporation/NEW",
       "insiders": 3,
-      "trades": 5,
-      "value": 15066320.0,
-      "shares": 1464000.0,
-      "avg_price": 10.29120218579235,
+      "trades": 8,
+      "value": 24312320.0,
+      "shares": 2289000.0,
+      "avg_price": 10.621371778069026,
       "first_trade": "2026-11-06",
-      "last_trade": "2026-11-10",
-      "last_filed": "2026-11-10",
+      "last_trade": "2026-11-13",
+      "last_filed": "2026-11-13",
       "roles": [
         "Chief Legal Officer",
         "Director",
         "Executive Chair"
       ],
       "stake_increase": 0.14285714285714285,
+      "any_plan": false,
+      "any_ten_pct": false,
+      "plan_unknown": 0
+    },
+    {
+      "symbol": "STWD",
+      "issuer": "STARWOOD PROPERTY TRUST, INC.",
+      "insiders": 2,
+      "trades": 4,
+      "value": 16711131.6,
+      "shares": 1414800.0,
+      "avg_price": 11.811656488549618,
+      "first_trade": "2026-11-11",
+      "last_trade": "2026-11-12",
+      "last_filed": "2026-11-13",
+      "roles": [
+        "Director",
+        "CEO",
+        "Chairman of the Board"
+      ],
+      "stake_increase": 3.2751824039838846,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
@@ -129,19 +150,20 @@
     {
       "symbol": "HPP",
       "issuer": "Hudson Pacific Properties, Inc.",
-      "insiders": 2,
-      "trades": 17,
-      "value": 862112.3,
-      "shares": 95000.0,
-      "avg_price": 9.074866315789475,
+      "insiders": 3,
+      "trades": 18,
+      "value": 905762.3,
+      "shares": 100000.0,
+      "avg_price": 9.057623000000001,
       "first_trade": "2026-11-09",
-      "last_trade": "2026-11-11",
-      "last_filed": "2026-11-12",
+      "last_trade": "2026-11-12",
+      "last_filed": "2026-11-13",
       "roles": [
         "Director",
-        "Chief Executive Officer"
+        "Chief Executive Officer",
+        "President"
       ],
-      "stake_increase": 0.19672840659827076,
+      "stake_increase": 0.24721878862793573,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
@@ -189,29 +211,6 @@
       "plan_unknown": 0
     },
     {
-      "symbol": "MTDR",
-      "issuer": "Matador Resources Co",
-      "insiders": 7,
-      "trades": 10,
-      "value": 634495.0,
-      "shares": 12504.0,
-      "avg_price": 50.74336212412028,
-      "first_trade": "2026-11-05",
-      "last_trade": "2026-11-10",
-      "last_filed": "2026-11-12",
-      "roles": [
-        "EVP",
-        "Reservoir Engineering",
-        "President",
-        "Director",
-        "Chairman and CEO"
-      ],
-      "stake_increase": 1.0477787091366304,
-      "any_plan": false,
-      "any_ten_pct": false,
-      "plan_unknown": 0
-    },
-    {
       "symbol": "WCC",
       "issuer": "WESCO INTERNATIONAL INC",
       "insiders": 2,
@@ -251,6 +250,25 @@
       "plan_unknown": 0
     },
     {
+      "symbol": "KGS",
+      "issuer": "Kodiak Gas Services, Inc.",
+      "insiders": 3,
+      "trades": 3,
+      "value": 544115.205,
+      "shares": 12145.0,
+      "avg_price": 44.801581309180726,
+      "first_trade": "2026-11-11",
+      "last_trade": "2026-11-12",
+      "last_filed": "2026-11-13",
+      "roles": [
+        "Director"
+      ],
+      "stake_increase": 1.401541695865452,
+      "any_plan": false,
+      "any_ten_pct": false,
+      "plan_unknown": 0
+    },
+    {
       "symbol": "ALNY",
       "issuer": "ALNYLAM PHARMACEUTICALS, INC.",
       "insiders": 2,
@@ -265,6 +283,27 @@
         "Director"
       ],
       "stake_increase": 0.8,
+      "any_plan": false,
+      "any_ten_pct": false,
+      "plan_unknown": 0
+    },
+    {
+      "symbol": "MTDR",
+      "issuer": "Matador Resources Co",
+      "insiders": 5,
+      "trades": 8,
+      "value": 541690.15,
+      "shares": 10689.0,
+      "avg_price": 50.67734586958556,
+      "first_trade": "2026-11-05",
+      "last_trade": "2026-11-10",
+      "last_filed": "2026-11-12",
+      "roles": [
+        "Director",
+        "Chairman and CEO",
+        "EVP and COO"
+      ],
+      "stake_increase": 1.0477787091366304,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
@@ -290,20 +329,22 @@
       "plan_unknown": 0
     },
     {
-      "symbol": "GFS",
-      "issuer": "GLOBALFOUNDRIES Inc.",
-      "insiders": 2,
-      "trades": 2,
-      "value": 473687.5,
-      "shares": 12500.0,
-      "avg_price": 37.895,
-      "first_trade": "2026-11-05",
-      "last_trade": "2026-11-06",
-      "last_filed": "2026-11-09",
+      "symbol": "CSQR",
+      "issuer": "Csquare, Inc.",
+      "insiders": 3,
+      "trades": 3,
+      "value": 454428.51947799994,
+      "shares": 25600.8053,
+      "avg_price": 17.750555662325198,
+      "first_trade": "2026-11-11",
+      "last_trade": "2026-11-11",
+      "last_filed": "2026-11-13",
       "roles": [
-        "Director"
+        "Director",
+        "Chief Executive Officer",
+        "Chief Financial Officer"
       ],
-      "stake_increase": 0.8333333333333334,
+      "stake_increase": 1.0,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
@@ -373,26 +414,6 @@
       "plan_unknown": 0
     },
     {
-      "symbol": "CSQR",
-      "issuer": "Csquare, Inc.",
-      "insiders": 2,
-      "trades": 2,
-      "value": 419428.6,
-      "shares": 23573.0,
-      "avg_price": 17.79275442243244,
-      "first_trade": "2026-11-11",
-      "last_trade": "2026-11-11",
-      "last_filed": "2026-11-12",
-      "roles": [
-        "Director",
-        "Chief Executive Officer"
-      ],
-      "stake_increase": 1.0,
-      "any_plan": false,
-      "any_ten_pct": false,
-      "plan_unknown": 0
-    },
-    {
       "symbol": "TSM",
       "issuer": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
       "insiders": 31,
@@ -416,22 +437,20 @@
       "plan_unknown": 0
     },
     {
-      "symbol": "KYN",
-      "issuer": "Kayne Anderson Energy Infrastructure Fund, Inc.",
+      "symbol": "NXRT",
+      "issuer": "NexPoint Residential Trust, Inc.",
       "insiders": 2,
-      "trades": 2,
-      "value": 382623.5,
-      "shares": 28900.0,
-      "avg_price": 13.239567474048442,
+      "trades": 6,
+      "value": 402249.25999999995,
+      "shares": 24657.0,
+      "avg_price": 16.313795676684105,
       "first_trade": "2026-11-05",
-      "last_trade": "2026-11-05",
-      "last_filed": "2026-11-06",
+      "last_trade": "2026-11-10",
+      "last_filed": "2026-11-13",
       "roles": [
-        "Director",
-        "President",
-        "Executive Vice President"
+        "See Remarks"
       ],
-      "stake_increase": 0.1809534688826383,
+      "stake_increase": 0.0934492103541725,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
@@ -460,66 +479,48 @@
       "plan_unknown": 0
     },
     {
-      "symbol": "NXRT",
-      "issuer": "NexPoint Residential Trust, Inc.",
-      "insiders": 2,
-      "trades": 5,
-      "value": 302318.75999999995,
-      "shares": 18292.0,
-      "avg_price": 16.527375902033672,
-      "first_trade": "2026-11-05",
-      "last_trade": "2026-11-09",
-      "last_filed": "2026-11-09",
-      "roles": [
-        "See Remarks"
-      ],
-      "stake_increase": 0.0934492103541725,
-      "any_plan": false,
-      "any_ten_pct": false,
-      "plan_unknown": 0
-    },
-    {
-      "symbol": "AN",
-      "issuer": "AUTONATION, INC.",
-      "insiders": 2,
-      "trades": 3,
-      "value": 298003.58,
-      "shares": 1611.0,
-      "avg_price": 184.98049658597145,
-      "first_trade": "2026-11-05",
-      "last_trade": "2026-11-06",
-      "last_filed": "2026-11-09",
-      "roles": [
-        "EVP & CFO",
-        "Director"
-      ],
-      "stake_increase": 0.05962425469681629,
-      "any_plan": false,
-      "any_ten_pct": false,
-      "plan_unknown": 0
-    },
-    {
-      "symbol": "DOX",
-      "issuer": "AMDOCS LTD",
-      "insiders": 4,
-      "trades": 5,
-      "value": 297695.04,
-      "shares": 7099.0,
-      "avg_price": 41.93478518101141,
+      "symbol": "DTI",
+      "issuer": "Drilling Tools International Corp",
+      "insiders": 5,
+      "trades": 10,
+      "value": 369603.18,
+      "shares": 221339.0,
+      "avg_price": 1.6698511333294177,
       "first_trade": "2026-11-09",
-      "last_trade": "2026-11-10",
-      "last_filed": "2026-11-12",
+      "last_trade": "2026-11-12",
+      "last_filed": "2026-11-13",
+      "roles": [
+        "Director",
+        "Chief Executive Officer",
+        "Chief Financial Officer"
+      ],
+      "stake_increase": 0.7555064799209624,
+      "any_plan": false,
+      "any_ten_pct": false,
+      "plan_unknown": 0
+    },
+    {
+      "symbol": "CTRI",
+      "issuer": "Centuri Holdings, Inc.",
+      "insiders": 2,
+      "trades": 2,
+      "value": 349910.0,
+      "shares": 15545.0,
+      "avg_price": 22.50948858153747,
+      "first_trade": "2026-11-10",
+      "last_trade": "2026-11-11",
+      "last_filed": "2026-11-13",
       "roles": [
         "Director"
       ],
-      "stake_increase": 0.31401391702633663,
+      "stake_increase": 0.37531133781432324,
       "any_plan": false,
       "any_ten_pct": false,
       "plan_unknown": 0
     }
   ],
   "url": "https://yumima.github.io/finterm/brief/2026-11-09/",
-  "x": "Insider buying, 7 days to Nov 13 (SEC Form 4): 37 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $15.1M (3 insiders), MP $3.4M (3 insiders), FIP $1.5M (2 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/",
-  "bluesky": "Insider buying, 7 days to Nov 13 (SEC Form 4): 37 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $15.1M (3 insiders), $MP $3.4M (3 insiders), $FIP $1.5M (2 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/",
-  "mastodon": "Insider buying, 7 days to Nov 13 (SEC Form 4): 37 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $15.1M (3 insiders), $MP $3.4M (3 insiders), $FIP $1.5M (2 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/\n\nNot investment advice. #investing #stocks #insidertrading #opensource"
+  "x": "Insider buying, 7 days to Nov 14 (SEC Form 4): 45 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $24.3M (3 insiders), STWD $16.7M (2 insiders), MP $3.4M (3 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/",
+  "bluesky": "Insider buying, 7 days to Nov 14 (SEC Form 4): 45 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $24.3M (3 insiders), $STWD $16.7M (2 insiders), $MP $3.4M (3 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/",
+  "mastodon": "Insider buying, 7 days to Nov 14 (SEC Form 4): 45 companies with 2+ insiders buying on the open market. Largest by $ reported: $FUN $24.3M (3 insiders), $STWD $16.7M (2 insiders), $MP $3.4M (3 insiders).\n\nFull list, method and base rate: https://yumima.github.io/finterm/brief/2026-11-09/\n\nNot investment advice. #investing #stocks #insidertrading #opensource"
 }
