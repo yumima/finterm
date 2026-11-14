@@ -434,6 +434,18 @@ class IpoWatchView : public QWidget {
     QString pending_select_deal_;
     int select_sub_ = -1;
     void apply_pending_select();
+    // Filters: status and window are coerced into a combination that can
+    // show rows (UPCOMING + PAST 30 DAYS used to be an empty table — and the
+    // 30D KPI click produced exactly that). Each setter re-renders once.
+    void set_status_filter(const QString& status); // all | upcoming | priced | withdrawn
+    void set_time_window(TimeWindow tw);
+    void reset_filters();
+    void sync_filter_chrome(); // active-chip highlight + RESET visibility
+    // After a re-render the open dossier's row is selected again (signals
+    // blocked — the dossier is already showing it); returns false when the
+    // current filter hides it.
+    bool reselect_detail_row();
+    void update_empty_state();
     QString detail_deal_id_; // the open dossier's deal (tickers repeat across re-filings)
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
@@ -476,6 +488,10 @@ class IpoWatchView : public QWidget {
     QComboBox* size_chip_ = nullptr;
     QComboBox* type_chip_ = nullptr;
     QLineEdit* search_ = nullptr;
+    QPushButton* reset_btn_ = nullptr;
+    QLabel* empty_lbl_ = nullptr;      // over the table when the filters leave no rows
+    bool auto_selected_ = false;       // the first deal was opened for the user once
+    bool calendar_loaded_ = false;     // a calendar answer was applied (empty ≠ loading)
 
     // Workspace + detail
     QSplitter* splitter_ = nullptr;

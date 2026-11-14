@@ -140,9 +140,14 @@ def test_stage_effective_and_imminent_window():
     assert st == "effective" and sd == date(2026, 10, 29)
     d = {"status": "filed", "stage": st, "stage_date": sd.isoformat(), "filed_date": date(2026, 10, 9)}
     p = ic.project(d, None, date(2026, 10, 30))
-    assert p["kind"] == "imminent" and p["hi"] == "2026-10-31", p
-    # two days past the window: overdue, not a date
-    assert ic.project(d, None, date(2026, 11, 2))["kind"] == "overdue"
+    # EFFECT Thu Oct 29 + p90 2d = Sat Oct 31 -> the window ends Monday
+    assert p["kind"] == "imminent" and p["hi"] == "2026-11-02", p
+    # seen on the Saturday: the likeliest day is Monday, never the weekend
+    p = ic.project(d, None, date(2026, 10, 31))
+    assert p["kind"] == "imminent" and p["date"] == "2026-11-02" and p["hi"] == "2026-11-02", p
+    assert all(date.fromisoformat(p[k]).weekday() < 5 for k in ("lo", "date", "hi")), p
+    # past the window: overdue, not a date
+    assert ic.project(d, None, date(2026, 11, 3))["kind"] == "overdue"
     assert ic.project(d, None, date(2026, 12, 15))["kind"] == "stalled"
 
 
@@ -229,6 +234,8 @@ def test_estimate_window_and_long_shot():
     deals["me"] = me
     p = ic.project(me, ic.comparables(deals, me, T), T)
     assert p["kind"] == "estimate" and p["lo"] >= T.isoformat() and p["lo"] <= p["date"] <= p["hi"], p
+    # T is a Sunday: no part of the window starts on a weekend
+    assert all(date.fromisoformat(p[k]).weekday() < 5 for k in ("lo", "date", "hi")), p
     assert abs(p["share"] - 20 / 30) < 1e-9
     deals = _cohort(6, 30, 30, lag=20)
     deals["me"] = me

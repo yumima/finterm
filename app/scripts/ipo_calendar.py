@@ -482,6 +482,14 @@ def _late(basis, due, today):
     return {"kind": kind, "basis": basis}
 
 
+def _weekday(d):
+    """The first weekday on or after d. Deals price on trading days; the
+    lags are calendar days, and clamping a window to today put a projected
+    pricing on a Saturday ("Nov 14 · ≤Nov 14"). No holiday calendar — a
+    window is p10–p90, not a booking."""
+    return d + timedelta(days=(7 - d.weekday()) % 7 if d.weekday() >= 5 else 0)
+
+
 def project(d, comps, today):
     """The projected pricing date and what it rests on."""
     st, st_date = d.get("stage"), parse_mdy(d.get("stage_date"))
@@ -513,10 +521,13 @@ def project(d, comps, today):
     if st in imminent:
         key, what = imminent[st]
         lo, pt, hi = IMMINENT[key]
-        due_hi = st_date + timedelta(days=hi)
+        # A window ending on a weekend ends on the Monday — the same day the
+        # deal stops being imminent and becomes overdue.
+        due_hi = _weekday(st_date + timedelta(days=hi))
         if today <= due_hi:
-            return {"kind": "imminent", "date": max(st_date + timedelta(days=pt), today).isoformat(),
-                    "lo": (st_date + timedelta(days=lo)).isoformat(), "hi": due_hi.isoformat(),
+            when = _weekday(max(st_date + timedelta(days=pt), today))
+            return {"kind": "imminent", "date": when.isoformat(),
+                    "lo": _weekday(st_date + timedelta(days=lo)).isoformat(), "hi": due_hi.isoformat(),
                     "basis": f"{what} {st_date:%b %-d}; IPOs at this step priced within "
                              f"{lo}–{hi} days (p10–p90)"}
         return _late(f"{what} {st_date:%b %-d}, but no pricing reported since — postponed, or a "
@@ -541,10 +552,10 @@ def project(d, comps, today):
                           "no date is projected")}
     fd = d["filed_date"]
     point = fd + timedelta(days=comps["lag_q50"])
-    lo = max(fd + timedelta(days=comps["lag_q25"]), today)
-    hi = max(fd + timedelta(days=comps["lag_q75"]), lo)
+    lo = _weekday(max(fd + timedelta(days=comps["lag_q25"]), today))
+    hi = max(_weekday(fd + timedelta(days=comps["lag_q75"])), lo)
     cls = "SPACs" if d.get("spac") else "operating companies"
-    return {"kind": "estimate", "date": max(point, lo).isoformat(), "lo": lo.isoformat(),
+    return {"kind": "estimate", "date": max(_weekday(point), lo).isoformat(), "lo": lo.isoformat(),
             "hi": hi.isoformat(), "comps": comps, "share": share,
             "basis": (f"{comps['priced']} of {comps['at_risk']} {cls} still unpriced at this age "
                       f"({comps['age_days']}d after first filing) went on to price — "
