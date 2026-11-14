@@ -44,6 +44,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"portfolio", "Portfolio"},
         {"watchlist", "Watchlist"},
         {"news", "News"},
+        {"social", "Social"},
         {"equity_research", "Equity Research"},
         // Legacy ids from saved layouts: the factories redirect them to live
         // screens (MainWindow), so the tab must carry the live screen's name —

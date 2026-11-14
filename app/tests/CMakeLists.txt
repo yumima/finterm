@@ -1073,3 +1073,10 @@ target_link_libraries(test_whats_on_model PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_whats_on_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME whats_on_model COMMAND test_whats_on_model)
 set_tests_properties(whats_on_model PROPERTIES ENVIRONMENT "TZ=America/New_York")
+
+# ── SOCIAL screen model (character counting, pre-flight, history links) ─────
+add_executable(test_social_model screens/test_social_model.cpp)
+target_include_directories(test_social_model PRIVATE ../src)
+target_link_libraries(test_social_model PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_social_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME social_model COMMAND test_social_model)

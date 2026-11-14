@@ -157,12 +157,21 @@ def issue_url(d):
     return f"{SITE_URL}/brief/{issue_day(d):%Y-%m-%d}/"
 
 
-def fit_post(head, items, tail, short_tail, url, limit, url_cost):
+# X weighs characters (twitter-text v3): these ranges count 1, everything
+# else 2 — "…" (U+2026) and CJK included. Links count url_cost regardless.
+_X_LIGHT = ((0, 4351), (8192, 8205), (8208, 8223), (8242, 8247))
+
+
+def x_weight(text):
+    return sum(1 if any(a <= ord(c) <= b for a, b in _X_LIGHT) else 2 for c in text)
+
+
+def fit_post(head, items, tail, short_tail, url, limit, url_cost, weigh=len):
     """The longest post within @limit: drop list items from the end, then fall
     back to the short tail. @url_cost is what the network charges for the
     link (X and Mastodon: 23 for any URL; Bluesky: its real length)."""
     def cost(t):
-        return len(t) - len(url) + url_cost
+        return weigh(t) - weigh(url) + url_cost
 
     for t in (tail, short_tail):
         for k in range(len(items), -1, -1):
@@ -212,7 +221,7 @@ def social_posts(rows, today, url):
     masto_tail = f"{tail}\n\nNot investment advice. #investing #stocks #insidertrading #opensource"
     return {
         "url": url,
-        "x": fit_post(head, x_items, tail, short, url, *_limit("x", url)),
+        "x": fit_post(head, x_items, tail, short, url, *_limit("x", url), weigh=x_weight),
         "bluesky": fit_post(head, items, tail, short, url, *_limit("bluesky", url)),
         "mastodon": fit_post(head, items, masto_tail, short, url, *_limit("mastodon", url)),
     }

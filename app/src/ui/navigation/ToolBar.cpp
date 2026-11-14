@@ -338,7 +338,9 @@ QMenu* ToolBar::build_navigate_menu() {
 
     m->addSeparator();
 
-    // Direct items (no submenu)
+    // Direct items (no submenu). Social is a top-tab screen too; listed here
+    // because no submenu fits publishing.
+    nav(m, "Social", "social");
     nav(m, "Docs", "docs");
     nav(m, "About", "about");
 

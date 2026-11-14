@@ -56,6 +56,7 @@
 #include "screens/markets/MarketsScreen.h"
 #include "screens/mcp_servers/McpServersScreen.h"
 #include "screens/news/NewsScreen.h"
+#include "screens/social/SocialScreen.h"
 #include "screens/node_editor/NodeEditorScreen.h"
 #include "screens/notes/NotesScreen.h"
 #include "screens/ownership/OwnershipScreen.h"
@@ -1058,6 +1059,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
+    dock_router_->register_factory("social", []() { return new screens::SocialScreen; });
     dock_router_->register_factory("watchlist", []() { return new screens::WatchlistScreen; });
 
     // Lazily constructed on first navigation — deferred to avoid startup cost.

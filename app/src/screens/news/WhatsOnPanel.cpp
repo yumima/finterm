@@ -37,6 +37,7 @@ namespace wo = finterm::whats_on;
 constexpr int kRefreshMs = 30 * 60 * 1000; // sources change a few times a day
 constexpr int kHeadlineCount = 6;
 constexpr const char* kItemProp = "whatsOnIndex";
+constexpr int kBriefSource = -2; ///< "whatsOnSource" of the weekly-brief row (-1: a headline)
 
 QString kind_color(const QString& kind) {
     if (kind == QLatin1String("FED"))
@@ -484,6 +485,29 @@ QWidget* WhatsOnPanel::make_headline_row(const services::NewsArticle& a, int ind
     return row;
 }
 
+QWidget* WhatsOnPanel::make_brief_row() {
+    // The weekly insider-buying brief is published each Saturday; reading it
+    // and announcing it happen on the SOCIAL screen.
+    auto* row = new QWidget;
+    row->setObjectName("whatsOnRow");
+    row->setAttribute(Qt::WA_StyledBackground, true);
+    row->setCursor(Qt::PointingHandCursor);
+    auto* h = new QHBoxLayout(row);
+    h->setContentsMargins(2, 3, 2, 3);
+    h->setSpacing(6);
+    auto* kind = new QLabel(QStringLiteral("BRIEF"));
+    kind->setStyleSheet(QStringLiteral("color:%1; font-weight:700;").arg(ui::colors::AMBER()));
+    h->addWidget(kind);
+    auto* title = new QLabel(QStringLiteral("Weekly brief — insider buying →"));
+    title->setWordWrap(true);
+    h->addWidget(title, 1);
+    row->setToolTip(QStringLiteral("Published each Saturday. Opens SOCIAL with the latest published issue and "
+                                   "what has been posted."));
+    row->setProperty("whatsOnSource", kBriefSource);
+    row->installEventFilter(this);
+    return row;
+}
+
 bool WhatsOnPanel::eventFilter(QObject* obj, QEvent* e) {
     if (e->type() != QEvent::MouseButtonRelease || static_cast<QMouseEvent*>(e)->button() != Qt::LeftButton)
         return QWidget::eventFilter(obj, e);
@@ -491,6 +515,10 @@ bool WhatsOnPanel::eventFilter(QObject* obj, QEvent* e) {
     if (!row || !row->property("whatsOnSource").isValid())
         return QWidget::eventFilter(obj, e);
     const int src = row->property("whatsOnSource").toInt();
+    if (src == kBriefSource) {
+        EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "social"}});
+        return true;
+    }
     if (src < 0) {
         const int i = row->property(kItemProp).toInt();
         if (i >= 0 && i < headlines_.size())
@@ -543,15 +571,19 @@ void WhatsOnPanel::render() {
         const auto it = buckets.constFind(b);
         section(mc::bucket_title(b));
         if (it == buckets.constEnd() || it->isEmpty()) {
+            // THIS WEEK always holds the brief row, so say what is empty.
             auto* none = new QLabel(b == mc::Bucket::ThisMonth || b == mc::Bucket::Upcoming
                                         ? QStringLiteral("Nothing scheduled in the sources yet")
-                                        : QStringLiteral("Nothing scheduled"));
+                                    : b == mc::Bucket::ThisWeek ? QStringLiteral("No releases scheduled")
+                                                                : QStringLiteral("Nothing scheduled"));
             none->setObjectName("whatsOnWhen");
             body_->addWidget(none);
-            continue;
+        } else {
+            for (const auto& item : *it)
+                body_->addWidget(make_row(item));
         }
-        for (const auto& item : *it)
-            body_->addWidget(make_row(item));
+        if (b == mc::Bucket::ThisWeek)
+            body_->addWidget(make_brief_row());
     }
 
     section(QStringLiteral("TOP HEADLINES"));

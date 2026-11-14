@@ -51,6 +51,7 @@ class WhatsOnPanel : public QWidget {
     void render_rates();
     QWidget* make_row(const whats_on::Item& item);
     QWidget* make_headline_row(const services::NewsArticle& a, int index);
+    QWidget* make_brief_row();
     void apply_styles();
 
     // Sources (each kept until its next good answer).
