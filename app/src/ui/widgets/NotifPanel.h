@@ -24,6 +24,8 @@ class NotifPanel : public QFrame {
 
   protected:
     void showEvent(QShowEvent* e) override;
+    /// A row about a symbol opens it in Equity Research on click.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     QWidget* list_container_ = nullptr;

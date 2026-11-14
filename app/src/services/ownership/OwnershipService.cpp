@@ -5,6 +5,7 @@
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "screens/ownership/OwnershipFlags.h"
+#include "services/alerts/AlertService.h"
 #include "services/notifications/NotificationService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -918,8 +919,10 @@ void OwnershipService::run_form4_scan() {
             // names — once the cycle has ended, not after every slice.
             if (self->insider_buys_.loaded && !self->insider_buys_loading_)
                 self->load_insider_buys(self->insider_buys_.query);
-            if (result.success && remaining == 0 && fetched > 0)
+            if (result.success && remaining == 0 && fetched > 0) {
                 self->check_holdings_alerts();
+                emit self->form4_store_updated();
+            }
         },
         /*on_line=*/{}, kScanTimeoutMs);
 }
@@ -1137,6 +1140,14 @@ void OwnershipService::check_holdings_alerts() {
                     continue;
                 stamps.insert(sym, QJsonObject{{QStringLiteral("filed"), filed}, {QStringLiteral("trades"), trades}});
                 changed = true;
+                // A name the user set an insider-cluster alert for gets that
+                // rule's announcements only (AlertService: 2+ insiders chained
+                // over 30 days, once per filing). This 7-day per-issuer count
+                // is a different window; announcing from both would say the
+                // same filing twice, or disagree about what a cluster is.
+                // Stamped here so turning the rule off later does not replay it.
+                if (alerts::AlertService::instance().covers_insider_clusters(sym))
+                    continue;
                 const double value = r.value(QStringLiteral("value")).toDouble();
                 const QString who =
                     insiders >= 2 ? QStringLiteral("%1 insiders").arg(insiders) : QStringLiteral("an insider");
@@ -1159,6 +1170,7 @@ void OwnershipService::check_holdings_alerts() {
                 req.message = msg;
                 req.level = notifications::NotifLevel::Alert;
                 req.trigger = notifications::NotifTrigger::OwnershipAlert;
+                req.symbol = sym;
                 notifications::NotificationService::instance().send(req);
             }
             if (changed)

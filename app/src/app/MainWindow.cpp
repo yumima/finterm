@@ -73,6 +73,7 @@
 #include "screens/trade_viz/TradeVizScreen.h"
 #include "screens/watchlist/WatchlistScreen.h"
 #include "screens/workbench/WorkbenchScreen.h"
+#include "services/alerts/AlertService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "services/updater/UpdateService.h"
 #include "services/workspace/WorkspaceManager.h"
@@ -1369,6 +1370,11 @@ void MainWindow::try_boot_prefetch() {
     if (locked_)
         return;
     boot_prefetched_ = true;
+
+    // The user's alert rules: evaluated in-process from here on (there is no
+    // background service). Re-started by AlertService itself when a different
+    // user unlocks.
+    alerts::AlertService::instance().start();
 
     // Warm each portfolio's summary cache so portfolio switches render instantly.
     auto& portfolio_svc = services::PortfolioService::instance();

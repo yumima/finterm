@@ -69,40 +69,38 @@ void NotificationService::register_providers() {
 
 // ── Send ──────────────────────────────────────────────────────────────────────
 
-void NotificationService::send(const NotificationRequest& req) {
-    // Read per-trigger filter from settings
-    auto& repo = SettingsRepository::instance();
-    auto get_bool = [&](const QString& key, bool def) -> bool {
-        auto r = repo.get(key);
-        return r.is_ok() ? (r.value() == "1") : def;
-    };
+namespace {
+// The repository answers "" (ok) for a key never saved — that is the default,
+// not "off". Only a stored "0" switches a default-on trigger off.
+bool setting_on(const QString& key, bool def) {
+    const auto r = SettingsRepository::instance().get(key);
+    if (!r.is_ok() || r.value().isEmpty())
+        return def;
+    return r.value() == QLatin1String("1");
+}
+} // namespace
 
-    // Check trigger-level filter (in-app always on unless globally disabled)
-    const bool inapp_on = get_bool("notifications.inapp", true);
-    const bool price_on = get_bool("notifications.price_alerts", true);
-    const bool orders_on = get_bool("notifications.order_fills", true);
-    const bool news_on = get_bool("notifications.news_alerts", false);
-    const bool ownership_on = get_bool("notifications.ownership_alerts", true);
-
-    bool trigger_allowed = true;
-    switch (req.trigger) {
+bool NotificationService::trigger_enabled(NotifTrigger trigger) {
+    switch (trigger) {
         case NotifTrigger::PriceAlert:
-            trigger_allowed = price_on;
-            break;
+            return setting_on(QStringLiteral("notifications.price_alerts"), true);
         case NotifTrigger::OrderFill:
-            trigger_allowed = orders_on;
-            break;
+            return setting_on(QStringLiteral("notifications.order_fills"), true);
         case NotifTrigger::NewsAlert:
-            trigger_allowed = news_on;
-            break;
+            return setting_on(QStringLiteral("notifications.news_alerts"), false);
         case NotifTrigger::OwnershipAlert:
-            trigger_allowed = ownership_on;
-            break;
+            return setting_on(QStringLiteral("notifications.ownership_alerts"), true);
         case NotifTrigger::Manual:
         case NotifTrigger::WorkflowNode:
-            trigger_allowed = true;
-            break;
+            return true;
     }
+    return true;
+}
+
+void NotificationService::send(const NotificationRequest& req) {
+    // Check trigger-level filter (in-app always on unless globally disabled)
+    const bool inapp_on = setting_on(QStringLiteral("notifications.inapp"), true);
+    const bool trigger_allowed = trigger_enabled(req.trigger);
 
     if (!trigger_allowed) {
         LOG_DEBUG("NotificationService",

@@ -140,6 +140,19 @@ def main():
     a = w.alerts(["WDGT", "NOPE"], days=7)
     check("alerts: one issuer row, the two scorable buyers", len(a["rows"]) == 1 and a["rows"][0]["insiders"] == 2, str(a["rows"]))
 
+    # ── cluster_rows: the raw rows behind the app's cluster alerts ──────────
+    c = w.cluster_rows(["wdgt", "NOPE"], days=40)
+    accs = sorted(r["accession"] for r in c["rows"])
+    check("cluster_rows: the three scorable buys with their accessions; 10% owner, plan and sell excluded",
+          accs == ["x1", "x2", "x3"], str(accs))
+    check("cluster_rows: buyers keyed by CIK, so one person is one buyer",
+          sorted({r["insider"] for r in c["rows"]}) == ["11", "12"], str(c["rows"]))
+    check("cluster_rows: trade and filing dates travel",
+          all(r["traded"] and r["filed"] for r in c["rows"]), str(c["rows"]))
+    check("cluster_rows: the store's reach is stated", c["scanned_to"] == d(1), str(c.get("scanned_to")))
+    old = w.cluster_rows(["WDGT"], days=1)
+    check("cluster_rows: the window is by FILED date", old["rows"] == [], str(old["rows"]))
+
     # ── calendar date math ──────────────────────────────────────────────────
     t = date(2026, 9, 7)   # a Monday
     f = w.form13f_deadlines(t, 90)

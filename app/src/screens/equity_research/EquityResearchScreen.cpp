@@ -1,5 +1,6 @@
 // src/screens/equity_research/EquityResearchScreen.cpp
 #include "screens/equity_research/EquityResearchScreen.h"
+#include "ui/alerts/AlertsDialog.h"
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
@@ -38,8 +39,10 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMetaType>
 #include <QPainter>
+#include <QPushButton>
 #include <QShortcut>
 #include <QStyledItemDelegate>
 #include <QTimeZone>
@@ -752,6 +755,33 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     mktcap_label_ = make_label("MKT CAP: —");
     rec_label_ = make_label("—");
     hl->addStretch();
+
+    // Alerts on this symbol, prefilled with the price the header shows.
+    auto* alert_btn = new QPushButton(QStringLiteral("+ ALERT"));
+    alert_btn->setCursor(Qt::PointingHandCursor);
+    alert_btn->setToolTip(QStringLiteral("Add an alert on this symbol (price level, day move, insider cluster buy)"));
+    alert_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px solid %2; "
+                                     "border-radius: 3px; padding: 3px 10px; font-size: 12px; font-weight: 700; }"
+                                     "QPushButton:hover { border-color: %1; }")
+                                 .arg(ui::colors::AMBER(), ui::colors::BORDER_MED()));
+    connect(alert_btn, &QPushButton::clicked, this, [this]() {
+        if (!current_symbol_.isEmpty())
+            ui::open_add_alert(this, current_symbol_, bar_quote_.price);
+    });
+    hl->addWidget(alert_btn);
+    bar->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(bar, &QWidget::customContextMenuRequested, this, [this, bar](const QPoint& pos) {
+        if (current_symbol_.isEmpty())
+            return;
+        QMenu menu(this);
+        QAction* add = menu.addAction(QStringLiteral("Add alert on %1…").arg(current_symbol_));
+        QAction* manage = menu.addAction(QStringLiteral("Manage alerts…"));
+        QAction* chosen = menu.exec(bar->mapToGlobal(pos));
+        if (chosen == add)
+            ui::open_add_alert(this, current_symbol_, bar_quote_.price);
+        else if (chosen == manage)
+            ui::open_alerts_manager(this);
+    });
 
     // Right-aligned freshness chip — shows when the active tab's data
     // last arrived. Empty until the first signal lands.

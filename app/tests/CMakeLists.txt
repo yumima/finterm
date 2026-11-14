@@ -1043,6 +1043,15 @@ set_target_properties(test_live_tick PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME live_tick COMMAND test_live_tick)
 set_tests_properties(live_tick PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── User alerts: crossing hysteresis, once per session, once per filing ──────
+# Header-only rules (AlertRules.h): fire/re-arm, the day-move session key, the
+# insider-cluster dedupe, absent ≠ 0, and the persistence round-trip.
+add_executable(test_alert_rules services/test_alert_rules.cpp)
+target_include_directories(test_alert_rules PRIVATE ../src)
+target_link_libraries(test_alert_rules PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_alert_rules PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME alert_rules COMMAND test_alert_rules)
+
 # ── AI assistant panel size (default 2x, clamped to 60% of the window) ───────
 add_executable(test_chat_panel_size ai_chat/test_chat_panel_size.cpp)
 target_include_directories(test_chat_panel_size PRIVATE ../src)

@@ -1,12 +1,15 @@
 #pragma once
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QList>
+#include <QPointer>
 #include <QWidget>
 
 namespace finterm::ui {
 
 class NotifBell;
 class NotifPanel;
+class NotifToast;
 
 /// The app's one bottom status bar — build version, feed indicators, ready
 /// status and the notification bell. (The dashboard used to carry a second
@@ -22,11 +25,16 @@ class StatusBar : public QWidget {
     void add_trailing_widget(QWidget* w);
 
   private:
+    static StatusBar* primary_bar();
+    static QList<QPointer<StatusBar>>& all_bars();
     void refresh_theme();
     void toggle_notif_panel();
     QLabel* ready_label_ = nullptr;
     NotifBell* notif_bell_ = nullptr;
     NotifPanel* notif_panel_ = nullptr;
+    /// The slide-in toast for every notification, over this window — made on
+    /// the first one, shown only while the shell is (not on the lock screen).
+    NotifToast* notif_toast_ = nullptr;
     QHBoxLayout* layout_ = nullptr;
 };
 

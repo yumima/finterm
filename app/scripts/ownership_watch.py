@@ -14,6 +14,10 @@ calendar:
                                          scorable insider buys in 30 days
     alerts    {"symbols": [...], "days"?} open-market insider buys on the
                                          reader's own holdings, newest first
+    cluster_rows {"symbols": [...], "days"?} one row per scorable buy, with
+                                         its accession, for the app's alert
+                                         rules — they group the rows into
+                                         clusters and announce each filing once
     calendar  {"days"?: 90}              the dated events that move these
                                          numbers: 13F deadlines, FINRA
                                          settlement and publication dates, IPO
@@ -202,6 +206,36 @@ def alerts(symbols, days=7):
     return r
 
 
+def cluster_rows(symbols, days=40):
+    """Every scorable open-market purchase filed in the window, one row per
+    transaction with its accession: the raw material for the app's insider
+    cluster alerts (AlertRules.h groups them with the Ownership definition and
+    remembers which filings it has announced). Local store only, no network.
+
+    `scanned_to` is the newest day the store has read, so the caller can tell
+    "no cluster" from "the store has not looked yet"."""
+    syms = sorted({str(s).upper().strip() for s in symbols if s})
+    con = form4.connect()
+    try:
+        scanned = con.execute("SELECT MAX(filed) FROM scanned_days").fetchone()[0] or ""
+        if not syms:
+            return {"rows": [], "scanned_to": scanned, "days": int(days)}
+        cutoff = (date.today() - timedelta(days=int(days))).isoformat()
+        q = f"""
+            SELECT symbol, accession, filed, tx_date,
+                   COALESCE(NULLIF(insider_cik,''), insider), value
+              FROM tx WHERE symbol IN ({",".join("?" * len(syms))})
+               AND open_market=1 AND derivative=0 AND code='P' AND direction='acquired'
+               AND COALESCE(ten_pct,0)=0 AND COALESCE(plan,0)=0 AND filed>=?
+             ORDER BY symbol, tx_date, accession"""
+        out = [{"symbol": s, "accession": a, "filed": f or "", "traded": t or "",
+                "insider": i or "", "value": v}
+               for s, a, f, t, i, v in con.execute(q, syms + [cutoff]).fetchall() if a]
+        return {"rows": out, "scanned_to": scanned, "days": int(days)}
+    finally:
+        con.close()
+
+
 # ── Calendar ────────────────────────────────────────────────────────────────
 
 def _is_bday(d):
@@ -353,6 +387,8 @@ def handle_action(action, p):
         return rows(p.get("symbols") or [], int(p.get("days") or 30))
     if action == "alerts":
         return alerts(p.get("symbols") or [], int(p.get("days") or 7))
+    if action == "cluster_rows":
+        return cluster_rows(p.get("symbols") or [], int(p.get("days") or 40))
     if action == "calendar":
         return calendar(int(p.get("days") or 90))
     return {"error": f"Unknown action: {action}"}

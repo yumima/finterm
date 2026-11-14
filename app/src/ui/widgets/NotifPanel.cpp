@@ -1,10 +1,13 @@
 #include "ui/widgets/NotifPanel.h"
 
+#include "ui/alerts/AlertsDialog.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QHBoxLayout>
+#include <QEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QShowEvent>
@@ -49,6 +52,22 @@ NotifPanel::NotifPanel(QWidget* parent) : QFrame(parent, Qt::Popup | Qt::Framele
         refresh();
     });
     hl->addWidget(mark_all_btn);
+
+    // The user's own alert rules: list, add, edit, pause, delete.
+    auto* manage_btn = new QPushButton("Manage alerts…");
+    manage_btn->setFlat(true);
+    manage_btn->setCursor(Qt::PointingHandCursor);
+    manage_btn->setStyleSheet(
+        QString("QPushButton { color: %1; background: transparent; border: none; font-size: 11px; "
+                "font-weight: bold; padding-left: 8px; }"
+                "QPushButton:hover { color: %2; }")
+            .arg(ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
+    connect(manage_btn, &QPushButton::clicked, this, [this]() {
+        QWidget* anchor = parentWidget();
+        hide();
+        open_alerts_manager(anchor);
+    });
+    hl->addWidget(manage_btn);
     vl->addWidget(header);
 
     // ── Scroll area ───────────────────────────────────────────────────────────
@@ -115,6 +134,13 @@ void NotifPanel::refresh() {
 
         auto* row = new QWidget;
         row->setFixedHeight(52);
+        if (!rec.request.symbol.isEmpty()) {
+            row->setProperty("notif_symbol", rec.request.symbol);
+            row->setProperty("notif_id", rec.id);
+            row->setCursor(Qt::PointingHandCursor);
+            row->setToolTip(QString("Open %1 in Equity Research").arg(rec.request.symbol));
+            row->installEventFilter(this);
+        }
         row->setStyleSheet(QString("QWidget { background: %1; border-bottom: 1px solid %2; }"
                                    "QWidget:hover { background: %3; }")
                                .arg(rec.read ? ui::colors::BG_SURFACE() : ui::colors::BG_RAISED(),
@@ -141,6 +167,9 @@ void NotifPanel::refresh() {
         tvl->addWidget(title_lbl);
 
         auto* msg_lbl = new QLabel(rec.request.message.left(60));
+        msg_lbl->setToolTip(rec.request.message);
+        msg_lbl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        title_lbl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         msg_lbl->setStyleSheet(
             QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         tvl->addWidget(msg_lbl);
@@ -154,6 +183,20 @@ void NotifPanel::refresh() {
 
         list_layout_->insertWidget(list_layout_->count() - 1, row);
     }
+}
+
+bool NotifPanel::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto* me = static_cast<QMouseEvent*>(event);
+        const QString sym = watched->property("notif_symbol").toString();
+        if (me->button() == Qt::LeftButton && !sym.isEmpty()) {
+            NotificationService::instance().mark_read(watched->property("notif_id").toInt());
+            hide();
+            open_in_equity_research(sym);
+            return true;
+        }
+    }
+    return QFrame::eventFilter(watched, event);
 }
 
 void NotifPanel::anchor_to(QWidget* ref_widget) {

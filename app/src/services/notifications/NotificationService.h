@@ -23,6 +23,9 @@ struct NotificationRequest {
     NotifLevel level = NotifLevel::Info;
     NotifTrigger trigger = NotifTrigger::Manual;
     QDateTime timestamp{QDateTime::currentDateTime()};
+    /// The security the notification is about, when there is one. The bell's
+    /// list and the toast open it in Equity Research on click.
+    QString symbol;
 };
 
 struct NotificationRecord {
@@ -96,6 +99,11 @@ class NotificationService : public QObject {
 
     /// Call after settings are saved to reload all provider configs.
     void reload_all_configs();
+
+    /// Whether the user's Settings switch for `trigger` lets it through (the
+    /// same switches send() applies). Reads the settings store: callers on a
+    /// hot path cache it.
+    static bool trigger_enabled(NotifTrigger trigger);
 
   signals:
     void notification_received(const finterm::notifications::NotificationRecord& record);
