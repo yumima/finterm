@@ -11,6 +11,7 @@
 // backend would refuse.
 
 #include <QDate>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLocale>
@@ -19,7 +20,11 @@
 #include <QString>
 #include <QStringList>
 #include <QTextBoundaryFinder>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QVector>
+
+#include <algorithm>
 
 namespace finterm::social {
 
@@ -27,6 +32,18 @@ namespace finterm::social {
 inline const QStringList& automated_networks() {
     static const QStringList n = {QStringLiteral("x"), QStringLiteral("bluesky"), QStringLiteral("mastodon")};
     return n;
+}
+
+/// Every network the screen lists: the automated ones, then the two posted
+/// to by hand (launch posts, app/scripts/launch_posts.py).
+inline const QStringList& all_networks() {
+    static const QStringList n = {QStringLiteral("x"), QStringLiteral("bluesky"), QStringLiteral("mastodon"),
+                                  QStringLiteral("reddit"), QStringLiteral("hackernews")};
+    return n;
+}
+
+inline bool is_manual_network(const QString& network) {
+    return network == QLatin1String("reddit") || network == QLatin1String("hackernews");
 }
 
 inline QString network_label(const QString& network) {
@@ -43,7 +60,7 @@ inline QString network_label(const QString& network) {
     return network;
 }
 
-/// "@samloganxp" from a stored handle with or without its "@".
+/// "@name" from a stored handle with or without its "@".
 inline QString account_label(const QString& account) {
     const QString a = account.trimmed();
     if (a.isEmpty())
@@ -59,6 +76,9 @@ struct Channel {
     bool manual = false;
     QString account;
     QString error;     ///< e.g. keyring unavailable — "could not look", not "not configured"
+    /// The backend's switch (social_post.ENABLED_NETWORKS): a network not
+    /// enabled is listed as "coming soon" and can't be selected or connected.
+    bool enabled = false;
     int limit = 0;     ///< characters; 0 = unknown
     int url_cost = -1; ///< what any link counts as; -1 = its real length (JSON null)
 };
@@ -75,6 +95,7 @@ inline QVector<Channel> parse_channels(const QJsonObject& root) {
         c.manual = o.value(QLatin1String("manual")).toBool();
         c.account = o.value(QLatin1String("account")).toString();
         c.error = o.value(QLatin1String("error")).toString();
+        c.enabled = o.value(QLatin1String("enabled")).toBool();
         c.limit = o.value(QLatin1String("limit")).toInt();
         const QJsonValue uc = o.value(QLatin1String("url_cost"));
         c.url_cost = uc.isDouble() ? uc.toInt() : -1;
@@ -88,6 +109,14 @@ inline const Channel* find_channel(const QVector<Channel>& channels, const QStri
         if (c.network == network)
             return &c;
     return nullptr;
+}
+
+/// Whether @p network may be used. Unknown until the channels answer says
+/// so — the one switch lives in the backend, so the screen and the backend
+/// can never disagree about it.
+inline bool network_enabled(const QVector<Channel>& channels, const QString& network) {
+    const Channel* c = find_channel(channels, network);
+    return c && c->enabled;
 }
 
 // ── the published issue ─────────────────────────────────────────────────────
@@ -290,9 +319,11 @@ inline Preflight preflight(const Brief& b, const Channel* channel, const QString
                          body.isEmpty() ? QStringLiteral("nothing to post")
                                         : QStringLiteral("%1 / %2").arg(len).arg(channel->limit)});
     }
-    const bool connected = channel && channel->configured && !channel->manual && channel->error.isEmpty();
+    const bool connected =
+        channel && channel->enabled && channel->configured && !channel->manual && channel->error.isEmpty();
     p.checks.append({QStringLiteral("%1 connected").arg(net), connected,
                      !channel             ? QStringLiteral("channels not loaded yet")
+                     : !channel->enabled  ? QStringLiteral("not enabled yet — coming soon")
                      : !channel->error.isEmpty() ? channel->error
                      : !connected         ? QStringLiteral("not connected")
                      : channel->account.isEmpty() ? QStringLiteral("connected")
@@ -328,14 +359,54 @@ struct HistoryRow {
     QString issue;
     QString network;
     QString ref;
-    QString link; ///< empty when the reference is not linkable
+    QString link;      ///< empty when the reference is not linkable
+    QString community; ///< launch posts: "r/algotrading", "Show HN"
 };
+
+// ── launch posts (Reddit / Hacker News, by hand) ────────────────────────────
+
+/// A hand-made launch post, as recorded by launch_mark.
+struct LaunchRecord {
+    QString target;
+    QString network;
+    QString community;
+    QString url;
+    QDateTime at; ///< invalid if the record's time was unreadable
+};
+
+inline QVector<LaunchRecord> parse_launch_records(const QJsonObject& launch) {
+    QVector<LaunchRecord> out;
+    for (auto it = launch.begin(); it != launch.end(); ++it) {
+        const QJsonObject o = it.value().toObject();
+        LaunchRecord r;
+        r.target = it.key();
+        r.network = o.value(QLatin1String("network")).toString();
+        r.community = o.value(QLatin1String("community")).toString();
+        r.url = o.value(QLatin1String("url")).toString();
+        r.at = QDateTime::fromString(o.value(QLatin1String("at")).toString(), Qt::ISODate);
+        out.append(r);
+    }
+    // Newest first; an unreadable time last.
+    std::stable_sort(out.begin(), out.end(), [](const LaunchRecord& a, const LaunchRecord& b) {
+        if (a.at.isValid() != b.at.isValid())
+            return a.at.isValid();
+        return a.at > b.at;
+    });
+    return out;
+}
 
 /// One row per (issue, network), newest issue first as the backend sends
 /// them; within an issue, the automated networks in display order, then any
-/// other network alphabetically.
+/// other network alphabetically. Launch posts come first, newest first, as
+/// "launch <date>".
 inline QVector<HistoryRow> parse_history(const QJsonObject& root) {
     QVector<HistoryRow> out;
+    for (const auto& r : parse_launch_records(root.value(QLatin1String("launch")).toObject())) {
+        const QString when = r.at.isValid() ? r.at.toUTC().date().toString(Qt::ISODate) : QString();
+        out.append({when.isEmpty() ? QStringLiteral("launch") : QStringLiteral("launch ") + when, r.network, r.url,
+                    r.url.startsWith(QLatin1String("https://")) ? r.url : QString(),
+                    r.community.isEmpty() ? r.target : r.community});
+    }
     for (const auto& v : root.value(QLatin1String("history")).toArray()) {
         const QJsonObject o = v.toObject();
         const QString issue = o.value(QLatin1String("issue")).toString();
@@ -349,10 +420,160 @@ inline QVector<HistoryRow> parse_history(const QJsonObject& root) {
                 order << k;
         for (const auto& n : order) {
             const QString ref = posts.value(n).toString();
-            out.append({issue, n, ref, ref_link(n, ref)});
+            out.append({issue, n, ref, ref_link(n, ref), {}});
         }
     }
     return out;
+}
+
+struct LaunchTarget {
+    QString id;
+    QString network;   ///< "reddit" | "hackernews"
+    QString community; ///< "r/algotrading", "Show HN"
+    QString kind;      ///< "text" | "link"
+    QString title;
+    QString body;          ///< text posts
+    QString url;           ///< link posts
+    QString first_comment; ///< posted by hand right after, where the plan says so
+    QStringList notes;     ///< the community's rules / how to post it
+    bool needs_issue = false;  ///< the draft carries this week's table
+    bool data_missing = false; ///< ...which could not be filled
+    QString issue;             ///< the issue the table came from
+    bool is_link() const { return kind == QLatin1String("link"); }
+};
+
+struct LaunchSet {
+    bool loaded = false;
+    QVector<LaunchTarget> targets;
+    QStringList rules;
+    QStringList skip; ///< "r/investing — bans self-promotion"
+    QMap<QString, LaunchRecord> posted;
+    QVector<const LaunchTarget*> for_network(const QString& network) const {
+        QVector<const LaunchTarget*> out;
+        for (const auto& t : targets)
+            if (t.network == network)
+                out.append(&t);
+        return out;
+    }
+    const LaunchTarget* find(const QString& id) const {
+        for (const auto& t : targets)
+            if (t.id == id)
+                return &t;
+        return nullptr;
+    }
+};
+
+inline LaunchSet parse_launch(const QJsonObject& o) {
+    LaunchSet s;
+    for (const auto& v : o.value(QLatin1String("targets")).toArray()) {
+        const QJsonObject j = v.toObject();
+        LaunchTarget t;
+        t.id = j.value(QLatin1String("id")).toString();
+        t.network = j.value(QLatin1String("network")).toString();
+        if (t.id.isEmpty() || !is_manual_network(t.network))
+            continue;
+        t.community = j.value(QLatin1String("community")).toString();
+        t.kind = j.value(QLatin1String("kind")).toString();
+        t.title = j.value(QLatin1String("title")).toString();
+        t.body = j.value(QLatin1String("body")).toString();
+        t.url = j.value(QLatin1String("url")).toString();
+        t.first_comment = j.value(QLatin1String("first_comment")).toString();
+        for (const auto& n : j.value(QLatin1String("notes")).toArray())
+            t.notes << n.toString();
+        t.needs_issue = j.value(QLatin1String("needs_issue")).toBool();
+        t.data_missing = j.value(QLatin1String("data_missing")).toBool();
+        t.issue = j.value(QLatin1String("issue")).toString();
+        s.targets.append(t);
+    }
+    for (const auto& r : o.value(QLatin1String("rules")).toArray())
+        s.rules << r.toString();
+    for (const auto& k : o.value(QLatin1String("skip")).toArray()) {
+        const QJsonObject j = k.toObject();
+        const QString why = j.value(QLatin1String("why")).toString();
+        const QString community = j.value(QLatin1String("community")).toString();
+        s.skip << (why.isEmpty() ? community : QStringLiteral("%1 — %2").arg(community, why));
+    }
+    for (const auto& r : parse_launch_records(o.value(QLatin1String("posted")).toObject()))
+        s.posted.insert(r.target, r);
+    s.loaded = !s.targets.isEmpty();
+    return s;
+}
+
+/// The longest title each site takes (HN cuts at 80).
+inline int title_limit(const QString& network) { return network == QLatin1String("hackernews") ? 80 : 300; }
+
+inline QString reddit_sub(const QString& community) {
+    return community.startsWith(QLatin1String("r/")) ? community.mid(2) : community;
+}
+
+/// The page where the reader submits @p t by hand, with the title (and a
+/// link post's URL) filled in. A text post's body can't go in a URL — it
+/// goes by clipboard.
+inline QString launch_submit_url(const LaunchTarget& t, const QString& title, const QString& link) {
+    auto enc = [](const QString& v) { return QString::fromLatin1(QUrl::toPercentEncoding(v)); };
+    if (t.network == QLatin1String("hackernews"))
+        return QStringLiteral("https://news.ycombinator.com/submitlink?u=%1&t=%2").arg(enc(link), enc(title));
+    if (t.network != QLatin1String("reddit"))
+        return {};
+    const QString sub = enc(reddit_sub(t.community));
+    if (t.is_link())
+        return QStringLiteral("https://www.reddit.com/r/%1/submit?url=%2&title=%3").arg(sub, enc(link), enc(title));
+    // Only old Reddit's form honours selftext=true (opens on the Text tab);
+    // the new one may open on Link, with nowhere to paste the body.
+    return QStringLiteral("https://old.reddit.com/r/%1/submit?selftext=true&title=%2").arg(sub, enc(title));
+}
+
+/// Empty if @p text is a post on @p t's community, else why not. The
+/// backend (launch_posts.validate_post_url) applies the same rule.
+inline QString validate_post_url(const LaunchTarget& t, const QString& text) {
+    const QUrl u(text.trimmed(), QUrl::StrictMode);
+    if (!u.isValid() || u.scheme() != QLatin1String("https") || u.host().isEmpty())
+        return QStringLiteral("Paste the post's full https:// link.");
+    const QString host = u.host().toLower();
+    if (t.network == QLatin1String("reddit")) {
+        static const QStringList hosts = {QStringLiteral("reddit.com"), QStringLiteral("www.reddit.com"),
+                                          QStringLiteral("old.reddit.com"), QStringLiteral("new.reddit.com"),
+                                          QStringLiteral("sh.reddit.com")};
+        if (!hosts.contains(host))
+            return QStringLiteral("That is not a reddit.com link.");
+        const QString prefix = QStringLiteral("/r/%1/").arg(reddit_sub(t.community).toLower());
+        if (!u.path().toLower().startsWith(prefix))
+            return QStringLiteral("That link is not a post in %1.").arg(t.community);
+        return {};
+    }
+    if (t.network == QLatin1String("hackernews")) {
+        if (host != QLatin1String("news.ycombinator.com"))
+            return QStringLiteral("That is not a news.ycombinator.com link.");
+        static const QRegularExpression digits(QStringLiteral("^\\d+$"));
+        if (u.path() != QLatin1String("/item") ||
+            !digits.match(QUrlQuery(u).queryItemValue(QStringLiteral("id"))).hasMatch())
+            return QStringLiteral("Paste the post's item link (news.ycombinator.com/item?id=…).");
+        return {};
+    }
+    return QStringLiteral("unknown network");
+}
+
+/// "One sub per day": a hint when another launch post was recorded in the
+/// 24 hours before @p now, else empty. @p target's own record is not
+/// "another" (its re-use has its own warning).
+inline QString pacing_hint(const QMap<QString, LaunchRecord>& posted, const QString& target, const QDateTime& now) {
+    const LaunchRecord* latest = nullptr;
+    for (const auto& r : posted) {
+        if (r.target == target || !r.at.isValid())
+            continue;
+        const qint64 secs = r.at.secsTo(now);
+        if (secs < 0 || secs >= 24 * 3600)
+            continue;
+        if (!latest || r.at > latest->at)
+            latest = &r;
+    }
+    if (!latest)
+        return {};
+    const qint64 hours = latest->at.secsTo(now) / 3600;
+    return QStringLiteral("%1 was posted %2 ago — one community per day; wait until %3.")
+        .arg(latest->community.isEmpty() ? latest->target : latest->community,
+             hours < 1 ? QStringLiteral("under an hour") : QStringLiteral("%1 h").arg(hours),
+             latest->at.addSecs(24 * 3600).toLocalTime().toString(QStringLiteral("ddd HH:mm")));
 }
 
 /// A hint for a publish refusal the reader can act on, or empty.

@@ -54,6 +54,18 @@ def set(name, value):  # noqa: A001 — mirrors get()
                                f"finterm: {name}", value, None)
 
 
+def delete(name):
+    """Remove @name under every identity: get() falls back to an older
+    build's copy, so clearing only the current one would leave the value
+    readable. An absent entry is not an error."""
+    Secret = _secret()
+    for ident in IDENTITIES:
+        try:
+            Secret.password_clear_sync(schema(ident), {ident[1]: name}, None)
+        except Exception as e:  # noqa: BLE001
+            raise KeyringUnavailable(f"keyring delete failed ({type(e).__name__})") from None
+
+
 def all_values(min_len=12):
     """Every stored value at least @min_len long (for the pre-commit guard)."""
     Secret = _secret()

@@ -10,24 +10,30 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QButtonGroup>
+#include <QClipboard>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QProcess>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTimer>
@@ -84,6 +90,11 @@ QString backend_python() {
 /// slot. The process is not owned by @p ctx — closing the screen or a
 /// dialog must not kill a post mid-flight — and @p done is dropped once
 /// @p ctx is gone.
+///
+/// The payload goes to the process's stdin, never its command line: argv is
+/// readable by every local user (ps, /proc/<pid>/cmdline) and payloads carry
+/// PINs, codes and passwords. social_app.py refuses those actions' payloads
+/// from argv.
 void call_backend(QObject* ctx, const QString& action, const QJsonObject& payload, int timeout_ms, Done done) {
     QPointer<QObject> guard(ctx);
     auto& runner = python::PythonRunner::instance();
@@ -142,7 +153,12 @@ void call_backend(QObject* ctx, const QString& action, const QJsonObject& payloa
                 LOG_WARN("Social", action + QStringLiteral(": ") + err);
             done(o, err, answered ? Outcome::Answered : Outcome::NoAnswer);
         });
-    proc->start(python, {script, action, QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))});
+    const QByteArray input = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+    QObject::connect(proc, &QProcess::started, proc, [proc, input]() {
+        proc->write(input);
+        proc->closeWriteChannel(); // EOF once written: the backend reads to the end
+    });
+    proc->start(python, {script, action, QStringLiteral("-")});
     if (timeout_ms > 0)
         timer->start(timeout_ms);
 }
@@ -227,6 +243,10 @@ void SocialScreen::apply_styles() {
                                  "#socialScreen QPushButton#socialPublish:disabled { color:%6; border-color:%3; }"
                                  "#socialScreen QPlainTextEdit { background:%8; color:%1; border:1px solid %3; "
                                  "  font-size:13px; }"
+                                 "#socialScreen QLineEdit#socialLine { background:%8; color:%1; border:1px solid %3; "
+                                 "  padding:2px 4px; font-size:13px; }"
+                                 "#socialScreen QScrollArea#socialScroll, #socialScreen QScrollArea#socialScroll > QWidget > QWidget "
+                                 "  { background:transparent; }"
                                  "#socialScreen QListWidget { background:%8; border:1px solid %3; }"
                                  "#socialScreen QListWidget::item:selected { background:%7; color:%4; }")
                       .arg(ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
@@ -334,16 +354,16 @@ QWidget* SocialScreen::build_issue_pane() {
 
 QWidget* SocialScreen::build_composer_pane() {
     auto* pane = new QWidget;
-    auto* v = new QVBoxLayout(pane);
-    v->setContentsMargins(8, 8, 8, 8);
-    v->setSpacing(6);
-    v->addWidget(ou::section_title(QStringLiteral("COMPOSER")).widget);
+    auto* outer = new QVBoxLayout(pane);
+    outer->setContentsMargins(8, 8, 8, 8);
+    outer->setSpacing(6);
+    outer->addWidget(ou::section_title(QStringLiteral("COMPOSER")).widget);
 
     auto* nets = new QHBoxLayout;
     nets->setSpacing(4);
     network_group_ = new QButtonGroup(this);
     network_group_->setExclusive(true);
-    for (const auto& n : so::automated_networks()) {
+    for (const auto& n : so::all_networks()) {
         auto* b = small_button(so::network_label(n));
         b->setCheckable(true);
         b->setChecked(n == network_);
@@ -353,7 +373,16 @@ QWidget* SocialScreen::build_composer_pane() {
         nets->addWidget(b);
     }
     nets->addStretch(1);
-    v->addLayout(nets);
+    outer->addLayout(nets);
+
+    composer_stack_ = new QStackedWidget;
+    outer->addWidget(composer_stack_, 1);
+
+    // Page 0: the automated networks.
+    auto* auto_page = new QWidget;
+    auto* v = new QVBoxLayout(auto_page);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(6);
 
     posting_as_ = new QLabel;
     posting_as_->setObjectName("socialDim");
@@ -400,14 +429,147 @@ QWidget* SocialScreen::build_composer_pane() {
     publish_btn_->setCursor(Qt::PointingHandCursor);
     connect(publish_btn_, &QPushButton::clicked, this, [this]() { confirm_publish(); });
     v->addWidget(publish_btn_);
+    composer_stack_->addWidget(auto_page);
+
+    // Page 1: Reddit / Hacker News, by hand.
+    composer_stack_->addWidget(build_manual_page());
 
     status_label_ = new QLabel;
     status_label_->setWordWrap(true);
     status_label_->setTextFormat(Qt::RichText);
     status_label_->setOpenExternalLinks(true);
     status_label_->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    v->addWidget(status_label_);
+    outer->addWidget(status_label_);
     return pane;
+}
+
+QWidget* SocialScreen::build_manual_page() {
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(4);
+
+    auto* pick = new QHBoxLayout;
+    auto* pl = new QLabel(QStringLiteral("Community"));
+    pl->setObjectName("socialDim");
+    pick->addWidget(pl);
+    launch_combo_ = new QComboBox;
+    launch_combo_->setObjectName("socialCombo");
+    connect(launch_combo_, &QComboBox::activated, this,
+            [this](int i) { show_launch_target(launch_combo_->itemData(i).toString()); });
+    pick->addWidget(launch_combo_, 1);
+    v->addLayout(pick);
+
+    launch_info_ = new QLabel;
+    launch_info_->setTextFormat(Qt::RichText);
+    launch_info_->setWordWrap(true);
+    launch_info_->setOpenExternalLinks(true);
+    v->addWidget(launch_info_);
+
+    // Edits are kept per target, so switching communities loses nothing.
+    auto keep = [this]() {
+        if (setting_editor_)
+            return;
+        if (const auto* t = current_launch_target()) {
+            launch_drafts_[t->id] = {launch_title_->text(), launch_body_->toPlainText(), launch_url_->text(),
+                                     launch_comment_->toPlainText()};
+            render_launch_counts(); // per keystroke: only what the text changes
+        }
+    };
+    auto* tl = new QHBoxLayout;
+    auto* tlab = new QLabel(QStringLiteral("Title"));
+    tlab->setObjectName("socialDim");
+    tl->addWidget(tlab);
+    tl->addStretch(1);
+    launch_title_count_ = new QLabel;
+    tl->addWidget(launch_title_count_);
+    v->addLayout(tl);
+    launch_title_ = new QLineEdit;
+    launch_title_->setObjectName("socialLine");
+    connect(launch_title_, &QLineEdit::textEdited, this, keep);
+    v->addWidget(launch_title_);
+
+    launch_url_label_ = new QLabel(QStringLiteral("URL"));
+    launch_url_label_->setObjectName("socialDim");
+    v->addWidget(launch_url_label_);
+    launch_url_ = new QLineEdit;
+    launch_url_->setObjectName("socialLine");
+    connect(launch_url_, &QLineEdit::textEdited, this, keep);
+    v->addWidget(launch_url_);
+
+    launch_body_label_ = new QLabel(QStringLiteral("Body (Markdown)"));
+    launch_body_label_->setObjectName("socialDim");
+    v->addWidget(launch_body_label_);
+    launch_body_ = new QPlainTextEdit;
+    connect(launch_body_, &QPlainTextEdit::textChanged, this, keep);
+    v->addWidget(launch_body_, 3);
+
+    launch_comment_label_ = new QLabel(QStringLiteral("First comment — post it yourself right after"));
+    launch_comment_label_->setObjectName("socialDim");
+    v->addWidget(launch_comment_label_);
+    launch_comment_ = new QPlainTextEdit;
+    connect(launch_comment_, &QPlainTextEdit::textChanged, this, keep);
+    v->addWidget(launch_comment_, 2);
+
+    auto* row1 = new QHBoxLayout;
+    row1->setSpacing(4);
+    copy_title_btn_ = small_button(QStringLiteral("Copy title"));
+    connect(copy_title_btn_, &QPushButton::clicked, this,
+            [this]() { copy_to_clipboard(launch_title_->text(), QStringLiteral("Title")); });
+    row1->addWidget(copy_title_btn_);
+    copy_body_btn_ = small_button(QStringLiteral("Copy body"));
+    connect(copy_body_btn_, &QPushButton::clicked, this, [this]() {
+        const auto* t = current_launch_target();
+        if (t && t->is_link())
+            copy_to_clipboard(launch_url_->text(), QStringLiteral("URL"));
+        else
+            copy_to_clipboard(launch_body_->toPlainText(), QStringLiteral("Body"));
+    });
+    row1->addWidget(copy_body_btn_);
+    copy_comment_btn_ = small_button(QStringLiteral("Copy first comment"));
+    connect(copy_comment_btn_, &QPushButton::clicked, this,
+            [this]() { copy_to_clipboard(launch_comment_->toPlainText(), QStringLiteral("First comment")); });
+    row1->addWidget(copy_comment_btn_);
+    row1->addStretch(1);
+    launch_reset_btn_ = small_button(QStringLiteral("Reset draft"));
+    launch_reset_btn_->setToolTip(QStringLiteral("Back to the draft from launch_posts.py (this week's table refilled)"));
+    connect(launch_reset_btn_, &QPushButton::clicked, this, [this]() {
+        if (const auto* t = current_launch_target()) {
+            launch_drafts_[t->id] = launch_templates_.value(t->id);
+            show_launch_target(t->id);
+        }
+    });
+    row1->addWidget(launch_reset_btn_);
+    v->addLayout(row1);
+
+    auto* row2 = new QHBoxLayout;
+    row2->setSpacing(4);
+    open_submit_btn_ = new QPushButton;
+    open_submit_btn_->setObjectName("socialPublish");
+    open_submit_btn_->setCursor(Qt::PointingHandCursor);
+    connect(open_submit_btn_, &QPushButton::clicked, this, [this]() { open_submit_page(); });
+    row2->addWidget(open_submit_btn_, 1);
+    mark_posted_btn_ = small_button(QStringLiteral("Mark as posted…"));
+    mark_posted_btn_->setToolTip(QStringLiteral("Record the post's link once it is up (one launch post per community)"));
+    connect(mark_posted_btn_, &QPushButton::clicked, this, [this]() { open_mark_posted(); });
+    row2->addWidget(mark_posted_btn_);
+    v->addLayout(row2);
+
+    v->addSpacing(4);
+    v->addWidget(ou::section_title(QStringLiteral("RULES")).widget);
+    launch_rules_ = new QLabel;
+    launch_rules_->setTextFormat(Qt::RichText);
+    launch_rules_->setWordWrap(true);
+    launch_rules_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    launch_rules_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    auto* scroll = new QScrollArea;
+    scroll->setObjectName("socialScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setWidget(launch_rules_);
+    v->addWidget(scroll, 2);
+    return page;
 }
 
 // ── Loading ─────────────────────────────────────────────────────────────────
@@ -421,7 +583,7 @@ void SocialScreen::showEvent(QShowEvent* e) {
 void SocialScreen::refresh_all() {
     last_refresh_ = QDateTime::currentDateTime();
     load_channels();
-    load_brief();
+    load_brief(); // its answer loads the launch drafts, filled from its rows
     load_history();
 }
 
@@ -438,6 +600,15 @@ void SocialScreen::load_channels() {
                          channels_ = so::parse_channels(o);
                          channels_loaded_ = true;
                          channels_error_.clear();
+                         // The composer must not stay on a network that is
+                         // switched off: fall back to the first enabled one.
+                         if (!so::network_enabled(channels_, network_)) {
+                             for (const auto& n : so::all_networks())
+                                 if (so::network_enabled(channels_, n)) {
+                                     select_network(n);
+                                     break;
+                                 }
+                         }
                      } else {
                          channels_error_ = err;
                      }
@@ -470,6 +641,7 @@ void SocialScreen::load_brief() {
                      render_brief();
                      render_composer();
                      render_busy();
+                     load_launch(); // after the brief: the drafts' table comes from its rows
                  });
 }
 
@@ -492,6 +664,47 @@ void SocialScreen::load_history() {
                      render_history();
                      render_busy();
                  });
+}
+
+void SocialScreen::load_launch() {
+    const int seq = ++launch_seq_;
+    launch_busy_ = true;
+    render_busy();
+    // The rows shown beside the composer, so the backend needn't fetch
+    // issue.json again and the table always matches the issue on screen.
+    QJsonObject payload;
+    if (brief_.loaded)
+        payload = {{QStringLiteral("issue"), brief_.issue}, {QStringLiteral("rows"), brief_.rows}};
+    call_backend(this, QStringLiteral("launch"), payload, python::PythonRunner::kProcessTimeoutMs,
+                 [this, seq](const QJsonObject& o, const QString& err, Outcome) {
+                     if (seq != launch_seq_)
+                         return;
+                     launch_busy_ = false;
+                     const so::LaunchSet l = err.isEmpty() ? so::parse_launch(o) : so::LaunchSet{};
+                     if (l.loaded) {
+                         launch_ = l;
+                         launch_error_.clear();
+                         adopt_launch_templates();
+                         if (so::is_manual_network(network_))
+                             show_launch_target(launch_target_.value(network_)); // a template may have changed
+                     } else {
+                         launch_error_ = err.isEmpty() ? QStringLiteral("the backend sent no launch drafts") : err;
+                     }
+                     render_channels();
+                     render_composer();
+                     render_busy();
+                 });
+}
+
+void SocialScreen::adopt_launch_templates() {
+    // Like the issue drafts: a draft still equal to its old template follows
+    // the new one (e.g. this week's table arrived); an edited one is kept.
+    for (const auto& t : std::as_const(launch_.targets)) {
+        const LaunchDraft tpl{t.title, t.body, t.url, t.first_comment};
+        if (!launch_drafts_.contains(t.id) || launch_drafts_.value(t.id) == launch_templates_.value(t.id))
+            launch_drafts_[t.id] = tpl;
+        launch_templates_[t.id] = tpl;
+    }
 }
 
 void SocialScreen::adopt_generated_texts() {
@@ -522,8 +735,12 @@ void SocialScreen::render_busy() {
         what << QStringLiteral("reading channels");
     if (history_busy_)
         what << QStringLiteral("reading history");
+    if (launch_busy_)
+        what << QStringLiteral("reading launch drafts");
     if (publish_busy_)
         what << QStringLiteral("publishing");
+    if (mark_busy_)
+        what << QStringLiteral("recording");
     busy_label_->setText(what.isEmpty() ? QString() : what.join(QStringLiteral(" · ")) + QStringLiteral("…"));
     busy_label_->setVisible(!what.isEmpty());
 }
@@ -547,42 +764,74 @@ void SocialScreen::render_channels() {
         auto* row = new QWidget;
         row->setObjectName("socialRow");
         row->setAttribute(Qt::WA_StyledBackground, true);
-        auto* h = new QHBoxLayout(row);
-        h->setContentsMargins(2, 4, 2, 4);
+        auto* rv = new QVBoxLayout(row);
+        rv->setContentsMargins(2, 4, 2, 4);
+        rv->setSpacing(1);
+        auto* h = new QHBoxLayout;
         h->setSpacing(6);
-        const bool live = c.configured && !c.manual && c.error.isEmpty();
+        rv->addLayout(h);
+        const bool live = c.enabled && c.configured && !c.manual && c.error.isEmpty();
         auto* dot = new QLabel(QStringLiteral("●"));
-        dot->setStyleSheet(QStringLiteral("color:%1;").arg(!c.error.isEmpty() ? ui::colors::AMBER()
-                                                           : live            ? ui::colors::POSITIVE()
-                                                                             : ui::colors::TEXT_TERTIARY()));
+        dot->setStyleSheet(QStringLiteral("color:%1;").arg(!c.enabled           ? ui::colors::TEXT_TERTIARY()
+                                                           : !c.error.isEmpty() ? ui::colors::AMBER()
+                                                           : live               ? ui::colors::POSITIVE()
+                                                                                : ui::colors::TEXT_TERTIARY()));
         h->addWidget(dot);
         auto* name = new QLabel(so::network_label(c.network));
         h->addWidget(name);
         h->addStretch(1);
+        auto* sub = new QLabel; // second line: as whom / what
+        sub->setObjectName("socialDim");
+        sub->setTextFormat(Qt::PlainText);
+        sub->setWordWrap(true);
 
-        if (c.manual) {
-            auto* m = new QLabel(QStringLiteral("manual"));
+        if (!c.enabled) {
+            // Built and tested, switched off in social_post.ENABLED_NETWORKS.
+            auto* m = new QLabel(QStringLiteral("coming soon"));
             m->setObjectName("socialDim");
             h->addWidget(m);
             row->setEnabled(false);
-            row->setToolTip(QStringLiteral("manual — phase 2"));
-        } else if (c.network == QLatin1String("x")) {
-            if (live && !c.account.isEmpty()) {
-                auto* a = new QLabel(so::account_label(c.account));
-                h->addWidget(a);
-            }
-            auto* btn = small_button(c.configured ? QStringLiteral("reconnect") : QStringLiteral("connect"));
-            btn->setToolTip(QStringLiteral("Sign in to X as the posting account (PIN sign-in)"));
-            connect(btn, &QPushButton::clicked, this, [this]() { open_x_connect(); });
-            h->addWidget(btn);
-        } else if (live) {
-            h->addWidget(new QLabel(c.account.isEmpty() ? QStringLiteral("connected") : so::account_label(c.account)));
-        } else {
-            auto* m = new QLabel(QStringLiteral("not connected"));
+            row->setToolTip(QStringLiteral("%1 is not enabled yet").arg(so::network_label(c.network)));
+        } else if (c.manual) {
+            auto* m = new QLabel(QStringLiteral("manual"));
             m->setObjectName("socialDim");
             h->addWidget(m);
-            row->setToolTip(QStringLiteral("not connected — set up with tools/announce.py --store-keys"));
+            int posted = 0;
+            const auto targets = launch_.for_network(c.network);
+            for (const auto* t : targets)
+                posted += launch_.posted.contains(t->id) ? 1 : 0;
+            if (!targets.isEmpty())
+                sub->setText(QStringLiteral("%1 of %2 launch posts made").arg(posted).arg(targets.size()));
+            row->setToolTip(QStringLiteral("Posted by hand: the composer copies the text and opens the submit "
+                                           "page; nothing is submitted by finterm."));
+        } else if (c.configured && c.error.isEmpty()) {
+            sub->setText(c.account.isEmpty() ? QStringLiteral("connected") : so::account_label(c.account));
+            auto* btn = small_button(QStringLiteral("disconnect"));
+            btn->setToolTip(QStringLiteral("Remove the posting account's sign-in from this computer"));
+            const QString net = c.network;
+            connect(btn, &QPushButton::clicked, this, [this, net]() { confirm_disconnect(net); });
+            h->addWidget(btn);
+        } else {
+            sub->setText(c.error.isEmpty() ? QStringLiteral("not connected") : QStringLiteral("keyring unavailable"));
+            auto* btn = small_button(QStringLiteral("connect"));
+            const QString net = c.network;
+            btn->setToolTip(net == QLatin1String("x")         ? QStringLiteral("Sign in to X as the posting account (PIN)")
+                            : net == QLatin1String("bluesky") ? QStringLiteral("Handle + an app password")
+                                                              : QStringLiteral("Sign in on your Mastodon server"));
+            connect(btn, &QPushButton::clicked, this, [this, net]() {
+                if (net == QLatin1String("x"))
+                    open_x_connect();
+                else if (net == QLatin1String("bluesky"))
+                    open_bsky_connect();
+                else if (net == QLatin1String("mastodon"))
+                    open_mastodon_connect();
+            });
+            h->addWidget(btn);
         }
+        if (!sub->text().isEmpty())
+            rv->addWidget(sub);
+        else
+            delete sub;
         if (!c.error.isEmpty())
             row->setToolTip(ui::tooltip_wrap(c.error));
         channels_box_->addWidget(row);
@@ -682,7 +931,9 @@ void SocialScreen::render_history() {
     for (int i = 0; i < history_.size(); ++i) {
         const auto& h = history_[i];
         history_table_->setItem(i, 0, ou::cell(h.issue));
-        history_table_->setItem(i, 1, ou::cell(so::network_label(h.network)));
+        history_table_->setItem(i, 1, ou::cell(h.community.isEmpty() ? so::network_label(h.network)
+                                                                     : so::network_label(h.network) +
+                                                                           QStringLiteral(" · ") + h.community));
         auto* post = ou::cell(h.link.isEmpty() ? h.ref : h.link, h.link.isEmpty() ? QString() : ui::colors::CYAN());
         if (!h.link.isEmpty()) {
             post->setData(Qt::UserRole, h.link);
@@ -700,7 +951,8 @@ void SocialScreen::render_history() {
     else if (history_loaded_ && history_.isEmpty())
         history_note_->setText(QStringLiteral("Nothing posted yet."));
     else
-        history_note_->setText(QStringLiteral("Every post the app or the weekly timer made, newest issue first."));
+        history_note_->setText(QStringLiteral("Every post the app or the weekly timer made, newest issue first; "
+                                              "launch posts you made by hand (Reddit / HN) on top."));
 }
 
 void SocialScreen::render_composer() {
@@ -708,9 +960,20 @@ void SocialScreen::render_composer() {
     const QString label = so::network_label(network_);
     for (auto it = network_btns_.begin(); it != network_btns_.end(); ++it) {
         const bool posted = brief_.loaded && !brief_.posted.value(it.key()).isEmpty();
+        const bool enabled = so::network_enabled(channels_, it.key());
         it.value()->setText(so::network_label(it.key()) + (posted ? QStringLiteral(" ✓") : QString()));
-        it.value()->setToolTip(posted ? QStringLiteral("Already posted for %1").arg(brief_.issue) : QString());
+        // Until the channels answer, only the current choice stays clickable.
+        it.value()->setEnabled(enabled || (!channels_loaded_ && it.key() == network_));
+        it.value()->setToolTip(!enabled && channels_loaded_ ? QStringLiteral("Coming soon")
+                               : posted ? QStringLiteral("Already posted for %1").arg(brief_.issue)
+                                        : QString());
     }
+    if (so::is_manual_network(network_)) {
+        composer_stack_->setCurrentIndex(1);
+        render_launch();
+        return;
+    }
+    composer_stack_->setCurrentIndex(0);
 
     if (!ch)
         posting_as_->setText(QStringLiteral("Reading %1's connection…").arg(label));
@@ -761,9 +1024,23 @@ void SocialScreen::render_composer() {
 void SocialScreen::select_network(const QString& network) {
     if (network == network_)
         return;
+    if (!so::network_enabled(channels_, network)) {
+        // Not enabled (or not known yet): keep the current choice checked.
+        if (auto* b = network_btns_.value(network_))
+            b->setChecked(true);
+        return;
+    }
     network_ = network;
     if (auto* b = network_btns_.value(network))
         b->setChecked(true);
+    if (so::is_manual_network(network_)) {
+        const auto targets = launch_.for_network(network_);
+        if (!launch_target_.contains(network_) && !targets.isEmpty())
+            launch_target_[network_] = targets.first()->id;
+        show_launch_target(launch_target_.value(network_));
+        render_composer();
+        return;
+    }
     setting_editor_ = true;
     editor_->setPlainText(drafts_.value(network_));
     setting_editor_ = false;
@@ -774,6 +1051,497 @@ void SocialScreen::set_status(const QString& html, bool error) {
     status_label_->setStyleSheet(
         QStringLiteral("color:%1;").arg(error ? ui::colors::NEGATIVE() : ui::colors::TEXT_PRIMARY()));
     status_label_->setText(html);
+}
+
+// ── Launch posts (Reddit / Hacker News, by hand) ────────────────────────────
+
+const so::LaunchTarget* SocialScreen::current_launch_target() const {
+    if (!so::is_manual_network(network_))
+        return nullptr;
+    const auto* t = launch_.find(launch_target_.value(network_));
+    return t && t->network == network_ ? t : nullptr;
+}
+
+void SocialScreen::show_launch_target(const QString& id) {
+    const auto* t = launch_.find(id);
+    if (t && t->network == network_)
+        launch_target_[network_] = id;
+    if (const auto* cur = current_launch_target()) {
+        const LaunchDraft d = launch_drafts_.value(cur->id);
+        setting_editor_ = true;
+        // Only what changed: setText would move the cursor and drop undo history.
+        if (launch_title_->text() != d.title) {
+            launch_title_->setText(d.title);
+            launch_title_->setCursorPosition(0); // show a long title from its start
+        }
+        if (launch_url_->text() != d.url)
+            launch_url_->setText(d.url);
+        if (launch_body_->toPlainText() != d.body)
+            launch_body_->setPlainText(d.body);
+        if (launch_comment_->toPlainText() != d.comment)
+            launch_comment_->setPlainText(d.comment);
+        setting_editor_ = false;
+    }
+    render_launch();
+}
+
+void SocialScreen::render_launch() {
+    const auto targets = launch_.for_network(network_);
+    const auto* t = current_launch_target();
+    if (!t && !targets.isEmpty()) {
+        show_launch_target(targets.first()->id); // first visit: the first community
+        return;
+    }
+
+    launch_combo_->blockSignals(true);
+    launch_combo_->clear();
+    for (const auto* x : targets) {
+        const bool posted = launch_.posted.contains(x->id);
+        launch_combo_->addItem(x->community + (posted ? QStringLiteral("  ✓ posted") : QString()), x->id);
+        if (t && x->id == t->id)
+            launch_combo_->setCurrentIndex(launch_combo_->count() - 1);
+    }
+    launch_combo_->blockSignals(false);
+
+    const QList<QWidget*> needs_target = {launch_combo_,   launch_title_,   launch_url_,       launch_body_,
+                                          launch_comment_, copy_title_btn_, copy_body_btn_,    copy_comment_btn_,
+                                          open_submit_btn_, mark_posted_btn_, launch_reset_btn_};
+    for (auto* w : needs_target)
+        w->setEnabled(t != nullptr);
+    if (!t) {
+        launch_info_->setText(esc(launch_error_.isEmpty() ? QStringLiteral("Reading the launch drafts…")
+                                                          : QStringLiteral("Launch drafts unavailable: ") + launch_error_));
+        launch_info_->setStyleSheet(QStringLiteral("color:%1;").arg(launch_error_.isEmpty() ? ui::colors::TEXT_SECONDARY()
+                                                                                             : ui::colors::NEGATIVE()));
+        open_submit_btn_->setText(QStringLiteral("Open submit page"));
+        launch_rules_->clear();
+        launch_title_count_->clear();
+        return;
+    }
+
+    // What this draft is, and anything that should stop the reader.
+    QStringList info;
+    info << QStringLiteral("<span style='color:%1;'>%2 post on %3 — copy it, post it yourself; nothing is "
+                           "submitted by finterm.</span>")
+                .arg(ui::colors::TEXT_SECONDARY(), t->is_link() ? QStringLiteral("Link") : QStringLiteral("Text"),
+                     esc(so::network_label(t->network)));
+    const auto warn = [](const QString& html) {
+        return QStringLiteral("<span style='color:%1;font-weight:700;'>%2</span>").arg(ui::colors::AMBER(), html);
+    };
+    if (launch_.posted.contains(t->id)) {
+        const auto& r = launch_.posted[t->id];
+        info << warn(QStringLiteral("Posted %1 — %2. One launch post per community.")
+                         .arg(r.at.isValid() ? esc(r.at.toLocalTime().date().toString(Qt::ISODate)) : QString(),
+                              link_html(r.url, QStringLiteral("view"))));
+    }
+    const QString pace = so::pacing_hint(launch_.posted, t->id, QDateTime::currentDateTimeUtc());
+    if (!pace.isEmpty())
+        info << warn(esc(pace));
+    if (t->data_missing)
+        info << warn(QStringLiteral("This week's table could not be filled — refresh once the issue loads."));
+    else if (t->needs_issue && !t->issue.isEmpty())
+        info << QStringLiteral("<span style='color:%1;'>Table from issue %2.</span>")
+                    .arg(ui::colors::TEXT_SECONDARY(), esc(t->issue));
+    launch_info_->setStyleSheet({});
+    launch_info_->setText(info.join(QStringLiteral("<br>")));
+
+    const bool has_comment = !launch_templates_.value(t->id).comment.isEmpty();
+    launch_url_label_->setVisible(t->is_link());
+    launch_url_->setVisible(t->is_link());
+    launch_body_label_->setVisible(!t->is_link());
+    launch_body_->setVisible(!t->is_link());
+    launch_comment_label_->setVisible(has_comment);
+    launch_comment_->setVisible(has_comment);
+    copy_comment_btn_->setVisible(has_comment);
+    copy_body_btn_->setText(t->is_link() ? QStringLiteral("Copy URL") : QStringLiteral("Copy body"));
+
+    open_submit_btn_->setText(QStringLiteral("Open %1 submit page").arg(t->community));
+    open_submit_btn_->setToolTip(t->is_link() ? QStringLiteral("Opens the submit form with the title and URL filled in")
+                                              : QStringLiteral("Copies the body, then opens the submit form with the "
+                                                               "title filled in — paste the body there"));
+    const bool posted = launch_.posted.contains(t->id);
+    mark_posted_btn_->setText(posted ? QStringLiteral("Replace record…") : QStringLiteral("Mark as posted…"));
+    mark_posted_btn_->setEnabled(!mark_busy_);
+    render_launch_counts();
+
+    QString rules = QStringLiteral("<b>%1</b><ul style='margin-left:-24px;'>").arg(esc(t->community));
+    for (const auto& n : t->notes)
+        rules += QStringLiteral("<li>%1</li>").arg(esc(n));
+    rules += QStringLiteral("</ul><b>Before posting anywhere</b><ul style='margin-left:-24px;'>");
+    for (const auto& r : std::as_const(launch_.rules))
+        rules += QStringLiteral("<li>%1</li>").arg(esc(r));
+    rules += QStringLiteral("</ul>");
+    if (!launch_.skip.isEmpty())
+        rules += QStringLiteral("<span style='color:%1;'><b>Skip:</b> %2</span>")
+                     .arg(ui::colors::TEXT_SECONDARY(), esc(launch_.skip.join(QStringLiteral("; "))));
+    launch_rules_->setText(rules);
+}
+
+void SocialScreen::render_launch_counts() {
+    const auto* t = current_launch_target();
+    if (!t)
+        return;
+    const int limit = so::title_limit(t->network);
+    const int len = int(launch_title_->text().trimmed().size());
+    launch_title_count_->setText(QStringLiteral("%1 / %2").arg(len).arg(limit));
+    launch_title_count_->setStyleSheet(QStringLiteral("color:%1;font-weight:700;")
+                                           .arg(len > limit ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
+    open_submit_btn_->setEnabled(len > 0);
+    launch_reset_btn_->setEnabled(!(launch_drafts_.value(t->id) == launch_templates_.value(t->id)));
+}
+
+void SocialScreen::copy_to_clipboard(const QString& text, const QString& what) {
+    if (auto* cb = QGuiApplication::clipboard())
+        cb->setText(text);
+    set_status(QStringLiteral("%1 copied to the clipboard.").arg(esc(what)), false);
+}
+
+void SocialScreen::open_submit_page() {
+    const auto* t = current_launch_target();
+    if (!t)
+        return;
+    const QString title = launch_title_->text().trimmed();
+    const QString link = launch_url_->text().trimmed();
+    if (title.isEmpty())
+        return;
+
+    QStringList why;
+    if (launch_.posted.contains(t->id)) {
+        const auto& r = launch_.posted[t->id];
+        why << QStringLiteral("%1 already has a launch post (%2). The plan is one per community.")
+                   .arg(t->community, r.url);
+    }
+    const QString pace = so::pacing_hint(launch_.posted, t->id, QDateTime::currentDateTimeUtc());
+    if (!pace.isEmpty())
+        why << pace;
+    if (t->data_missing && launch_body_->toPlainText().contains(QLatin1String("[this week's table")))
+        why << QStringLiteral("The body still lacks this week's table.");
+    if (title.size() > so::title_limit(t->network))
+        why << QStringLiteral("The title is longer than %1 allows (%2 characters).")
+                   .arg(so::network_label(t->network))
+                   .arg(so::title_limit(t->network));
+    if (!why.isEmpty()) {
+        QMessageBox box(QMessageBox::Warning, QStringLiteral("Open the submit page?"), why.join(QStringLiteral("\n\n")),
+                        QMessageBox::NoButton, this);
+        auto* go = box.addButton(QStringLiteral("Open anyway"), QMessageBox::AcceptRole);
+        auto* cancel = box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(cancel);
+        box.setEscapeButton(cancel);
+        box.exec();
+        if (box.clickedButton() != go)
+            return;
+    }
+
+    const QString url = so::launch_submit_url(*t, title, link);
+    if (url.isEmpty())
+        return;
+    // A text post's body can't ride in the URL: it goes by clipboard.
+    if (!t->is_link()) {
+        if (auto* cb = QGuiApplication::clipboard())
+            cb->setText(launch_body_->toPlainText());
+    }
+    QDesktopServices::openUrl(QUrl::fromEncoded(url.toLatin1()));
+    set_status(t->is_link() ? QStringLiteral("Opened the %1 submit page. Check it, submit it yourself, then "
+                                             "<b>Mark as posted</b>.")
+                                  .arg(esc(t->community))
+                            : QStringLiteral("Body copied — paste it into the %1 submit page that opened. Submit it "
+                                             "yourself, then <b>Mark as posted</b>.")
+                                  .arg(esc(t->community)),
+               false);
+}
+
+void SocialScreen::open_mark_posted() {
+    const auto* t = current_launch_target();
+    if (!t || mark_busy_)
+        return;
+    const QString id = t->id;
+    const QString community = t->community;
+    const so::LaunchTarget target = *t; // the dialog outlives a reload of launch_
+    const bool replace = launch_.posted.contains(id);
+
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle(QStringLiteral("Mark %1 as posted").arg(community));
+    dlg->setMinimumWidth(480);
+    auto* v = new QVBoxLayout(dlg);
+    v->setContentsMargins(14, 14, 14, 14);
+    v->setSpacing(8);
+    auto* intro = new QLabel(QStringLiteral("Paste the link of the post you made in <b>%1</b>:").arg(esc(community)));
+    intro->setTextFormat(Qt::RichText);
+    v->addWidget(intro);
+    auto* url = new QLineEdit;
+    url->setPlaceholderText(target.network == QLatin1String("hackernews")
+                                ? QStringLiteral("https://news.ycombinator.com/item?id=…")
+                                : QStringLiteral("https://www.reddit.com/r/%1/comments/…").arg(so::reddit_sub(community)));
+    v->addWidget(url);
+    auto* why = new QLabel;
+    why->setWordWrap(true);
+    why->setStyleSheet(QStringLiteral("color:%1;").arg(ui::colors::NEGATIVE()));
+    v->addWidget(why);
+    if (replace) {
+        const auto& r = launch_.posted[id];
+        auto* w = new QLabel(QStringLiteral("%1 already has a launch post recorded (%2). This replaces that record.")
+                                 .arg(community, r.url));
+        w->setWordWrap(true);
+        w->setStyleSheet(QStringLiteral("color:%1;font-weight:700;").arg(ui::colors::AMBER()));
+        v->addWidget(w);
+    }
+    auto* box = new QDialogButtonBox;
+    auto* cancel = box->addButton(QDialogButtonBox::Cancel);
+    auto* ok = box->addButton(replace ? QStringLiteral("Replace record") : QStringLiteral("Record"),
+                              QDialogButtonBox::AcceptRole);
+    ok->setEnabled(false);
+    ok->setAutoDefault(false);
+    cancel->setDefault(true);
+    connect(box, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+    v->addWidget(box);
+    connect(url, &QLineEdit::textChanged, dlg, [url, why, ok, target]() {
+        const QString text = url->text().trimmed();
+        const QString err = text.isEmpty() ? QString() : so::validate_post_url(target, text);
+        why->setText(err);
+        ok->setEnabled(!text.isEmpty() && err.isEmpty());
+    });
+
+    QPointer<SocialScreen> self = this;
+    connect(dlg, &QDialog::accepted, this, [self, url, id, community, replace]() {
+        if (!self)
+            return;
+        const QString link = url->text().trimmed();
+        self->mark_busy_ = true;
+        self->render_busy();
+        self->render_composer();
+        call_backend(self, QStringLiteral("launch_mark"),
+                     {{QStringLiteral("target"), id}, {QStringLiteral("url"), link}, {QStringLiteral("replace"), replace}},
+                     kConnectTimeoutMs, [self, community](const QJsonObject&, const QString& err, Outcome) {
+                         self->mark_busy_ = false;
+                         if (err.isEmpty())
+                             self->set_status(QStringLiteral("Recorded the %1 launch post.").arg(esc(community)), false);
+                         else
+                             self->set_status(QStringLiteral("Not recorded — %1").arg(esc(err)), true);
+                         self->render_busy();
+                         self->load_launch();
+                         self->load_history();
+                     });
+    });
+    dlg->open();
+    url->setFocus();
+}
+
+// ── Connect / disconnect ────────────────────────────────────────────────────
+
+void SocialScreen::confirm_disconnect(const QString& network) {
+    const so::Channel* ch = so::find_channel(channels_, network);
+    const QString label = so::network_label(network);
+    const QString who = ch && !ch->account.isEmpty() ? so::account_label(ch->account)
+                                                     : QStringLiteral("the connected account");
+    const QString what = network == QLatin1String("x")
+                             ? QStringLiteral("The X app's own keys stay; Connect signs an account in again.")
+                         : network == QLatin1String("mastodon")
+                             ? QStringLiteral("finterm also asks the server to revoke its token.")
+                             : QStringLiteral("The app password stays valid at Bluesky until you delete it there.");
+    auto* box = new QMessageBox(QMessageBox::Warning, QStringLiteral("Disconnect %1").arg(label),
+                                QStringLiteral("Disconnect %1 from %2?\n\nThis removes its sign-in from this computer's "
+                                               "keyring; nothing more is posted there, by this screen or the weekly "
+                                               "timer, until it is connected again. %3")
+                                    .arg(who, label, what),
+                                QMessageBox::NoButton, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    auto* go = box->addButton(QStringLiteral("Disconnect"), QMessageBox::DestructiveRole);
+    auto* cancel = box->addButton(QMessageBox::Cancel);
+    box->setDefaultButton(cancel);
+    box->setEscapeButton(cancel);
+    QPointer<SocialScreen> self = this;
+    connect(box, &QMessageBox::buttonClicked, this, [self, go, network, label](QAbstractButton* b) {
+        if (!self || b != go)
+            return;
+        self->set_status(QStringLiteral("Disconnecting %1…").arg(esc(label)), false);
+        call_backend(self, QStringLiteral("disconnect"), {{QStringLiteral("network"), network}}, kConnectTimeoutMs,
+                     [self, label](const QJsonObject& o, const QString& err, Outcome) {
+                         if (!err.isEmpty())
+                             self->set_status(QStringLiteral("%1: not disconnected — %2").arg(esc(label), esc(err)), true);
+                         else
+                             self->set_status(QStringLiteral("%1 disconnected. %2")
+                                                  .arg(esc(label), esc(o.value(QLatin1String("note")).toString())),
+                                              false);
+                         self->load_channels();
+                     });
+    });
+    box->open();
+}
+
+void SocialScreen::open_bsky_connect() {
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle(QStringLiteral("Connect Bluesky"));
+    dlg->setMinimumWidth(460);
+    auto* v = new QVBoxLayout(dlg);
+    v->setContentsMargins(14, 14, 14, 14);
+    v->setSpacing(8);
+    auto* intro = new QLabel(QStringLiteral("finterm posts to Bluesky with an <b>app password</b> — never the "
+                                            "account's own password. Create one at %1 (name it \"finterm\"), then "
+                                            "enter it below. Deleting it there revokes finterm's access.")
+                                 .arg(link_html(QStringLiteral("https://bsky.app/settings/app-passwords"),
+                                                QStringLiteral("bsky.app › Settings › App passwords"))));
+    intro->setTextFormat(Qt::RichText);
+    intro->setWordWrap(true);
+    intro->setOpenExternalLinks(true);
+    v->addWidget(intro);
+    auto* handle = new QLineEdit;
+    handle->setPlaceholderText(QStringLiteral("handle, e.g. name.bsky.social"));
+    v->addWidget(handle);
+    auto* pw = new QLineEdit;
+    pw->setPlaceholderText(QStringLiteral("app password: xxxx-xxxx-xxxx-xxxx"));
+    pw->setEchoMode(QLineEdit::Password);
+    v->addWidget(pw);
+    auto* status = new QLabel;
+    status->setWordWrap(true);
+    status->setTextFormat(Qt::PlainText);
+    v->addWidget(status);
+    auto* box = new QDialogButtonBox;
+    auto* go = box->addButton(QStringLiteral("Connect"), QDialogButtonBox::ActionRole);
+    go->setEnabled(false);
+    box->addButton(QDialogButtonBox::Close);
+    connect(box, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+    v->addWidget(box);
+    auto update = [go, handle, pw]() { go->setEnabled(!handle->text().trimmed().isEmpty() && !pw->text().isEmpty()); };
+    connect(handle, &QLineEdit::textChanged, dlg, update);
+    connect(pw, &QLineEdit::textChanged, dlg, update);
+
+    QPointer<QDialog> dlg_guard = dlg;
+    auto submit = [this, dlg_guard, handle, pw, go, status]() {
+        if (!go->isEnabled())
+            return;
+        go->setEnabled(false);
+        status->setStyleSheet(QStringLiteral("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+        status->setText(QStringLiteral("Checking with Bluesky…"));
+        call_backend(this, QStringLiteral("bsky_connect"),
+                     {{QStringLiteral("handle"), handle->text().trimmed()}, {QStringLiteral("app_password"), pw->text()}},
+                     kConnectTimeoutMs, [this, dlg_guard, go, status](const QJsonObject& o, const QString& err, Outcome) {
+                         if (!err.isEmpty()) {
+                             if (dlg_guard) {
+                                 go->setEnabled(true);
+                                 status->setStyleSheet(QStringLiteral("color:%1;").arg(ui::colors::NEGATIVE()));
+                                 status->setText(err);
+                             } else {
+                                 set_status(QStringLiteral("Bluesky not connected: ") + esc(err), true);
+                             }
+                             return;
+                         }
+                         set_status(QStringLiteral("Bluesky connected as %1.")
+                                        .arg(esc(so::account_label(o.value(QLatin1String("account")).toString()))),
+                                    false);
+                         load_channels();
+                         if (dlg_guard)
+                             dlg_guard->accept();
+                     });
+    };
+    connect(go, &QPushButton::clicked, dlg, submit);
+    connect(pw, &QLineEdit::returnPressed, dlg, submit);
+    dlg->open();
+}
+
+void SocialScreen::open_mastodon_connect() {
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle(QStringLiteral("Connect Mastodon"));
+    dlg->setMinimumWidth(460);
+    auto* v = new QVBoxLayout(dlg);
+    v->setContentsMargins(14, 14, 14, 14);
+    v->setSpacing(8);
+    auto* intro = new QLabel(QStringLiteral("1. Enter your server and open its sign-in page; sign in as the POSTING "
+                                            "account and click <b>Authorize</b>.<br>"
+                                            "2. Paste the code it shows here and press Finish."));
+    intro->setTextFormat(Qt::RichText);
+    intro->setWordWrap(true);
+    v->addWidget(intro);
+    auto* inst_row = new QHBoxLayout;
+    auto* instance = new QLineEdit;
+    instance->setPlaceholderText(QStringLiteral("server, e.g. mastodon.social"));
+    inst_row->addWidget(instance, 1);
+    auto* open_btn = new QPushButton(QStringLiteral("Open sign-in"));
+    open_btn->setEnabled(false);
+    inst_row->addWidget(open_btn);
+    v->addLayout(inst_row);
+    auto* code_row = new QHBoxLayout;
+    auto* code = new QLineEdit;
+    code->setPlaceholderText(QStringLiteral("authorization code"));
+    code_row->addWidget(code, 1);
+    auto* finish = new QPushButton(QStringLiteral("Finish"));
+    finish->setEnabled(false);
+    code_row->addWidget(finish);
+    v->addLayout(code_row);
+    auto* status = new QLabel;
+    status->setWordWrap(true);
+    status->setTextFormat(Qt::RichText);
+    status->setOpenExternalLinks(true);
+    status->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    v->addWidget(status);
+    auto* box = new QDialogButtonBox(QDialogButtonBox::Close);
+    connect(box, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+    v->addWidget(box);
+
+    auto say = [status](const QString& html, bool error) {
+        status->setStyleSheet(
+            QStringLiteral("color:%1;").arg(error ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
+        status->setText(html);
+    };
+    connect(instance, &QLineEdit::textChanged, dlg,
+            [open_btn, instance]() { open_btn->setEnabled(!instance->text().trimmed().isEmpty()); });
+    connect(code, &QLineEdit::textChanged, dlg, [finish, code]() { finish->setEnabled(!code->text().trimmed().isEmpty()); });
+
+    connect(open_btn, &QPushButton::clicked, dlg, [dlg, open_btn, instance, say]() {
+        open_btn->setEnabled(false);
+        say(QStringLiteral("Registering finterm on the server…"), false);
+        call_backend(dlg, QStringLiteral("mastodon_connect_start"), {{QStringLiteral("instance"), instance->text().trimmed()}},
+                     kConnectTimeoutMs, [open_btn, say](const QJsonObject& o, const QString& err, Outcome) {
+                         open_btn->setEnabled(true);
+                         // A new start replaces the pending sign-in: an older code no longer works.
+                         open_btn->setText(QStringLiteral("Start over"));
+                         const QUrl url(o.value(QLatin1String("url")).toString());
+                         if (!err.isEmpty() || url.scheme() != QLatin1String("https")) {
+                             say(esc(err.isEmpty() ? QStringLiteral("The server's answer had no sign-in link") : err), true);
+                             return;
+                         }
+                         QDesktopServices::openUrl(url);
+                         say(QStringLiteral("Opened in your browser — if it did not open, use %1. Use the code from "
+                                            "this page; starting over makes it invalid.")
+                                 .arg(link_html(url.toString(), QStringLiteral("this link"))),
+                             false);
+                     });
+    });
+
+    QPointer<QDialog> dlg_guard = dlg;
+    auto do_finish = [this, dlg_guard, code, finish, open_btn, say]() {
+        const QString c = code->text().trimmed();
+        if (c.isEmpty())
+            return;
+        finish->setEnabled(false);
+        open_btn->setEnabled(false);
+        say(QStringLiteral("Exchanging the code…"), false);
+        call_backend(this, QStringLiteral("mastodon_connect_finish"), {{QStringLiteral("code"), c}}, kConnectTimeoutMs,
+                     [this, dlg_guard, finish, open_btn, say](const QJsonObject& o, const QString& err, Outcome) {
+                         if (!err.isEmpty()) {
+                             if (dlg_guard) {
+                                 open_btn->setEnabled(true);
+                                 finish->setEnabled(true);
+                                 say(esc(err), true);
+                             } else {
+                                 set_status(QStringLiteral("Mastodon sign-in failed: ") + esc(err), true);
+                             }
+                             return;
+                         }
+                         set_status(QStringLiteral("Mastodon connected as %1.")
+                                        .arg(esc(so::account_label(o.value(QLatin1String("account")).toString()))),
+                                    false);
+                         load_channels();
+                         if (dlg_guard)
+                             dlg_guard->accept();
+                     });
+    };
+    connect(finish, &QPushButton::clicked, dlg, do_finish);
+    connect(code, &QLineEdit::returnPressed, dlg, do_finish);
+    dlg->open();
 }
 
 // ── X sign-in ───────────────────────────────────────────────────────────────

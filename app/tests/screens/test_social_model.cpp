@@ -1,5 +1,6 @@
 // test_social_model.cpp — SOCIAL screen: per-network character counting,
-// the pre-flight checklist that gates Publish, and recorded post -> link.
+// the pre-flight checklist that gates Publish, recorded post -> link, the
+// enabled-networks switch and the hand-made launch posts (Reddit / HN).
 
 #include "screens/social/SocialModel.h"
 
@@ -27,10 +28,20 @@ Channel x_channel(bool configured = true) {
     Channel c;
     c.network = QStringLiteral("x");
     c.configured = configured;
-    c.account = QStringLiteral("samloganxp");
+    c.enabled = true;
+    c.account = QStringLiteral("posting_account");
     c.limit = 280;
     c.url_cost = 23;
     return c;
+}
+
+LaunchTarget target(const char* network, const char* community, const char* kind) {
+    LaunchTarget t;
+    t.id = QStringLiteral("t");
+    t.network = network;
+    t.community = community;
+    t.kind = kind;
+    return t;
 }
 
 QJsonObject json(const char* s) { return QJsonDocument::fromJson(QByteArray(s)).object(); }
@@ -166,10 +177,35 @@ class TestSocialModel : public QObject {
         QVERIFY(!preflight(good_brief(), &c, "x", kUrl).all_ok());
     }
 
+    void a_network_not_enabled_never_passes() {
+        auto c = x_channel();
+        c.enabled = false;
+        const auto p = preflight(good_brief(), &c, "x", kUrl);
+        QVERIFY(!p.all_ok());
+        QCOMPARE(p.checks[5].detail, QStringLiteral("not enabled yet — coming soon"));
+    }
+
+    void enabled_comes_from_the_backend_answer() {
+        const auto ch = parse_channels(json("{\"channels\":["
+            "{\"network\":\"x\",\"configured\":true,\"enabled\":true,\"limit\":280,\"url_cost\":23},"
+            "{\"network\":\"bluesky\",\"configured\":true,\"enabled\":false,\"limit\":300},"
+            "{\"network\":\"reddit\",\"manual\":true,\"configured\":true}]}"));
+        QVERIFY(network_enabled(ch, "x"));
+        QVERIFY(!network_enabled(ch, "bluesky"));
+        QVERIFY(!network_enabled(ch, "reddit"));   // absent = off
+        QVERIFY(!network_enabled(ch, "mastodon")); // not listed = off
+        QVERIFY(!network_enabled({}, "x"));        // before the answer: nothing is usable
+        // A configured Bluesky that isn't enabled must not pass pre-flight.
+        Channel b = *find_channel(ch, "bluesky");
+        QVERIFY(!preflight(good_brief(), &b, "bluesky", kUrl).all_ok());
+        QCOMPARE(all_networks().size(), 5);
+        QVERIFY(is_manual_network("hackernews") && !is_manual_network("x"));
+    }
+
     // ── parsing ─────────────────────────────────────────────────────────────
     void parses_channels_with_null_url_cost() {
         const auto ch = parse_channels(json("{\"channels\":["
-            "{\"network\":\"x\",\"configured\":true,\"account\":\"samloganxp\",\"error\":\"\",\"limit\":280,\"url_cost\":23,\"manual\":false},"
+            "{\"network\":\"x\",\"configured\":true,\"account\":\"posting_account\",\"error\":\"\",\"limit\":280,\"url_cost\":23,\"manual\":false},"
             "{\"network\":\"bluesky\",\"configured\":false,\"account\":\"\",\"error\":\"\",\"limit\":300,\"url_cost\":null,\"manual\":false},"
             "{\"network\":\"reddit\",\"configured\":true,\"manual\":true,\"account\":\"\"}]}"));
         QCOMPARE(ch.size(), 3);
@@ -178,7 +214,7 @@ class TestSocialModel : public QObject {
         QVERIFY(ch[2].manual);
         QCOMPARE(find_channel(ch, "bluesky")->limit, 300);
         QVERIFY(!find_channel(ch, "mastodon"));
-        QCOMPARE(account_label("samloganxp"), QStringLiteral("@samloganxp"));
+        QCOMPARE(account_label("posting_account"), QStringLiteral("@posting_account"));
         QCOMPARE(account_label("@a"), QStringLiteral("@a"));
     }
 
@@ -222,6 +258,90 @@ class TestSocialModel : public QObject {
         QCOMPARE(rows[2].network, QStringLiteral("mastodon"));
         QCOMPARE(rows[3].issue, QStringLiteral("2026-W45"));
         QVERIFY(rows[3].link.isEmpty());
+    }
+
+    void launch_rows_come_first_newest_first() {
+        const auto rows = parse_history(json("{\"history\":[{\"issue\":\"2026-W46\",\"posts\":{\"x\":\"42\"}}],"
+            "\"launch\":{"
+            "\"reddit-algotrading\":{\"url\":\"https://www.reddit.com/r/algotrading/comments/a/\",\"at\":\"2026-11-10T15:00:00+00:00\","
+            "\"network\":\"reddit\",\"community\":\"r/algotrading\"},"
+            "\"hn-show\":{\"url\":\"https://news.ycombinator.com/item?id=1\",\"at\":\"2026-11-12T15:00:00+00:00\","
+            "\"network\":\"hackernews\",\"community\":\"Show HN\"}}}"));
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows[0].community, QStringLiteral("Show HN"));
+        QCOMPARE(rows[0].issue, QStringLiteral("launch 2026-11-12"));
+        QCOMPARE(rows[0].link, QStringLiteral("https://news.ycombinator.com/item?id=1"));
+        QCOMPARE(rows[1].community, QStringLiteral("r/algotrading"));
+        QCOMPARE(rows[2].issue, QStringLiteral("2026-W46"));
+        QVERIFY(rows[2].community.isEmpty());
+    }
+
+    // ── launch posts ────────────────────────────────────────────────────────
+    void parses_launch_set() {
+        const auto s = parse_launch(json("{\"targets\":["
+            "{\"id\":\"reddit-sideproject\",\"network\":\"reddit\",\"community\":\"r/SideProject\",\"kind\":\"link\","
+            "\"title\":\"T\",\"url\":\"https://github.com/o/r\",\"first_comment\":\"C\",\"notes\":[\"n1\"]},"
+            "{\"id\":\"hn-show\",\"network\":\"hackernews\",\"community\":\"Show HN\",\"kind\":\"link\",\"title\":\"S\"},"
+            "{\"id\":\"bad\",\"network\":\"x\"}],"
+            "\"rules\":[\"r1\"],\"skip\":[{\"community\":\"r/investing\",\"why\":\"bans it\"},{\"community\":\"r/quant\",\"why\":\"\"}],"
+            "\"posted\":{\"hn-show\":{\"url\":\"https://news.ycombinator.com/item?id=9\",\"at\":\"2026-11-12T15:00:00+00:00\"}}}"));
+        QVERIFY(s.loaded);
+        QCOMPARE(s.targets.size(), 2); // a non-manual network is not a launch target
+        QCOMPARE(s.for_network("reddit").size(), 1);
+        QVERIFY(s.find("reddit-sideproject")->is_link());
+        QCOMPARE(s.find("reddit-sideproject")->notes, QStringList{QStringLiteral("n1")});
+        QCOMPARE(s.skip, (QStringList{QStringLiteral("r/investing — bans it"), QStringLiteral("r/quant")}));
+        QVERIFY(s.posted.contains("hn-show"));
+        QVERIFY(s.posted["hn-show"].at.isValid());
+        QVERIFY(!parse_launch(json("{\"error\":\"x\"}")).loaded);
+    }
+
+    void submit_urls() {
+        const auto text = target("reddit", "r/algotrading", "text");
+        QCOMPARE(launch_submit_url(text, QStringLiteral("A & B? 100%"), {}),
+                 QStringLiteral("https://old.reddit.com/r/algotrading/submit?selftext=true&title=A%20%26%20B%3F%20100%25"));
+        const auto link = target("reddit", "r/SideProject", "link");
+        QCOMPARE(launch_submit_url(link, QStringLiteral("finterm"), QStringLiteral("https://github.com/o/r")),
+                 QStringLiteral("https://www.reddit.com/r/SideProject/submit?url=https%3A%2F%2Fgithub.com%2Fo%2Fr&title=finterm"));
+        const auto hn = target("hackernews", "Show HN", "link");
+        QCOMPARE(launch_submit_url(hn, QStringLiteral("Show HN: X – y"), QStringLiteral("https://github.com/o/r")),
+                 QStringLiteral("https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fgithub.com%2Fo%2Fr&t=Show%20HN%3A%20X%20%E2%80%93%20y"));
+        QVERIFY(launch_submit_url(target("x", "", "text"), "t", {}).isEmpty());
+        QCOMPARE(title_limit("hackernews"), 80);
+        QCOMPARE(title_limit("reddit"), 300);
+    }
+
+    void post_url_must_be_on_the_targets_site_and_community() {
+        const auto algo = target("reddit", "r/algotrading", "text");
+        QVERIFY(validate_post_url(algo, "https://www.reddit.com/r/algotrading/comments/abc/x/").isEmpty());
+        QVERIFY(validate_post_url(algo, " https://old.reddit.com/r/AlgoTrading/comments/abc/ ").isEmpty());
+        QVERIFY(!validate_post_url(algo, "https://www.reddit.com/r/stocks/comments/abc/").isEmpty());
+        QVERIFY(!validate_post_url(algo, "https://reddit.com.evil.example/r/algotrading/comments/a/").isEmpty());
+        QVERIFY(!validate_post_url(algo, "https://evilreddit.com/r/algotrading/comments/a/").isEmpty());
+        QVERIFY(!validate_post_url(algo, "http://www.reddit.com/r/algotrading/comments/abc/").isEmpty());
+        QVERIFY(!validate_post_url(algo, "www.reddit.com/r/algotrading/comments/abc/").isEmpty());
+        QVERIFY(!validate_post_url(algo, "").isEmpty());
+        const auto hn = target("hackernews", "Show HN", "link");
+        QVERIFY(validate_post_url(hn, "https://news.ycombinator.com/item?id=4242").isEmpty());
+        QVERIFY(!validate_post_url(hn, "https://news.ycombinator.com/item?id=abc").isEmpty());
+        QVERIFY(!validate_post_url(hn, "https://news.ycombinator.com/user?id=4242").isEmpty());
+        QVERIFY(!validate_post_url(hn, "https://www.reddit.com/r/algotrading/comments/a/").isEmpty());
+    }
+
+    void pacing_is_one_community_per_day() {
+        const QDateTime now = QDateTime::fromString("2026-11-13T12:00:00Z", Qt::ISODate);
+        QMap<QString, LaunchRecord> posted;
+        QVERIFY(pacing_hint(posted, "a", now).isEmpty());
+        posted.insert("b", {"b", "reddit", "r/ValueInvesting", "u", now.addSecs(-5 * 3600)});
+        const QString h = pacing_hint(posted, "a", now);
+        QVERIFY2(h.startsWith(QStringLiteral("r/ValueInvesting was posted 5 h ago")), qPrintable(h));
+        QVERIFY(pacing_hint(posted, "b", now).isEmpty()); // its own record is not "another"
+        posted["b"].at = now.addSecs(-24 * 3600);         // exactly a day: free again
+        QVERIFY(pacing_hint(posted, "a", now).isEmpty());
+        posted["b"].at = now.addSecs(-(24 * 3600 - 1));
+        QVERIFY(!pacing_hint(posted, "a", now).isEmpty());
+        posted["b"].at = QDateTime();                     // unreadable time: no claim
+        QVERIFY(pacing_hint(posted, "a", now).isEmpty());
     }
 
     void error_hints() {

@@ -1080,3 +1080,16 @@ target_include_directories(test_social_model PRIVATE ../src)
 target_link_libraries(test_social_model PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_social_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME social_model COMMAND test_social_model)
+
+# ── SOCIAL backend (connect / disconnect, enabled switch, launch record) ────
+# Offline: fake HTTP and an in-memory keyring. Pins that secrets never come
+# from argv, that nothing is stored until the network verified it, that X's
+# disconnect keeps the developer app's keys, and that only the enabled
+# networks can be published to or connected.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME social_backend
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_social_backend.py
+    )
+    set_tests_properties(social_backend PROPERTIES TIMEOUT 60)
+endif()
