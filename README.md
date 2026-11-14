@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`05c2ba7cd`](https://github.com/yumima/finterm/commit/05c2ba7cd) news: article detail steps aside while the WHAT'S ON pane is open
 - [`ef7d0a193`](https://github.com/yumima/finterm/commit/ef7d0a193) news: WHAT'S ON reads without a legend — explicit dates, notable IPOs, trimmed top tier, peek pane
 - [`f95c5297e`](https://github.com/yumima/finterm/commit/f95c5297e) markets: PANELS first and default; quote panels keep every row when refreshes are refused
 - [`b79673391`](https://github.com/yumima/finterm/commit/b79673391) alerts: user ALERTS — price crossings, day moves, insider cluster buys

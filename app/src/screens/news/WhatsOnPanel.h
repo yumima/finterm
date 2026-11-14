@@ -87,7 +87,7 @@ class WhatsOnPanel : public QWidget {
     QString policy_range_, effr_, effr_date_, y2_, y10_, yields_date_;
 
     QSet<QString> mine_; ///< watchlist + portfolio symbols, normalised
-    bool top_tier_only_ = true;
+    whats_on::Impact min_impact_ = whats_on::Impact::High; ///< impact selector; HIGH by default
     bool mine_only_ = false;
     QSet<int> collapsed_;    ///< whats_on::Section values folded by the user
     QSet<QString> expanded_; ///< Item::row_key of rows showing their detail
@@ -96,7 +96,6 @@ class WhatsOnPanel : public QWidget {
     QVector<QPair<QPointer<QLabel>, whats_on::Item>> when_labels_; ///< re-labelled each tick
     std::optional<whats_on::Item> next_up_;
 
-    QPushButton* filter_btn_ = nullptr;
     QPushButton* mine_btn_ = nullptr;
     QLabel* rates_label_ = nullptr;
     QLabel* next_label_ = nullptr;

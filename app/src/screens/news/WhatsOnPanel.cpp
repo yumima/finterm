@@ -28,6 +28,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <QButtonGroup>
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -49,6 +50,7 @@ constexpr int kBriefSource = -2;   ///< "whatsOnSource" of the weekly-brief row 
 constexpr int kSectionSource = -3; ///< a section header (click folds it)
 constexpr const char* kCollapsedKey = "news/whats_on_collapsed";
 constexpr const char* kMineOnlyKey = "news/whats_on_mine_only";
+constexpr const char* kMinImpactKey = "news/whats_on_min_impact"; ///< 2 HIGH, 1 MED+, 0 ALL
 
 QString kind_color(const QString& kind) {
     if (kind == QLatin1String("FED"))
@@ -87,6 +89,7 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     for (const auto& v : settings.value(kCollapsedKey).toList())
         collapsed_.insert(v.toInt());
     mine_only_ = settings.value(kMineOnlyKey, false).toBool();
+    min_impact_ = static_cast<wo::Impact>(std::clamp(settings.value(kMinImpactKey, 2).toInt(), 0, 2));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -95,30 +98,54 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     auto* bar = new QHBoxLayout;
     bar->setContentsMargins(0, 0, 0, 0);
     bar->setSpacing(6);
-    filter_btn_ = new QPushButton(QStringLiteral("US TOP-TIER"), this);
-    filter_btn_->setObjectName("whatsOnFilter");
-    filter_btn_->setCheckable(true);
-    filter_btn_->setChecked(true);
-    filter_btn_->setCursor(Qt::PointingHandCursor);
-    filter_btn_->setToolTip(
-        QStringLiteral("On: what moves US markets — HIGH and MED items only (see the impact tags): US data that\n"
-                       "matters, the Fed, $50B+ earnings, IPOs raising $1B+, 10Y+ auctions, holidays.\n"
-                       "Routine items (bill and short-note auctions, month end, opex, small IPOs) wait in the\n"
-                       "full view; your own names always show.\n"
-                       "Off: the full view — every country and impact level in the calendar."));
-    connect(filter_btn_, &QPushButton::toggled, this, [this](bool on) {
-        top_tier_only_ = on;
-        fetch_fred(false); // a wider list can need more series
-        render();
-    });
-    bar->addWidget(filter_btn_);
-    mine_btn_ = new QPushButton(QStringLiteral("◆ YOUR NAMES"), this);
+    // Impact selector: what a row needs to be listed. HIGH keeps the drawer
+    // to the handful of events that move the whole market.
+    struct Tier {
+        const char* label;
+        wo::Impact min;
+        const char* tip;
+    };
+    static const Tier kTiers[] = {
+        {"HIGH", wo::Impact::High,
+         "Only HIGH-impact events: FOMC, CPI, payrolls, unemployment, GDP, PCE,\n"
+         "$500B+ earnings, IPOs raising $10B+."},
+        {"MED+", wo::Impact::Med,
+         "HIGH and MED: also other US data that matters, $50B+ earnings, IPOs raising $1B+,\n"
+         "10Y+ auctions, market holidays, and MED events on your stocks."},
+        {"ALL", wo::Impact::Low,
+         "Everything in the sources: every country's releases, bill auctions, month end,\n"
+         "options expiry, small IPOs."},
+    };
+    auto* tiers = new QButtonGroup(this);
+    tiers->setExclusive(true);
+    for (const auto& t : kTiers) {
+        auto* b = new QPushButton(QString::fromLatin1(t.label), this);
+        b->setObjectName("whatsOnFilter");
+        b->setCheckable(true);
+        b->setChecked(t.min == min_impact_);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(QString::fromUtf8(t.tip) + QStringLiteral("\n\n") + wo::impact_rules());
+        const wo::Impact min = t.min;
+        connect(b, &QPushButton::clicked, this, [this, min]() {
+            if (min_impact_ == min)
+                return;
+            min_impact_ = min;
+            QSettings().setValue(kMinImpactKey, static_cast<int>(min));
+            fetch_fred(false); // ALL lists more releases, which can need more series
+            render();
+        });
+        tiers->addButton(b);
+        bar->addWidget(b);
+    }
+    bar->addSpacing(6);
+    mine_btn_ = new QPushButton(QStringLiteral("◆ MY STOCKS"), this);
     mine_btn_->setObjectName("whatsOnFilter");
     mine_btn_->setCheckable(true);
     mine_btn_->setChecked(mine_only_);
     mine_btn_->setCursor(Qt::PointingHandCursor);
-    mine_btn_->setToolTip(QStringLiteral("Only events on symbols in your watchlists and portfolios: earnings, "
-                                         "ex-dividend dates, insider cluster buys.\n◆ marks them in the full list."));
+    mine_btn_->setToolTip(QStringLiteral("Only events on the symbols in your watchlists and portfolios: earnings, "
+                                         "ex-dividend dates, insider cluster buys.\nThe impact selector still "
+                                         "applies — pick ALL to see every one.\n◆ marks them in the full list."));
     connect(mine_btn_, &QPushButton::toggled, this, [this](bool on) {
         mine_only_ = on;
         QSettings().setValue(kMineOnlyKey, on);
@@ -577,7 +604,7 @@ void WhatsOnPanel::fetch_auctions(bool force) {
 void WhatsOnPanel::fetch_fred(bool force) {
     // Only the series behind releases already out this week (a handful).
     const QDateTime now = QDateTime::currentDateTime();
-    const QStringList need = wo::fred_series_needed(macro_, now, wo::week_start(now.date()), top_tier_only_);
+    const QStringList need = wo::fred_series_needed(macro_, now, wo::week_start(now.date()), min_impact_ > wo::Impact::Low);
     QStringList fetch;
     for (const QString& id : need) {
         if (!force) {
@@ -691,7 +718,7 @@ QVector<wo::Item> WhatsOnPanel::collect_items(const QDateTime& now) const {
                                               e.title.contains(QLatin1String("Auction"));
                                    }),
                     macro.end());
-    QVector<wo::Item> items = wo::items_from_macro(macro, now, top_tier_only_, from, &fred_);
+    QVector<wo::Item> items = wo::items_from_macro(macro, now, min_impact_ > wo::Impact::Low, from, &fred_);
     items += wo::items_from_fomc(fomc_, today, items);
     items += wo::items_from_ipo_deals(ipo_deals_, today);
     items += wo::items_from_earnings(events_.value("earnings").toArray(), from, mine_);
@@ -818,7 +845,7 @@ QWidget* WhatsOnPanel::make_row(const wo::Row& r) {
         row->setToolTip(item.source == wo::Item::Source::Ipo
                             ? QStringLiteral("Open in IPO Watch\n\n%1\n\nIPOs raising $1B+ are tagged MED and $10B+ "
                                              "HIGH (shares offered x top of the price range); smaller deals show only "
-                                             "with US TOP-TIER off.")
+                                             "under ALL.")
                                   .arg(item.detail)
                         : !item.symbol.isEmpty()            ? QStringLiteral("Open %1 in Equity Research\n\n%2")
                                                                   .arg(item.symbol, item.detail)
@@ -947,7 +974,7 @@ void WhatsOnPanel::tick() {
             render();
             return;
         }
-        // YOUR NAMES: the line follows the list under it — the next event on
+        // MY STOCKS: the line follows the list under it — the next event on
         // your names, whatever its impact.
         next_label_->setText(
             QStringLiteral("<span style=\"color:%1; font-weight:700;\">%2</span>&nbsp; %3")
@@ -972,12 +999,21 @@ void WhatsOnPanel::render() {
     const QDate today = now.toLocalTime().date();
     rendered_day_ = today;
     const QVector<wo::Item> items = collect_items(now);
-    next_up_ = wo::next_up(items, now, mine_only_);
+    // MY STOCKS: the line follows the list under it, so it honours the impact selector too.
+    if (mine_only_) {
+        QVector<wo::Item> listed;
+        for (const auto& i : items)
+            if (i.impact >= min_impact_)
+                listed += i;
+        next_up_ = wo::next_up(listed, now, true);
+    } else {
+        next_up_ = wo::next_up(items, now, false);
+    }
     next_label_->setVisible(next_up_.has_value());
-    next_label_->setToolTip(mine_only_ ? QStringLiteral("The next event on your watchlist and portfolio names")
+    next_label_->setToolTip(mine_only_ ? QStringLiteral("The next event on the stocks in your portfolios and watchlists")
                                        : QStringLiteral("The next HIGH-impact event\n\n") + wo::impact_rules());
     QMap<wo::Section, int> hidden;
-    const auto sections = wo::sectionize(items, today, wo::Filter{mine_only_, top_tier_only_}, &hidden);
+    const auto sections = wo::sectionize(items, today, wo::Filter{mine_only_, min_impact_}, &hidden);
 
     auto section = [this](wo::Section s, int rows) {
         const bool folded = collapsed_.contains(static_cast<int>(s));
@@ -997,7 +1033,7 @@ void WhatsOnPanel::render() {
         body_->addWidget(l);
     };
     if (mine_only_ && mine_.isEmpty())
-        none(QStringLiteral("No symbols in your watchlists or portfolios yet."));
+        none(QStringLiteral("No stocks in your portfolios or watchlists yet."));
     for (auto s : {wo::Section::Earlier, wo::Section::Today, wo::Section::ThisWeek, wo::Section::ThisMonth,
                    wo::Section::Later}) {
         const auto it = sections.constFind(s);
@@ -1008,8 +1044,9 @@ void WhatsOnPanel::render() {
             continue;
         if (n == 0) {
             // THIS WEEK always holds the brief row, so say what is empty.
-            none(mine_only_                                                     ? QStringLiteral("Nothing on your names")
-                 : hidden.value(s) > 0                                          ? QStringLiteral("Nothing high-impact")
+            none(hidden.value(s) > 0 ? (min_impact_ == wo::Impact::High ? QStringLiteral("Nothing HIGH-impact")
+                                                                         : QStringLiteral("Nothing MED or HIGH"))
+                 : mine_only_                                                   ? QStringLiteral("Nothing on your stocks")
                  : s == wo::Section::ThisMonth || s == wo::Section::Later ? QStringLiteral("Nothing scheduled in the sources yet")
                  : s == wo::Section::ThisWeek                                   ? QStringLiteral("No releases scheduled")
                                                                                 : QStringLiteral("Nothing scheduled"));
@@ -1018,11 +1055,14 @@ void WhatsOnPanel::render() {
                 body_->addWidget(make_row(row));
         }
         if (const int h = hidden.value(s); h > 0) {
-            auto* l = new QLabel(QStringLiteral("+%1 routine in the full view").arg(h));
+            auto* l = new QLabel(QStringLiteral("+%1 more under %2")
+                                     .arg(h)
+                                     .arg(min_impact_ == wo::Impact::High ? QStringLiteral("MED+ / ALL")
+                                                                          : QStringLiteral("ALL")));
             l->setObjectName("whatsOnWhen");
             l->setWordWrap(true);
-            l->setToolTip(QStringLiteral("Bill and short-note auctions, month end, opex, small IPOs and other LOW "
-                                         "items — switch US TOP-TIER off to list them.\n\n") +
+            l->setToolTip(QStringLiteral("Events below the impact you picked. Pick a lower tier above to list them."
+                                         "\n\n") +
                           wo::impact_rules());
             body_->addWidget(l);
         }

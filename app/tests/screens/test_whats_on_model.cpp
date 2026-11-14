@@ -496,16 +496,29 @@ class TestWhatsOnModel : public QObject {
             mk("CPI m/m", QDate(2026, 11, 18), Impact::High),
         };
         QMap<Section, int> hidden;
-        auto s = sectionize(items, today, Filter{false, true}, &hidden);
-        QStringList kept;
-        for (const auto& r : s.value(Section::ThisMonth))
-            kept << r.head().title;
-        // Bills, month end and the small IPO go; yours stays at any impact.
-        QCOMPARE(kept, (QStringList{"10Y note auction", "CPI m/m", "KO goes ex-dividend"}));
-        QCOMPARE(hidden.value(Section::ThisMonth), 4);
-        // Full view: everything, the bills sharing one row; nothing hidden.
+        auto titles = [](const QVector<Row>& rows) {
+            QStringList t;
+            for (const auto& r : rows)
+                t << r.head().title;
+            return t;
+        };
+        // HIGH (the default): only the HIGH row; everything else is counted.
+        auto s = sectionize(items, today, Filter{false, Impact::High}, &hidden);
+        QCOMPARE(titles(s.value(Section::ThisMonth)), (QStringList{"CPI m/m"}));
+        QCOMPARE(hidden.value(Section::ThisMonth), 6);
+        // MED+: bills, month end, the small IPO and LOW items on your names go.
         hidden.clear();
-        s = sectionize(items, today, Filter{false, false}, &hidden);
+        s = sectionize(items, today, Filter{false, Impact::Med}, &hidden);
+        QCOMPARE(titles(s.value(Section::ThisMonth)), (QStringList{"10Y note auction", "CPI m/m"}));
+        QCOMPARE(hidden.value(Section::ThisMonth), 5);
+        // MY STOCKS at MED+: the selector applies to your names too.
+        hidden.clear();
+        s = sectionize(items, today, Filter{true, Impact::Med}, &hidden);
+        QVERIFY(s.value(Section::ThisMonth).isEmpty());
+        QCOMPARE(hidden.value(Section::ThisMonth), 1);
+        // ALL: everything, the bills sharing one row; nothing hidden.
+        hidden.clear();
+        s = sectionize(items, today, Filter{false, Impact::Low}, &hidden);
         QCOMPARE(s.value(Section::ThisMonth).size(), 6);
         QVERIFY(hidden.isEmpty());
     }

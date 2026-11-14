@@ -102,9 +102,9 @@ inline QString impact_rules() {
         "        earnings of companies worth $500B+; IPOs raising $10B+\n"
         "MED — PPI, retail sales, jobless claims, ISM, JOLTS, hourly earnings, Fed Chair remarks,\n"
         "        FOMC minutes, other releases the calendar rates high; earnings of $50B+ companies\n"
-        "        and of your names; IPOs raising $1B+; 10Y+ note/bond auctions; market holidays,\n"
-        "        early closes, quad witching, quarter end; insider cluster buys in your names\n"
-        "LOW — everything else (no tag): shown only with US TOP-TIER off, unless it is yours\n"
+        "        and of your stocks; IPOs raising $1B+; 10Y+ note/bond auctions; market holidays,\n"
+        "        early closes, quad witching, quarter end; insider cluster buys in your stocks\n"
+        "LOW — everything else (no tag): shown only under ALL\n"
         "IPO size = shares offered x top of the price range (Nasdaq calendar), before the\n"
         "        underwriters' over-allotment option");
 }
@@ -862,7 +862,7 @@ inline QString next_text(const Item& it, const QDateTime& now) {
 }
 
 /// The next event worth a line of its own: market-wide, the first HIGH item
-/// still ahead; in YOUR NAMES mode (`mine_only`), the first event on the
+/// still ahead; in MY STOCKS mode (`mine_only`), the first event on the
 /// user's names at any impact — the line follows the list it sits above.
 /// Ties (one session, several reports) go to the larger company / deal.
 inline std::optional<Item> next_up(const QVector<Item>& items, const QDateTime& now, bool mine_only = false) {
@@ -942,9 +942,8 @@ struct Row {
 };
 
 struct Filter {
-    bool mine_only = false; ///< YOUR NAMES
-    bool top_tier = false;  ///< US TOP-TIER: LOW items (bills, short notes, month end, opex, small
-                            ///< IPOs) only in the full view — unless they are on your names
+    bool mine_only = false;           ///< MY STOCKS: only events on the user's symbols
+    Impact min_impact = Impact::Low;  ///< the impact selector: HIGH / MED+ / ALL (Low)
 };
 
 /// Earnings in a row: your names first, then by impact, then by market cap
@@ -971,7 +970,7 @@ inline int earnings_shown(const Row& r, int max_names = 3) {
 /// then by instant (earnings by session). Grouped items join the row of the
 /// first item of their group that day; inside an earnings row see
 /// earnings_before. `hidden` (optional) counts, per section, the items the
-/// US TOP-TIER filter left for the full view.
+/// impact selector left out (shown as "+N more").
 inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& today, const Filter& f = {},
                                               QMap<Section, int>* hidden = nullptr) {
     auto plain_untimed = [](const Item& i) { return !i.timed && i.session.isEmpty() && i.group.isEmpty(); };
@@ -992,7 +991,10 @@ inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& 
             continue;
         if (s == Section::Earlier && !(it.released || it.mine || it.impact >= Impact::Med))
             continue;
-        if (f.top_tier && it.impact == Impact::Low && !it.mine) {
+        // The selector applies to every row, your names included: a focused
+        // view that quietly kept every MED/LOW event on a long watchlist
+        // would not be focused.
+        if (it.impact < f.min_impact) {
             if (hidden)
                 ++(*hidden)[s];
             continue;
