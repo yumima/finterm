@@ -185,9 +185,14 @@ inline QString format_value(Transform t, double v) {
 inline double value_at(const QVector<Obs>& obs, int i, Transform t) {
     if (i < 0 || i >= obs.size())
         return NAN;
+    // m/m and change transforms (monthly series only) need the PREVIOUS month:
+    // a skipped observation (FRED's "." — e.g. CPI Oct 2025, never collected)
+    // would otherwise turn a two-month change into a "m/m".
+    const bool prev_is_last_month = i >= 1 && obs[i - 1].date == obs[i].date.addMonths(-1);
     switch (t) {
     case Transform::PctMoM:
-        return i >= 1 && obs[i - 1].value != 0.0 ? (obs[i].value / obs[i - 1].value - 1.0) * 100.0 : NAN;
+        return prev_is_last_month && obs[i - 1].value != 0.0 ? (obs[i].value / obs[i - 1].value - 1.0) * 100.0
+                                                             : NAN;
     case Transform::PctYoY: {
         // 12 observations back must be the same month a year earlier — a gap
         // in the series would otherwise compare against the wrong month.
@@ -196,7 +201,7 @@ inline double value_at(const QVector<Obs>& obs, int i, Transform t) {
         return (obs[i].value / obs[i - 12].value - 1.0) * 100.0;
     }
     case Transform::DiffK:
-        return i >= 1 ? obs[i].value - obs[i - 1].value : NAN;
+        return prev_is_last_month ? obs[i].value - obs[i - 1].value : NAN;
     case Transform::LevelPct:
     case Transform::LevelK:
     case Transform::LevelMFromK:

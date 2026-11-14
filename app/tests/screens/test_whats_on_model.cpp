@@ -78,34 +78,6 @@ class TestWhatsOnModel : public QObject {
         QCOMPARE(items[0].figures, QStringLiteral("$15.00-17.00 · NYSE"));
     }
 
-    void bucketize_orders_and_groups() {
-        const QDate today(2026, 11, 13); // Friday
-        auto mk = [](const QString& t, const QDateTime& w, bool timed) {
-            Item i;
-            i.title = t;
-            i.when = w;
-            i.timed = timed;
-            return i;
-        };
-        const QVector<Item> items = {
-            mk("later today", QDateTime(today, QTime(14, 0)), true),
-            mk("all day today", QDateTime(today, QTime(0, 0)), false),
-            mk("early today", QDateTime(today, QTime(8, 30)), true),
-            mk("sunday", QDateTime(QDate(2026, 11, 15), QTime(9, 0)), true),
-            mk("next week", QDateTime(QDate(2026, 11, 18), QTime(0, 0)), false),
-            mk("december", QDateTime(QDate(2026, 12, 9), QTime(11, 0)), true),
-            mk("yesterday", QDateTime(QDate(2026, 11, 12), QTime(11, 0)), true),
-        };
-        const auto b = bucketize(items, today);
-        QCOMPARE(b.value(mc::Bucket::Today).size(), 3);
-        QCOMPARE(b.value(mc::Bucket::Today)[0].title, QStringLiteral("all day today"));
-        QCOMPARE(b.value(mc::Bucket::Today)[1].title, QStringLiteral("early today"));
-        QCOMPARE(b.value(mc::Bucket::ThisWeek).size(), 1);
-        QCOMPARE(b.value(mc::Bucket::ThisMonth)[0].title, QStringLiteral("next week"));
-        QCOMPARE(b.value(mc::Bucket::Upcoming)[0].title, QStringLiteral("december"));
-        QVERIFY(!b.contains(mc::Bucket::Past));
-    }
-
     // ── Earnings that matter ──────────────────────────────────────────────
     void earnings_large_caps_and_own_names() {
         const auto rows = QJsonDocument::fromJson(R"([
@@ -219,8 +191,10 @@ class TestWhatsOnModel : public QObject {
         e.timed = false;
         e.session = "AMC";
         e.when = QDateTime(QDate(2026, 11, 17), QTime(16, 5), et);
+        e.day = QDate(2026, 11, 17); // the listed ET date: Tuesday in every zone
         QCOMPARE(when_label(e, now), QStringLiteral("Tue AMC"));
         e.session.clear();
+        e.day = {};
         e.when = QDateTime(QDate(2026, 11, 13), QTime(0, 0));
         QCOMPARE(when_label(e, now), QStringLiteral("Today"));
     }

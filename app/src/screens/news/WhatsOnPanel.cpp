@@ -536,12 +536,13 @@ void WhatsOnPanel::fetch_auctions(bool force) {
         const char* key;
         QString url;
         QJsonArray WhatsOnPanel::*slot;
+        QString error_source; ///< one per endpoint: one answering must not clear the other's refusal
     };
     const Src srcs[] = {
         {kTdUpKey, QStringLiteral("https://www.treasurydirect.gov/TA_WS/securities/upcoming?format=json"),
-         &WhatsOnPanel::td_upcoming_},
+         &WhatsOnPanel::td_upcoming_, QStringLiteral("Auctions (upcoming)")},
         {kTdDoneKey, QStringLiteral("https://www.treasurydirect.gov/TA_WS/securities/auctioned?format=json&days=10"),
-         &WhatsOnPanel::td_auctioned_},
+         &WhatsOnPanel::td_auctioned_, QStringLiteral("Auctions (results)")},
     };
     for (const auto& s : srcs) {
         if (!force) {
@@ -553,17 +554,18 @@ void WhatsOnPanel::fetch_auctions(bool force) {
         }
         const QString key = QString::fromLatin1(s.key);
         auto slot = s.slot;
-        HttpClient::instance().get(s.url, [self, key, slot](Result<QJsonDocument> res) {
+        const QString err = s.error_source;
+        HttpClient::instance().get(s.url, [self, key, slot, err](Result<QJsonDocument> res) {
             if (!self)
                 return;
             if (!res.is_ok() || !res.value().isArray()) {
                 // Keep the last copy (if any) on screen; the refusal is stated.
-                self->set_error(QStringLiteral("Auctions"), QStringLiteral("TreasuryDirect unavailable"));
+                self->set_error(err, QStringLiteral("TreasuryDirect unavailable"));
                 return;
             }
             put_doc(key, res.value(), kTdSec);
             self->*slot = res.value().array();
-            self->clear_error(QStringLiteral("Auctions"));
+            self->clear_error(err);
             self->apply_auctions();
         });
     }
@@ -676,13 +678,18 @@ void WhatsOnPanel::render_rates() {
 QVector<wo::Item> WhatsOnPanel::collect_items(const QDateTime& now) const {
     const QDate today = now.toLocalTime().date();
     const QDate from = wo::week_start(today);
-    QVector<wo::Item> items = wo::items_from_macro(macro_, now, top_tier_only_, from, &fred_);
-    // TreasuryDirect is the authority on auctions; the calendar's own
-    // "10-y Bond Auction" rows would repeat them.
+    // TreasuryDirect is the authority on US auctions; the calendar's own US
+    // "10-y Bond Auction" rows would repeat them. Other countries' auctions
+    // (Bund, JGB — shown with the filter off) have no other source and stay.
+    QVector<mc::MacroEvent> macro = macro_;
     if (!auctions_.isEmpty())
-        items.erase(std::remove_if(items.begin(), items.end(),
-                                   [](const wo::Item& i) { return i.title.contains(QLatin1String("Auction")); }),
-                    items.end());
+        macro.erase(std::remove_if(macro.begin(), macro.end(),
+                                   [](const mc::MacroEvent& e) {
+                                       return (e.country == QLatin1String("USD") || e.country == QLatin1String("US")) &&
+                                              e.title.contains(QLatin1String("Auction"));
+                                   }),
+                    macro.end());
+    QVector<wo::Item> items = wo::items_from_macro(macro, now, top_tier_only_, from, &fred_);
     items += wo::items_from_fomc(fomc_, today, items);
     items += wo::items_from_ipo_deals(ipo_deals_, today);
     items += wo::items_from_earnings(events_.value("earnings").toArray(), from, mine_);
@@ -933,7 +940,11 @@ void WhatsOnPanel::tick() {
             label->setText(wo::when_label(item, now));
     if (next_high_) {
         // The event passed: find the next one.
-        const bool passed = next_high_->timed ? next_high_->when <= now : next_high_->local_date() < now.date();
+        // Same test as wo::next_high, negated: an untimed item today is past
+        // once its nominal hour is (an AMC report after 16:05 ET).
+        const QDate d = next_high_->local_date();
+        const bool passed = next_high_->timed ? next_high_->when <= now
+                                              : d < now.date() || (d == now.date() && next_high_->when <= now);
         if (passed) {
             render();
             return;

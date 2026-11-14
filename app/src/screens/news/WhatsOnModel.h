@@ -77,8 +77,10 @@ struct Item {
     QString group;       ///< non-empty: items with the same group on the same day share one row
     bool released = false; ///< the number is out (macro actual, auction result, reported EPS)
     double surprise_pct = NAN; ///< EARNINGS: reported EPS vs consensus, % (NaN until reported)
+    QDate day; ///< set for date-anchored items (earnings): the listed ET date, NOT
+               ///< shifted by the viewer's zone ("Thu AMC" stays Thursday in Tokyo)
 
-    QDate local_date() const { return when.toLocalTime().date(); }
+    QDate local_date() const { return day.isValid() ? day : when.toLocalTime().date(); }
     /// Stable identity across re-renders (an expanded row stays expanded).
     QString row_key() const {
         return QString::number(static_cast<int>(source)) + QLatin1Char('|') + local_date().toString(Qt::ISODate) +
@@ -399,6 +401,7 @@ inline QVector<Item> items_from_earnings(const QJsonArray& rows, const QDate& fr
                               : it.session == QLatin1String("AMC") ? QTime(16, 5)
                                                                    : QTime(12, 0);
         it.when = QDateTime(d, nominal, et_zone());
+        it.day = d;
         it.timed = false;
         it.mine = is_mine;
         it.impact = earnings_impact(cap, is_mine);
@@ -557,8 +560,10 @@ inline QVector<Item> items_from_market_dates(const QVector<mkt::MarketDate>& dat
 inline QString when_label(const Item& it, const QDateTime& now) {
     if (!it.when.isValid())
         return QStringLiteral("—");
-    const QDate today = now.toLocalTime().date();
-    const QDate d = it.local_date();
+    // A timed item's clock is ET, so its day is the ET day too — "Tue 14:00
+    // ET", not the viewer's "Wed" beside an ET clock.
+    const QDate today = it.timed ? now.toTimeZone(et_zone()).date() : now.toLocalTime().date();
+    const QDate d = it.timed ? it.when.toTimeZone(et_zone()).date() : it.local_date();
     const QLocale en(QLocale::English);
     QString day;
     if (d == today)
@@ -581,7 +586,7 @@ inline QString when_label(const Item& it, const QDateTime& now) {
     };
     if (secs >= 0 && secs < 24 * 3600)
         return QStringLiteral("in %1 · %2").arg(span(secs), clock);
-    if (secs < 0 && d == today && -secs < 3 * 3600) // just out; older reads better as a clock
+    if (secs < 0 && -secs < 3 * 3600) // just out; older reads better as a clock
         return QStringLiteral("%1 ago").arg(span(-secs));
     return day + QLatin1Char(' ') + clock;
 }
@@ -706,25 +711,6 @@ inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& 
                 std::stable_sort(r.items.begin(), r.items.end(),
                                  [](const Item& a, const Item& b) { return a.impact > b.impact; });
         }
-    }
-    return out;
-}
-
-/// Items grouped by horizon, each group chronological; past items dropped.
-inline QMap<mc::Bucket, QVector<Item>> bucketize(QVector<Item> items, const QDate& today) {
-    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) {
-        if (a.local_date() != b.local_date())
-            return a.local_date() < b.local_date();
-        // Untimed (all-day) items first within a day, then by clock.
-        if (a.timed != b.timed)
-            return !a.timed;
-        return a.when < b.when;
-    });
-    QMap<mc::Bucket, QVector<Item>> out;
-    for (auto& it : items) {
-        const auto b = mc::bucket_for(it.local_date(), today);
-        if (b != mc::Bucket::Past)
-            out[b].append(std::move(it));
     }
     return out;
 }

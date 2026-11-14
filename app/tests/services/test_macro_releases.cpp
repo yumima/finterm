@@ -115,6 +115,11 @@ class TestMacroReleases : public QObject {
         auto gappy = obs;
         gappy.remove(3);
         QVERIFY(std::isnan(value_at(gappy, gappy.size() - 1, Transform::PctYoY)));
+        // m/m and payroll change across a skipped month (FRED "." — CPI Oct
+        // 2025) would be a two-month change: no number.
+        const QVector<Obs> skip = {{QDate(2025, 9, 1), 324.0}, {QDate(2025, 11, 1), 325.0}};
+        QVERIFY(std::isnan(value_at(skip, 1, Transform::PctMoM)));
+        QVERIFY(std::isnan(value_at(skip, 1, Transform::DiffK)));
     }
 
     void gdp_quarterly() {

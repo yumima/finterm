@@ -99,6 +99,8 @@ def parse_earnings_day(doc, day):
         return None
     out = []
     for r in data.get("rows") or []:
+        if not isinstance(r, dict):
+            continue
         sym = norm_symbol(r.get("symbol"))
         if not sym:
             continue
@@ -135,6 +137,8 @@ def parse_dividends_day(doc, day):
         return None
     out = []
     for r in cal.get("rows") or []:
+        if not isinstance(r, dict):
+            continue
         sym = norm_symbol(r.get("symbol"))
         ex = _mdy(r.get("dividend_Ex_Date"))
         if not sym or not ex:
@@ -169,8 +173,15 @@ def weekdays(start, end):
     return out
 
 
-def day_ttl(day, today):
-    return 7 * 86400 if day < today - timedelta(days=1) else 4 * 3600
+def day_ttl(day, today, written_on=None):
+    """A closed day keeps for a week — but only a copy WRITTEN once the day had
+    closed (`written_on` >= day + 2, the same boundary). A copy fetched while
+    the day was still ahead holds no reported EPS and stays on the short TTL,
+    so EARLIER THIS WEEK gets its numbers."""
+    closed = day < today - timedelta(days=1)
+    if closed and (written_on is None or written_on >= day + timedelta(days=2)):
+        return 7 * 86400
+    return 4 * 3600
 
 
 # ── fetch ────────────────────────────────────────────────────────────────────
@@ -181,7 +192,10 @@ def _fetch_days(cache, kind, url, parse, days, today):
     import ipo_calendar as ic
     got, todo = {}, []
     for d in days:
-        hit = cache.get(f"{kind}:{d.isoformat()}", day_ttl(d, today))
+        key = f"{kind}:{d.isoformat()}"
+        at = cache.written_at(key)
+        written_on = date.fromtimestamp(at) if at is not None else None
+        hit = cache.get(key, day_ttl(d, today, written_on))
         if hit is not None:
             got[d] = hit
         else:
@@ -266,26 +280,34 @@ def is_fred_csv(text, series_id):
     return first.lower().startswith("observation_date,") and first.split(",", 1)[1].strip() == series_id
 
 
+def _fred_one(requests, sid, start):
+    """(sid, csv text) or (sid, None) — one refused series must not lose the others."""
+    if not _FRED_ID.match(sid):
+        return sid, None
+    try:
+        r = requests.get(FRED_CSV, params={"id": sid, "cosd": start.isoformat()}, timeout=15)
+        r.raise_for_status()
+        return sid, (r.text if is_fred_csv(r.text, sid) else None)
+    except Exception as e:
+        print(f"whats_on_calendar: FRED {sid} failed ({type(e).__name__})", file=sys.stderr)
+        return sid, None
+
+
 def fred(ids, start):
     try:
         import requests
     except ImportError:  # pragma: no cover
         return {"series": {}, "failed": list(ids)}
+    # Concurrent: the app gives the whole call 60 s, so a few slow series in a
+    # row must not run the deadline out and lose the ones that answered.
     out, failed = {}, []
-    for sid in ids:
-        if not _FRED_ID.match(sid):
-            failed.append(sid)
-            continue
-        try:
-            r = requests.get(FRED_CSV, params={"id": sid, "cosd": start.isoformat()}, timeout=20)
-            r.raise_for_status()
-            if is_fred_csv(r.text, sid):
-                out[sid] = r.text
-            else:
-                failed.append(sid)
-        except Exception as e:  # one refused series must not lose the others
-            print(f"whats_on_calendar: FRED {sid} failed ({type(e).__name__})", file=sys.stderr)
-            failed.append(sid)
+    if ids:
+        with ThreadPoolExecutor(max_workers=min(6, len(ids))) as ex:
+            for sid, text in ex.map(lambda s: _fred_one(requests, s, start), ids):
+                if text is None:
+                    failed.append(sid)
+                else:
+                    out[sid] = text
     return {"series": out, "failed": failed}
 
 

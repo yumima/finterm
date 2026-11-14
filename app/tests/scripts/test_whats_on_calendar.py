@@ -91,6 +91,10 @@ def test_window_and_ttl():
     assert w.day_ttl(date(2026, 11, 10), today) == 7 * 86400
     assert w.day_ttl(date(2026, 11, 12), today) == 4 * 3600  # yesterday: late reports still landing
     assert w.day_ttl(date(2026, 11, 20), today) == 4 * 3600
+    # A copy fetched before the day closed has no reported EPS: short TTL.
+    assert w.day_ttl(date(2026, 11, 10), today, date(2026, 11, 9)) == 4 * 3600
+    assert w.day_ttl(date(2026, 11, 10), today, date(2026, 11, 11)) == 4 * 3600
+    assert w.day_ttl(date(2026, 11, 10), today, date(2026, 11, 12)) == 7 * 86400
 
 
 def test_fred_csv_recognised_by_header_only():
