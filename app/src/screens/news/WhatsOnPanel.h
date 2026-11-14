@@ -1,8 +1,9 @@
 #pragma once
 // WhatsOnPanel.h — the News screen's left drawer: what matters today, this
-// week, this month and later (macro releases, Fed, IPO pricings, rates, top
-// headlines). Replaced the INTELLIGENCE drawer's top-stories/categories view.
-// Pure logic lives in WhatsOnModel.h.
+// week, this month and later (macro releases with their printed numbers, Fed,
+// earnings, Treasury auctions, market holidays and expirations, IPO
+// pricings, rates, top headlines). Replaced the INTELLIGENCE drawer's
+// top-stories/categories view. Pure logic lives in WhatsOnModel.h.
 
 #include "screens/news/WhatsOnModel.h"
 #include "services/news/NewsService.h"
@@ -11,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
+#include <QSet>
 #include <QVector>
 #include <QWidget>
 
@@ -44,20 +46,34 @@ class WhatsOnPanel : public QWidget {
     void fetch_fomc(bool force);
     void fetch_rates(bool force);
     void fetch_ipos(bool force);
+    void fetch_events(bool force);
+    void fetch_auctions(bool force);
+    void fetch_fred(bool force);
+    void load_user_symbols();
     void apply_fomc(const QVector<QDate>& dates);
     void apply_effr(const QJsonObject& r);
     bool apply_yields(const QJsonArray& rows);
+    void apply_events(const QJsonObject& root);
+    void apply_auctions();
     void render();
     void render_rates();
-    QWidget* make_row(const whats_on::Item& item);
+    void tick();
+    QVector<whats_on::Item> collect_items(const QDateTime& now) const;
+    QWidget* make_row(const whats_on::Row& row);
     QWidget* make_headline_row(const services::NewsArticle& a, int index);
     QWidget* make_brief_row();
+    void open_symbol(const QString& symbol);
     void apply_styles();
 
     // Sources (each kept until its next good answer).
     QVector<macro_calendar::MacroEvent> macro_;
     QVector<QDate> fomc_;
     QJsonArray ipo_deals_;
+    QJsonObject events_; ///< whats_on_calendar.py: earnings / dividends / insiders
+    QJsonArray td_upcoming_, td_auctioned_;
+    QVector<treasury_auctions::Auction> auctions_;
+    whats_on::FredSeries fred_;
+    QSet<QString> fred_inflight_;
     QVector<services::NewsArticle> headlines_;
     QStringList errors_; ///< per source, cleared on that source's next success
     void set_error(const QString& source, const QString& why);
@@ -66,15 +82,25 @@ class WhatsOnPanel : public QWidget {
     // Rates
     QString policy_range_, effr_, effr_date_, y2_, y10_, yields_date_;
 
+    QSet<QString> mine_; ///< watchlist + portfolio symbols, normalised
     bool top_tier_only_ = true;
+    bool mine_only_ = false;
+    QSet<int> collapsed_;    ///< whats_on::Section values folded by the user
+    QSet<QString> expanded_; ///< Item::row_key of rows showing their detail
     QDateTime last_refresh_;
+    QDate rendered_day_;
+    QVector<QPair<QPointer<QLabel>, whats_on::Item>> when_labels_; ///< re-labelled each tick
+    std::optional<whats_on::Item> next_high_;
 
     QPushButton* filter_btn_ = nullptr;
+    QPushButton* mine_btn_ = nullptr;
     QLabel* rates_label_ = nullptr;
+    QLabel* next_label_ = nullptr;
     QLabel* status_label_ = nullptr;
-    QVBoxLayout* body_ = nullptr; ///< bucket sections + headlines, rebuilt by render()
+    QVBoxLayout* body_ = nullptr; ///< sections + headlines, rebuilt by render()
     QNetworkAccessManager* nam_ = nullptr;
     QTimer* timer_ = nullptr;
+    QTimer* tick_ = nullptr;
 };
 
 } // namespace finterm::screens
