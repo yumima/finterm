@@ -6,7 +6,7 @@ permalink: "/insider-cluster-buys/"
 
 _Updated November 14, 2026 · [this week's issue](https://yumima.github.io/finterm/brief/2026-11-09/) · [all issues](https://yumima.github.io/finterm/brief/)_
 
-<!-- issue 2026-W46 stamp 20261114T171435Z -->
+<!-- issue 2026-W46 stamp 20261114T220856Z -->
 
 {% raw %}
 ## Insider buying clusters

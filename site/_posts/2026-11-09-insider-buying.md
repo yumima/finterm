@@ -1,11 +1,20 @@
 ---
-title: "Insider buying clusters — the 7 days to November 14, 2026"
-description: "45 companies where two or more insiders reported open-market purchases in SEC Form 4 filings, the 7 days to November 14, 2026."
+title: "Weekly brief: insider buying, the week ahead, screen leaders — the 7 days to November 14, 2026"
+description: "45 companies where two or more insiders reported open-market purchases in SEC Form 4 filings, the 7 days to November 14, 2026. Plus the week's top-tier US releases and the top name from each strategy screen."
 date: 2026-11-09
 updated: 2026-11-14
 ---
 
-<!-- issue 2026-W46 stamp 20261114T171435Z -->
+<!-- issue 2026-W46 stamp 20261114T220856Z -->
+
+{% raw %}
+## The week in brief
+
+- **Last week:** 45 companies had two or more insiders buying on the open market (SEC Form 4); largest by dollars reported: FUN ($24.3M), STWD ($16.7M), MP ($3.4M).
+- **Next week (Nov 16–Nov 20):** the release calendar was not available.
+- **Screens:** the top name on each — CDNA (RS Leaders), MRNA (Momentum 12-1), MGNI (CAN SLIM), KOD (Breakout Leaders), SNDK (Magic Formula), CHRD (Piotroski F-Score ≥ 8), MXL (Quality + Momentum), KSS (Trending Value), OPCH (Leader Pullback), TXNM (Low Volatility). Screen output, not a recommendation.
+
+{% endraw %}
 
 {% raw %}
 ## Insider buying clusters
@@ -46,4 +55,31 @@ _20 more companies met the conditions; the 25 largest by dollars are shown._
 
 {% endraw %}
 
-_This brief is general information compiled mechanically from public SEC EDGAR filings (Form 4). It is not investment advice, a recommendation, or an offer to buy or sell any security, and it does not consider any reader's circumstances. finterm and its authors are not registered investment advisers or broker-dealers. Backtest figures are hypothetical and past results do not predict future returns. Data may contain errors; verify against the filings. finterm receives no compensation from any company listed. Source: U.S. SEC, EDGAR._
+{% raw %}
+## The week ahead — US releases, Nov 16 to Nov 20
+
+The scheduled US releases that move the whole market: everything rated high impact, plus Fed speakers, jobless claims and the other inflation, labor and growth reports. Times are US Eastern. Dates are set by the agencies and can move.
+
+_No release list this week: the calendar for that week was not published yet when this issue was built._
+
+## Top name from each screen
+
+The first-ranked stock on each of finterm's strategy screens as of the 2026-11-13 close — each screen is a published, rule-exact method (Minervini, O'Neil, Greenblatt, Piotroski and others), applied to US stocks above $2B. **Screen output, not a recommendation.** Every screen was backtested on point-in-time S&P 500 members from 2010 to 2026, and none beat the equal-weighted index with statistical significance; each line gives that screen's own record. A name already listed under an earlier screen passes to that screen's next one.
+
+_Prices for 517 stocks could not be refreshed for this run; they were ranked on their last earlier close._
+
+- **RS Leaders (Trend Template top 25)**: **CDNA** CareDx, Inc. The 25 highest-RS stocks among Trend Template passers. Ranked by: RS rating. _Record: +1.7% a year vs the equal-weighted S&P 500 (t 0.5)._
+- **Momentum 12-1**: **MRNA** Moderna, Inc. Past 12-month return skipping the latest month — the classic cross-sectional momentum. Ranked by: 12-1 return. _Record: +1.5% a year vs the equal-weighted S&P 500 (t 0.6)._
+- **CAN SLIM (partial)**: **MGNI** Magnite, Inc. Growth leaders: accelerating earnings, near highs, strong RS, in a healthy market. Ranked by: RS rating. _Record: Not backtested._
+- **Breakout Leaders (Kullamaggie-style)**: **KOD** Kodiak Sciences, Inc. The biggest recent movers that are volatile enough to trade and resting near their highs. Ranked by: Combined 1/3/6-month rank. _Record: +0.2% a year vs the equal-weighted S&P 500 (t 0.1)._
+- **Magic Formula**: **SNDK** Sandisk Corporation. Good businesses at cheap prices: high earnings yield plus high return on capital. Ranked by: Combined rank. _Record: +0.2% a year vs the equal-weighted S&P 500 (t 0.1)._
+- **Piotroski F-Score ≥ 8**: **CHRD** Chord Energy Corporation. Nine accounting tests of improving health; 8-9 passes. Cheapest first. Ranked by: Price/book, cheapest first. _Record: +1.5% a year vs the equal-weighted S&P 500 (t 1.2)._
+- **Quality + Momentum**: **MXL** MaxLinear, Inc. Most profitable third of the market by gross profit / assets, then the strongest 25 by momentum. Ranked by: 12-1 return. _Record: +1.0% a year vs the equal-weighted S&P 500 (t 0.5)._
+- **Trending Value**: **KSS** Kohl's Corporation. Cheapest decile on six value ratios, then the 25 with the best 6-month return. Ranked by: 6-month return. _Record: +0.7% a year vs the equal-weighted S&P 500 (t 0.3)._
+- **Leader Pullback (Martin Luk)**: **OPCH** Option Care Health Inc. Market leaders resting at their rising 21-day average; the method enters on a break of the prior day's high with a 1-3% stop. Ranked by: Combined 1/3/6-month rank. _Record: Tested as trades: average -0.17R per trade over 1,529 trades._
+- **Low Volatility**: **TXNM** TXNM Energy, Inc. The calmest decile by one-year realised volatility — a defensive tilt. Ranked by: Volatility, lowest first. _Record: -3.0% a year vs the equal-weighted S&P 500 (t -1.1)._
+
+
+{% endraw %}
+
+_This brief is general information compiled mechanically from public SEC EDGAR filings (Form 4), a public economic-release calendar, and published stock-screening rules applied by finterm. It is not investment advice, a recommendation, or an offer to buy or sell any security, and it does not consider any reader's circumstances. finterm and its authors are not registered investment advisers or broker-dealers. Backtest figures are hypothetical and past results do not predict future returns. Data may contain errors; verify against the filings. finterm receives no compensation from any company listed. Sources: insider filings, U.S. SEC, EDGAR; release dates as set by U.S. agencies, via the ForexFactory calendar; screen rankings computed by finterm from TradingView and Yahoo Finance market data, none of which is reproduced here._
