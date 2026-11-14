@@ -128,7 +128,11 @@ def _us_market_holidays(year: int) -> FrozenSet[date]:
         class _USMarketCal(USFederalHolidayCalendar):
             # USFederalHolidayCalendar omits Good Friday but US equity
             # markets and CME's equity-index products do close that day.
-            rules = USFederalHolidayCalendar.rules + [GoodFriday]
+            # It also includes Columbus Day and Veterans Day, which are bank
+            # holidays only: NYSE and CME trade normally on both, so walking
+            # back past them priced a day change against the session before.
+            rules = [r for r in USFederalHolidayCalendar.rules
+                     if r.name not in ("Columbus Day", "Veterans Day")] + [GoodFriday]
 
         hols = _USMarketCal().holidays(
             start=f"{year}-01-01", end=f"{year}-12-31"
@@ -185,6 +189,56 @@ def previous_session_end_utc(symbol: str,
             break
 
     return candidate.astimezone(ZoneInfo("UTC"))
+
+
+def _last_reopen_local(symbol: str, now_local: datetime) -> datetime:
+    """Most recent session OPEN at or before `now_local` (America/New_York).
+
+    CME Globex reopens at 18:00 ET Sunday-Thursday for every product in
+    _FUTURES_SESSIONS; spot FX rolls at 17:00 ET and reopens Sunday 17:00.
+    Neither opens on a Friday or Saturday evening.
+    """
+    futures = symbol.endswith("=F")
+    hour = 18 if futures else 17
+    cand = now_local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if cand > now_local:
+        cand -= timedelta(days=1)
+    for _ in range(14):
+        if cand.weekday() in (4, 5):  # Fri, Sat: no reopen that evening
+            cand -= timedelta(days=1)
+            continue
+        if futures:
+            # Globex does not reopen on the eve of a full closure (Thu 24 Dec
+            # before Christmas Day, the Thursday before Good Friday): that
+            # evening's session would trade the holiday.
+            trading_day = (cand + timedelta(days=1)).date()
+            if trading_day in _us_market_holidays(trading_day.year):
+                cand -= timedelta(days=1)
+                continue
+        break
+    return cand
+
+
+def day_change_reference_utc(symbol: str,
+                             now_utc: Optional[datetime] = None) -> datetime:
+    """The session end a DAY CHANGE is measured from (futures / FX).
+
+    The last print belongs to the session that opened at the most recent
+    reopen, and its day change is against the settle BEFORE that reopen. From
+    a settle until the next reopen — and all weekend — the session on screen
+    is still the one that just settled, so previous_session_end_utc (its OWN
+    settle) is the wrong reference there: on Saturday 2026-11-14 it priced
+    ES=F against Friday 16:00 ET and showed +8.00 (+0.11%) while the contract
+    was down 32.25 (-0.42%) on Thursday's settle, Yahoo's own previous close.
+
+    Equities and crypto are unchanged (previous_session_end_utc).
+    """
+    if not (symbol.endswith("=F") or symbol.endswith("=X")):
+        return previous_session_end_utc(symbol, now_utc)
+    if now_utc is None:
+        now_utc = datetime.now(ZoneInfo("UTC"))
+    reopen = _last_reopen_local(symbol, now_utc.astimezone(ZoneInfo("America/New_York")))
+    return previous_session_end_utc(symbol, reopen.astimezone(ZoneInfo("UTC")))
 
 
 def batch_prior_references(symbols: List[str],
@@ -259,7 +313,7 @@ def batch_prior_references(symbols: List[str],
             else:
                 idx = idx.tz_convert("UTC")
 
-            target_ts = previous_session_end_utc(sym, now_utc)
+            target_ts = day_change_reference_utc(sym, now_utc)
             mask = idx <= target_ts
             if not bool(mask.any()):
                 continue

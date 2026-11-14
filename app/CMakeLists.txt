@@ -1088,6 +1088,7 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
+    src/screens/markets/world/WorldMarketsView.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
@@ -1605,6 +1606,7 @@ set_source_files_properties(
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/MarketsScreen.cpp
+    src/screens/markets/world/WorldMarketsView.cpp
     src/screens/mcp_servers/McpServersScreen.cpp
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsDetailPanel.cpp

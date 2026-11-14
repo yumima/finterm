@@ -34,6 +34,9 @@ class MarketPanel : public QWidget {
     const QString& panel_id() const { return config_.id; }
     const QStringList& symbols() const { return config_.symbols; }
     void update_config(const MarketPanelConfig& cfg);
+    /// Drop this panel's quote subscriptions (its page is hidden); refresh()
+    /// subscribes again.
+    void hub_unsubscribe_all();
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -64,7 +67,6 @@ class MarketPanel : public QWidget {
     void show_row_context_menu(const QPoint& pos);
 
     void hub_resubscribe();
-    void hub_unsubscribe_all();
     void rebuild_from_cache();
 
     MarketPanelConfig config_;

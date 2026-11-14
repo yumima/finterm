@@ -191,22 +191,7 @@ void QuoteTableWidget::fetch_futures() {
                 sync_fut_stream(); // the quotes kept on screen still take live prints
                 return;
             }
-            // Replace, don't merge: a row that lost its sound reading goes
-            // back to a dash rather than keeping a quote against an old settle.
-            // A live print newer than the fetched quote (the daemon caches the
-            // answer) stays — same contract, same previous close.
-            // A REFUSED row never blanks one the stream filled (a row declined
-            // on purpose does: "replace, don't merge" — no sound reading, a dash).
-            QString refused_why;
-            for (auto it = fresh.begin(); it != fresh.end(); ++it) {
-                if (it->refused && refused_why.isEmpty())
-                    refused_why = it->reason;
-                const auto cur = fut_.constFind(it.key());
-                if (cur == fut_.constEnd() || cur->contract != it->contract || services::is_pending(*cur))
-                    continue;
-                if (it->refused || (cur->ref_price == it->ref_price && cur->ts > it->ts))
-                    it.value() = cur.value();
-            }
+            const QString refused_why = services::merge_fetched_futures(fut_, fresh);
             fut_ = fresh;
             sync_fut_stream();
             fut_failed_ = !refused_why.isEmpty();

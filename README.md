@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`fce45aba8`](https://github.com/yumima/finterm/commit/fce45aba8) news: WHAT'S ON review fixes — ET-dated earnings, FRED gap guard, per-endpoint auction errors, cache finality
 - [`9f92c1205`](https://github.com/yumima/finterm/commit/9f92c1205) news: WHAT'S ON becomes a calendar — earnings, printed numbers, auctions, market dates, your names
 - [`983d8f938`](https://github.com/yumima/finterm/commit/983d8f938) social: phase 2 — Bluesky/Mastodon connect, Reddit/HN launch drafts; only X enabled
 - [`60bc20eb9`](https://github.com/yumima/finterm/commit/60bc20eb9) social: SOCIAL screen — publish the weekly brief by hand, with confirmation
