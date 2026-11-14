@@ -20,12 +20,12 @@ namespace world {
 class WorldMarketsView;
 }
 
-/// Markets terminal. Two modes behind a WORLD / PANELS toggle (the last choice
+/// Markets terminal. Two modes behind a PANELS / WORLD toggle (the last choice
 /// is remembered):
-///  - WORLD (default): a fixed one-screen overview of global markets
-///    (world::WorldMarketsView).
-///  - PANELS: the user-configurable workstation of quote panels in a
+///  - PANELS (default): the user-configurable workstation of quote panels in a
 ///    QSplitter layout; splitter state is persisted to SettingsRepository.
+///  - WORLD: a fixed one-screen overview of global markets
+///    (world::WorldMarketsView).
 class MarketsScreen : public QWidget {
     Q_OBJECT
   public:
@@ -73,7 +73,7 @@ class MarketsScreen : public QWidget {
     QStackedWidget* stack_ = nullptr;
     world::WorldMarketsView* world_ = nullptr;
     QWidget* panels_page_ = nullptr;
-    Mode mode_ = Mode::World;
+    Mode mode_ = Mode::Panels;
     QPushButton* world_btn_ = nullptr;
     QPushButton* panels_btn_ = nullptr;
     QVector<QWidget*> panel_only_controls_; // hidden in WORLD mode

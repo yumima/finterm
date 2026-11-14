@@ -3,12 +3,14 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
+#include "services/markets/LastKnownQuote.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QHeaderView>
 #include <QTableWidgetItem>
 
+#include <algorithm>
 #include <cmath>
 
 namespace finterm::screens::widgets {
@@ -23,6 +25,12 @@ QuoteTableWidget::QuoteTableWidget(const QString& title, const QStringList& symb
     build_table();
 
     connect(this, &BaseWidget::refresh_requested, this, &QuoteTableWidget::refresh_data);
+
+    // A hydrated row turns current when its poll lands, but the hub skips
+    // re-publishing a byte-identical quote — no delivery would undim it.
+    stale_timer_ = new QTimer(this);
+    stale_timer_->setInterval(5000);
+    connect(stale_timer_, &QTimer::timeout, this, &QuoteTableWidget::recheck_stale);
 
     apply_styles();
     set_loading(true);
@@ -282,6 +290,29 @@ void QuoteTableWidget::hub_subscribe_all() {
         });
     }
     hub_active_ = true;
+    stale_timer_->start();
+    // subscribe() replays only values younger than the TTL; a symbol whose
+    // refresh keeps failing would otherwise never get a row back.
+    if (services::seed_last_known_quotes(symbols_, row_cache_) > 0) {
+        set_loading(false);
+        clear_error();
+        quote_render_.request();
+    }
+}
+
+QSet<QString> QuoteTableWidget::stale_symbols() const {
+    QSet<QString> stale;
+    for (const auto& sym : std::as_const(symbols_))
+        if (row_cache_.contains(sym) && services::last_known_is_stale(sym))
+            stale.insert(sym);
+    return stale;
+}
+
+void QuoteTableWidget::recheck_stale() {
+    if (!table_ || !isVisible())
+        return;
+    if (stale_symbols() != stale_shown_)
+        render_from_cache();
 }
 
 void QuoteTableWidget::hub_unsubscribe_all() {
@@ -290,6 +321,7 @@ void QuoteTableWidget::hub_unsubscribe_all() {
     for (const auto& sym : symbols_)
         hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
+    stale_timer_->stop();
     // Keep row_cache_ so a quick hide/show doesn't flash an empty table —
     // the first hub delivery on re-subscribe will refresh it anyway.
 }
@@ -301,15 +333,30 @@ void QuoteTableWidget::render_from_cache() {
     // unchanged, so only the cells whose text moved are touched and repainted —
     // not a clear-and-rebuild of the whole table several times a second.
     QVector<QStringList> rows;
-    QVector<const services::QuoteData*> row_quotes;
+    QVector<const services::QuoteData*> row_quotes; // nullptr: no quote for that row yet
     QStringList row_syms;
+    const bool any = std::any_of(symbols_.cbegin(), symbols_.cend(),
+                                 [this](const QString& sym) { return row_cache_.contains(sym); });
     for (const auto& sym : symbols_) {
         auto it = row_cache_.constFind(sym);
-        if (it == row_cache_.constEnd())
+        if (it == row_cache_.constEnd()) {
+            // Nothing known for any symbol: leave the table empty (loading).
+            // Otherwise the symbol keeps its row, with dashes.
+            if (!any)
+                continue;
+            QStringList cells{label_map_.value(sym, sym), ui::formatting::placeholder(), ui::formatting::placeholder(),
+                              ui::formatting::placeholder()};
+            if (fut_enabled_)
+                cells << ui::formatting::placeholder();
+            rows.append(cells);
+            row_quotes.append(nullptr);
+            row_syms.append(sym);
             continue;
+        }
         const auto& q = it.value();
         QString display_name = label_map_.value(q.symbol, q.symbol);
-        QString price_str = QString::number(q.price, 'f', price_decimals_);
+        QString price_str = std::isfinite(q.price) && q.price > 0 ? QString::number(q.price, 'f', price_decimals_)
+                                                                  : ui::formatting::placeholder();
         double chg_abs = q.change;
         QString chg_str = std::isfinite(chg_abs)
                               ? QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_)
@@ -328,10 +375,26 @@ void QuoteTableWidget::render_from_cache() {
     }
     const bool refit = table_->set_rows(rows);
     row_symbols_ = row_syms;
+    stale_shown_ = stale_symbols();
     for (int row = 0; row < row_quotes.size(); ++row) {
+        // A quote from an earlier session (hydrated) or whose refresh failed
+        // is dimmed and says so; it is never drawn as the current price.
+        const bool stale = row_quotes[row] && stale_shown_.contains(row_syms[row]);
+        if (auto* price = table_->item(row, 1)) {
+            price->setForeground(QColor(stale ? ui::colors::TEXT_SECONDARY() : ui::colors::WHITE()));
+            price->setToolTip(!row_quotes[row]
+                                  ? QStringLiteral("No quote yet.")
+                                  : stale ? QStringLiteral("STALE: the last known quote (an earlier session's, or "
+                                                           "its refresh failed); waiting for a fresh one.")
+                                          : QString());
+        }
+        if (!row_quotes[row])
+            continue;
         const auto& q = *row_quotes[row];
-        table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
-        table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
+        // A stale row's change is the old session's: no gain/loss colour.
+        const QString chg_color = stale ? ui::colors::TEXT_SECONDARY() : ui::change_color(q.change_pct);
+        table_->set_cell_color(row, 2, chg_color);
+        table_->set_cell_color(row, 3, chg_color);
         if (fut_enabled_) {
             if (auto* it = table_->item(row, kColFut)) {
                 const auto fut = fut_.constFind(q.symbol);

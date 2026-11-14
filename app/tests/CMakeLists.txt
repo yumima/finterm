@@ -859,6 +859,20 @@ set_target_properties(test_base_widget_error PROPERTIES UNITY_BUILD OFF AUTOMOC 
 add_test(NAME base_widget_error COMMAND test_base_widget_error)
 set_tests_properties(base_widget_error PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── Last-known quotes: a late subscriber keeps every row (STOCK INDICES ^AXJO) ─
+# DataHub replays only values younger than the TTL; with refreshes refused a
+# panel opened later showed one index. Real DataHub, refusing producer.
+add_executable(test_last_known_quote
+    services/test_last_known_quote.cpp
+    ../src/datahub/DataHub.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_last_known_quote PRIVATE ../src)
+target_link_libraries(test_last_known_quote PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
+set_target_properties(test_last_known_quote PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME last_known_quote COMMAND test_last_known_quote)
+set_tests_properties(last_known_quote PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ── SEC contact identity (C++ half; the Python half is contact_identity) ─────
 add_executable(test_sec_identity
     services/test_sec_identity.cpp

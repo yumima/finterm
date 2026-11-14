@@ -21,8 +21,10 @@ namespace finterm::screens {
 /// Inline error/retry state.
 ///
 /// `refresh()` re-subscribes the panel to `market:quote:<sym>` on the
-/// DataHub for each configured symbol, then force-kicks the hub. Each
-/// delivery updates `row_cache_` and re-renders.
+/// DataHub for each configured symbol, seeds every row from the hub's last
+/// value (services/markets/LastKnownQuote.h), then force-kicks the hub. Each
+/// delivery updates `row_cache_` and re-renders. Every configured symbol has a
+/// row: a STALE quote is dimmed, a missing one is all dashes.
 /// `refresh_finished` is emitted once the initial set of quotes has arrived
 /// (or on timeout) so the parent `MarketsScreen::refresh_all()` counter drains.
 class MarketPanel : public QWidget {
@@ -68,6 +70,8 @@ class MarketPanel : public QWidget {
 
     void hub_resubscribe();
     void rebuild_from_cache();
+    static QSet<QString> stale_symbols(const QVector<services::QuoteData>& quotes);
+    void recheck_stale();
 
     MarketPanelConfig config_;
     QVector<services::QuoteData> cached_quotes_;
@@ -81,6 +85,8 @@ class MarketPanel : public QWidget {
     QSet<QString> pending_initial_; // symbols awaiting first delivery for refresh_finished
     bool refresh_inflight_ = false;
     bool hub_active_ = false;
+    QSet<QString> stale_shown_; // rows populate() last drew as STALE
+    QTimer* stale_timer_ = nullptr;
 
     // Header widgets (28px)
     QWidget* header_ = nullptr;

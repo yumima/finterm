@@ -29,6 +29,13 @@ namespace finterm::screens {
 // Helper
 // ---------------------------------------------------------------------------
 
+namespace {
+/// The PANELS / WORLD choice. Not "markets_view_mode": see the constructor.
+constexpr const char* kViewModeKey = "markets_view";
+constexpr int kPanelsPage = 0;
+constexpr int kWorldPage = 1;
+} // namespace
+
 static QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
     const int sz = (px > 0) ? px : ui::fonts::font_px(-2);
     return QString("color:%1;background:transparent;font-size:%2px;font-family:'%3';%4")
@@ -51,11 +58,6 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     root->addWidget(header_bar_);
 
     stack_ = new QStackedWidget(this);
-    world_ = new world::WorldMarketsView(stack_);
-    connect(world_, &world::WorldMarketsView::symbol_activated, this,
-            [this](const QString& sym, const QString& name) { MarketChartDialog::show_for(sym, name, this); });
-    stack_->addWidget(world_);
-
     panels_page_ = new QWidget(stack_);
     auto* pl = new QVBoxLayout(panels_page_);
     pl->setContentsMargins(0, 0, 0, 0);
@@ -64,7 +66,12 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     build_splitter_layout();
     pl->addWidget(h_splitter_, 1);
     restore_splitter_state();
-    stack_->addWidget(panels_page_);
+    stack_->addWidget(panels_page_); // kPanelsPage
+
+    world_ = new world::WorldMarketsView(stack_);
+    connect(world_, &world::WorldMarketsView::symbol_activated, this,
+            [this](const QString& sym, const QString& name) { MarketChartDialog::show_for(sym, name, this); });
+    stack_->addWidget(world_); // kWorldPage
     root->addWidget(stack_, 1);
 
     auto_refresh_timer_ = new QTimer(this);
@@ -89,9 +96,14 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
             [this](const ui::ThemeTokens&) { refresh_theme(); });
     refresh_theme();
 
-    // WORLD unless the user last chose PANELS.
-    const auto saved = SettingsRepository::instance().get("markets_view_mode");
-    set_mode(saved.is_ok() && saved.value() == QLatin1String("panels") ? Mode::Panels : Mode::World, false);
+    // PANELS unless the user last chose WORLD. The choice lives under a new
+    // key: "markets_view_mode" held "world" for everyone for a day only
+    // because WORLD was the forced default — it is not a choice to honour.
+    auto& settings = SettingsRepository::instance();
+    if (const auto old = settings.get("markets_view_mode"); old.is_ok() && !old.value().isEmpty())
+        settings.remove("markets_view_mode");
+    const auto saved = settings.get(kViewModeKey);
+    set_mode(saved.is_ok() && saved.value() == QLatin1String("world") ? Mode::World : Mode::Panels, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,16 +111,17 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
 // ---------------------------------------------------------------------------
 
 void MarketsScreen::set_mode(Mode m, bool persist) {
-    const bool changed = m != mode_ || stack_->currentIndex() != (m == Mode::World ? 0 : 1);
+    const int page = m == Mode::World ? kWorldPage : kPanelsPage;
+    const bool changed = m != mode_ || stack_->currentIndex() != page;
     mode_ = m;
     // Switching pages hides the other one, so WORLD unsubscribes and stops
     // its timers by itself (WorldMarketsView::hideEvent).
-    stack_->setCurrentIndex(m == Mode::World ? 0 : 1);
+    stack_->setCurrentIndex(page);
     for (QWidget* w : panel_only_controls_)
         w->setVisible(m == Mode::Panels);
     update_mode_buttons();
     if (persist)
-        SettingsRepository::instance().set("markets_view_mode", m == Mode::World ? "world" : "panels");
+        SettingsRepository::instance().set(kViewModeKey, m == Mode::World ? "world" : "panels");
     if (!changed || !isVisible())
         return;
     if (m == Mode::Panels) {
@@ -383,10 +396,10 @@ QWidget* MarketsScreen::build_header_bar() {
 
     add_sep();
 
-    // WORLD / PANELS — two-state toggle; the choice is remembered.
-    world_btn_ = new QPushButton("WORLD");
+    // PANELS / WORLD — two-state toggle; the choice is remembered.
     panels_btn_ = new QPushButton("PANELS");
-    for (auto* b : {world_btn_, panels_btn_}) {
+    world_btn_ = new QPushButton("WORLD");
+    for (auto* b : {panels_btn_, world_btn_}) {
         b->setFixedHeight(22);
         b->setCheckable(true);
         b->setCursor(Qt::PointingHandCursor);

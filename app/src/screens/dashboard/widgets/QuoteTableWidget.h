@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QMap>
+#include <QSet>
 #include <QTimer>
 
 #include <functional>
@@ -53,12 +54,15 @@ class QuoteTableWidget : public BaseWidget {
     void hub_subscribe_all();
     /// Hub path: unsubscribe and clear row cache. Called from hideEvent.
     void hub_unsubscribe_all();
-    /// Render current `row_cache_` in the order the symbols were supplied.
+    /// Render current `row_cache_` in the order the symbols were supplied:
+    /// one row per symbol, a STALE quote dimmed, a missing one all dashes.
     void render_from_cache();
+    QSet<QString> stale_symbols() const;
+    void recheck_stale();
 
     QStringList symbols_;
-    // Raw symbol per displayed row. Rows skip symbols with no quote yet and
-    // show display names, so neither the index nor the text maps back.
+    // Raw symbol per displayed row. Rows show display names, so the text
+    // does not map back.
     QStringList row_symbols_;
     QMap<QString, QString> label_map_;
     int price_decimals_;
@@ -69,6 +73,8 @@ class QuoteTableWidget : public BaseWidget {
     /// updates.
     QHash<QString, finterm::services::QuoteData> row_cache_;
     bool hub_active_ = false;
+    QSet<QString> stale_shown_; // rows render_from_cache() last drew as STALE
+    QTimer* stale_timer_ = nullptr;
 
     void fetch_futures();
     void sync_fut_stream();

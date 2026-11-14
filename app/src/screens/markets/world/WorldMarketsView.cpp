@@ -7,6 +7,7 @@
 #include "screens/dashboard/widgets/SectorHeatmapStyle.h"
 #include "screens/markets/world/MarketSessions.h"
 #include "screens/markets/world/OvernightSummary.h"
+#include "services/markets/LastKnownQuote.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -720,8 +721,10 @@ const services::IndexFutureQuote* WorldMarketsView::future_for(const QString& in
 
 RowStatus WorldMarketsView::status_of(const QString& sym) const {
     const auto* q = quote(sym);
+    // The hub's state, not errors_: a seeded quote's error predates this
+    // view's error subscription and is never replayed to it.
     return row_status(q != nullptr, q ? q->price : kNaN, services::MarketDataService::instance().has_live_quote(sym),
-                      has_error(sym));
+                      services::quote_topic_state(sym) == datahub::SubscriptionState::Error);
 }
 
 // ── lifecycle ──────────────────────────────────────────────────────────────
@@ -789,6 +792,13 @@ void WorldMarketsView::subscribe_all() {
         });
     }
     subscribed_ = true;
+    // subscribe() replays only values younger than the TTL: shown minutes
+    // after startup while refreshes are refused, every row would read "—"
+    // though the hub holds its last quote. status_of() marks these STALE.
+    if (services::seed_last_known_quotes(world_quote_symbols(), quotes_) > 0) {
+        all_dirty_ = true;
+        render_.request();
+    }
 }
 
 void WorldMarketsView::unsubscribe_all() {
