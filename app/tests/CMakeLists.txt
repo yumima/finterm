@@ -996,6 +996,11 @@ if(Python3_Interpreter_FOUND)
         NAME ipo_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ipo_calendar.py
     )
+    # News › WHAT'S ON company events: refusal ≠ quiet day, absent ≠ 0, own names kept
+    add_test(
+        NAME whats_on_calendar
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_whats_on_calendar.py
+    )
     # Vendor price sources → the daemon's payload (NY-midnight bars, total-return
     # basis, Yahoo fallback). Runs the daemon-merge case only where yfinance is
     # importable; the venv interpreter is preferred when present (see _TALIPP_TEST_PY).
@@ -1073,6 +1078,21 @@ target_link_libraries(test_whats_on_model PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_whats_on_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME whats_on_model COMMAND test_whats_on_model)
 set_tests_properties(whats_on_model PROPERTIES ENVIRONMENT "TZ=America/New_York")
+
+# ── Market-structure dates (NYSE holidays, early closes, opex, month ends) ────
+add_executable(test_market_calendar services/test_market_calendar.cpp)
+target_include_directories(test_market_calendar PRIVATE ../src)
+target_link_libraries(test_market_calendar PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_market_calendar PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME market_calendar COMMAND test_market_calendar)
+
+# ── Released macro numbers (FRED) + Treasury auctions (TreasuryDirect) ───────
+add_executable(test_macro_releases services/test_macro_releases.cpp)
+target_include_directories(test_macro_releases PRIVATE ../src)
+target_link_libraries(test_macro_releases PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_macro_releases PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME macro_releases COMMAND test_macro_releases)
+set_tests_properties(macro_releases PROPERTIES ENVIRONMENT "TZ=America/New_York")
 
 # ── SOCIAL screen model (character counting, pre-flight, history links) ─────
 add_executable(test_social_model screens/test_social_model.cpp)

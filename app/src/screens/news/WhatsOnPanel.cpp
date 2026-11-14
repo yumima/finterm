@@ -5,12 +5,15 @@
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "services/calendar/MacroCalendarFeed.h"
-#include "storage/cache/CacheManager.h"
 #include "services/news/NewsPromo.h"
+#include "storage/cache/CacheManager.h"
+#include "storage/repositories/PortfolioRepository.h"
+#include "storage/repositories/WatchlistRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QJsonDocument>
@@ -20,8 +23,10 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
+#include <QSettings>
 #include <QShowEvent>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -33,11 +38,18 @@ namespace finterm::screens {
 namespace {
 namespace mc = finterm::macro_calendar;
 namespace wo = finterm::whats_on;
+namespace ta = finterm::treasury_auctions;
+namespace mr = finterm::macro_releases;
 
 constexpr int kRefreshMs = 30 * 60 * 1000; // sources change a few times a day
+constexpr int kTickMs = 30 * 1000;         // countdown labels
 constexpr int kHeadlineCount = 6;
+constexpr int kEventsAheadDays = 45;       // earnings/ex-div window: this week → ~6 weeks out
 constexpr const char* kItemProp = "whatsOnIndex";
-constexpr int kBriefSource = -2; ///< "whatsOnSource" of the weekly-brief row (-1: a headline)
+constexpr int kBriefSource = -2;   ///< "whatsOnSource" of the weekly-brief row (-1: a headline)
+constexpr int kSectionSource = -3; ///< a section header (click folds it)
+constexpr const char* kCollapsedKey = "news/whats_on_collapsed";
+constexpr const char* kMineOnlyKey = "news/whats_on_mine_only";
 
 QString kind_color(const QString& kind) {
     if (kind == QLatin1String("FED"))
@@ -48,19 +60,34 @@ QString kind_color(const QString& kind) {
         return ui::colors::WARNING();
     if (kind == QLatin1String("GROWTH"))
         return ui::colors::POSITIVE();
-    if (kind == QLatin1String("IPO"))
+    if (kind == QLatin1String("IPO") || kind == QLatin1String("EARNINGS"))
         return ui::colors::INFO();
+    if (kind == QLatin1String("RATES"))
+        return ui::colors::CYAN();
+    if (kind == QLatin1String("INSIDER") || kind == QLatin1String("EX-DIV"))
+        return ui::colors::POSITIVE();
     return ui::colors::TEXT_SECONDARY();
 }
 
 QString pct(double fraction_or_pct, bool is_fraction) {
     return QString::number(is_fraction ? fraction_or_pct * 100.0 : fraction_or_pct, 'f', 2) + QLatin1Char('%');
 }
+
+QString section_header_text(wo::Section s, int rows, bool collapsed) {
+    return QStringLiteral("%1 %2%3")
+        .arg(collapsed ? QStringLiteral("▸") : QStringLiteral("▾"), wo::section_title(s),
+             rows > 0 ? QStringLiteral("  ·  %1").arg(rows) : QString());
+}
 } // namespace
 
 WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("whatsOnPanel");
     nam_ = new QNetworkAccessManager(this);
+
+    QSettings settings;
+    for (const auto& v : settings.value(kCollapsedKey).toList())
+        collapsed_.insert(v.toInt());
+    mine_only_ = settings.value(kMineOnlyKey, false).toBool();
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -78,15 +105,29 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
                                            "Off: every country and impact level in the calendar."));
     connect(filter_btn_, &QPushButton::toggled, this, [this](bool on) {
         top_tier_only_ = on;
+        fetch_fred(false); // a wider list can need more series
         render();
     });
     bar->addWidget(filter_btn_);
+    mine_btn_ = new QPushButton(QStringLiteral("◆ YOUR NAMES"), this);
+    mine_btn_->setObjectName("whatsOnFilter");
+    mine_btn_->setCheckable(true);
+    mine_btn_->setChecked(mine_only_);
+    mine_btn_->setCursor(Qt::PointingHandCursor);
+    mine_btn_->setToolTip(QStringLiteral("Only events on symbols in your watchlists and portfolios: earnings, "
+                                         "ex-dividend dates, insider cluster buys.\n◆ marks them in the full list."));
+    connect(mine_btn_, &QPushButton::toggled, this, [this](bool on) {
+        mine_only_ = on;
+        QSettings().setValue(kMineOnlyKey, on);
+        render();
+    });
+    bar->addWidget(mine_btn_);
     bar->addStretch();
     auto* refresh_btn = new QPushButton(QStringLiteral("↻"), this);
     refresh_btn->setObjectName("whatsOnFilter");
     refresh_btn->setFixedWidth(28);
     refresh_btn->setCursor(Qt::PointingHandCursor);
-    refresh_btn->setToolTip(QStringLiteral("Refresh calendar, rates and IPOs"));
+    refresh_btn->setToolTip(QStringLiteral("Refresh calendar, earnings, auctions, rates and IPOs"));
     connect(refresh_btn, &QPushButton::clicked, this, [this]() { refresh(true); });
     bar->addWidget(refresh_btn);
     root->addLayout(bar);
@@ -96,6 +137,14 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     rates_label_->setWordWrap(true);
     rates_label_->setTextFormat(Qt::RichText);
     root->addWidget(rates_label_);
+
+    next_label_ = new QLabel(this);
+    next_label_->setObjectName("whatsOnNext");
+    next_label_->setWordWrap(true);
+    next_label_->setTextFormat(Qt::RichText);
+    next_label_->setToolTip(wo::impact_rules());
+    next_label_->hide();
+    root->addWidget(next_label_);
 
     body_ = new QVBoxLayout;
     body_->setContentsMargins(0, 0, 0, 0);
@@ -114,6 +163,14 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
             refresh();
     });
     timer_->start();
+
+    tick_ = new QTimer(this);
+    tick_->setInterval(kTickMs);
+    connect(tick_, &QTimer::timeout, this, [this]() {
+        if (isVisible())
+            tick();
+    });
+    tick_->start();
 
     apply_styles();
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this, [this](const ui::ThemeTokens&) {
@@ -138,6 +195,7 @@ void WhatsOnPanel::apply_styles() {
                        "#whatsOnPanel QLabel#whatsOnDetail { color:%5; padding:2px 0 4px 8px; }"
                        "#whatsOnPanel QLabel#whatsOnStatus { color:%5; }"
                        "#whatsOnPanel QLabel#whatsOnRates { color:%2; padding:2px 0; }"
+                       "#whatsOnPanel QLabel#whatsOnNext { color:%2; padding:3px 4px; border:1px solid %4; }"
                        "#whatsOnPanel QWidget#whatsOnRow { background:transparent; border-bottom:1px solid %4; }"
                        "#whatsOnPanel QWidget#whatsOnRow:hover { background:%6; }"
                        "#whatsOnPanel QPushButton#whatsOnFilter { %1 color:%5; background:transparent; "
@@ -151,14 +209,19 @@ void WhatsOnPanel::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     if (!last_refresh_.isValid() || last_refresh_.msecsTo(QDateTime::currentDateTime()) > kRefreshMs)
         refresh();
+    else
+        tick();
 }
 
 void WhatsOnPanel::refresh(bool force) {
     last_refresh_ = QDateTime::currentDateTime();
+    load_user_symbols();
     fetch_macro(force);
     fetch_fomc(force);
     fetch_rates(force);
     fetch_ipos(force);
+    fetch_events(force);
+    fetch_auctions(force);
 }
 
 void WhatsOnPanel::set_error(const QString& source, const QString& why) {
@@ -174,6 +237,25 @@ void WhatsOnPanel::clear_error(const QString& source) {
                   errors_.end());
 }
 
+void WhatsOnPanel::load_user_symbols() {
+    // Local SQLite reads, the same way the Watchlist and Portfolio screens
+    // load them — small, and no network.
+    QStringList syms;
+    if (auto wl = WatchlistRepository::instance().list_all(); wl.is_ok()) {
+        for (const auto& w : wl.value())
+            if (auto st = WatchlistRepository::instance().get_stocks(w.id); st.is_ok())
+                for (const auto& s : st.value())
+                    syms << s.symbol;
+    }
+    if (auto pf = PortfolioRepository::instance().list_portfolios(); pf.is_ok()) {
+        for (const auto& p : pf.value())
+            if (auto as = PortfolioRepository::instance().get_assets(p.id); as.is_ok())
+                for (const auto& a : as.value())
+                    syms << a.symbol;
+    }
+    mine_ = wo::norm_symbols(syms);
+}
+
 // ── Sources ─────────────────────────────────────────────────────────────────
 
 void WhatsOnPanel::fetch_macro(bool force) {
@@ -181,7 +263,7 @@ void WhatsOnPanel::fetch_macro(bool force) {
     // cached fetch: the feed answers 429 to repeated requests.
     mc::fetch_week(
         this,
-        [this](const mc::FeedResult& r) {
+        [this, force](const mc::FeedResult& r) {
             if (!r.ok) {
                 set_error(QStringLiteral("Calendar"), QStringLiteral("ForexFactory unavailable (%1)").arg(r.error));
                 return;
@@ -192,6 +274,7 @@ void WhatsOnPanel::fetch_macro(bool force) {
                           QStringLiteral("refresh refused (%1) — showing the last copy").arg(r.error));
             else
                 clear_error(QStringLiteral("Calendar"));
+            fetch_fred(force);
             render();
         },
         force);
@@ -205,22 +288,29 @@ constexpr const char* kFomcKey = "whatson:fomc:v1";
 constexpr const char* kEffrKey = "whatson:effr:v1";
 constexpr const char* kYieldsKey = "whatson:yields:v1";
 constexpr const char* kIpoKey = "whatson:ipos:v1";
+constexpr const char* kEventsKey = "whatson:events:v1:"; // + window + symbol-set hash
+constexpr const char* kTdUpKey = "whatson:td:upcoming:v1";
+constexpr const char* kTdDoneKey = "whatson:td:auctioned:v1";
+constexpr const char* kFredKey = "whatson:fred:v1:"; // + series id
 constexpr int kFomcSec = 12 * 3600; // a published calendar
 constexpr int kEffrSec = 3600;      // one print a day
 constexpr int kYieldsSec = 3 * 3600;
 constexpr int kIpoSec = 30 * 60;
+constexpr int kEventsSec = 60 * 60;  // the script caches each day itself (4 h / 7 d)
+constexpr int kTdSec = 60 * 60;      // announcements land a few days ahead; results at the close
+constexpr int kFredSec = 20 * 60;    // short: an actual appears within the hour after 08:30
 
-std::optional<QJsonDocument> cached_doc(const char* key) {
-    if (const auto hit = CacheManager::instance().try_get(QString::fromLatin1(key))) {
+std::optional<QJsonDocument> cached_doc(const QString& key) {
+    if (const auto hit = CacheManager::instance().try_get(key)) {
         const auto d = QJsonDocument::fromJson(hit->toUtf8());
         if (!d.isNull())
             return d;
     }
     return std::nullopt;
 }
-void put_doc(const char* key, const QJsonDocument& d, int ttl) {
-    CacheManager::instance().put(QString::fromLatin1(key), QString::fromUtf8(d.toJson(QJsonDocument::Compact)),
-                                 ttl, QStringLiteral("whatson"));
+void put_doc(const QString& key, const QJsonDocument& d, int ttl) {
+    CacheManager::instance().put(key, QString::fromUtf8(d.toJson(QJsonDocument::Compact)), ttl,
+                                 QStringLiteral("whatson"));
 }
 } // namespace
 
@@ -369,6 +459,171 @@ void WhatsOnPanel::fetch_ipos(bool force) {
         });
 }
 
+void WhatsOnPanel::apply_events(const QJsonObject& root) {
+    events_ = root;
+    const int total = root.value("days_total").toInt();
+    const int failed = root.value("days_failed").toArray().size();
+    // A day Nasdaq did not answer is NOT a day without earnings: say so
+    // instead of letting the gap read as a quiet day.
+    if (failed > 0)
+        set_error(QStringLiteral("Earnings"),
+                  QStringLiteral("Nasdaq did not answer for %1 of %2 days — those days may be missing")
+                      .arg(failed)
+                      .arg(total));
+    else
+        clear_error(QStringLiteral("Earnings"));
+    if (const int df = root.value("div_days_failed").toArray().size(); df > 0)
+        set_error(QStringLiteral("Ex-dividend"), QStringLiteral("%1 days unanswered by Nasdaq").arg(df));
+    else
+        clear_error(QStringLiteral("Ex-dividend"));
+    render();
+}
+
+void WhatsOnPanel::fetch_events(bool force) {
+    const QDate today = QDate::currentDate();
+    const QDate from = wo::week_start(today);
+    const QDate to = today.addDays(kEventsAheadDays);
+    QStringList syms(mine_.begin(), mine_.end());
+    syms.sort();
+    const QString sym_arg = syms.join(QLatin1Char(','));
+    const QString key =
+        QString::fromLatin1(kEventsKey) + from.toString(Qt::ISODate) + QLatin1Char(':') +
+        QString::fromLatin1(QCryptographicHash::hash(sym_arg.toUtf8(), QCryptographicHash::Sha1).toHex().left(12));
+    if (!force) {
+        if (const auto d = cached_doc(key); d && d->isObject()) {
+            apply_events(d->object());
+            return;
+        }
+    }
+    QPointer<WhatsOnPanel> self = this;
+    QStringList args = {QStringLiteral("events"), from.toString(Qt::ISODate), to.toString(Qt::ISODate)};
+    if (!sym_arg.isEmpty())
+        args << sym_arg;
+    // ~2 Nasdaq requests per weekday on a cold cache, paced: well over the
+    // default 30 s process deadline the first time.
+    python::PythonRunner::instance().run(
+        QStringLiteral("whats_on_calendar.py"), args,
+        [self, key](python::PythonResult r) {
+            if (!self)
+                return;
+            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
+            if (!r.success || root.isEmpty() || !root.contains("earnings")) {
+                self->set_error(QStringLiteral("Earnings"),
+                                root.value("error").toString(r.success ? QStringLiteral("calendar unreadable")
+                                                                       : QStringLiteral("script failed")));
+                return;
+            }
+            if (root.contains("error")) { // every day refused — keep what we had
+                self->set_error(QStringLiteral("Earnings"), root.value("error").toString());
+                return;
+            }
+            // A partial answer is cached briefly so the missing days are retried.
+            const bool partial = !root.value("days_failed").toArray().isEmpty();
+            put_doc(key, QJsonDocument(root), partial ? 10 * 60 : kEventsSec);
+            self->apply_events(root);
+        },
+        {}, 180'000);
+}
+
+void WhatsOnPanel::apply_auctions() {
+    auctions_ = ta::parse(td_upcoming_, td_auctioned_);
+    render();
+}
+
+void WhatsOnPanel::fetch_auctions(bool force) {
+    QPointer<WhatsOnPanel> self = this;
+    struct Src {
+        const char* key;
+        QString url;
+        QJsonArray WhatsOnPanel::*slot;
+    };
+    const Src srcs[] = {
+        {kTdUpKey, QStringLiteral("https://www.treasurydirect.gov/TA_WS/securities/upcoming?format=json"),
+         &WhatsOnPanel::td_upcoming_},
+        {kTdDoneKey, QStringLiteral("https://www.treasurydirect.gov/TA_WS/securities/auctioned?format=json&days=10"),
+         &WhatsOnPanel::td_auctioned_},
+    };
+    for (const auto& s : srcs) {
+        if (!force) {
+            if (const auto d = cached_doc(s.key); d && d->isArray()) {
+                this->*s.slot = d->array();
+                apply_auctions();
+                continue;
+            }
+        }
+        const QString key = QString::fromLatin1(s.key);
+        auto slot = s.slot;
+        HttpClient::instance().get(s.url, [self, key, slot](Result<QJsonDocument> res) {
+            if (!self)
+                return;
+            if (!res.is_ok() || !res.value().isArray()) {
+                // Keep the last copy (if any) on screen; the refusal is stated.
+                self->set_error(QStringLiteral("Auctions"), QStringLiteral("TreasuryDirect unavailable"));
+                return;
+            }
+            put_doc(key, res.value(), kTdSec);
+            self->*slot = res.value().array();
+            self->clear_error(QStringLiteral("Auctions"));
+            self->apply_auctions();
+        });
+    }
+}
+
+void WhatsOnPanel::fetch_fred(bool force) {
+    // Only the series behind releases already out this week (a handful).
+    const QDateTime now = QDateTime::currentDateTime();
+    const QStringList need = wo::fred_series_needed(macro_, now, wo::week_start(now.date()), top_tier_only_);
+    QStringList fetch;
+    for (const QString& id : need) {
+        if (!force) {
+            if (const auto hit = CacheManager::instance().try_get(QString::fromLatin1(kFredKey) + id)) {
+                fred_[id] = mr::parse_fred_csv(*hit);
+                continue;
+            }
+        }
+        if (!fred_inflight_.contains(id))
+            fetch << id;
+    }
+    if (fetch.isEmpty())
+        return;
+    for (const auto& id : fetch)
+        fred_inflight_.insert(id);
+    // FRED's public graph download (no API key), through the script: FRED's
+    // edge resets the stream for the app's own User-Agent.
+    QPointer<WhatsOnPanel> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("whats_on_calendar.py"),
+        {QStringLiteral("fred"), fetch.join(QLatin1Char(',')),
+         now.date().addYears(-2).addMonths(-2).toString(Qt::ISODate)},
+        [self, fetch](python::PythonResult r) {
+            if (!self)
+                return;
+            for (const auto& id : fetch)
+                self->fred_inflight_.remove(id);
+            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
+            const QJsonObject series = root.value("series").toObject();
+            QStringList failed;
+            for (const auto& id : fetch) {
+                const QString csv = series.value(id).toString();
+                const auto obs = mr::parse_fred_csv(csv);
+                if (obs.isEmpty()) {
+                    failed << id; // refused or unreadable: the actual stays absent
+                    continue;
+                }
+                CacheManager::instance().put(QString::fromLatin1(kFredKey) + id, csv, kFredSec,
+                                             QStringLiteral("whatson"));
+                self->fred_[id] = obs;
+            }
+            if (failed.isEmpty())
+                self->clear_error(QStringLiteral("FRED"));
+            else
+                self->set_error(QStringLiteral("FRED"),
+                                QStringLiteral("%1 unavailable — those actuals not shown").arg(failed.join(", ")));
+            self->render();
+        },
+        {}, 60'000);
+}
+
 void WhatsOnPanel::set_headlines(const QVector<services::NewsArticle>& ranked) {
     QVector<services::NewsArticle> keep;
     for (const auto& a : ranked) {
@@ -418,8 +673,44 @@ void WhatsOnPanel::render_rates() {
     rates_label_->setToolTip(asof.join(QLatin1Char('\n')));
 }
 
-QWidget* WhatsOnPanel::make_row(const wo::Item& item) {
-    const QDate today = QDate::currentDate();
+QVector<wo::Item> WhatsOnPanel::collect_items(const QDateTime& now) const {
+    const QDate today = now.toLocalTime().date();
+    const QDate from = wo::week_start(today);
+    QVector<wo::Item> items = wo::items_from_macro(macro_, now, top_tier_only_, from, &fred_);
+    // TreasuryDirect is the authority on auctions; the calendar's own
+    // "10-y Bond Auction" rows would repeat them.
+    if (!auctions_.isEmpty())
+        items.erase(std::remove_if(items.begin(), items.end(),
+                                   [](const wo::Item& i) { return i.title.contains(QLatin1String("Auction")); }),
+                    items.end());
+    items += wo::items_from_fomc(fomc_, today, items);
+    items += wo::items_from_ipo_deals(ipo_deals_, today);
+    items += wo::items_from_earnings(events_.value("earnings").toArray(), from, mine_);
+    items += wo::items_from_dividends(events_.value("dividends").toArray(), from);
+    items += wo::items_from_insiders(events_.value("insiders").toArray(), from,
+                                     events_.value("insider_last_scanned").toString());
+    items += wo::items_from_auctions(auctions_, from);
+    // The month after this one is enough horizon for market dates.
+    items += wo::items_from_market_dates(
+        market_calendar::market_dates(today, QDate(today.year(), today.month(), 1).addMonths(2).addDays(-1)));
+    return items;
+}
+
+void WhatsOnPanel::open_symbol(const QString& symbol) {
+    if (symbol.isEmpty())
+        return;
+    // Beside the news, as the app's other "open in X" gestures do; the load is
+    // queued so it lands after the split materializes the screen.
+    EventBus::instance().publish("nav.split_alongside", QVariantMap{{"screen_id", "equity_research"}});
+    QMetaObject::invokeMethod(
+        this,
+        [symbol]() { EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", symbol}}); },
+        Qt::QueuedConnection);
+}
+
+QWidget* WhatsOnPanel::make_row(const wo::Row& r) {
+    const wo::Item& item = r.head();
+    const bool grouped = r.items.size() > 1 || item.source == wo::Item::Source::Earnings;
     auto* row = new QWidget;
     row->setObjectName("whatsOnRow");
     row->setAttribute(Qt::WA_StyledBackground, true);
@@ -431,36 +722,100 @@ QWidget* WhatsOnPanel::make_row(const wo::Item& item) {
     auto* top = new QHBoxLayout;
     top->setContentsMargins(0, 0, 0, 0);
     top->setSpacing(6);
-    auto* when = new QLabel(mc::short_when(item.when, item.timed, today));
+    auto* when = new QLabel(wo::when_label(item, QDateTime::currentDateTime()));
     when->setObjectName("whatsOnWhen");
+    when_labels_.append({when, item});
     top->addWidget(when);
     auto* kind = new QLabel(item.kind);
     kind->setStyleSheet(QStringLiteral("color:%1; font-weight:700;").arg(kind_color(item.kind)));
     top->addWidget(kind);
+    if (r.mine()) {
+        auto* m = new QLabel(QStringLiteral("◆"));
+        m->setStyleSheet(QStringLiteral("color:%1;").arg(ui::colors::AMBER()));
+        m->setToolTip(QStringLiteral("In your watchlists or portfolios"));
+        top->addWidget(m);
+    }
     top->addStretch();
+    if (const QString tag = wo::impact_tag(r.impact()); !tag.isEmpty()) {
+        auto* imp = new QLabel(tag);
+        const QString c = r.impact() == wo::Impact::High ? ui::colors::NEGATIVE() : ui::colors::WARNING();
+        imp->setStyleSheet(QStringLiteral("color:%1; font-weight:700; border:1px solid %1; padding:0 3px;").arg(c));
+        imp->setToolTip(wo::impact_rules());
+        top->addWidget(imp);
+    }
     v->addLayout(top);
 
-    auto* title = new QLabel(item.title);
-    title->setWordWrap(true);
-    v->addWidget(title);
-    if (!item.figures.isEmpty()) {
-        auto* fig = new QLabel(item.figures);
-        fig->setObjectName("whatsOnFigures");
-        fig->setWordWrap(true);
-        v->addWidget(fig);
+    QStringList details;
+    if (grouped && item.source == wo::Item::Source::Earnings) {
+        // One row per session: symbols as links to Equity Research; yours in
+        // amber; reported EPS beside the symbol once it is out.
+        QStringList parts;
+        for (const auto& it : r.items) {
+            QString s = QStringLiteral("<a href=\"%1\" style=\"color:%2; text-decoration:none;%3\">%4%1</a>")
+                            .arg(it.symbol.toHtmlEscaped(), it.mine ? ui::colors::AMBER() : ui::colors::TEXT_PRIMARY(),
+                                 it.mine || it.impact == wo::Impact::High ? QStringLiteral(" font-weight:700;")
+                                                                          : QString(),
+                                 it.mine ? QStringLiteral("◆") : QString());
+            // Reported: the surprise vs consensus only (EPS and estimate in
+            // the detail) — keeps a busy reporting day to a line or two.
+            if (it.released && std::isfinite(it.surprise_pct))
+                s += QStringLiteral(" <span style=\"color:%1;\">%2%3%</span>")
+                         .arg(it.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
+                              it.surprise_pct >= 0 ? QStringLiteral("+") : QString(),
+                              QString::number(it.surprise_pct, 'f', 1));
+            parts << s;
+            details << it.detail;
+        }
+        auto* title = new QLabel(parts.join(QStringLiteral(" · ")));
+        title->setTextFormat(Qt::RichText);
+        title->setWordWrap(true);
+        title->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+        connect(title, &QLabel::linkActivated, this, [this](const QString& sym) { open_symbol(sym); });
+        v->addWidget(title);
+        row->setToolTip(QStringLiteral("Click a symbol for Equity Research; click the row for estimates"));
+    } else {
+        QStringList titles, figs;
+        for (const auto& it : r.items) {
+            titles << it.title;
+            if (!it.figures.isEmpty())
+                figs << (r.items.size() > 1 ? it.title.section(QLatin1Char(' '), 0, 0) + QLatin1Char(' ') + it.figures
+                                            : it.figures);
+            details << it.detail;
+        }
+        // Grouped bills: "13W · 26W bill auction".
+        QString text = titles.join(QStringLiteral(" · "));
+        if (r.items.size() > 1 && item.source == wo::Item::Source::Auction) {
+            QStringList terms;
+            for (const auto& it : r.items)
+                terms << it.title.section(QLatin1Char(' '), 0, 0);
+            text = terms.join(QStringLiteral(" · ")) + QStringLiteral(" bill auctions");
+        }
+        auto* title = new QLabel(text);
+        title->setWordWrap(true);
+        v->addWidget(title);
+        if (!figs.isEmpty()) {
+            auto* fig = new QLabel(figs.join(QStringLiteral(" · ")));
+            fig->setObjectName("whatsOnFigures");
+            fig->setWordWrap(true);
+            v->addWidget(fig);
+        }
+        row->setToolTip(item.source == wo::Item::Source::Ipo ? QStringLiteral("Open in IPO Watch")
+                        : !item.symbol.isEmpty()            ? QStringLiteral("Open %1 in Equity Research\n\n%2")
+                                                                  .arg(item.symbol, item.detail)
+                                                            : QStringLiteral("Click for details"));
     }
-    auto* detail = new QLabel(item.detail);
+    auto* detail = new QLabel(details.join(QStringLiteral("\n\n")));
     detail->setObjectName("whatsOnDetail");
     detail->setWordWrap(true);
     detail->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    detail->hide();
+    detail->setVisible(expanded_.contains(item.row_key()));
     v->addWidget(detail);
 
-    row->setToolTip(item.source == wo::Item::Source::Ipo ? QStringLiteral("Open in IPO Watch")
-                                                         : QStringLiteral("Click for details"));
     row->setProperty("whatsOnSource", static_cast<int>(item.source));
     row->setProperty("whatsOnKey", item.key);
     row->setProperty("whatsOnDeal", item.deal_id);
+    row->setProperty("whatsOnRowKey", item.row_key());
+    row->setProperty("whatsOnSymbol", grouped ? QString() : item.symbol);
     row->installEventFilter(this);
     return row;
 }
@@ -515,11 +870,23 @@ bool WhatsOnPanel::eventFilter(QObject* obj, QEvent* e) {
     if (!row || !row->property("whatsOnSource").isValid())
         return QWidget::eventFilter(obj, e);
     const int src = row->property("whatsOnSource").toInt();
+    if (src == kSectionSource) {
+        const int s = row->property("whatsOnSection").toInt();
+        if (!collapsed_.remove(s))
+            collapsed_.insert(s);
+        QVariantList keep;
+        for (int c : std::as_const(collapsed_))
+            keep << c;
+        QSettings().setValue(kCollapsedKey, keep);
+        // Deferred: the header being clicked is deleted by the rebuild.
+        QMetaObject::invokeMethod(this, [this]() { render(); }, Qt::QueuedConnection);
+        return true;
+    }
     if (src == kBriefSource) {
         EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "social"}});
         return true;
     }
-    if (src < 0) {
+    if (src == -1) {
         const int i = row->property(kItemProp).toInt();
         if (i >= 0 && i < headlines_.size())
             emit article_clicked(headlines_[i]);
@@ -540,9 +907,43 @@ bool WhatsOnPanel::eventFilter(QObject* obj, QEvent* e) {
             Qt::QueuedConnection);
         return true;
     }
-    if (auto* detail = row->findChild<QLabel*>(QStringLiteral("whatsOnDetail")))
+    if (const QString sym = row->property("whatsOnSymbol").toString(); !sym.isEmpty()) {
+        open_symbol(sym);
+        return true;
+    }
+    if (auto* detail = row->findChild<QLabel*>(QStringLiteral("whatsOnDetail"))) {
         detail->setVisible(!detail->isVisible());
+        const QString k = row->property("whatsOnRowKey").toString();
+        if (detail->isVisible())
+            expanded_.insert(k);
+        else
+            expanded_.remove(k);
+    }
     return true;
+}
+
+void WhatsOnPanel::tick() {
+    const QDateTime now = QDateTime::currentDateTime();
+    if (rendered_day_ != now.date()) { // a new day re-buckets everything
+        render();
+        return;
+    }
+    for (const auto& [label, item] : std::as_const(when_labels_))
+        if (label)
+            label->setText(wo::when_label(item, now));
+    if (next_high_) {
+        // The event passed: find the next one.
+        const bool passed = next_high_->timed ? next_high_->when <= now : next_high_->local_date() < now.date();
+        if (passed) {
+            render();
+            return;
+        }
+        const wo::Item& n = *next_high_;
+        const QString what = n.source == wo::Item::Source::Earnings ? n.title + QStringLiteral(" earnings") : n.title;
+        next_label_->setText(QStringLiteral("<span style=\"color:%1; font-weight:700;\">NEXT HIGH</span>&nbsp; "
+                                            "%2 — %3")
+                                 .arg(ui::colors::NEGATIVE(), what.toHtmlEscaped(), wo::when_label(n, now)));
+    }
 }
 
 void WhatsOnPanel::render() {
@@ -553,52 +954,72 @@ void WhatsOnPanel::render() {
             it->widget()->deleteLater();
         delete it;
     }
+    when_labels_.clear();
     render_rates();
 
     const QDateTime now = QDateTime::currentDateTime();
     const QDate today = now.toLocalTime().date();
-    QVector<wo::Item> items = wo::items_from_macro(macro_, now, top_tier_only_);
-    items += wo::items_from_fomc(fomc_, today, items);
-    items += wo::items_from_ipo_deals(ipo_deals_, today);
-    const auto buckets = wo::bucketize(items, today);
+    rendered_day_ = today;
+    const QVector<wo::Item> items = collect_items(now);
+    next_high_ = wo::next_high(items, now);
+    next_label_->setVisible(next_high_.has_value());
+    const auto sections = wo::sectionize(items, today, wo::Filter{mine_only_});
 
-    auto section = [this](const QString& title) {
-        auto* l = new QLabel(title);
+    auto section = [this](wo::Section s, int rows) {
+        const bool folded = collapsed_.contains(static_cast<int>(s));
+        auto* l = new QLabel(section_header_text(s, rows, folded));
         l->setObjectName("whatsOnSection");
+        l->setCursor(Qt::PointingHandCursor);
+        l->setToolTip(folded ? QStringLiteral("Show") : QStringLiteral("Fold"));
+        l->setProperty("whatsOnSource", kSectionSource);
+        l->setProperty("whatsOnSection", static_cast<int>(s));
+        l->installEventFilter(this);
+        body_->addWidget(l);
+        return !folded;
+    };
+    auto none = [this](const QString& text) {
+        auto* l = new QLabel(text);
+        l->setObjectName("whatsOnWhen");
         body_->addWidget(l);
     };
-    for (auto b : {mc::Bucket::Today, mc::Bucket::ThisWeek, mc::Bucket::ThisMonth, mc::Bucket::Upcoming}) {
-        const auto it = buckets.constFind(b);
-        section(mc::bucket_title(b));
-        if (it == buckets.constEnd() || it->isEmpty()) {
+    if (mine_only_ && mine_.isEmpty())
+        none(QStringLiteral("No symbols in your watchlists or portfolios yet."));
+    for (auto s : {wo::Section::Earlier, wo::Section::Today, wo::Section::ThisWeek, wo::Section::ThisMonth,
+                   wo::Section::Later}) {
+        const auto it = sections.constFind(s);
+        const int n = it == sections.constEnd() ? 0 : int(it->size());
+        if (s == wo::Section::Earlier && n == 0)
+            continue; // nothing came out yet this week (Monday morning)
+        if (!section(s, n))
+            continue;
+        if (n == 0) {
             // THIS WEEK always holds the brief row, so say what is empty.
-            auto* none = new QLabel(b == mc::Bucket::ThisMonth || b == mc::Bucket::Upcoming
-                                        ? QStringLiteral("Nothing scheduled in the sources yet")
-                                    : b == mc::Bucket::ThisWeek ? QStringLiteral("No releases scheduled")
-                                                                : QStringLiteral("Nothing scheduled"));
-            none->setObjectName("whatsOnWhen");
-            body_->addWidget(none);
+            none(mine_only_                                                     ? QStringLiteral("Nothing on your names")
+                 : s == wo::Section::ThisMonth || s == wo::Section::Later ? QStringLiteral("Nothing scheduled in the sources yet")
+                 : s == wo::Section::ThisWeek                                   ? QStringLiteral("No releases scheduled")
+                                                                                : QStringLiteral("Nothing scheduled"));
         } else {
-            for (const auto& item : *it)
-                body_->addWidget(make_row(item));
+            for (const auto& row : *it)
+                body_->addWidget(make_row(row));
         }
-        if (b == mc::Bucket::ThisWeek)
+        if (s == wo::Section::ThisWeek && !mine_only_)
             body_->addWidget(make_brief_row());
     }
 
-    section(QStringLiteral("TOP HEADLINES"));
-    if (headlines_.isEmpty()) {
-        auto* none = new QLabel(QStringLiteral("Waiting for the feed…"));
-        none->setObjectName("whatsOnWhen");
-        body_->addWidget(none);
-    }
+    QLabel* head = new QLabel(QStringLiteral("TOP HEADLINES"));
+    head->setObjectName("whatsOnSection");
+    body_->addWidget(head);
+    if (headlines_.isEmpty())
+        none(QStringLiteral("Waiting for the feed…"));
     for (int i = 0; i < headlines_.size(); ++i)
         body_->addWidget(make_headline_row(headlines_[i], i));
 
     QStringList notes = errors_;
-    notes << QStringLiteral("Macro: ForexFactory (this week) · FOMC: federalreserve.gov · Rates: NY Fed, Fed H.15 · "
-                            "IPOs: Nasdaq");
+    notes << QStringLiteral("Macro: ForexFactory (this + next week) · actuals: FRED · FOMC: federalreserve.gov · "
+                            "Rates: NY Fed, Fed H.15 · Earnings, ex-div, IPOs: Nasdaq · Auctions: TreasuryDirect · "
+                            "Market dates: NYSE rules, computed · Times ET");
     status_label_->setText(notes.join(QLatin1Char('\n')));
+    tick();
 }
 
 } // namespace finterm::screens
