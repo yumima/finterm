@@ -28,6 +28,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QMap>
+#include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
 #include <QString>
@@ -79,6 +80,9 @@ struct Item {
     double surprise_pct = NAN; ///< EARNINGS: reported EPS vs consensus, % (NaN until reported)
     QDate day; ///< set for date-anchored items (earnings): the listed ET date, NOT
                ///< shifted by the viewer's zone ("Thu AMC" stays Thursday in Tokyo)
+    QString name;      ///< EARNINGS / IPO / EX-DIV: short company name ("NVIDIA", "Anthropic")
+    double size = NAN; ///< EARNINGS: market cap; IPO: deal size (top of range) — ordering only
+    QString when_note; ///< untimed: what the day means ("expected to price") — after the date
 
     QDate local_date() const { return day.isValid() ? day : when.toLocalTime().date(); }
     /// Stable identity across re-renders (an expanded row stays expanded).
@@ -95,12 +99,149 @@ inline QString impact_rules() {
     return QStringLiteral(
         "Impact is a fixed table, not a judgement per event:\n"
         "HIGH — FOMC decision, CPI, nonfarm payrolls, unemployment rate, GDP, PCE prices;\n"
-        "        earnings of companies worth $500B+\n"
+        "        earnings of companies worth $500B+; IPOs raising $10B+\n"
         "MED — PPI, retail sales, jobless claims, ISM, JOLTS, hourly earnings, Fed Chair remarks,\n"
         "        FOMC minutes, other releases the calendar rates high; earnings of $50B+ companies\n"
-        "        and of your names; 10Y+ note/bond auctions; market holidays, early closes,\n"
-        "        quad witching, quarter end; insider cluster buys in your names\n"
-        "LOW — everything else (no tag)");
+        "        and of your names; IPOs raising $1B+; 10Y+ note/bond auctions; market holidays,\n"
+        "        early closes, quad witching, quarter end; insider cluster buys in your names\n"
+        "LOW — everything else (no tag): shown only with US TOP-TIER off, unless it is yours\n"
+        "IPO size = shares offered x top of the price range (Nasdaq calendar), before the\n"
+        "        underwriters' over-allotment option");
+}
+
+constexpr double kNotableIpo = 1e9; ///< an IPO raising this much (top of range) is MED…
+constexpr double kHighIpo = 10e9;   ///< …and HIGH from here
+
+inline Impact ipo_impact(double deal_size) {
+    if (!std::isfinite(deal_size))
+        return Impact::Low;
+    return deal_size >= kHighIpo ? Impact::High : deal_size >= kNotableIpo ? Impact::Med : Impact::Low;
+}
+
+// ── Plain-language formatting (every row reads without a legend) ────────────
+
+/// "NVIDIA Corporation" → "NVIDIA", "The Home Depot, Inc." → "Home Depot",
+/// "JPMorgan Chase & Co." → "JPMorgan Chase", "Anthropic, PBC" → "Anthropic".
+/// Strips legal-form and holding-structure words from the END only, never to
+/// nothing.
+inline QString short_company(const QString& raw) {
+    QString s = raw.simplified();
+    // Nasdaq's security descriptions ("Cognex Corporation Common Stock",
+    // "Artesian Resources Corporation Class A Common Stock") and its
+    // "Home Depot, Inc. (The)" ordering.
+    static const QRegularExpression security(
+        QStringLiteral("\\s+(Class [A-Z]\\b|Common Stock|Ordinary Shares|American Depositary|Depositary Shares|"
+                       "Sponsored ADR).*$"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression the_suffix(QStringLiteral("\\s*\\(The\\)\\s*$"),
+                                               QRegularExpression::CaseInsensitiveOption);
+    const QString before = s;
+    s.remove(the_suffix);
+    s.remove(security);
+    if (s.isEmpty())
+        s = before;
+    if (s.startsWith(QLatin1String("The "), Qt::CaseInsensitive) && s.size() > 4)
+        s = s.mid(4);
+    static const QStringList tails = {
+        "inc", "inc.", "incorporated", "corp", "corp.", "corporation", "co", "co.", "company", "ltd", "ltd.",
+        "limited", "plc", "p.l.c.", "n.v.", "nv", "s.a.", "sa", "s.p.a.", "ag", "se", "pbc", "llc", "l.p.", "lp",
+        "holdings", "holding", "group", "(adr)", "adr", "&", "and"};
+    for (;;) {
+        while (s.endsWith(QLatin1Char(',')) || s.endsWith(QLatin1Char(' ')))
+            s.chop(1);
+        const int sp = s.lastIndexOf(QLatin1Char(' '));
+        if (sp <= 0)
+            break;
+        const QString last = s.mid(sp + 1).toLower();
+        if (!tails.contains(last))
+            break;
+        s.truncate(sp);
+    }
+    return s.isEmpty() ? raw.trimmed() : s;
+}
+
+/// "Tue Nov 17"; the year is added when it is not `today`'s ("Tue Jan 5, 2027").
+inline QString date_label(const QDate& d, const QDate& today) {
+    if (!d.isValid())
+        return QStringLiteral("—");
+    const QLocale en(QLocale::English);
+    return en.toString(d, d.year() == today.year() ? QStringLiteral("ddd MMM d") : QStringLiteral("ddd MMM d, yyyy"));
+}
+
+/// "Wed Dec 9, in 26 days" / "Mon Nov 16, tomorrow" / "Fri Nov 13, today".
+inline QString days_away(const QDate& d, const QDate& today) {
+    const qint64 n = today.daysTo(d);
+    return date_label(d, today) + QStringLiteral(", ") +
+           (n == 0   ? QStringLiteral("today")
+            : n == 1 ? QStringLiteral("tomorrow")
+            : n > 1  ? QStringLiteral("in %1 days").arg(n)
+                     : QStringLiteral("%1 days ago").arg(-n));
+}
+
+/// Earnings session in words: BMO/AMC are Nasdaq's codes, not the reader's.
+inline QString session_label(const QString& session) {
+    if (session == QLatin1String("BMO"))
+        return QStringLiteral("before open");
+    if (session == QLatin1String("AMC"))
+        return QStringLiteral("after close");
+    return QStringLiteral("time TBA"); // to be announced
+}
+
+/// "8:30 ET", "14:00 ET" — the release clock the market quotes.
+inline QString clock_et(const QDateTime& when) {
+    return when.toTimeZone(et_zone()).toString(QStringLiteral("H:mm")) + QStringLiteral(" ET");
+}
+
+/// The figures of a macro release in words: "Actual 0.3% vs forecast 0.4% ·
+/// prior 0.6%", "Actual pending · forecast …" (out, number not yet
+/// available), "Forecast 0.3% · prior 0.4%" (not out yet).
+inline QString figures_text(const QString& actual, const QString& forecast, const QString& prior,
+                            bool pending = false) {
+    QStringList parts;
+    if (!actual.isEmpty())
+        parts << (forecast.isEmpty() ? QStringLiteral("Actual %1").arg(actual)
+                                     : QStringLiteral("Actual %1 vs forecast %2").arg(actual, forecast));
+    else if (pending)
+        parts << (forecast.isEmpty() ? QStringLiteral("Actual pending")
+                                     : QStringLiteral("Actual pending · forecast %1").arg(forecast));
+    else if (!forecast.isEmpty())
+        parts << QStringLiteral("Forecast %1").arg(forecast);
+    if (!prior.isEmpty())
+        parts << (parts.isEmpty() ? QStringLiteral("Prior %1") : QStringLiteral("prior %1")).arg(prior);
+    return parts.join(QStringLiteral(" · "));
+}
+
+/// The calendar's own names for a few headline releases, in the words the
+/// news uses. Display only: lookups (FRED spec, FOMC de-dupe) keep the
+/// calendar's title.
+inline QString plain_macro_title(const QString& title) {
+    static const QHash<QString, QString> map = {
+        {QStringLiteral("Non-Farm Employment Change"), QStringLiteral("Nonfarm payrolls")},
+        {QStringLiteral("Unemployment Claims"), QStringLiteral("Jobless claims")},
+        {QStringLiteral("Prelim UoM Consumer Sentiment"), QStringLiteral("UMich consumer sentiment (prelim)")},
+        {QStringLiteral("Revised UoM Consumer Sentiment"), QStringLiteral("UMich consumer sentiment (final)")},
+        {QStringLiteral("Prelim UoM Inflation Expectations"), QStringLiteral("UMich inflation expectations (prelim)")},
+        {QStringLiteral("Revised UoM Inflation Expectations"), QStringLiteral("UMich inflation expectations (final)")},
+        {QStringLiteral("JOLTS Job Openings"), QStringLiteral("Job openings (JOLTS)")},
+        {QStringLiteral("Federal Funds Rate"), QStringLiteral("Federal Funds Rate (FOMC decision)")},
+    };
+    return map.value(title, title);
+}
+
+/// "NASDAQ Global Select" → "Nasdaq"; NYSE names pass through.
+inline QString exchange_short(const QString& exch) {
+    return exch.contains(QLatin1String("NASDAQ"), Qt::CaseInsensitive) ? QStringLiteral("Nasdaq") : exch;
+}
+
+/// "$58B" / "$1.5B" / "$240M" — compact deal sizes.
+inline QString usd_compact(double usd) {
+    if (!std::isfinite(usd))
+        return QStringLiteral("—");
+    if (usd >= 1e9)
+        return ta::money_b(usd); // "$58B" / "$1.2B" — the auctions' format
+    if (usd >= 1e6)
+        return QStringLiteral("$%1M").arg(QString::number(usd / 1e6, 'f', usd >= 1e7 ? 0 : 1));
+    return QStringLiteral("$%1K").arg(QString::number(usd / 1e3, 'f', 0));
 }
 
 inline Impact macro_impact(const QString& title, int ff_importance) {
@@ -155,14 +296,7 @@ inline QDate week_start(const QDate& d) {
 // ── Macro ───────────────────────────────────────────────────────────────────
 
 inline QString macro_figures(const mc::MacroEvent& e) {
-    QStringList parts;
-    if (!e.actual.isEmpty())
-        parts << QStringLiteral("A %1").arg(e.actual);
-    if (!e.forecast.isEmpty())
-        parts << QStringLiteral("F %1").arg(e.forecast);
-    if (!e.previous.isEmpty())
-        parts << QStringLiteral("P %1").arg(e.previous);
-    return parts.join(QStringLiteral(" · "));
+    return figures_text(e.actual, e.forecast, e.previous);
 }
 
 using FredSeries = QHash<QString, QVector<mr::Obs>>; ///< FRED id → observations
@@ -215,7 +349,8 @@ inline QVector<Item> items_from_macro(const QVector<mc::MacroEvent>& events, con
         if (it.kind.isEmpty())
             it.kind = QStringLiteral("MACRO");
         const bool us = e.country == QLatin1String("USD") || e.country == QLatin1String("US");
-        it.title = e.country == QLatin1String("USD") ? e.title : e.country + QLatin1Char(' ') + e.title;
+        it.title = e.country == QLatin1String("USD") ? plain_macro_title(e.title)
+                                                     : e.country + QLatin1Char(' ') + e.title;
         it.impact = us ? macro_impact(e.title, e.importance) : (e.importance >= 3 ? Impact::Med : Impact::Low);
         it.figures = macro_figures(e);
         QString source_note = QStringLiteral("Source: ForexFactory weekly calendar (forecast = consensus)");
@@ -224,19 +359,10 @@ inline QVector<Item> items_from_macro(const QVector<mc::MacroEvent>& events, con
             if (const auto spec = mr::spec_for(e.title); spec && fred->contains(spec->fred_id)) {
                 const QDate release_day = e.when.toTimeZone(et_zone()).date();
                 const auto p = mr::printed(*spec, fred->value(spec->fred_id), release_day);
-                QStringList parts;
-                if (!p.actual.isEmpty()) {
-                    parts << QStringLiteral("A %1").arg(p.actual);
-                    it.released = true;
-                } else {
-                    parts << QStringLiteral("A awaiting FRED");
-                }
-                if (!e.forecast.isEmpty())
-                    parts << QStringLiteral("F %1").arg(e.forecast);
-                const QString prior = !p.prior.isEmpty() ? p.prior : e.previous;
-                if (!prior.isEmpty())
-                    parts << QStringLiteral("P %1").arg(prior);
-                it.figures = parts.join(QStringLiteral(" · "));
+                it.released = !p.actual.isEmpty();
+                // Until FRED posts the period: "Actual pending", never last month's number.
+                it.figures = figures_text(p.actual, e.forecast, !p.prior.isEmpty() ? p.prior : e.previous,
+                                          /*pending=*/true);
                 source_note = p.actual.isEmpty()
                                   ? QStringLiteral("Actual: FRED %1 has not posted %2 yet. Forecast/previous: "
                                                    "ForexFactory.")
@@ -303,38 +429,145 @@ inline QVector<Item> items_from_fomc(const QVector<QDate>& decisions, const QDat
     return out;
 }
 
-/// Expected IPO pricings (status "upcoming") dated today or later, from the
-/// ipo_calendar.py "deals" array IPO Watch uses.
+/// What an IPO raises, from the ipo_calendar.py deal: shares offered x the
+/// price range (lo/hi), or — when Nasdaq has no range/shares yet — its
+/// registered "up to" amount (`proposed_amount`, which includes the
+/// over-allotment) as `hi` alone. NaN when neither is known: an unknown size
+/// is not a small one, it is unknown (and stays out of the top tier).
+struct DealSize {
+    double lo = NAN, hi = NAN;
+    double price_lo = NAN, price_hi = NAN;
+    double shares = NAN;
+    bool registered = false; ///< hi is Nasdaq's "up to" dollar amount, not shares x price
+};
+
+inline DealSize ipo_deal_size(const QJsonObject& o) {
+    DealSize z;
+    const QStringList range =
+        o.value(QLatin1String("price_range")).toString().remove(QLatin1Char('$')).split(QLatin1Char('-'));
+    bool ok1 = false, ok2 = true;
+    const double p1 = range.value(0).trimmed().toDouble(&ok1);
+    const double p2 = range.size() > 1 ? range.value(1).trimmed().toDouble(&ok2) : p1;
+    if (ok1 && ok2 && range.size() <= 2 && p1 > 0 && p2 >= p1) {
+        z.price_lo = p1;
+        z.price_hi = p2;
+    }
+    if (const QJsonValue sh = o.value(QLatin1String("shares")); sh.isDouble() && sh.toDouble() > 0)
+        z.shares = sh.toDouble();
+    if (std::isfinite(z.price_lo) && std::isfinite(z.shares)) {
+        z.lo = z.shares * z.price_lo;
+        z.hi = z.shares * z.price_hi;
+    } else if (const QJsonValue pa = o.value(QLatin1String("proposed_amount")); pa.isDouble() && pa.toDouble() > 0) {
+        z.hi = pa.toDouble();
+        z.registered = true;
+    }
+    return z;
+}
+
+inline QString share_price(double p) {
+    return QStringLiteral("$") + QString::number(p, 'f', p == std::floor(p) ? 0 : 2);
+}
+
+/// "$70–78 a share · raising $58–64B · Nasdaq".
+inline QString ipo_figures(const DealSize& z, const QString& exchange) {
+    QStringList fig;
+    if (std::isfinite(z.price_lo))
+        fig << (z.price_hi > z.price_lo
+                    ? share_price(z.price_lo) + QStringLiteral("–") + share_price(z.price_hi).mid(1)
+                    : share_price(z.price_lo)) +
+                   QStringLiteral(" a share");
+    if (std::isfinite(z.lo) && z.hi > z.lo) {
+        const QString lo = usd_compact(z.lo), hi = usd_compact(z.hi);
+        // "$58–64B" when both ends share a unit, else "$800M–1.2B".
+        fig << QStringLiteral("raising ") + (lo.right(1) == hi.right(1) ? lo.chopped(1) : lo) +
+                   QStringLiteral("–") + hi.mid(1);
+    } else if (std::isfinite(z.hi)) {
+        fig << (z.registered ? QStringLiteral("up to %1") : QStringLiteral("raising %1")).arg(usd_compact(z.hi));
+    }
+    if (!exchange.isEmpty())
+        fig << exchange_short(exchange);
+    return fig.join(QStringLiteral(" · "));
+}
+
+/// IPOs from the ipo_calendar.py "deals" array IPO Watch uses:
+///   * every expected pricing (status "upcoming") dated today or later —
+///     Nasdaq's expected date, set by the underwriters;
+///   * a still-filed deal only when it is notable (>= kNotableIpo) AND IPO
+///     Watch projects a dated window for it (imminent / estimate) — shown at
+///     the projection's point with its window, and never above MED (a
+///     statistical window is not a scheduled event). Long shots, dormant and
+///     undated filings get no row: no date is invented.
+/// Impact by size (ipo_impact): small deals are LOW and stay in the full view.
 inline QVector<Item> items_from_ipo_deals(const QJsonArray& deals, const QDate& today) {
     QVector<Item> out;
+    const QLocale en(QLocale::English);
     for (const auto& v : deals) {
         const QJsonObject o = v.toObject();
-        if (o.value(QLatin1String("status")).toString() != QLatin1String("upcoming"))
+        const QString status = o.value(QLatin1String("status")).toString();
+        const QJsonObject proj = o.value(QLatin1String("projection")).toObject();
+        const QString pkind = proj.value(QLatin1String("kind")).toString();
+        const bool upcoming = status == QLatin1String("upcoming");
+        const bool projected = status == QLatin1String("filed") &&
+                               (pkind == QLatin1String("imminent") || pkind == QLatin1String("estimate"));
+        if (!upcoming && !projected)
             continue;
-        const QDate d = QDate::fromString(o.value(QLatin1String("expected_date")).toString(), Qt::ISODate);
+        const QDate d = QDate::fromString(upcoming ? o.value(QLatin1String("expected_date")).toString()
+                                                   : proj.value(QLatin1String("date")).toString(),
+                                          Qt::ISODate);
         if (!d.isValid() || d < today)
             continue;
         const QString company = o.value(QLatin1String("company")).toString().trimmed();
         const QString ticker = o.value(QLatin1String("ticker")).toString().trimmed();
         if (company.isEmpty())
             continue;
+        const DealSize z = ipo_deal_size(o);
+        Impact imp = ipo_impact(z.hi);
+        if (projected) {
+            if (imp == Impact::Low)
+                continue; // the undated pipeline is IPO Watch's job; only notable filers here
+            imp = std::min(imp, Impact::Med);
+        }
         Item it;
         it.source = Item::Source::Ipo;
         it.when = QDateTime(d, QTime(0, 0)); // local day; pricing time is not published
         it.timed = false;
         it.kind = QStringLiteral("IPO");
-        it.title = ticker.isEmpty() ? company : QStringLiteral("%1 (%2)").arg(company, ticker);
-        const QString range = o.value(QLatin1String("price_range")).toString().trimmed();
+        it.name = short_company(company);
+        it.title = ticker.isEmpty() ? it.name : QStringLiteral("%1 (%2)").arg(it.name, ticker);
+        it.size = z.hi;
+        it.impact = imp;
         const QString exch = o.value(QLatin1String("exchange")).toString().trimmed();
-        QStringList fig;
-        if (!range.isEmpty())
-            fig << QStringLiteral("$") + range;
-        if (!exch.isEmpty())
-            fig << exch;
-        it.figures = fig.join(QStringLiteral(" · "));
+        it.figures = ipo_figures(z, exch);
         it.key = ticker.isEmpty() ? company : ticker;
         it.deal_id = o.value(QLatin1String("deal_id")).toString();
-        it.detail = QStringLiteral("Expected to price %1").arg(QLocale(QLocale::English).toString(d, "ddd d MMM yyyy"));
+        const QString size_line =
+            std::isfinite(z.lo)
+                ? QStringLiteral("%1M shares at $%2–%3 = %4–%5, before the over-allotment option")
+                      .arg(QString::number(z.shares / 1e6, 'f', z.shares >= 1e7 ? 0 : 1))
+                      .arg(z.price_lo, 0, 'f', 2)
+                      .arg(z.price_hi, 0, 'f', 2)
+                      .arg(usd_compact(z.lo), usd_compact(z.hi))
+            : std::isfinite(z.hi) ? QStringLiteral("Offering of up to %1 (Nasdaq's dollar value of the shares "
+                                                   "offered, incl. the over-allotment option); no share count yet")
+                                        .arg(usd_compact(z.hi))
+                                  : QStringLiteral("Size not published yet");
+        if (upcoming) {
+            it.when_note = QStringLiteral("expected to price");
+            it.detail = QStringLiteral("%1 — expected to price %2 (Nasdaq's expected date, set by the underwriters; "
+                                       "it can slip). Shares usually start trading the next business day.\n%3%4")
+                            .arg(company, en.toString(d, QStringLiteral("dddd MMM d, yyyy")), size_line,
+                                 exch.isEmpty() ? QString() : QStringLiteral(" · ") + exch);
+        } else {
+            const QDate lo = QDate::fromString(proj.value(QLatin1String("lo")).toString(), Qt::ISODate);
+            const QDate hi = QDate::fromString(proj.value(QLatin1String("hi")).toString(), Qt::ISODate);
+            it.when_note = lo.isValid() && hi.isValid() && hi > lo
+                               ? QStringLiteral("projected, window %1 – %2")
+                                     .arg(en.toString(lo, QStringLiteral("MMM d")),
+                                          en.toString(hi, QStringLiteral("MMM d")))
+                               : QStringLiteral("projected");
+            it.detail = QStringLiteral("%1 — filed, no pricing date set. IPO Watch's projection: %2\n%3")
+                            .arg(company, proj.value(QLatin1String("basis")).toString(), size_line);
+        }
         out.append(it);
     }
     return out;
@@ -395,7 +628,9 @@ inline QVector<Item> items_from_earnings(const QJsonArray& rows, const QDate& fr
         it.source = Item::Source::Earnings;
         it.kind = QStringLiteral("EARNINGS");
         it.symbol = sym;
-        it.title = sym;
+        it.name = short_company(name.isEmpty() ? sym : name);
+        it.title = it.name;
+        it.size = cap;
         it.session = session == QLatin1String("BMO") || session == QLatin1String("AMC") ? session : QString();
         const QTime nominal = it.session == QLatin1String("BMO")   ? QTime(7, 0)
                               : it.session == QLatin1String("AMC") ? QTime(16, 5)
@@ -412,12 +647,12 @@ inline QVector<Item> items_from_earnings(const QJsonArray& rows, const QDate& fr
             it.surprise_pct = sur;
             it.figures = QStringLiteral("EPS %1").arg(eps(act));
             if (std::isfinite(est))
-                it.figures += QStringLiteral(" vs %1 est").arg(eps(est));
+                it.figures += QStringLiteral(" vs %1 expected").arg(eps(est));
             if (std::isfinite(sur))
-                it.figures += QStringLiteral(" (%1%2%)").arg(sur >= 0 ? QStringLiteral("+") : QString(),
+                it.figures += QStringLiteral(" (%1%2% surprise)").arg(sur >= 0 ? QStringLiteral("+") : QString(),
                                                              QString::number(sur, 'f', 1));
         } else if (std::isfinite(est)) {
-            it.figures = QStringLiteral("EPS est %1").arg(eps(est));
+            it.figures = QStringLiteral("EPS estimate %1").arg(eps(est));
         }
         const QString when_txt = it.session == QLatin1String("BMO")   ? QStringLiteral("before the open")
                                  : it.session == QLatin1String("AMC") ? QStringLiteral("after the close")
@@ -450,10 +685,14 @@ inline QVector<Item> items_from_dividends(const QJsonArray& rows, const QDate& f
         it.symbol = sym;
         it.mine = true;
         it.when = QDateTime(d, QTime(0, 0));
-        it.title = QStringLiteral("%1 goes ex-dividend").arg(sym);
+        const QString company = o.value(QLatin1String("name")).toString().trimmed();
+        it.name = company.isEmpty() ? sym : short_company(company);
+        it.title = it.name == sym ? QStringLiteral("%1 goes ex-dividend").arg(sym)
+                                  : QStringLiteral("%1 (%2) goes ex-dividend").arg(it.name, sym);
         const double amt = jnum(o, "amount");
         if (std::isfinite(amt))
-            it.figures = QStringLiteral("$%1/sh").arg(amt < 0.1 ? QString::number(amt, 'g', 3) : QString::number(amt, 'f', 2));
+            it.figures = QStringLiteral("$%1 a share")
+                             .arg(amt < 0.1 ? QString::number(amt, 'g', 3) : QString::number(amt, 'f', 2));
         const QString pay = o.value(QLatin1String("pay_date")).toString();
         it.detail = QStringLiteral("%1 — buy before %2 to receive the dividend%3\nSource: Nasdaq dividend calendar")
                         .arg(o.value(QLatin1String("name")).toString(), d.toString(Qt::ISODate),
@@ -552,61 +791,95 @@ inline QVector<Item> items_from_market_dates(const QVector<mkt::MarketDate>& dat
 
 // ── Labels ──────────────────────────────────────────────────────────────────
 
-/// "in 2h 05m · 08:30 ET" (timed, within 24 h), "35m ago" / "2h ago" (timed,
-/// out within the last 3 h), "Today 08:30 ET", "Thu 08:30 ET" (within a
-/// week either side), "Nov 20 08:30 ET"; untimed:
-/// "Today", "Thu", "Nov 20", plus the earnings session ("Thu AMC"). Clock
-/// times are US Eastern — the release clock the market quotes.
-inline QString when_label(const Item& it, const QDateTime& now) {
+/// The row's date line — always the calendar date, the countdown only as a
+/// hint beside it:
+///   timed:   "Thu Nov 19 · 8:30 ET", "Fri Nov 13 · 8:30 ET · in 2h 05m"
+///            (within 24 h ahead), "… · 35m ago" (out within 3 h);
+///   untimed: "Tue Nov 17 · after close" (earnings, session in words),
+///            "Thu Nov 19 · expected to price" (IPO; `with_note`).
+/// A timed item's day AND clock are US Eastern — the release clock the market
+/// quotes ("Tue 14:00 ET" never sits beside the viewer's Wednesday); an
+/// untimed one keeps its listed date (Item::local_date). The year is shown
+/// when it is not the current one.
+inline QString when_label(const Item& it, const QDateTime& now, bool with_note = true) {
     if (!it.when.isValid())
         return QStringLiteral("—");
-    // A timed item's clock is ET, so its day is the ET day too — "Tue 14:00
-    // ET", not the viewer's "Wed" beside an ET clock.
-    const QDate today = it.timed ? now.toTimeZone(et_zone()).date() : now.toLocalTime().date();
-    const QDate d = it.timed ? it.when.toTimeZone(et_zone()).date() : it.local_date();
-    const QLocale en(QLocale::English);
-    QString day;
-    if (d == today)
-        day = QStringLiteral("Today");
-    else if (d == today.addDays(-1))
-        day = QStringLiteral("Yest");
-    else if (std::abs(today.daysTo(d)) < 7)
-        day = en.toString(d, QStringLiteral("ddd"));
-    else
-        day = en.toString(d, QStringLiteral("MMM d"));
-    if (!it.timed)
-        return it.session.isEmpty() ? day : day + QLatin1Char(' ') + it.session;
-    const QString clock = it.when.toTimeZone(et_zone()).toString(QStringLiteral("HH:mm")) + QStringLiteral(" ET");
+    if (!it.timed) {
+        QString s = date_label(it.local_date(), now.toLocalTime().date());
+        if (it.source == Item::Source::Earnings)
+            s += QStringLiteral(" · ") + session_label(it.session);
+        if (with_note && !it.when_note.isEmpty())
+            s += QStringLiteral(" · ") + it.when_note;
+        return s;
+    }
+    QString s = date_label(it.when.toTimeZone(et_zone()).date(), now.toTimeZone(et_zone()).date()) +
+                QStringLiteral(" · ") + clock_et(it.when);
     const qint64 secs = now.secsTo(it.when);
-    auto span = [](qint64 s) {
-        const qint64 h = s / 3600, m = (s % 3600) / 60;
+    auto span = [](qint64 v) {
+        const qint64 h = v / 3600, m = (v % 3600) / 60;
         if (h == 0)
             return QStringLiteral("%1m").arg(std::max<qint64>(m, 1));
         return m == 0 ? QStringLiteral("%1h").arg(h) : QStringLiteral("%1h %2m").arg(h).arg(m, 2, 10, QLatin1Char('0'));
     };
     if (secs >= 0 && secs < 24 * 3600)
-        return QStringLiteral("in %1 · %2").arg(span(secs), clock);
-    if (secs < 0 && -secs < 3 * 3600) // just out; older reads better as a clock
-        return QStringLiteral("%1 ago").arg(span(-secs));
-    return day + QLatin1Char(' ') + clock;
+        s += QStringLiteral(" · in ") + span(secs);
+    else if (secs < 0 && -secs < 3 * 3600) // just out; older needs no hint
+        s += QStringLiteral(" · ") + span(-secs) + QStringLiteral(" ago");
+    return s;
 }
 
-/// First HIGH item still ahead (timed: after now; untimed: from today on).
-inline std::optional<Item> next_high(const QVector<Item>& items, const QDateTime& now) {
+/// Still ahead: a timed item after `now`; an untimed one on a later day, or
+/// today — earnings until their nominal session hour (an AMC report until
+/// 16:05 ET), any other all-day item (an IPO pricing, an ex-date) all day:
+/// its `when` is the day's midnight, not an hour it happens at.
+inline bool is_ahead(const Item& it, const QDateTime& now) {
+    if (!it.when.isValid())
+        return false;
+    if (it.timed)
+        return it.when > now;
     const QDate today = now.toLocalTime().date();
+    if (it.local_date() != today)
+        return it.local_date() > today;
+    return it.source != Item::Source::Earnings || it.when > now;
+}
+
+/// What happens, in words: "NVIDIA earnings", "Anthropic IPO prices",
+/// "CPI m/m", "Microsoft (MSFT) goes ex-dividend".
+inline QString event_phrase(const Item& it) {
+    switch (it.source) {
+    case Item::Source::Earnings:
+        return (it.name.isEmpty() ? it.symbol : it.name) + QStringLiteral(" earnings");
+    case Item::Source::Ipo:
+        return (it.name.isEmpty() ? it.title : it.name) + QStringLiteral(" IPO prices");
+    default:
+        return it.title;
+    }
+}
+
+/// The NEXT line: "NVIDIA earnings — Thu Nov 19 · after close".
+inline QString next_text(const Item& it, const QDateTime& now) {
+    return event_phrase(it) + QStringLiteral(" — ") + when_label(it, now, /*with_note=*/false);
+}
+
+/// The next event worth a line of its own: market-wide, the first HIGH item
+/// still ahead; in YOUR NAMES mode (`mine_only`), the first event on the
+/// user's names at any impact — the line follows the list it sits above.
+/// Ties (one session, several reports) go to the larger company / deal.
+inline std::optional<Item> next_up(const QVector<Item>& items, const QDateTime& now, bool mine_only = false) {
     std::optional<Item> best;
     for (const auto& it : items) {
-        if (it.impact != Impact::High)
+        if (mine_only ? !it.mine : it.impact != Impact::High)
             continue;
-        const bool ahead = it.timed ? it.when > now : it.local_date() > today ||
-                                                          (it.local_date() == today && it.when > now);
-        if (!ahead)
+        if (!is_ahead(it, now))
             continue;
-        if (!best || it.when < best->when)
+        const bool bigger = std::isfinite(it.size) && (!best || !std::isfinite(best->size) || it.size > best->size);
+        if (!best || it.when < best->when || (it.when == best->when && bigger))
             best = it;
     }
     return best;
 }
+
+
 
 // ── Sections ────────────────────────────────────────────────────────────────
 
@@ -670,13 +943,37 @@ struct Row {
 
 struct Filter {
     bool mine_only = false; ///< YOUR NAMES
+    bool top_tier = false;  ///< US TOP-TIER: LOW items (bills, short notes, month end, opex, small
+                            ///< IPOs) only in the full view — unless they are on your names
 };
+
+/// Earnings in a row: your names first, then by impact, then by market cap
+/// (unknown size last) — the names a row can show are the ones that matter.
+inline bool earnings_before(const Item& a, const Item& b) {
+    if (a.mine != b.mine)
+        return a.mine;
+    if (a.impact != b.impact)
+        return a.impact > b.impact;
+    const bool fa = std::isfinite(a.size), fb = std::isfinite(b.size);
+    if (fa != fb)
+        return fa;
+    return fa && a.size > b.size;
+}
+
+/// How many names an earnings row shows before "+N more": `max_names`, but
+/// never hides one of your names.
+inline int earnings_shown(const Row& r, int max_names = 3) {
+    const int mine = int(std::count_if(r.items.begin(), r.items.end(), [](const Item& i) { return i.mine; }));
+    return std::min<int>(int(r.items.size()), std::max(max_names, mine));
+}
 
 /// Sort, filter, group and section. Within a day: plain all-day items first,
 /// then by instant (earnings by session). Grouped items join the row of the
-/// first item of their group that day; inside an earnings row the largest
-/// impact comes first.
-inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& today, const Filter& f = {}) {
+/// first item of their group that day; inside an earnings row see
+/// earnings_before. `hidden` (optional) counts, per section, the items the
+/// US TOP-TIER filter left for the full view.
+inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& today, const Filter& f = {},
+                                              QMap<Section, int>* hidden = nullptr) {
     auto plain_untimed = [](const Item& i) { return !i.timed && i.session.isEmpty() && i.group.isEmpty(); };
     std::stable_sort(items.begin(), items.end(), [&](const Item& a, const Item& b) {
         if (a.local_date() != b.local_date())
@@ -695,6 +992,11 @@ inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& 
             continue;
         if (s == Section::Earlier && !(it.released || it.mine || it.impact >= Impact::Med))
             continue;
+        if (f.top_tier && it.impact == Impact::Low && !it.mine) {
+            if (hidden)
+                ++(*hidden)[s];
+            continue;
+        }
         if (!it.group.isEmpty()) {
             const QString gk = it.group + QLatin1Char('|') + it.local_date().toString(Qt::ISODate);
             if (const auto g = group_rows.constFind(gk); g != group_rows.constEnd()) {
@@ -708,8 +1010,7 @@ inline QMap<Section, QVector<Row>> sectionize(QVector<Item> items, const QDate& 
     for (auto& rows : out) {
         for (auto& r : rows) {
             if (r.items.size() > 1 && r.head().source == Item::Source::Earnings)
-                std::stable_sort(r.items.begin(), r.items.end(),
-                                 [](const Item& a, const Item& b) { return a.impact > b.impact; });
+                std::stable_sort(r.items.begin(), r.items.end(), earnings_before);
         }
     }
     return out;

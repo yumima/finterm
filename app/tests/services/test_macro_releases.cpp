@@ -167,10 +167,10 @@ class TestMacroReleases : public QObject {
         // its announcement (one row, not two).
         QCOMPARE(labels, (QStringList{"30Y bond", "13W bill", "10Y note (reopening)", "2Y note",
                                       "2Y FRN (reopening)"}));
-        QCOMPARE(ta::figures(a[0]), QStringLiteral("High 5.441% · BTC 2.36"));
+        QCOMPARE(ta::figures(a[0]), QStringLiteral("Yield 5.441% · bid-to-cover 2.36"));
         QVERIFY(a[0].has_result());
         QCOMPARE(a[0].close.toTimeZone(QTimeZone("America/New_York")).time(), QTime(13, 0));
-        QCOMPARE(ta::figures(a[1]), QStringLiteral("High 3.955% · BTC 2.94"));
+        QCOMPARE(ta::figures(a[1]), QStringLiteral("Discount rate 3.955% · bid-to-cover 2.94"));
         QCOMPARE(a[2].years, 10);
         QCOMPARE(ta::figures(a[2]), QStringLiteral("$19B")); // announced, no result yet
         QVERIFY(!a[3].announced);                           // tentative schedule

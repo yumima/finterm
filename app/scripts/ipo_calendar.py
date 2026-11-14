@@ -309,7 +309,7 @@ def merge_months(month_docs):
             d = deals[did] = {"deal_id": did, "company": "", "ticker": "", "exchange": "",
                               "filed_date": None, "expected_date": None, "priced_date": None,
                               "withdrawn_date": None, "price_range": "", "final_price": None,
-                              "shares": None, "offer_amount": None}
+                              "shares": None, "offer_amount": None, "proposed_amount": None}
         # latest non-empty identity wins (later buckets carry the listing name)
         for src, dst in (("companyName", "company"), ("proposedTickerSymbol", "ticker"),
                          ("proposedExchange", "exchange")):
@@ -321,6 +321,9 @@ def merge_months(month_docs):
     for doc in month_docs:
         for r in doc.get("filed", []):
             d = slot(r)
+            # The registration's "up to" amount (fee table; includes the
+            # over-allotment) — the only size a filed deal has.
+            d["proposed_amount"] = parse_money(r.get("dollarValueOfSharesOffered")) or d["proposed_amount"]
             fd = parse_mdy(r.get("filedDate"))
             if fd and (d["filed_date"] is None or fd < d["filed_date"]):
                 d["filed_date"] = fd
@@ -329,6 +332,7 @@ def merge_months(month_docs):
             d["expected_date"] = parse_mdy(r.get("expectedPriceDate")) or d["expected_date"]
             d["price_range"] = (r.get("proposedSharePrice") or "").strip() or d["price_range"]
             d["shares"] = parse_money(r.get("sharesOffered")) or d["shares"]
+            d["proposed_amount"] = parse_money(r.get("dollarValueOfSharesOffered")) or d["proposed_amount"]
         for r in doc.get("priced", []):
             d = slot(r)
             d["priced_date"] = parse_mdy(r.get("pricedDate")) or d["priced_date"]

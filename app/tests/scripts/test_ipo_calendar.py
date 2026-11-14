@@ -41,6 +41,22 @@ def test_merge_by_deal_id_one_row_per_deal():
     assert d["status"] == "priced"
     assert d["filed_date"] == date(2026, 5, 29) and d["priced_date"] == date(2026, 6, 18)
     assert d["final_price"] == 10.0 and d["shares"] == 10_000_000
+    assert d["proposed_amount"] == 100_000_000  # the filed row's registered amount
+
+
+def test_proposed_amount_latest_wins_and_absent_is_none():
+    # News › WHAT'S ON sizes a still-filed deal by its registered amount; the
+    # upcoming row (range set) restates it — the later one wins.
+    oct_ = month(filed=[{"dealID": "2-2", "companyName": "Big Co", "filedDate": "10/26/2026",
+                         "dollarValueOfSharesOffered": "$100,000,000"}])
+    nov = month(upcoming=[{"dealID": "2-2", "companyName": "Big Co", "proposedSharePrice": "70.00-78.00",
+                           "sharesOffered": "825,000,000", "expectedPriceDate": "11/19/2026",
+                           "dollarValueOfSharesOffered": "$74,002,500,000"}])
+    d = ic.merge_months([oct_, nov])["2-2"]
+    assert d["proposed_amount"] == 74_002_500_000 and d["status"] == "upcoming"
+    bare = ic.merge_months([month(filed=[{"dealID": "3-3", "companyName": "X", "filedDate": "10/1/2026",
+                                          "dollarValueOfSharesOffered": "--"}])])["3-3"]
+    assert bare["proposed_amount"] is None  # absent, not 0
 
 
 def test_withdrawn_bucket_ends_the_deal():

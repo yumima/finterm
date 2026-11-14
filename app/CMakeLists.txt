@@ -1145,6 +1145,7 @@ set(SCREEN_SOURCES
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsSidePanel.cpp
     src/screens/news/WhatsOnPanel.cpp
+    src/screens/news/NewsPeekPane.cpp
     src/screens/news/NewsFeedPanel.cpp
     src/screens/news/NewsFeedModel.cpp
     src/screens/news/NewsFeedDelegate.cpp
@@ -1620,6 +1621,7 @@ set_source_files_properties(
     src/screens/news/NewsScreen.cpp
     src/screens/news/NewsSidePanel.cpp
     src/screens/news/WhatsOnPanel.cpp
+    src/screens/news/NewsPeekPane.cpp
     src/screens/news/NewsTickerStrip.cpp
     src/screens/node_editor/NodeEditorScreen.cpp
     src/screens/node_editor/canvas/EdgeItem.cpp

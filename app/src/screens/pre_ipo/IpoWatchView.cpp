@@ -200,9 +200,7 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     // the GUI thread after nav.switch_screen, so this view exists by then; the
     // calendar may not have loaded yet, hence the pending key.
     select_sub_ = EventBus::instance().subscribe("ipo_watch.select", [this](const QVariantMap& m) {
-        pending_select_deal_ = m.value("deal_id").toString().trimmed();
-        pending_select_ = m.value("key").toString().trimmed();
-        apply_pending_select();
+        select_deal(m.value("deal_id").toString(), m.value("key").toString());
     });
 
     // PreIpoService::data_loaded carries the private-company dossiers
@@ -1138,6 +1136,12 @@ QString IpoWatchView::status_text() const {
 IpoWatchView::~IpoWatchView() {
     if (select_sub_ >= 0)
         EventBus::instance().unsubscribe(select_sub_);
+}
+
+void IpoWatchView::select_deal(const QString& deal_id, const QString& key) {
+    pending_select_deal_ = deal_id.trimmed();
+    pending_select_ = key.trimmed();
+    apply_pending_select();
 }
 
 void IpoWatchView::apply_pending_select() {

@@ -35,6 +35,10 @@ class WhatsOnPanel : public QWidget {
 
   signals:
     void article_clicked(const services::NewsArticle& article);
+    /// A row asks to open `screen_id` ("equity_research" {symbol}, "pre_ipo"
+    /// {deal_id, key}, "social" {}) right beside the drawer — NewsScreen
+    /// hosts it in its peek pane.
+    void open_beside(const QString& screen_id, const QVariantMap& args);
 
   protected:
     void showEvent(QShowEvent* e) override;
@@ -90,7 +94,7 @@ class WhatsOnPanel : public QWidget {
     QDateTime last_refresh_;
     QDate rendered_day_;
     QVector<QPair<QPointer<QLabel>, whats_on::Item>> when_labels_; ///< re-labelled each tick
-    std::optional<whats_on::Item> next_high_;
+    std::optional<whats_on::Item> next_up_;
 
     QPushButton* filter_btn_ = nullptr;
     QPushButton* mine_btn_ = nullptr;

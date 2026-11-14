@@ -37,7 +37,17 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     Q_OBJECT
     Q_INTERFACES(finterm::IGroupLinked)
   public:
-    explicit EquityResearchScreen(QWidget* parent = nullptr);
+    /// `hosted`: an instance embedded outside the dock (News › WHAT'S ON peek
+    /// pane) — it shows only what its host (or its own search) asks for: no
+    /// app-wide "equity_research.load_symbol" subscription, no default symbol,
+    /// and it leaves the app's single Finnhub live-tick subscription to the
+    /// docked screen (it still follows the shared Yahoo quote stream).
+    explicit EquityResearchScreen(QWidget* parent = nullptr, bool hosted = false);
+    ~EquityResearchScreen() override;
+
+    /// Show `symbol` without broadcasting to the symbol groups — for an
+    /// instance hosted outside the dock (News › WHAT'S ON peek pane).
+    void show_symbol(const QString& symbol) { load_symbol(symbol, false, false); }
 
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
@@ -64,6 +74,8 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     void on_tab_changed(int index);
 
   private:
+    int load_sub_ = -1; ///< "equity_research.load_symbol" — released in the destructor
+    bool hosted_ = false;
     void build_ui();
     QWidget* build_title_bar();
     QWidget* build_quote_bar();
