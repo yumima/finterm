@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="{{ site.lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% seo %}
+  {% feed_meta %}
+  <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="{{ '/' | relative_url }}">finterm</a>
+    <nav>
+      <a href="{{ '/brief/' | relative_url }}">Weekly brief</a>
+      <a href="{{ '/insider-cluster-buys/' | relative_url }}">Insider buys</a>
+      <a href="{{ site.repo_url }}">GitHub</a>
+      <a class="cta" href="{{ site.download_url }}">Download</a>
+    </nav>
+  </header>
+
+  <main>
+    {% if page.title and page.url != "/" and page.layout != "post" and page.url != "/brief/" %}<h1>{{ page.title }}</h1>{% endif %}
+    {{ content }}
+  </main>
+
+  {% include cta.html %}
+
+  <footer class="bottom">
+    <p>
+      finterm is free and open source (AGPL-3.0) · <a href="{{ site.repo_url }}">source</a> ·
+      <a href="{{ '/feed.xml' | relative_url }}">RSS</a>
+    </p>
+    <p class="fine">
+      General information from public filings, not investment advice or a recommendation to buy or sell
+      any security. Past patterns do not predict future returns; filings can be late, amended or wrong.
+      Check the original filings before relying on anything here. finterm was built with substantial AI
+      assistance.
+    </p>
+  </footer>
+</body>
+</html>

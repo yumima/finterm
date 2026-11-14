@@ -13,7 +13,6 @@ out/
 tmpqt/
 .git/
 .gitignore
-images/
 docs/
 .github/
 *.md

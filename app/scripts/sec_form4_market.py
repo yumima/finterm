@@ -48,7 +48,7 @@ import time
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sec_ownership_data import _get, parse_form4  # noqa: E402
+from sec_ownership_data import _get_status, parse_form4  # noqa: E402
 from finterm_paths import market_data_path
 
 BASE = "https://www.sec.gov/Archives"
@@ -103,6 +103,28 @@ def connect():
     return con
 
 
+def coverage(days, con=None):
+    """Which business days of the trailing @days-calendar-day window have been
+    read to the end. Today is not expected: its index may not exist yet.
+
+    Returns (read, expected, missing) — the one definition both the app's
+    coverage note and the weekly brief's completeness gate use.
+    """
+    today = date.today()
+    cutoff = today - timedelta(days=int(days))
+    expected = [d.isoformat() for d in business_days(int(days) + 3) if cutoff <= d < today]
+    own = con is None
+    con = con or connect()
+    try:
+        done = {r[0] for r in con.execute(
+            "SELECT filed FROM scanned_days WHERE filed >= ?", (cutoff.isoformat(),)).fetchall()}
+    finally:
+        if own:
+            con.close()
+    missing = sorted(d for d in expected if d not in done)
+    return len(expected) - len(missing), len(expected), missing
+
+
 def business_days(n):
     out, d = [], date.today()
     while len(out) < n:
@@ -117,12 +139,17 @@ def day_index(d):
 
     A Form 4 is indexed under both the issuer and every reporting owner, so the
     same accession appears several times; the dict collapses them.
+
+    {} means EDGAR has no index for the day (404: a market holiday, or today
+    before it publishes). None means the index could not be read — refused,
+    throttled, offline — and the day must NOT be recorded as walked: a refusal
+    written off as a holiday is never fetched again.
     """
     q = (d.month - 1) // 3 + 1
     url = f"{BASE}/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx"
-    r = _get(url)
-    if not r or not getattr(r, "ok", False):
-        return {}
+    r, status = _get_status(url)
+    if r is None:
+        return {} if status == 404 else None
     out = {}
     for line in r.text.splitlines():
         if not line.startswith("4 "):
@@ -172,13 +199,15 @@ def scan(days=3, limit=None, max_new_days=None):
     con = connect()
     parent_at_start = os.getppid()
     try:
-        fetched = parsed = skipped = 0
-        # A day with any filing recorded has been walked; the index for a given
-        # day never changes once published.
+        fetched = parsed = skipped = failed = 0
+        failed_days = []
+        # Only a day walked to its end is done. A day with some filings in
+        # `seen` but no `scanned_days` row was cut off part-way (the app quit
+        # mid-walk) and is resumed: its already-read filings are skipped, so
+        # the cost is one index fetch. Counting such days as done left them
+        # partial forever — 199 of a day's ~500 filings, never revisited.
         done_days = {r[0] for r in con.execute(
             "SELECT filed FROM scanned_days").fetchall()}
-        done_days |= {r[0] for r in con.execute(
-            "SELECT DISTINCT filed FROM seen").fetchall()}
         wanted = [d for d in business_days(int(days)) if d.isoformat() not in done_days]
         budget = int(max_new_days) if max_new_days else len(wanted)
         days_left = budget
@@ -193,6 +222,12 @@ def scan(days=3, limit=None, max_new_days=None):
                 break
             filed = d.isoformat()
             idx = day_index(d)
+            if idx is None:
+                # Unreadable, not empty: leave the day unrecorded so the next
+                # pass retries it, and stop — the other days' indexes sit on
+                # the same server that just refused or failed.
+                failed_days.append(filed)
+                break
             if not idx:
                 # No index for this date — a holiday, or today before EDGAR
                 # publishes. Record it only when it is in the past: today's
@@ -210,10 +245,13 @@ def scan(days=3, limit=None, max_new_days=None):
                 "SELECT accession FROM seen WHERE filed=?", (filed,)).fetchall()}
             todo = [(a, p) for a, p in idx.items() if a not in have]
             skipped += len(idx) - len(todo)
-            if limit:
+            # A pass capped by @limit read only part of the day: it is not done.
+            truncated = bool(limit) and len(todo) > int(limit)
+            if truncated:
                 todo = todo[:int(limit)]
+            day_failed = 0
             for n, (acc, path) in enumerate(todo, 1):
-                r = _get(f"{BASE}/{path}")
+                r, status = _get_status(f"{BASE}/{path}")
                 time.sleep(REQ_PAUSE)
                 fetched += 1
                 # Commit in small batches. One transaction per day held the
@@ -223,9 +261,17 @@ def scan(days=3, limit=None, max_new_days=None):
                 # "database is locked". Twenty-five filings is a few seconds.
                 if n % 25 == 0:
                     con.commit()
-                con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (acc, filed))
-                if not r or not getattr(r, "ok", False):
+                if r is None and status == 404:
+                    # Gone for good (withdrawn or removed): nothing to read,
+                    # and retrying would hold the day open forever.
+                    con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (acc, filed))
                     continue
+                if r is None:
+                    # Refused, throttled, offline: not marked seen, so the
+                    # next pass fetches it again rather than losing it.
+                    day_failed += 1
+                    continue
+                con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (acc, filed))
                 xml = _extract_xml(r.text)
                 if not xml:
                     continue
@@ -247,15 +293,32 @@ def scan(days=3, limit=None, max_new_days=None):
                          t.get("shares_held_after"),
                          1 if t.get("ten_percent_owner") else 0,
                          None if plan is None else (1 if plan else 0)))
-            con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (filed,))
+            if day_failed:
+                failed += day_failed
+                failed_days.append(filed)
+            elif not truncated:
+                con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (filed,))
             con.commit()
-        remaining_days = max(0, len(wanted) - budget)
-        return {"fetched": fetched, "transactions": parsed,
+        # Whatever is still unrecorded — not reached, failed, or cut short by
+        # @limit — is still to do. Counted from the store, not inferred.
+        recorded = {r[0] for r in con.execute("SELECT filed FROM scanned_days").fetchall()}
+        remaining_days = sum(1 for d in wanted if d.isoformat() not in recorded and d < date.today())
+        out = {"fetched": fetched, "transactions": parsed,
                 "already_had": skipped, "days": int(days),
                 "days_read": budget - days_left,
                 # >0 means the window asked for is not fully covered yet and
                 # pressing again will fetch more.
-                "days_remaining": remaining_days}
+                "days_remaining": remaining_days,
+                # What could not be read this pass (refused, throttled,
+                # offline) — retried next pass, never written off.
+                "failed_days": sorted(set(failed_days)), "failed_filings": failed}
+        if failed_days:
+            # The caller's soft-error path: pause and retry later rather than
+            # hammering a server that is refusing or throttling us.
+            n = len(set(failed_days))
+            out["error"] = (f"EDGAR did not answer for {n} day{'s' if n != 1 else ''} "
+                            f"({failed} filing{'s' if failed != 1 else ''} unread) — they are retried, not skipped")
+        return out
     except sqlite3.OperationalError as e:
         if "locked" not in str(e).lower():
             raise
@@ -350,15 +413,14 @@ def recent(days=30, min_insiders=1, min_value=25_000.0, exclude_ten_pct=True,
                 "any_plan": bool(any_plan), "any_ten_pct": bool(any_ten),
                 "plan_unknown": int(plan_unknown or 0),
             })
-        covered = con.execute(
-            "SELECT COUNT(*), MAX(filed) FROM scanned_days WHERE filed>=?", (cutoff,)).fetchone()
-        wanted = sum(1 for d in business_days(int(days) * 7 // 5 + 3)
-                     if d.isoformat() >= cutoff)
+        last = con.execute(
+            "SELECT MAX(filed) FROM scanned_days WHERE filed>=?", (cutoff,)).fetchone()
+        read, wanted, _missing = coverage(days, con)
         return {"rows": out, "days": int(days), "direction": direction,
                 "min_insiders": int(min_insiders), "min_value": float(min_value),
                 "exclude_ten_pct": bool(exclude_ten_pct), "exclude_plan": bool(exclude_plan),
-                "days_scanned": covered[0] or 0, "days_wanted": wanted,
-                "last_scanned": covered[1] or ""}
+                "days_scanned": read, "days_wanted": wanted,
+                "last_scanned": last[0] or ""}
     finally:
         con.close()
 

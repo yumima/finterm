@@ -12,6 +12,9 @@ No network: rows are inserted the way scan() inserts them. What is pinned:
     kept either way.
   • Sells never reach the buy ranking; grants never do.
   • Joint filers on one filing (same insider name, no CIK) count once.
+  • A day cut off part-way (filings in `seen`, no `scanned_days` row) is
+    resumed by the next scan — only its unread filings are fetched — and
+    then counts as covered; a completed day is not walked again.
 """
 
 import os
@@ -126,6 +129,75 @@ def main():
     rs = m.recent(days=30, min_insiders=1, min_value=0, direction="sell")
     check("recent: the sell view lists GHI's sale and nothing else",
           [x["symbol"] for x in rs["rows"]] == ["GHI"], str([x["symbol"] for x in rs["rows"]]))
+
+    # ── an interrupted day is resumed, not written off ─────────────────────
+    con = m.connect()
+    marked = {r[0] for r in con.execute("SELECT filed FROM scanned_days")}
+    days = [x.isoformat() for x in m.business_days(8) if x < today and x.isoformat() not in marked][:2]
+    partial, complete = days
+    con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (f"{partial}-read", partial))
+    con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (complete,))
+    con.commit()
+    con.close()
+    walked, fetched = [], []
+    m.day_index = lambda dd: (walked.append(dd.isoformat()) or
+                              {f"{dd}-read": f"a/{dd}-read.txt", f"{dd}-new": f"a/{dd}-new.txt"})
+    class Ok:
+        ok, text = True, "no ownership xml here"
+    m._get_status = lambda url: (fetched.append(url) or (Ok(), 200))
+    m.REQ_PAUSE = 0
+    res = m.scan(days=8)
+    check("scan: the interrupted day is walked again", partial in walked, str(walked))
+    check("scan: a completed day is not", complete not in walked, str(walked))
+    check("scan: only the unread filing of the interrupted day is fetched",
+          any(u.endswith(f"{partial}-new.txt") for u in fetched)
+          and not any(u.endswith(f"{partial}-read.txt") for u in fetched),
+          str(fetched))
+    con = m.connect()
+    check("scan: the resumed day is now recorded as covered",
+          con.execute("SELECT 1 FROM scanned_days WHERE filed=?", (partial,)).fetchone() is not None, str(res))
+    con.close()
+
+    # ── a failed filing is not read; a vanished one is; a refusal stops ────
+    con = m.connect()
+    marked = {r[0] for r in con.execute("SELECT filed FROM scanned_days")}
+    con.close()
+    left = [x.isoformat() for x in m.business_days(12) if x < today and x.isoformat() not in marked]
+    flaky, gone_day, refused, after = left[0], left[1], left[2], left[3]
+    m.day_index = lambda dd: ({f"{dd}-ok": f"a/{dd}-ok.txt", f"{dd}-bad": f"a/{dd}-bad.txt"}
+                              if dd.isoformat() == flaky else
+                              {f"{dd}-ok": f"a/{dd}-ok.txt", f"{dd}-404": f"a/{dd}-404.txt"}
+                              if dd.isoformat() == gone_day else
+                              None if dd.isoformat() == refused else {})
+    m._get_status = lambda url: ((None, 503) if url.endswith("-bad.txt") else
+                                 (None, 404) if url.endswith("-404.txt") else (Ok(), 200))
+    res = m.scan(days=12)
+    con = m.connect()
+    rec = {r[0] for r in con.execute("SELECT filed FROM scanned_days")}
+    seen = {r[0] for r in con.execute("SELECT accession FROM seen")}
+    con.close()
+    check("scan: a day with an unreadable filing stays unrecorded", flaky not in rec, str(res))
+    check("scan: the unreadable filing is not marked seen", f"{flaky}-bad" not in seen and f"{flaky}-ok" in seen)
+    check("scan: a filing gone for good (404) does not hold its day open",
+          gone_day in rec and f"{gone_day}-404" in seen, str(res))
+    check("scan: a refused index leaves its day unrecorded", refused not in rec, str(res))
+    check("scan: a refusal ends the pass — older days are not hammered", after not in rec, str(res))
+    check("scan: failures are reported as a soft error with the days",
+          refused in res.get("failed_days", []) and flaky in res.get("failed_days", []) and "error" in res, str(res))
+    check("scan: every unrecorded past day counts as still to do",
+          res.get("days_remaining", 0) >= 3, str(res))
+    read, expected, missing = m.coverage(20)
+    check("coverage: the failed days are reported missing", flaky in missing and refused in missing, str(missing))
+    check("coverage: today is never expected", today.isoformat() not in missing)
+
+    # day_index itself: 404 = no filings that day; anything else = unknown.
+    real = __import__("importlib").reload(m)
+    real._get_status = lambda url: (None, 404)
+    check("day_index: 404 is an empty day", real.day_index(today) == {})
+    real._get_status = lambda url: (None, 403)
+    check("day_index: a refusal is None, not empty", real.day_index(today) is None)
+    real._get_status = lambda url: (None, None)
+    check("day_index: no answer is None, not empty", real.day_index(today) is None)
 
     print()
     if FAILURES:

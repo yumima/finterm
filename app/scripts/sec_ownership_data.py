@@ -75,22 +75,32 @@ CLUSTER_WINDOW_DAYS = 30
 CLUSTER_MIN_INSIDERS = 2
 
 
-def _get(url, headers=None, timeout=20):
-    """Throttled GET. Returns the response or None — never raises."""
+def _get_status(url, headers=None, timeout=20):
+    """Throttled GET that says why it failed: (response, status).
+
+    (resp, 200) on success; (None, 404) etc. for an HTTP error; (None, None)
+    when nothing came back at all — network failure, or `requests` missing.
+    Callers that must tell "the file does not exist" from "we could not read
+    it" use this; _get folds both into None.
+    """
     global _LAST_REQ
     if requests is None:
-        return None
+        return None, None
     elapsed = time.time() - _LAST_REQ
     if elapsed < _MIN_REQ_GAP:
         time.sleep(_MIN_REQ_GAP - elapsed)
     try:
         r = requests.get(url, timeout=timeout, headers=headers or UA)
-        _LAST_REQ = time.time()
-        r.raise_for_status()
-        return r
     except Exception:
         _LAST_REQ = time.time()
-        return None
+        return None, None
+    _LAST_REQ = time.time()
+    return (r, r.status_code) if r.ok else (None, r.status_code)
+
+
+def _get(url, headers=None, timeout=20):
+    """Throttled GET. Returns the response or None — never raises."""
+    return _get_status(url, headers, timeout)[0]
 
 
 def _pad_cik(cik):

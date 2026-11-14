@@ -74,27 +74,11 @@ def keyring_secrets():
     """Values stored in finterm's keyring (never printed). Says so when it
     cannot check, rather than passing silently."""
     try:
-        import gi
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app", "scripts"))
+        import finterm_keyring
 
-        gi.require_version("Secret", "1")
-        from gi.repository import Secret
-
-        # The current keyring identity, and an older build's until its first
-        # launch moves the entries (SecureStorage::migrate_identity).
-        items = []
-        for name, attr in (("finterm", "finterm-key"), ("com.fincept.terminal", "fincept-key")):
-            schema = Secret.Schema.new(name, Secret.SchemaFlags.NONE, {attr: Secret.SchemaAttributeType.STRING})
-            items += Secret.password_search_sync(
-                schema, {}, Secret.SearchFlags.ALL | Secret.SearchFlags.LOAD_SECRETS | Secret.SearchFlags.UNLOCK,
-                None)
-        out = []
-        for it in items:
-            sec = it.get_secret()
-            val = sec.get_text() if sec else None
-            # Short values (a flag, a PIN-attempt counter) would match noise.
-            if val and len(val) >= 12:
-                out.append(val)
-        return out
+        # Short values (a flag, a PIN-attempt counter) would match noise.
+        return finterm_keyring.all_values(min_len=12)
     except Exception as e:
         print(f"pre-commit: note — keyring check skipped ({type(e).__name__}); "
               "pasted API keys are only caught by their shape.", file=sys.stderr)
