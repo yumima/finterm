@@ -198,8 +198,11 @@ def summary(m):
             "schedule_at": m.get("schedule_at", ""), "accept_incomplete": bool(m.get("accept_incomplete")),
             "post_x": bool(m.get("post_x")), "x_ref": m.get("x_ref", ""), "x_error": m.get("x_error", ""),
             "published_at": m.get("published_at", ""), "commit": m.get("commit", ""),
-            "error": m.get("error", "") or ("the build stopped without finishing — see the log"
-                                            if st == "failed" and m.get("state") == "building" else "")}
+            # A note stored on the draft (a failed rebuild, a scheduled publish
+            # being retried) — never the top-level "error", which means THIS
+            # call failed and would make a successful save read as refused.
+            "note": m.get("error", "") or ("the build stopped without finishing — see the log"
+                                           if st == "failed" and m.get("state") == "building" else "")}
 
 
 def list_drafts():
@@ -232,7 +235,7 @@ def get(did):
             if gen.exists():
                 out["generated_body"] = "\n".join(split_page(gen.read_text(encoding="utf-8"))[2])
         except (OSError, ValueError) as e:
-            out["error"] = f"the draft's page is unreadable ({e})"
+            out["note"] = f"the draft's page is unreadable ({e})"
     return out
 
 
@@ -332,16 +335,21 @@ def start_weekly_build(force=False):
         return {"error": f"{m.get('key')} is already published; it can't be rebuilt."}
     if m and m.get("edited") and not force:
         return {"error": "This week's draft has corrections; rebuilding replaces them.", "needs_force": True}
+    # "building" is stored BEFORE the child starts (under the lock, from a
+    # fresh load), so the child's own result can never be overwritten by it.
+    with Lock(wait=True):
+        base = load(did) or {"id": did, "kind": "weekly", "created": _iso(_now())}
+        base["prev_ready"] = base.get("state") == "ready" and bool(base.get("main"))
+        base.update({"state": "building", "pid": os.getpid(), "error": "", "title": base.get("title") or
+                     f"Weekly brief {wb.issue_key(date.today())}"})
+        store(base)
     with open(log_path(), "a", encoding="utf-8") as log:
         log.write(f"\n=== {_iso(_now())} weekly build (Social screen)\n")
         log.flush()
-        p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly"], stdout=log,
-                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
-                             cwd=os.path.dirname(os.path.abspath(__file__)))
-    base = m or {"id": did, "kind": "weekly", "created": _iso(_now())}
-    base.update({"state": "building", "pid": p.pid, "error": "", "title": base.get("title") or
-                 f"Weekly brief {wb.issue_key(date.today())}"})
-    store(base)
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly"], stdout=log,
+                         stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
+                         cwd=os.path.dirname(os.path.abspath(__file__)))
+    time.sleep(0.5)  # the child records its own pid at once; this one exits
     return get(did)
 
 
@@ -390,7 +398,8 @@ def build_weekly(if_unedited=False):
         if if_unedited and m.get("state") == "ready" and (m.get("edited") or m.get("schedule_at")):
             print(f"{did} is corrected or scheduled; not rebuilt (rebuild it from the Social screen)")
             return 0
-        had = m.get("state") == "ready" and bool(m.get("main"))
+        had = (m.get("state") == "ready" or (m.get("state") == "building" and m.get("prev_ready"))) \
+            and bool(m.get("main"))
         m.update({"state": "building", "pid": os.getpid(), "error": "",
                   "title": f"Weekly brief {wb.issue_key(date.today())}"})
         with Lock(wait=True):
@@ -399,14 +408,19 @@ def build_weekly(if_unedited=False):
         shutil.rmtree(scratch, ignore_errors=True)
         (scratch / "site").mkdir(parents=True)
         try:
+            # Output goes straight to this process's stdout — the log file (or
+            # the journal) — so the screen's "recent log" moves during a long
+            # build and a killed build keeps what it said.
+            sys.stdout.flush()
             r = subprocess.run([sys.executable, str(repo_root() / "tools/weekly_brief.py"), "--site",
                                 str(scratch / "site"), "--allow-incomplete", "--draft"],
-                               capture_output=True, text=True, timeout=BUILD_TIMEOUT_S)
-            sys.stdout.write(r.stdout + r.stderr)
+                               stdin=subprocess.DEVNULL, timeout=BUILD_TIMEOUT_S)
             if r.returncode != 0:
-                tail = (r.stderr or r.stdout).strip().splitlines()[-1:] or [f"exit {r.returncode}"]
-                raise RuntimeError(f"the brief failed: {tail[0][:300]}")
-            post = Path(r.stdout.strip().splitlines()[-1]).resolve()
+                raise RuntimeError(f"the brief failed (exit {r.returncode}) — see the log")
+            posts = sorted((scratch / "site/_posts").glob("*.md"))
+            if len(posts) != 1:
+                raise RuntimeError(f"the brief wrote {len(posts)} issue pages, expected 1")
+            post = posts[0].resolve()
             main = str(post.relative_to(scratch.resolve()))
             issue = json.loads((scratch / "site/issue.json").read_text(encoding="utf-8"))
             with Lock(wait=True):
@@ -552,8 +566,8 @@ def theme_body(title, overview, facts):
     out += ["", f"## Insider buying, last {days} days", ""]
     rows = facts.get("insiders") or []
     if rows:
-        out += ["Open-market purchases (Form 4, code P) by officers and directors; 10% owners and 10b5-1 plan "
-                "trades excluded.", "", "| Ticker | Insiders | Reported | Trade dates |", "|---|---:|---:|---|"]
+        out += ["Open-market purchases (Form 4, code P) reported by insiders; purchases by 10% owners and "
+                "pre-scheduled 10b5-1 plan trades are excluded.", "", "| Ticker | Insiders | Reported | Trade dates |", "|---|---:|---:|---|"]
         for r in rows:
             span = r["first_trade"] if r["first_trade"] == r["last_trade"] else f"{r['first_trade']} – {r['last_trade']}"
             out.append(f"| {wb.md_escape(r['symbol'])} | {r['insiders']} | {wb.money(r['value'])} | {span} |")
@@ -578,7 +592,7 @@ def theme_body(title, overview, facts):
     return out
 
 
-def theme_create(title, tickers, overview, facts):
+def theme_create(title, overview, facts):
     title = " ".join(str(title or "").split())[:120]
     if not title:
         return {"error": "Give the theme a title."}
@@ -591,7 +605,10 @@ def theme_create(title, tickers, overview, facts):
     while load(did):
         did, n = f"theme-{slug}-{today:%Y%m%d}-{n}", n + 1
     url_slug = did[len("theme-"):]
-    rel = f"site/_posts/{today.isoformat()}-{did}.md"
+    # A collection of its own (site/_config.yml "themes"), not _posts: the
+    # weekly archive, the home page's latest issue and the feed are weekly
+    # issues only.
+    rel = f"site/_themes/{today.isoformat()}-{did}.md"
     url = f"{wb.SITE_URL}/themes/{url_slug}/"
     names = [c["ticker"] for c in facts["companies"]]
     front = {"title": title, "description": f"A theme brief: {', '.join(names[:8])} — companies, insider buying and "
@@ -664,8 +681,6 @@ def save(did, body=None, x_text=None, post_x=None):
                     d = json.loads(p.read_text(encoding="utf-8"))
                     d["stamp"] = stamp.split(" stamp ")[1].rstrip(" ->")
                     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-            gen = _file(m, m["main"], "generated")
-            m["edited"] = not gen.exists() or "\n".join(split_page(gen.read_text(encoding="utf-8"))[2]) != body
         if x_text is not None:
             m["x_text"] = x_text
             if m["kind"] == "weekly":
@@ -676,6 +691,12 @@ def save(did, body=None, x_text=None, post_x=None):
                     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if post_x is not None:
             m["post_x"] = bool(post_x)
+        # Corrected = the page OR the X text differs from what was generated
+        # (the timer's rebuild and Revert both key on this).
+        gen = _file(m, m["main"], "generated")
+        page_now = "\n".join(split_page(_file(m, m["main"]).read_text(encoding="utf-8"))[2])
+        page_gen = "\n".join(split_page(gen.read_text(encoding="utf-8"))[2]) if gen.exists() else None
+        m["edited"] = page_now != page_gen or m.get("x_text", "") != m.get("x_generated", "")
         m["saved_at"] = _iso(_now())
         store(m)
     return get(did)
@@ -700,8 +721,13 @@ def schedule(did, at, accept_incomplete=False):
     if why:
         return {"error": why}
     if not at:
-        m["schedule_at"] = ""
-        store(m)
+        with Lock(wait=True):
+            m = load(did)
+            why = _editable(m)
+            if why:
+                return {"error": why}
+            m["schedule_at"] = ""
+            store(m)
         return get(did)
     when = _parse(at)
     if not when:
@@ -711,8 +737,13 @@ def schedule(did, at, accept_incomplete=False):
     if not m.get("complete", True) and not accept_incomplete:
         return {"error": "Some days of filings could not be read; confirm scheduling an incomplete week.",
                 "needs_confirm": True}
-    m.update({"schedule_at": _iso(when), "accept_incomplete": bool(accept_incomplete)})
-    store(m)
+    with Lock(wait=True):
+        m = load(did)  # a tick may have published it meanwhile
+        why = _editable(m)
+        if why:
+            return {"error": why}
+        m.update({"schedule_at": _iso(when), "accept_incomplete": bool(accept_incomplete)})
+        store(m)
     return get(did)
 
 
@@ -749,7 +780,7 @@ def publish(did, accept_incomplete=False):
         _git("add", "-A", *m["files"])
         if subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--quiet"]).returncode == 0:
             m.update({"state": "published", "published_at": _iso(_now()), "schedule_at": "",
-                      "commit": _git("rev-parse", "HEAD")})
+                      "commit": _git("rev-parse", "HEAD"), "error": ""})
             store(m)
             return get(did)  # identical to what is live: nothing to push
         _git("commit", "--quiet", "-m", f"brief: {m['key']}")
@@ -819,11 +850,9 @@ def tick(log=print):
                     m["x_error"] = "the page never showed this version; not posted"
                     store(m)
                 continue
-            if not page_live(m):
-                continue
             import social_post as sp
 
-            if "x" not in sp.ENABLED_NETWORKS:
+            if "x" not in sp.ENABLED_NETWORKS or not page_live(m):
                 continue
             try:
                 results, failed = sp.announce(m["key"], {"x": m.get("x_text", "")}, only={"x"}, log=log,
@@ -862,6 +891,25 @@ def main(argv):
         out = publish(argv[2], accept_incomplete="--accept-incomplete" in argv)
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return 1 if out.get("error") else 0
+    # For tools/weekly_publish.sh — no Python embedded in shell.
+    if cmd == "weekly-id":
+        print(weekly_id())
+        return 0
+    if cmd == "state" and len(argv) > 2:
+        m = load(argv[2]) or {}
+        print(_effective_state(m) if m else "none")
+        return 0
+    if cmd == "x-ref" and len(argv) > 2:
+        print((load(argv[2]) or {}).get("x_ref", ""))
+        return 0
+    if cmd == "post-x" and len(argv) > 2:
+        with Lock(wait=True):
+            m = load(argv[2])
+            if not m:
+                return 1
+            m["post_x"] = True
+            store(m)
+        return 0
     if cmd == "list":
         print(json.dumps(list_drafts(), indent=2, ensure_ascii=False))
         return 0

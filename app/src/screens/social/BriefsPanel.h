@@ -17,7 +17,6 @@
 // overview (optional) and lays it out in the fixed structure.
 
 #include <QJsonObject>
-#include <functional>
 #include <QString>
 #include <QWidget>
 
@@ -60,7 +59,7 @@ class BriefsPanel : public QWidget {
 
     void generate_weekly(bool force);
     void new_theme();
-    void save(std::function<void()> then = {});
+    void save();
     void revert();
     void discard();
     void schedule(bool accept_incomplete = false);

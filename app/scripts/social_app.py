@@ -215,7 +215,7 @@ DRAFT_ACTIONS = {
     "draft": lambda p: bd.get(_sid(p)),
     "draft_build_weekly": lambda p: bd.start_weekly_build(force=bool(p.get("force"))),
     "theme_facts": lambda p: bd.theme_facts(p.get("tickers") or ""),
-    "theme_create": lambda p: bd.theme_create(p.get("title"), None, p.get("overview") or "", p.get("facts") or {}),
+    "theme_create": lambda p: bd.theme_create(p.get("title"), p.get("overview") or "", p.get("facts") or {}),
     "draft_save": lambda p: bd.save(_sid(p), body=p.get("body"), x_text=p.get("x_text"),
                                     post_x=p.get("post_x")),
     "draft_revert": lambda p: bd.revert(_sid(p)),

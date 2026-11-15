@@ -27,7 +27,7 @@ echo "=== $(date -Is) weekly brief ${1:-draft}"
 
 if [ "${1:-}" != "--auto" ]; then
     python3 "$DRAFTS" build-weekly --if-unedited
-    id=$(python3 -c "import sys;sys.path.insert(0,'$REPO/app/scripts');import brief_drafts as b;print(b.weekly_id())")
+    id=$(python3 "$DRAFTS" weekly-id)
     if command -v notify-send >/dev/null 2>&1; then
         notify-send "finterm: weekly brief ready for review" \
             "Open SOCIAL › BRIEFS to review, correct and publish ($id)." || true
@@ -37,11 +37,11 @@ fi
 
 # --auto: an incomplete week is retried (the app may be mid-scan), never published.
 ok=
-id=$(python3 -c "import sys;sys.path.insert(0,'$REPO/app/scripts');import brief_drafts as b;print(b.weekly_id())")
+id=$(python3 "$DRAFTS" weekly-id)
 for attempt in 1 2 3; do
     # A failed build is retried like a refused publish; "already published"
     # exits 0, so a rerun after success finishes at once.
-    if python3 -c "import sys;sys.path.insert(0,'$REPO/app/scripts');import brief_drafts as b;m=b.load('$id') or {};sys.exit(0 if m.get('state')=='published' else 1)"; then
+    if [ "$(python3 "$DRAFTS" state "$id")" = published ]; then
         echo "$id is already published"; ok=1; break
     fi
     if python3 "$DRAFTS" build-weekly && python3 "$DRAFTS" publish "$id"; then ok=1; break; fi
@@ -53,15 +53,10 @@ done
 [ -n "$ok" ] || { echo "not published this run; the timer retries next time"; exit 1; }
 
 # Post to X once the page shows this version (tick does nothing until then).
-python3 - "$REPO" "$id" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[1] + "/app/scripts")
-import brief_drafts as b
-m = b.load(sys.argv[2]); m["post_x"] = True; b.store(m)
-PY
+python3 "$DRAFTS" post-x "$id"
 for i in $(seq 1 60); do
     python3 "$DRAFTS" tick
-    if python3 -c "import sys;sys.path.insert(0,'$REPO/app/scripts');import brief_drafts as b;m=b.load('$id');sys.exit(0 if m.get('x_ref') else 1)"; then
+    if [ -n "$(python3 "$DRAFTS" x-ref "$id")" ]; then
         exit 0
     fi
     sleep 30

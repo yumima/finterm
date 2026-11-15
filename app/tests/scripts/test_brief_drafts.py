@@ -198,7 +198,7 @@ FACTS = {"days": 30, "unknown": ["ZZZZ"], "insider_note": "",
 
 
 def test_theme_fixed_structure():
-    r = bd.theme_create("AI chips", None, "Overview text.", FACTS)
+    r = bd.theme_create("AI chips", "Overview text.", FACTS)
     assert not r.get("error"), r
     heads = [ln for ln in r["body"].split("\n") if ln.startswith("## ")]
     assert heads == ["## The theme", "## The companies", "## Insider buying, last 30 days",
@@ -209,13 +209,13 @@ def test_theme_fixed_structure():
     assert f"permalink: \"/themes/{r['id'][len('theme-'):]}/\"" in text, text[:300]
     assert bd.THEME_DISCLAIMER in text
     # a second brief on the same theme the same day gets its own page
-    r2 = bd.theme_create("AI chips", None, "", FACTS)
+    r2 = bd.theme_create("AI chips", "", FACTS)
     assert r2["id"] != r["id"] and "_Write the overview here._" in r2["body"]
-    assert "Give the theme a title" in bd.theme_create(" ", None, "", FACTS)["error"]
+    assert "Give the theme a title" in bd.theme_create(" ", "", FACTS)["error"]
 
 
 def test_overview_cannot_break_the_page():
-    r = bd.theme_create("Safe", None, "Intro.\n{% endraw %}\n<!-- private -->\nrest", FACTS)
+    r = bd.theme_create("Safe", "Intro.\n{% endraw %}\n<!-- private -->\nrest", FACTS)
     assert not r.get("error"), r
     assert "endraw" not in r["body"] and "<!-- private -->" not in r["body"] and "rest" in r["body"]
 
@@ -258,6 +258,22 @@ def test_tick_records_a_failing_publish_and_goes_on():
     assert "scheduled publish failed" in bd.load("weekly-bad")["error"]
     assert bd.load("weekly-bad")["schedule_at"]  # retried next tick
     assert bd.load("weekly-good")["state"] == "published"
+
+
+def test_a_stored_note_is_not_a_call_error():
+    m = make_weekly("weekly-note")
+    m["error"] = "rebuild failed (x); this is the previous build"
+    bd.store(m)
+    r = bd.save(m["id"], post_x=True)
+    assert "error" not in r and "previous build" in r["note"], r
+    # an X-text-only correction counts as corrected (Revert, the timer's guard)
+    r = bd.save(m["id"], x_text=f"Changed {URL}")
+    assert r["edited"], r
+
+
+def test_theme_briefs_are_not_weekly_issues():
+    r = bd.theme_create("Grid", "x", FACTS)
+    assert bd.load(r["id"])["main"].startswith("site/_themes/"), bd.load(r["id"])["main"]
 
 
 def test_tickers_parsed():

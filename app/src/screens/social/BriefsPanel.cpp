@@ -335,8 +335,9 @@ void BriefsPanel::load_list() {
                          // In motion: a build, an X post waiting for its page, or a schedule
                          // coming due in the next 20 minutes (a later one is the timer's job).
                          const QDateTime due = QDateTime::fromString(x.value("schedule_at").toString(), Qt::ISODate);
-                         waiting |= st == "building" ||
-                                    (due.isValid() && QDateTime::currentDateTimeUtc().secsTo(due) < 20 * 60) ||
+                         // Overdue (a failing publish) is the 10-minute timer's to retry, not a 15 s loop.
+                         const qint64 to_due = due.isValid() ? QDateTime::currentDateTimeUtc().secsTo(due) : -1;
+                         waiting |= st == "building" || (to_due >= -60 && to_due < 20 * 60) ||
                                     (st == "published" && x.value("post_x").toBool() &&
                                      x.value("x_ref").toString().isEmpty() && x.value("x_error").toString().isEmpty());
                      }
@@ -469,7 +470,7 @@ void BriefsPanel::render_draft() {
     QStringList notes;
     for (const auto& n : draft_.value("notes").toArray())
         notes << n.toString();
-    const QString err = draft_.value("error").toString();
+    const QString err = draft_.value("note").toString(); // the draft's stored note (not a call error)
     if (st == "building" || st == "failed") {
         QString text = st == "building" ? QStringLiteral("Building — this takes a few minutes. Recent log:\n")
                                         : QStringLiteral("The build failed: %1\nRecent log:\n").arg(err);
@@ -547,7 +548,7 @@ void BriefsPanel::generate_weekly(bool force) {
                  });
 }
 
-void BriefsPanel::save(std::function<void()> then) {
+void BriefsPanel::save() {
     if (current_.isEmpty())
         return;
     busy_ = true;
@@ -559,7 +560,7 @@ void BriefsPanel::save(std::function<void()> then) {
     if (x_text() != loaded_x_)
         p.insert(QStringLiteral("x_text"), x_text());
     call_backend(this, QStringLiteral("draft_save"), p, kQuickMs,
-                 [this, id, then](const QJsonObject& o, const QString& err, Outcome) {
+                 [this, id](const QJsonObject&, const QString& err, Outcome) {
                      busy_ = false;
                      if (!err.isEmpty()) {
                          set_status(QStringLiteral("Not saved: ") + err.toHtmlEscaped(), true);
@@ -570,9 +571,6 @@ void BriefsPanel::save(std::function<void()> then) {
                      draft_ = {};
                      load_draft(id);
                      load_list();
-                     Q_UNUSED(o);
-                     if (then)
-                         then();
                  });
 }
 

@@ -27,8 +27,17 @@ feed:
   path: feed.xml
   posts_limit: 30
 
+# Theme briefs (Social › BRIEFS): their own collection, so the weekly
+# archive, the home page's latest issue and feed.xml stay weekly issues.
+collections:
+  themes:
+    output: true
+    permalink: /themes/:name/
+
 defaults:
   - scope: { path: "", type: posts }
+    values: { layout: post }
+  - scope: { path: "", type: themes }
     values: { layout: post }
   - scope: { path: "" }
     values: { layout: default }

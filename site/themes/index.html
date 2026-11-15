@@ -1,0 +1,17 @@
+---
+title: Theme briefs
+description: finterm's theme briefs — a set of companies, their insider buying and recent SEC filings.
+---
+<h1>Theme briefs</h1>
+<p>
+  Briefs on a theme: the companies, open-market insider buying from SEC Form 4 filings and their recent SEC
+  filings. Inclusion in a theme is not a view on a company. The weekly brief is <a href="{{ '/brief/' | relative_url }}">here</a>.
+</p>
+<ul class="issues">
+{% assign themes = site.themes | sort: "date" | reverse %}
+{% for t in themes %}
+  <li><a href="{{ t.url | relative_url }}">{{ t.title }}</a> <span class="meta">{{ t.date | date: "%b %-d, %Y" }}</span></li>
+{% else %}
+  <li>No theme briefs yet.</li>
+{% endfor %}
+</ul>
