@@ -28,6 +28,11 @@
     <binary>finterm</binary>
   </provides>
   <releases>
+    <release version="4.0.4" date="2026-11-14">
+      <description>
+        <p>Version 4.0.4 — AI chat with live voice, IPO Watch, Screener, Ownership, world markets.</p>
+      </description>
+    </release>
     <release version="4.0.2" date="2026-04-14">
       <description>
         <p>Version 4.0.2 — Patch release.</p>
