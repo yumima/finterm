@@ -160,6 +160,8 @@ class StreamingCoreAgent:
 
             # Handle streaming response
             full_content = ""
+            streamed_visible = ""
+            tool_evidence = []
             # Think-block filter state: skip tokens inside <think>...</think>
             in_think = False
             think_buf = ""
@@ -199,10 +201,12 @@ class StreamingCoreAgent:
                                 in_think = True
                                 think_buf = think_buf[start + len("<think>"):]
 
-                    if visible:
-                        visible = _strip_emoji(visible)
-                        self.emit("token", visible)
-                        yield {"type": "token", "content": visible}
+                    # Not emitted as it arrives: a figure can only be checked
+                    # once the run's tool results are known, and a number shown
+                    # live cannot be taken back. The checked text is emitted
+                    # below, in pieces, exactly as the non-streaming branch does.
+                    tool_evidence.append(chunk if not hasattr(chunk, 'content') or hasattr(chunk, 'tool') else None)
+                    streamed_visible += visible
             else:
                 # Non-streaming response - strip think blocks then chunk-emit
                 content = core.get_response_content(response)
@@ -219,6 +223,23 @@ class StreamingCoreAgent:
             clean_content = _strip_emoji(
                 _re.sub(r'<think>.*?</think>', '', full_content, flags=_re.DOTALL).strip()
             )
+            if streamed_visible:
+                # A true stream: ground the whole answer against what the run
+                # was given — the query, the instructions, the tool results the
+                # stream carried, and the finished run's own record of its
+                # messages and tools — then emit it.
+                from finagent_core.number_grounding import ground
+                last_run = None
+                try:
+                    last_run = agent.get_last_run_output(session_id=session_id)
+                except Exception:
+                    last_run = None
+                clean_content = ground(clean_content, query, config.get("instructions"),
+                                       config.get("system_prompt"), tool_evidence, last_run)
+                for i in range(0, len(clean_content), 50):
+                    piece = clean_content[i:i+50]
+                    self.emit("token", piece)
+                    yield {"type": "token", "content": piece}
 
             # Emit completion
             self.emit("done", clean_content, {"total_tokens": len(clean_content)})

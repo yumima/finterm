@@ -2,21 +2,10 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-14)
+## Today's commits (2026-11-15)
 
 Latest first.
 
-- [`4d0828849`](https://github.com/yumima/finterm/commit/4d0828849) **chore(release):** update README download links and updates.json for v4.0.4
-- [`14161f3e7`](https://github.com/yumima/finterm/commit/14161f3e7) release: 4.0.4
-- [`8e5f5c935`](https://github.com/yumima/finterm/commit/8e5f5c935) readme: rewritten short — install first, what's inside, AI, privacy, build, troubleshooting
-- [`9f01a198e`](https://github.com/yumima/finterm/commit/9f01a198e) **ci:** world markets font declaration parses as a variable on Clang and MSVC
-- [`26ee2309e`](https://github.com/yumima/finterm/commit/26ee2309e) ai chat: full-width replies, expandable window, live voice conversation; news listen survives a brief
-- [`914607f8d`](https://github.com/yumima/finterm/commit/914607f8d) social briefs: review fixes — stored notes aren't call errors, schedule can't undo a publish, themes in their own collection
-- [`f179c1da6`](https://github.com/yumima/finterm/commit/f179c1da6) brief: 2026-W46
-- [`3855b6237`](https://github.com/yumima/finterm/commit/3855b6237) social: BRIEFS — generate, review, correct, schedule or publish now; theme briefs; private sections
-- [`bb7975b99`](https://github.com/yumima/finterm/commit/bb7975b99) weekly brief: the week ahead (top-tier US macro) and the top name from each screen
-- [`675a9108c`](https://github.com/yumima/finterm/commit/675a9108c) ipo watch: labelled filters that can't cancel out, the open deal stays selected, dossier shows only what an unlisted deal has
-- [`871c9a7f5`](https://github.com/yumima/finterm/commit/871c9a7f5) brief: 2026-W46
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

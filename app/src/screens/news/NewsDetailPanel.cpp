@@ -877,14 +877,17 @@ void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {
 
     ai_summary_->setText(analysis.summary.isEmpty() ? "No AI summary available." : analysis.summary);
 
-    if (std::isfinite(analysis.sentiment.score)) {
-        double score = std::clamp(analysis.sentiment.score, -1.0, 1.0);
-        QString sent_color =
-            score > 0.1 ? ui::colors::POSITIVE : (score < -0.1 ? ui::colors::NEGATIVE : ui::colors::WARNING);
-        ai_sentiment_->setText(QString("Sentiment: %1%2").arg(score >= 0 ? "+" : "").arg(score, 0, 'f', 2));
+    // A label, never a score: the model can say which way an article reads,
+    // it cannot measure by how much.
+    const QString& label = analysis.sentiment.label;
+    if (!label.isEmpty()) {
+        QString sent_color = label == QLatin1String("positive")   ? ui::colors::POSITIVE
+                             : label == QLatin1String("negative") ? ui::colors::NEGATIVE
+                                                                  : ui::colors::WARNING;
+        ai_sentiment_->setText(QStringLiteral("Sentiment: %1").arg(label.toUpper()));
         ai_sentiment_->setStyleSheet(QString("color: %1;").arg(sent_color));
     } else {
-        // Model returned no sentiment score — don't invent a neutral 0.00.
+        // Model returned no usable sentiment — don't invent a neutral one.
         ai_sentiment_->setText(QStringLiteral("Sentiment: \u2014"));
         ai_sentiment_->setStyleSheet(QString());
     }

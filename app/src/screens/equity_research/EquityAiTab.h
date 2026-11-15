@@ -6,7 +6,9 @@
 // record scores them both (AiPredictionRepository, source column):
 //
 //   quant  — fundamentals + price action → POSITION/WHY/RISKS prose and a
-//            structured JSON forecast (direction, target, confidence).
+//            structured JSON call: a DIRECTION and a recommendation. No
+//            target price, percentage or confidence — a model can only make
+//            those up, and the terminal shows no made-up figure.
 //   fingpt — the AI4Finance FinGPT-Forecaster port (FinGptPrompts.h): weekly
 //            price-move windows with the news that landed in each, answered in
 //            [Positive Developments]/[Potential Concerns]/[Prediction & Analysis].

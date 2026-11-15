@@ -91,8 +91,12 @@ def main():
     ins("j2", "JKL", "JKL Ltd", "Fund and GP", "", "10% owner", "P", "acquired", 100, 10.0, 1)
     # Older than the window.
     ins("z1", "ZZZ", "Zed", "Zoe", "0041", "Director", "P", "acquired", 9000, 9.0, 45)
-    con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (d(1),))
-    con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (d(2),))
+    # Coverage counts BUSINESS days, so the two scanned days must be business
+    # days: "yesterday and the day before" made this test fail every Sunday
+    # and Monday, when one or both of those are a weekend.
+    past = [x for x in m.business_days(30) if x < today]  # coverage never counts today
+    for day in sorted(past, reverse=True)[:2]:
+        con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (day.isoformat(),))
     con.commit()
     con.close()
 

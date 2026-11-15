@@ -103,6 +103,7 @@ class CoreAgent:
         """
         if session_id:
             config = {**config, "session_id": session_id}
+        self._last_query = query  # evidence for number grounding
 
         resolved_user_id = (
             user_id
@@ -202,7 +203,9 @@ class CoreAgent:
         config["structured_outputs"] = True
 
         response = self.run(query, config, session_id)
-        content = self.get_response_content(response)
+        # Structured output is validated against a schema by code; grounding
+        # would null its numeric fields. The raw text goes to the validator.
+        content = self._raw_response_content(response)
 
         try:
             data = json.loads(content) if isinstance(content, str) else content
@@ -467,7 +470,23 @@ class CoreAgent:
     # Helper Methods
     # ============================================================
 
-    def get_response_content(self, response) -> str:
+    def get_response_content(self, response, *evidence) -> str:
+        """The response text, with every figure the run cannot account for removed.
+
+        A model may quote a figure, never originate one: each number in the
+        text is checked against what the run was given — its messages and tool
+        results (read off `response`), plus any extra `evidence` the caller
+        holds (the query, when the response object does not carry it). See
+        number_grounding.py. This is the one place agent, team and workflow
+        output is turned into text, so no caller can skip the check.
+        """
+        from finagent_core.number_grounding import ground
+        text = self._raw_response_content(response)
+        if not isinstance(text, str) or not text:
+            return text
+        return ground(text, response, getattr(self, "_last_query", None), *evidence)
+
+    def _raw_response_content(self, response) -> str:
         """Extract text content from response.
 
         For TeamRunOutput, combines member responses with the coordinator summary
@@ -483,7 +502,7 @@ class CoreAgent:
                     member_content = str(member_resp.content)
                 # Nested TeamRunOutput — recurse
                 elif hasattr(member_resp, 'member_responses'):
-                    member_content = self.get_response_content(member_resp)
+                    member_content = self._raw_response_content(member_resp)
                 if member_content and member_content.strip():
                     # Use agent name if available
                     name = None
@@ -612,7 +631,15 @@ class CoreAgent:
         instructions = (config.get("instructions") or config.get("system_prompt")
                         or "You are a helpful AI assistant.")
         from finagent_core.clock import with_current_date
-        agent_kwargs["instructions"] = with_current_date(instructions)
+        from finagent_core.number_grounding import DIRECTIVE
+        # Every agent is told the figures rule; get_response_content enforces
+        # it whether or not the model obeys (number_grounding.py).
+        instructions = with_current_date(instructions)
+        if isinstance(instructions, str):
+            instructions = instructions + "\n\n" + DIRECTIVE
+        elif isinstance(instructions, list):
+            instructions = [*instructions, DIRECTIVE]
+        agent_kwargs["instructions"] = instructions
 
         # =================================================================
         # 4. Tools - Load and validate

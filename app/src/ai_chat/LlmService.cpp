@@ -13,6 +13,10 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/TopicPolicy.h"
+#include "ai_chat/NumberGrounding.h"
+#include "ai_chat/ThinkTrace.h"
+
+#include <QDate>
 #include "mcp/McpService.h"
 #include "services/app_context/AppContextService.h"
 #include "storage/repositories/LlmConfigRepository.h"
@@ -39,6 +43,31 @@
 namespace finterm::ai_chat {
 
 static constexpr const char* TAG = "LlmService";
+
+// ── Evidence for number grounding ────────────────────────────────────────────
+// Tool results are fetched deep inside the provider-specific loops, on the
+// thread that runs the request. Each one is also what the model is allowed to
+// quote, so every tool call goes through run_tool(), which records the result
+// for the request in progress on this thread. A scope nests (the nested event
+// loop in eventloop_request can start another request on the same thread), so
+// the previous sink is restored on exit rather than cleared.
+static thread_local QStringList* t_evidence_sink = nullptr;
+
+struct EvidenceScope {
+    QStringList collected;
+    QStringList* prev;
+    EvidenceScope() : prev(t_evidence_sink) { t_evidence_sink = &collected; }
+    ~EvidenceScope() { t_evidence_sink = prev; }
+    EvidenceScope(const EvidenceScope&) = delete;
+    EvidenceScope& operator=(const EvidenceScope&) = delete;
+};
+
+static mcp::ToolResult run_tool(const QString& function_name, const QJsonObject& args) {
+    auto tr = mcp::McpService::instance().execute_openai_function(function_name, args);
+    if (t_evidence_sink)
+        t_evidence_sink->append(QString::fromUtf8(QJsonDocument(tr.to_json()).toJson(QJsonDocument::Compact)));
+    return tr;
+}
 
 // ============================================================================
 // Content extractors (shared across non-streaming paths and tool follow-ups)
@@ -807,6 +836,8 @@ QString LlmService::compose_system_prompt(const PersonaScope& persona, bool with
         if (!sfx.isEmpty())
             blocks << sfx;
     }
+    if (persona.ground_numbers)
+        blocks << grounding::kDirective;
     // Volatile date line goes LAST so the stable prefix above stays cacheable.
     blocks << current_date_line();
     return blocks.join(QStringLiteral("\n\n"));
@@ -1443,7 +1474,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                 QJsonObject input = block["input"].toObject();
 
                 LOG_INFO(TAG, "Executing Anthropic tool: " + tool_name);
-                auto tr = mcp::McpService::instance().execute_openai_function(tool_name, input);
+                auto tr = run_tool(tool_name, input);
                 tool_results.append(QJsonObject{
                     {"type", "tool_result"},
                     {"tool_use_id", tool_id},
@@ -1505,7 +1536,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                     QJsonObject fn_args = fc["args"].toObject();
 
                     LOG_INFO(TAG, "Executing Gemini tool: " + fn_name);
-                    auto tr = mcp::McpService::instance().execute_openai_function(fn_name, fn_args);
+                    auto tr = run_tool(fn_name, fn_args);
 
                     // Build a JSON response object. Gemini requires response to be an
                     // object (string values are wrapped under a key).
@@ -1615,7 +1646,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                         QString("Executing tool: %1 args=%2")
                             .arg(fn_name,
                                  QString::fromUtf8(QJsonDocument(fn_args).toJson(QJsonDocument::Compact)).left(200)));
-                    auto tr = mcp::McpService::instance().execute_openai_function(fn_name, fn_args);
+                    auto tr = run_tool(fn_name, fn_args);
                     LOG_INFO(TAG,
                              QString("Tool %1 -> %2 (msg=%3 err=%4)")
                                  .arg(fn_name, tr.success ? "OK" : "FAIL", tr.message.left(120), tr.error.left(120)));
@@ -1723,7 +1754,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
                                   .arg(round)
                                   .arg(fname,
                                        QString::fromUtf8(QJsonDocument(fa).toJson(QJsonDocument::Compact)).left(200)));
-                auto tr = mcp::McpService::instance().execute_openai_function(fname, fa);
+                auto tr = run_tool(fname, fa);
                 LOG_INFO(TAG, QString("TOOL LOOP r%1: %2 -> %3 (msg=%4 err=%5)")
                                   .arg(round)
                                   .arg(fname, tr.success ? "OK" : "FAIL", tr.message.left(120), tr.error.left(120)));
@@ -1981,7 +2012,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
     QString tool_results;
     for (const auto& tc : calls) {
         LOG_INFO(TAG, "Executing text-detected tool: " + tc.name);
-        auto tr = mcp::McpService::instance().execute_openai_function(tc.name, tc.args);
+        auto tr = run_tool(tc.name, tc.args);
 
         QString result_content;
         if (!tr.message.isEmpty())
@@ -2366,6 +2397,7 @@ LlmResponse LlmService::request_with_fallback(const QString& user_message,
                                               const PersonaScope& persona) {
     PersonaScope target = persona;
     const QString requested_model = eff_model(persona);
+    EvidenceScope evidence; // tool results of every attempt below
     LlmResponse resp = do_request(user_message, history, use_tools, target);
     for (int hop = 0; hop < kMaxQuotaHops && is_quota_exhausted(resp); ++hop) {
         const PersonaScope next = next_quota_fallback(target);
@@ -2385,7 +2417,78 @@ LlmResponse LlmService::request_with_fallback(const QString& user_message,
     resp.requested_model = requested_model;
     resp.fell_back = resp.provider_used.compare(eff_provider(persona), Qt::CaseInsensitive) != 0 ||
                      resp.model_used != requested_model;
+    if (persona.ground_numbers && resp.success && !resp.content.isEmpty())
+        ground_reply(resp, user_message, history, use_tools, target, evidence.collected);
     return resp;
+}
+
+// A model may quote a figure, never originate one (NumberGrounding.h). This is
+// the one place every reply passes — chat() and the streaming path both come
+// through request_with_fallback — so no surface can forget to apply it.
+void LlmService::ground_reply(LlmResponse& resp, const QString& user_message,
+                              const std::vector<ConversationMessage>& history, bool use_tools,
+                              const PersonaScope& target, QStringList& tool_results) {
+    const int year = QDate::currentDate().year();
+    auto evidence_now = [&]() {
+        grounding::Evidence ev(year);
+        // Everything the model was shown. The system prompt carries the date
+        // line and the user's view; tool results carry the data.
+        ev.add(compose_system_prompt(target, use_tools, /*with_suffix=*/true));
+        for (const auto& m : history)
+            ev.add(m.content);
+        ev.add(user_message);
+        for (const QString& t : tool_results)
+            ev.add(t);
+        return ev;
+    };
+    // A leaked reasoning trace is not the answer: its numbers are neither
+    // shown as claims nor worth a retry. Check what the reader will see.
+    const QString visible = strip_think_traces(resp.content);
+    grounding::Result checked = grounding::enforce(visible, evidence_now(), year);
+    // One chance to answer properly before figures are cut: told exactly which
+    // ones could not be traced, a model usually restates them from the data or
+    // says they are unavailable — a better answer than one with holes.
+    //
+    // Only for a request that ran NO tool, and the retry itself runs without
+    // tools: a second pass with tools attached could repeat a side effect the
+    // first already had (a paper order, a watchlist entry, a note).
+    if (!checked.removed.isEmpty() && tool_results.isEmpty()) {
+        LOG_INFO(TAG, QString("grounding: %1 of %2 figures untraceable (%3) — one corrective retry")
+                          .arg(checked.removed.size())
+                          .arg(checked.checked)
+                          .arg(checked.removed.join(QStringLiteral(", ")).left(200)));
+        std::vector<ConversationMessage> h2 = history;
+        h2.push_back({QStringLiteral("user"), user_message});
+        h2.push_back({QStringLiteral("assistant"), visible});
+        const QString fix = QStringLiteral(
+                                "These figures in your answer are not in the material you were given: %1. "
+                                "Give the same answer again in the same format, using only figures from that "
+                                "material. Where a figure is not available, say so in words or leave it out — "
+                                "do not replace it with another number.")
+                                .arg(checked.removed.join(QStringLiteral(", ")));
+        LlmResponse again = do_request(fix, h2, /*use_tools=*/false, target);
+        if (again.success && !again.content.isEmpty()) {
+            const QString visible2 = strip_think_traces(again.content);
+            grounding::Result c2 = grounding::enforce(visible2, evidence_now(), year);
+            if (c2.removed.size() < checked.removed.size())
+                checked = c2;
+            resp.prompt_tokens += again.prompt_tokens;
+            resp.completion_tokens += again.completion_tokens;
+            resp.total_tokens += again.total_tokens;
+        }
+    }
+    resp.figures_checked = checked.checked;
+    resp.figures_removed = checked.removed;
+    if (checked.removed.isEmpty())
+        return;
+    LOG_WARN(TAG, QString("grounding: removed %1 untraceable figure(s): %2")
+                      .arg(checked.removed.size())
+                      .arg(checked.removed.join(QStringLiteral(", ")).left(300)));
+    // The reasoning trace goes with the unchecked text it belonged to.
+    resp.content = checked.text;
+    // JSON is consumed by a parser, not read: no footnote.
+    if (!checked.json && target.grounding_note)
+        resp.content += grounding::footnote(int(checked.removed.size()));
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,

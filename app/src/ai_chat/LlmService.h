@@ -141,6 +141,17 @@ struct PersonaScope {
     /// observed news brief collapsed into a multi-thousand-token run of country
     /// and bird names. The cap does not prevent the collapse; it bounds it.
     int max_tokens = 0;
+    /// Enforce "a model may quote a figure, never originate one" on the reply
+    /// (NumberGrounding.h): every number is checked against what this request
+    /// was given, and any that is not there is removed before the caller sees
+    /// the text. On by default for every surface. Turn it off ONLY where the
+    /// output is not a statement about the world — code completion, a drafted
+    /// SKILL.md patch — never for anything that describes markets or holdings.
+    bool ground_numbers = true;
+    /// Append the "N figures were removed" line to a prose reply that lost
+    /// figures. Off where the text is published or stored verbatim and the
+    /// caller reports the removal itself (LlmResponse::figures_removed).
+    bool grounding_note = true;
 };
 
 struct LlmResponse {
@@ -158,6 +169,10 @@ struct LlmResponse {
     QString model_used = {};
     bool fell_back = false;
     QString requested_model = {};
+    // Number grounding (see PersonaScope::ground_numbers). `content` is already
+    // clean; these say what the check did, for surfaces that want to show it.
+    int figures_checked = 0;          ///< figures examined in the reply
+    QStringList figures_removed = {}; ///< figures removed, as the model wrote them
 };
 
 // chunk_text, is_done
@@ -300,6 +315,11 @@ class LlmService : public QObject {
     //   with_tools  — tools are attached to this request
     //   with_suffix — also append persona instructions + ambient context
     QString compose_system_prompt(const PersonaScope& persona, bool with_tools, bool with_suffix) const;
+
+    // Number grounding, applied to the final reply of every request.
+    void ground_reply(LlmResponse& resp, const QString& user_message,
+                      const std::vector<ConversationMessage>& history, bool use_tools, const PersonaScope& target,
+                      QStringList& tool_results);
 
     // Quota-fallback walk shared by chat() and the streaming path. Stamps
     // provider_used / model_used / fell_back on the response.

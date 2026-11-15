@@ -151,6 +151,7 @@ void InlineCompletionController::on_idle_timeout() {
         persona.model = target.model;
         persona.api_key = target.api_key;
         persona.base_url = target.base_url;
+        persona.ground_numbers = false; // completes the user's own text/code as they type
         return ai_chat::LlmService::instance().chat(prompt, std::vector<ai_chat::ConversationMessage>{},
                                                     /*use_tools=*/false, persona);
     });

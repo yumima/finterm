@@ -178,7 +178,13 @@ inline QString forecaster_system_prompt() {
                           "basic financials from the past weeks, then provide an analysis and prediction "
                           "for the companies' stock price movement for the upcoming week. "
                           "Your answer format should be as follows:\n\n[Positive Developments]:\n1. ...\n\n"
-                          "[Potential Concerns]:\n1. ...\n\n[Prediction & Analysis]\nPrediction: ...\nAnalysis: ...");
+                          "[Potential Concerns]:\n1. ...\n\n[Prediction & Analysis]\nPrediction: ...\nAnalysis: ...\n\n"
+                          // finterm's one departure from the published prompt: the original
+                          // elicits "Up by 2-3%". A percentage the model predicts is a figure
+                          // it makes up, so the call here is a direction and nothing numeric.
+                          "State the prediction as a direction only — Up, Down or Flat. Do not "
+                          "state a percentage, a price target or a probability, and quote only "
+                          "figures that appear in the information you were given.");
 }
 
 /// Large count for prompt text: "3.45 trillion" — readable by the model, no

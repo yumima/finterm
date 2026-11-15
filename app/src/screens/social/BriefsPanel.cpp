@@ -841,6 +841,9 @@ void BriefsPanel::new_theme() {
                          auto scope = ai_chat::LlmService::instance().scope_for_role(QStringLiteral("news"));
                          scope.think = false;
                          scope.temperature = 0.3;
+                         // Published text: no footnote inside it. A removed
+                         // figure is reported to the editor in the note below.
+                         scope.grounding_note = false;
                          ai_chat::LlmService::instance().chat_streaming(
                              prompt, {}, [](const QString&, bool) {}, /*use_tools=*/false, scope,
                              [self, create](ai_chat::LlmResponse resp) {
@@ -856,10 +859,15 @@ void BriefsPanel::new_theme() {
                                  // Reasoning models may leak a think block; it is never part of the page.
                                  text.remove(QRegularExpression(QStringLiteral("<think>.*</think>"),
                                                                 QRegularExpression::DotMatchesEverythingOption));
-                                 create(text.trimmed(), QStringLiteral(" The overview was drafted by %1 — check every "
-                                                                       "sentence.")
-                                                            .arg(resp.model_used.isEmpty() ? QStringLiteral("the AI")
-                                                                                           : resp.model_used.toHtmlEscaped()));
+                                 QString note = QStringLiteral(" The overview was drafted by %1 — check every sentence.")
+                                                    .arg(resp.model_used.isEmpty() ? QStringLiteral("the AI")
+                                                                                   : resp.model_used.toHtmlEscaped());
+                                 if (!resp.figures_removed.isEmpty())
+                                     note += QStringLiteral(" It stated %1 figure(s) that are not in the filings data; "
+                                                            "each is replaced by [unverified] — rewrite those "
+                                                            "sentences before publishing.")
+                                                 .arg(resp.figures_removed.size());
+                                 create(text.trimmed(), note);
                              });
                      });
     });

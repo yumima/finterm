@@ -548,6 +548,18 @@ add_test(NAME query_store COMMAND test_query_store)
 # load is what pushes the account into 429 rate limiting, which a user
 # experiences as missing data rather than as slowness.
 
+# ── Number grounding, agent runtime ──────────────────────────────────────────
+# The Python twin of ai_chat/NumberGrounding.h (ctest number_grounding), for
+# replies that come from the agent runtime instead of LlmService. Same cases,
+# same expectations: the two must never disagree about what a made-up figure is.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME number_grounding_agents
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_number_grounding.py
+    )
+    set_tests_properties(number_grounding_agents PROPERTIES TIMEOUT 60)
+endif()
+
 if(Python3_Interpreter_FOUND)
     add_test(
         NAME daemon_singleflight
@@ -757,6 +769,18 @@ target_include_directories(test_degeneracy PRIVATE ../src)
 target_link_libraries(test_degeneracy PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_degeneracy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME degeneracy COMMAND test_degeneracy)
+
+# ── Number grounding (every AI reply) ────────────────────────────────────────
+# The rule: a model may quote a figure it was given, never originate one. This
+# is the only thing between a hallucinated price and the user, and it fails in
+# two directions — passing an invented number, or deleting a true one.
+add_executable(test_number_grounding
+    ai_chat/test_number_grounding.cpp
+)
+target_include_directories(test_number_grounding PRIVATE ../src)
+target_link_libraries(test_number_grounding PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_number_grounding PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME number_grounding COMMAND test_number_grounding)
 
 # ── News brief formatting (TL;DR + DIGEST panes) ─────────────────────────────
 # Everything this covers failed silently: a '•'-bulleted brief lost its whole

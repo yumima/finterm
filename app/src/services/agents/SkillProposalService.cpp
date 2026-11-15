@@ -150,8 +150,12 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, 
 
     LOG_INFO(kSkillTag, QString("proposing fix for skill %1 (trace %2)").arg(skill_name, trace.request_id.left(8)));
 
-    auto resp =
-        ai_chat::LlmService::instance().chat(prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false);
+    // The output is a SKILL.md patch (instructions for an agent), not a
+    // statement about markets: number grounding would mangle its examples.
+    ai_chat::PersonaScope scope;
+    scope.ground_numbers = false;
+    auto resp = ai_chat::LlmService::instance().chat(prompt, std::vector<ai_chat::ConversationMessage>{},
+                                                     /*use_tools=*/false, scope);
     if (!resp.success)
         return Result<SkillProposal>::err(std::string("LLM error: ") + resp.error.toStdString());
 

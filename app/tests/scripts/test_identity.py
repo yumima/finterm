@@ -44,6 +44,7 @@ DECLARED = {  # host each file talks to
     "finra_short_volume.py", "finra_short_interest.py",          # FINRA
     "nominatim_data.py", "overpass_api_data.py",                 # OpenStreetMap
     "yfinance_data.py",                                          # its EDGAR document fetch
+    "brief_drafts.py",                                           # EDGAR only: company_tickers.json + submissions (_sec_get)
     os.path.join("mcp", "edgar", "base.py"),                     # EDGAR
     os.path.join("Analytics", "corporateFinance", "deal_database", "deal_scanner.py"),  # EDGAR
 }

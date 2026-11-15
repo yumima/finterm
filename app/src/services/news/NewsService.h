@@ -66,6 +66,9 @@ struct SentimentAnalysis {
     double score = 0;
     double intensity = 0;
     double confidence = 0;
+    /// "positive" | "neutral" | "negative" — what the model is asked for. The
+    /// numbers above are legacy: a model cannot measure them, only invent them.
+    QString label = {};
 };
 
 struct MarketImpactData {

@@ -903,7 +903,7 @@ void NodeEditorScreen::on_show_templates() {
         set_param(n3, "value", "0.7");
         auto n4 = make_node("agent.single", "Sentiment Agent", 1000, 200);
         set_param(n4, "agent_type", "economic");
-        set_param(n4, "prompt", "Analyze sentiment of these news articles. Rate bullish/bearish 1-10.");
+        set_param(n4, "prompt", "Analyze sentiment of these news articles. Label each bullish, bearish or neutral — no scores.");
         auto n5 = make_node("control.if_else", "Bullish?", 1300, 200);
         auto n6 = make_node("notify.telegram", "Buy Signal", 1600, 100);
         auto n7 = make_node("core.set", "Hold", 1600, 350);

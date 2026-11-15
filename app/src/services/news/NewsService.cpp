@@ -420,7 +420,7 @@ QString news_build_analysis_prompt(const QString& title, const QString& body) {
     return QString("You are a financial news analyst. Analyse the article and reply with ONLY a JSON "
                    "object (no markdown, no commentary) of exactly this shape:\n"
                    "{\"summary\":\"2-3 sentences\","
-                   "\"sentiment\":{\"score\":-1..1,\"intensity\":0..1,\"confidence\":0..1},"
+                   "\"sentiment\":\"negative|neutral|positive\","
                    "\"market_impact\":{\"urgency\":\"LOW|MEDIUM|HIGH\","
                    "\"prediction\":\"negative|neutral|moderate_positive|positive\"},"
                    "\"keywords\":[],\"topics\":[],\"key_points\":[],"
@@ -484,7 +484,14 @@ bool news_parse_analysis(const QString& content, NewsAnalysis& out) {
         const QJsonValue v = sent.value(QString::fromLatin1(k));
         return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
     };
+    // The model is asked for a LABEL. A sentiment score, intensity or
+    // confidence is a figure it can only make up, so none is requested; the
+    // numeric fields stay NaN unless an older-shaped reply carried them, and
+    // number grounding has already nulled any that were not in the article.
     out.sentiment = {num_or_nan("score"), num_or_nan("intensity"), num_or_nan("confidence")};
+    const QString label = a.value("sentiment").toString().trimmed().toLower();
+    if (label == QLatin1String("positive") || label == QLatin1String("negative") || label == QLatin1String("neutral"))
+        out.sentiment.label = label;
     out.market_impact = {mi.value("urgency").toString(), mi.value("prediction").toString()};
     for (const auto& v : a.value("keywords").toArray())
         out.keywords << v.toString();

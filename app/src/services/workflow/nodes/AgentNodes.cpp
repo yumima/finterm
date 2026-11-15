@@ -251,7 +251,12 @@ void register_agent_nodes(NodeRegistry& registry) {
                     using finterm::ai_chat::ConversationMessage;
 
                     // Single non-streaming call using globally active LLM config
-                    auto resp = LlmService::instance().chat(query, {ConversationMessage{"system", system_prompt}});
+                    // The reply is a tool choice with arguments, read by code:
+                    // {"limit": 50} is a parameter, not a claim about the world.
+                    finterm::ai_chat::PersonaScope scope;
+                    scope.ground_numbers = false;
+                    auto resp = LlmService::instance().chat(query, {ConversationMessage{"system", system_prompt}},
+                                                            /*use_tools=*/true, scope);
 
                     if (!resp.success) {
                         cb(false, {}, "Tool Picker LLM call failed: " + resp.error);

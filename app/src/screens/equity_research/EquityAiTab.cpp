@@ -69,6 +69,21 @@ QString pct_str(double v) {
     return std::isnan(v) ? QStringLiteral("n/a") : QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 1);
 }
 
+// A model states a DIRECTION and nothing numeric: a target price, a predicted
+// percentage and a confidence score are figures it can only make up, and the
+// terminal does not show made-up figures (ai_chat/NumberGrounding.h). Records
+// written before that rule still carry the model's target; they are kept and
+// drawn as they were made, and this tells the two kinds apart.
+bool has_magnitude(const AiPrediction& p) {
+    return p.target_price > 0;
+}
+
+/// "UP +3.2%" for a legacy record, "UP" for a direction-only one.
+QString call_str(const AiPrediction& p) {
+    return has_magnitude(p) ? QString("%1 %2").arg(p.direction.toUpper(), pct_str(p.predicted_pct))
+                            : p.direction.toUpper();
+}
+
 // Pull the last balanced {...} JSON object out of the model's reply (it is told
 // to end with a ```json block). Tolerant: works with or without the fence.
 QJsonObject extract_forecast_json(const QString& text) {
@@ -424,9 +439,13 @@ void PredictionChart::paintEvent(QPaintEvent*) {
     // ── Predicted segments: made-on → predicted-target ────────────────────────
     for (const auto& pr : preds_) {
         const qint64 t0 = ymd_to_secs(pr.created_at), t1 = ymd_to_secs(pr.resolve_date);
-        if (t0 == 0 || t1 == 0 || pr.target_price <= 0)
+        if (t0 == 0 || t1 == 0 || pr.price_at_pred <= 0)
             continue;
-        const QPointF a(X(t0), Y(pr.price_at_pred)), b(X(t1), Y(pr.target_price));
+        // A direction-only call has no target to aim at: its line runs level at
+        // the price it was made at — the level the outcome is graded against —
+        // and a marker at the start says which way it called.
+        const bool mag = has_magnitude(pr);
+        const QPointF a(X(t0), Y(pr.price_at_pred)), b(X(t1), Y(mag ? pr.target_price : pr.price_at_pred));
         const char* col = !pr.resolved ? colors::AMBER() : pr.correct ? colors::POSITIVE() : colors::NEGATIVE();
         // Orthogonal encoding, one chart: LINE STYLE is the engine (quant
         // solid, news dotted), COLOR is the outcome (green hit, red miss,
@@ -435,11 +454,34 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         QPen pen(QColor(col), 1.6);
         if (pr.source == QLatin1String("fingpt"))
             pen.setStyle(Qt::DotLine);
+        if (!mag) {
+            pen.setWidthF(1.0);
+            if (pen.style() == Qt::SolidLine)
+                pen.setStyle(Qt::DashLine);
+        }
         p.setPen(pen);
         p.drawLine(a, b);
         p.setBrush(QColor(col));
-        p.drawEllipse(b, 3.0, 3.0);
-        if (off_scale(pr.target_price)) {
+        if (mag) {
+            p.drawEllipse(b, 3.0, 3.0);
+        } else {
+            p.setPen(Qt::NoPen);
+            QPainterPath mark;
+            if (pr.direction == QLatin1String("up")) {
+                mark.moveTo(a.x(), a.y() - 7.0);
+                mark.lineTo(a.x() - 5.0, a.y() + 2.0);
+                mark.lineTo(a.x() + 5.0, a.y() + 2.0);
+            } else if (pr.direction == QLatin1String("down")) {
+                mark.moveTo(a.x(), a.y() + 7.0);
+                mark.lineTo(a.x() - 5.0, a.y() - 2.0);
+                mark.lineTo(a.x() + 5.0, a.y() - 2.0);
+            } else {
+                mark.addRect(a.x() - 4.0, a.y() - 2.0, 8.0, 4.0);
+            }
+            mark.closeSubpath();
+            p.fillPath(mark, QColor(col));
+        }
+        if (mag && off_scale(pr.target_price)) {
             // Chevron into the margin, the same convention the earnings
             // reaction chart uses: a pinned point must never read as a value
             // that happened to land exactly on the frame.
@@ -522,10 +564,11 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         double best_d = 9.0; // px hit threshold
         for (const auto& pr : preds_) {
             const qint64 t0 = ymd_to_secs(pr.created_at), t1 = ymd_to_secs(pr.resolve_date);
-            if (t0 == 0 || t1 == 0 || pr.target_price <= 0)
+            if (t0 == 0 || t1 == 0 || pr.price_at_pred <= 0)
                 continue;
-            const double d = dist_to_segment(QPointF(hover_), QPointF(X(t0), Y(pr.price_at_pred)),
-                                             QPointF(X(t1), Y(pr.target_price)));
+            const double d =
+                dist_to_segment(QPointF(hover_), QPointF(X(t0), Y(pr.price_at_pred)),
+                                QPointF(X(t1), Y(has_magnitude(pr) ? pr.target_price : pr.price_at_pred)));
             if (d < best_d) {
                 best_d = d;
                 hp = &pr;
@@ -533,21 +576,26 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         }
         if (hp) {
             const qint64 t0 = ymd_to_secs(hp->created_at), t1 = ymd_to_secs(hp->resolve_date);
-            const QPointF a(X(t0), Y(hp->price_at_pred)), b(X(t1), Y(hp->target_price));
+            const bool mag = has_magnitude(*hp);
+            const QPointF a(X(t0), Y(hp->price_at_pred)), b(X(t1), Y(mag ? hp->target_price : hp->price_at_pred));
             const char* hc = !hp->resolved ? colors::AMBER() : hp->correct ? colors::POSITIVE() : colors::NEGATIVE();
             p.setBrush(Qt::NoBrush);
             p.setPen(QPen(QColor(hc), 2.6));
             p.drawLine(a, b); // emphasise the hovered forecast
             QStringList lines;
-            lines << QString("%1 %2 · %3 %4 → %5 · conf %6")
-                         .arg(source_label(hp->source), hp->created_at.left(10), hp->direction.toUpper(),
-                              pct_str(hp->predicted_pct), fmt::format_money(hp->target_price),
-                              hp->confidence > 0 ? QString::number(hp->confidence) : QStringLiteral("—"));
-            lines << (hp->resolved ? QString("Actual %1 · %2 · off %3pp")
-                                         .arg(pct_str(hp->actual_pct),
-                                              hp->correct ? QStringLiteral("✓ hit") : QStringLiteral("✗ miss"),
-                                              QString::number(std::abs(hp->predicted_pct - hp->actual_pct), 'f', 1))
-                                   : QString("resolves %1 · pending").arg(hp->resolve_date));
+            if (mag)
+                lines << QString("%1 %2 · %3 → %4 (the model's own target)")
+                             .arg(source_label(hp->source), hp->created_at.left(10), call_str(*hp),
+                                  fmt::format_money(hp->target_price));
+            else
+                lines << QString("%1 %2 · called %3 from %4")
+                             .arg(source_label(hp->source), hp->created_at.left(10), hp->direction.toUpper(),
+                                  fmt::format_money(hp->price_at_pred));
+            lines << (hp->resolved
+                          ? QString("Actual %1 · %2")
+                                .arg(pct_str(hp->actual_pct),
+                                     hp->correct ? QStringLiteral("✓ hit") : QStringLiteral("✗ miss"))
+                          : QString("resolves %1 · pending").arg(hp->resolve_date));
             draw_box(b, lines, hc);
         } else {
             // 2) Otherwise → nearest day's actual close.
@@ -735,7 +783,7 @@ void EquityAiTab::build_ui() {
     chart_ = new PredictionChart;
     bv->addWidget(chart_, 2);
 
-    static const QStringList kCols = {"Made", "Engine", "Horizon", "Call", "Target", "Conf", "Actual", "Result"};
+    static const QStringList kCols = {"Made", "Engine", "Horizon", "Call", "From", "Actual", "Result"};
     record_table_ = new QTableWidget;
     record_table_->setColumnCount(kCols.size());
     record_table_->setHorizontalHeaderLabels(kCols);
@@ -1066,8 +1114,8 @@ void EquityAiTab::show_idle_analysis() {
         return;
     }
     analysis_view_->setPlainText(QString("Click “Run AI Analysis” for both engines' read on %1 — a position "
-                                         "recommendation with thesis and risks, the FinGPT news forecast, and a price "
-                                         "forecast from each recorded to the track record below.")
+                                         "recommendation with thesis and risks, the FinGPT news read, and an up / down / "
+                                         "flat call from each, recorded and graded in the track record below.")
                                      .arg(current_symbol_.isEmpty() ? QStringLiteral("this stock") : current_symbol_));
 }
 
@@ -1143,16 +1191,22 @@ QString EquityAiTab::build_quant_prompt() const {
     const QString hl = h == 1   ? QStringLiteral("1 trading day")
                        : h == 7 ? QStringLiteral("1 week")
                                 : QStringLiteral("1 month");
-    return QString("Analyze this stock for a retail investor and forecast its move over the next %1.\n\n"
+    // The model is asked for a DIRECTION and its reasons — never a target
+    // price, a percentage or a confidence score. Those are figures it would
+    // have to invent; every figure in its answer must come from the DATA
+    // block, and the service removes any that does not (NumberGrounding.h).
+    return QString("Analyze this stock for a retail investor and say which way you expect it to move over "
+                   "the next %1.\n\n"
                    "<<<DATA>>>\n%2\n<<<END>>>\n\n"
                    "Write a short, plain-language read in 3 labeled parts: 1) POSITION — what "
-                   "a reasonable position is now (e.g. accumulate / hold / reduce / avoid) and "
-                   "a sensible entry zone; 2) WHY — the thesis from the data above; 3) RISKS — "
-                   "what would break it. Then, on the FINAL line, output ONLY a compact JSON "
-                   "object with your %1 forecast and nothing after it:\n"
-                   "{\"direction\":\"up|down|flat\",\"target_price\":<number>,\"predicted_pct\":<number>,"
-                   "\"confidence\":<0-100>,\"recommendation\":\"buy|accumulate|hold|reduce|sell\",\"rationale\":\"one "
-                   "short sentence\"}")
+                   "a reasonable position is now (e.g. accumulate / hold / reduce / avoid); "
+                   "2) WHY — the thesis from the data above; 3) RISKS — what would break it. "
+                   "Quote only figures that appear in the data above. Do not give a price target, an "
+                   "entry price, a predicted percentage or a probability: state a direction and the "
+                   "reasons for it. Then, on the FINAL line, output ONLY a compact JSON object with "
+                   "your %1 call and nothing after it:\n"
+                   "{\"direction\":\"up|down|flat\",\"recommendation\":\"buy|accumulate|hold|reduce|sell\","
+                   "\"rationale\":\"one short sentence\"}")
         .arg(hl, stock_data_block());
 }
 
@@ -1282,47 +1336,24 @@ void EquityAiTab::run_quant_forecast(bool automatic) {
             p.resolve_date = market_today().addDays(horizon).toString(Qt::ISODate);
             p.price_at_pred = price_now;
 
-            // ── Reconcile the model's three ways of saying one thing ────
-            // A language model routinely emits a target price, a percentage
-            // and a direction word that do not agree. price_at_pred is ours
-            // and exact; the target wins and the percentage is derived from
-            // it — see AiForecastMath.h.
-            const std::optional<double> stated_pct =
-                f.contains(QStringLiteral("predicted_pct"))
-                    ? std::optional<double>(f.value(QStringLiteral("predicted_pct")).toDouble())
-                    : std::nullopt;
-            const aif::Forecast fc =
-                aif::reconcile(price_now, f.value(QStringLiteral("target_price")).toDouble(), stated_pct);
-            if (fc.empty) {
-                // A reply with a direction word but no usable numbers is not a
-                // forecast. Recording it would store a "flat" call the model
-                // never made and then grade it against real closes.
+            // The call is the direction word, and only that. No target, no
+            // percentage, no confidence is asked for or stored: the record is
+            // graded on direction against real closes (resolve_predictions).
+            p.direction = f.value(QStringLiteral("direction")).toString().trimmed().toLower();
+            if (p.direction != QLatin1String("up") && p.direction != QLatin1String("down") &&
+                p.direction != QLatin1String("flat")) {
+                // Recording anything else would put a call the model never
+                // made into a track record that is graded against real closes.
                 self->status_lbl_->setText(
-                    QStringLiteral("The quant engine returned no usable target or percentage — not recorded."));
+                    QStringLiteral("The quant engine stated no direction (up / down / flat) — not recorded."));
                 self->run_news_forecast(automatic);
                 return;
             }
-            p.target_price = fc.target_price;
-            p.predicted_pct = fc.predicted_pct;
-            p.direction = fc.direction;
-            p.confidence = std::clamp(f.value(QStringLiteral("confidence")).toInt(), 0, 100);
             p.recommendation = f.value(QStringLiteral("recommendation")).toString().toLower();
             p.rationale = f.value(QStringLiteral("rationale")).toString();
             p.analysis = shown;
 
             if (AiPredictionRepository::instance().insert(p) > 0) {
-                // The incoherence note goes INTO the quant pane, not the status
-                // line: run_news_forecast() rewrites the status synchronously on
-                // the next call, so a status-line note was dead code. The pane
-                // is where the reader is looking at the numbers it qualifies.
-                if (fc.incoherent)
-                    self->analysis_view_->setPlainText(
-                        self->analysis_view_->toPlainText() +
-                        QStringLiteral("\n\n⚠ The model's stated %1% did not match its own %2 "
-                                       "target; the recorded forecast derives from the target "
-                                       "(%3% from here).")
-                            .arg(QString::number(stated_pct.value_or(0.0), 'f', 1), fmt::format_money(p.target_price),
-                                 QString::number(p.predicted_pct, 'f', 1)));
                 self->status_lbl_->setText(
                     QStringLiteral("Quant forecast recorded — resolves %1.").arg(p.resolve_date));
                 self->update_quant_chip(p);
@@ -1557,44 +1588,17 @@ void EquityAiTab::render_news_answer(const QString& raw, const QString& model_us
 }
 
 void EquityAiTab::record_news_prediction(const fg::ForecasterAnswer& a, const QString& model_used) {
-    // Only a stated call joins the track record. An explicit FLAT is a call
-    // (point estimate 0% — the flat band scores it against the real close); a
-    // directional call additionally needs its percentage band, because scoring
-    // one without it would mean inventing a magnitude the model never gave.
+    // Only a stated call joins the track record: UP, DOWN, or an explicit
+    // FLAT. The record holds the direction alone — the engine is told not to
+    // give a percentage, and one that slips through is neither stored nor
+    // graded (it is a figure the model made up).
     if (a.direction == 0 && !a.flat_stated) {
         status_lbl_->setText(QStringLiteral("News engine stated no direction — shown, not recorded."));
         return;
     }
-    if (a.direction != 0 && !std::isfinite(a.bin_lo)) {
-        status_lbl_->setText(QStringLiteral("News engine gave no percentage band — shown, not recorded."));
-        return;
-    }
-    if (a.direction == 0 && std::isfinite(a.bin_lo)) {
-        // A flat call is recorded as a 0% point estimate and graded against
-        // the record's fixed ±1% flat band. A model that said "within 0-3%"
-        // made a WIDER claim than that scoring can honour — grading it on ±1%
-        // would invent precision, so it is shown but not recorded.
-        const double bound = std::isinf(a.bin_hi) ? a.bin_lo : a.bin_hi;
-        if (bound > aif::kFlatBandPct) {
-            status_lbl_->setText(
-                QStringLiteral("News engine called it flat within ±%1% — wider than the ±%2% the record scores "
-                               "flat against, so it is shown, not recorded.")
-                    .arg(QString::number(bound, 'g', 4))
-                    .arg(QString::number(aif::kFlatBandPct, 'g', 4)));
-            return;
-        }
-    }
     if (candles_.isEmpty() || candles_.last().close <= 0)
         return;
     const double price_now = candles_.last().close;
-    // "2-3%" → 2.5; "more than 5%" → 5 (the stated floor, not an invention);
-    // a stated FLAT is exactly 0.
-    const double mag = a.direction == 0 ? 0.0 : (std::isinf(a.bin_hi) ? a.bin_lo : (a.bin_lo + a.bin_hi) / 2.0);
-    const aif::Forecast fc = aif::reconcile(price_now, /*stated_target=*/0.0, std::optional<double>(a.direction * mag));
-    if (fc.empty) {
-        status_lbl_->setText(QStringLiteral("News engine's band is implausible — not recorded."));
-        return;
-    }
 
     AiPrediction p;
     p.ticker = current_symbol_;
@@ -1604,10 +1608,7 @@ void EquityAiTab::record_news_prediction(const fg::ForecasterAnswer& a, const QS
     p.horizon_days = 7; // FinGPT's method is fixed to "the upcoming week"
     p.resolve_date = market_today().addDays(7).toString(Qt::ISODate);
     p.price_at_pred = price_now;
-    p.target_price = fc.target_price;
-    p.predicted_pct = fc.predicted_pct;
-    p.direction = fc.direction;
-    p.confidence = 0; // the method states no confidence; 0 renders as "—"
+    p.direction = a.direction > 0 ? QStringLiteral("up") : a.direction < 0 ? QStringLiteral("down") : QStringLiteral("flat");
     p.rationale = a.prediction;
     p.analysis = fg::strip_think(a.analysis).trimmed();
 
@@ -1793,11 +1794,10 @@ void EquityAiTab::update_quant_chip(const AiPrediction& p) {
     const char* dir_col = up ? colors::POSITIVE() : down ? colors::NEGATIVE() : colors::TEXT_SECONDARY();
     style_chip(quant_chip_, accent);
     quant_chip_->setText(QStringLiteral("<span style='color:%1;font-weight:700;'>QUANT</span> %2"
-                                        "<b style='color:%3;'>%4 %5</b> "
-                                        "<span style='color:%6;'>→ %7 · conf %8 · %9</span>")
-                             .arg(QString(colors::TEXT_DIM()), verdict, QString(dir_col), p.direction.toUpper(),
-                                  pct_str(p.predicted_pct), QString(colors::TEXT_SECONDARY()),
-                                  fmt::format_money(p.target_price), QString::number(p.confidence),
+                                        "<b style='color:%3;'>%4</b> "
+                                        "<span style='color:%5;'>· %6</span>")
+                             .arg(QString(colors::TEXT_DIM()), verdict, QString(dir_col), call_str(p),
+                                  QString(colors::TEXT_SECONDARY()),
                                   p.horizon_days == 1   ? QStringLiteral("1d")
                                   : p.horizon_days == 7 ? QStringLiteral("1w")
                                                         : QStringLiteral("%1d").arg(p.horizon_days)));
@@ -1986,10 +1986,9 @@ QString EquityAiTab::stock_data_block(const QVector<AiPrediction>& preds) const 
         }
     if (!preds.isEmpty()) {
         const AiPrediction& p = preds.first();
-        L << QString("Latest AI forecast (%1 engine, %2): %3 %4 by %5, target %6%7%8")
+        L << QString("Latest AI call (%1 engine, %2): %3 by %4, made at %5%6")
                  .arg(source_label(p.source).toLower(), p.created_at.left(10), p.direction.toUpper(),
-                      pct_str(p.predicted_pct), p.resolve_date, fmt::format_money(p.target_price),
-                      p.confidence > 0 ? QString(", confidence %1/100").arg(p.confidence) : QString(),
+                      p.resolve_date, fmt::format_money(p.price_at_pred),
                       resolved ? QString(" · track-record hit rate %1% (%2/%3)")
                                      .arg(qRound(100.0 * correct / resolved))
                                      .arg(correct)
@@ -2069,9 +2068,9 @@ QString EquityAiTab::chat_context_block() const {
         const QString body = p.analysis.size() > kMaxAnalysisChars
                                  ? p.analysis.left(kMaxAnalysisChars) + QStringLiteral(" … [truncated]")
                                  : p.analysis;
-        parts << QStringLiteral("Terminal's own %1 analysis (%2, %3 %4 by %5):\n%6")
+        parts << QStringLiteral("Terminal's own %1 analysis (%2, called %3 by %4):\n%5")
                      .arg(is_news ? QStringLiteral("FinGPT news-engine") : QStringLiteral("quant-engine"),
-                          p.created_at.left(10), p.direction.toUpper(), pct_str(p.predicted_pct), p.resolve_date, body);
+                          p.created_at.left(10), p.direction.toUpper(), p.resolve_date, body);
         if (have_quant_read && have_news_read)
             break;
     }
@@ -2124,23 +2123,19 @@ void EquityAiTab::refresh_track_record() {
         return;
     const QVector<AiPrediction> preds = AiPredictionRepository::instance().for_ticker(current_symbol_);
 
-    // Accuracy over resolved predictions, per engine: direction hit-rate AND
-    // magnitude error. Both stay per-engine — an average over two different
-    // methods' errors is a number that grades neither.
+    // Accuracy over resolved predictions, per engine: the direction hit-rate.
+    // Per-engine on purpose — a rate over two different methods grades neither.
     int q_res = 0, q_hit = 0, n_res = 0, n_hit = 0;
-    double q_err = 0.0, n_err = 0.0;
     for (const auto& p : preds)
         if (p.resolved) {
             if (p.source == QLatin1String("fingpt")) {
                 ++n_res;
                 if (p.correct)
                     ++n_hit;
-                n_err += std::abs(p.predicted_pct - p.actual_pct);
             } else {
                 ++q_res;
                 if (p.correct)
                     ++q_hit;
-                q_err += std::abs(p.predicted_pct - p.actual_pct);
             }
         }
     if (q_res + n_res == 0) {
@@ -2148,17 +2143,15 @@ void EquityAiTab::refresh_track_record() {
     } else {
         QStringList parts;
         if (q_res)
-            parts << QString("Quant %1% (%2/%3), miss %4pp")
+            parts << QString("Quant direction %1% (%2/%3)")
                          .arg(qRound(100.0 * q_hit / q_res))
                          .arg(q_hit)
-                         .arg(q_res)
-                         .arg(q_err / q_res, 0, 'f', 1);
+                         .arg(q_res);
         if (n_res)
-            parts << QString("News %1% (%2/%3), miss %4pp")
+            parts << QString("News direction %1% (%2/%3)")
                          .arg(qRound(100.0 * n_hit / n_res))
                          .arg(n_hit)
-                         .arg(n_res)
-                         .arg(n_err / n_res, 0, 'f', 1);
+                         .arg(n_res);
         accuracy_lbl_->setText(parts.join(QStringLiteral("  ·  ")));
     }
 
@@ -2197,25 +2190,19 @@ void EquityAiTab::refresh_track_record() {
              : p.horizon_days == 7 ? "1w"
                                    : QString("%1d").arg(p.horizon_days),
              colors::TEXT_SECONDARY(), Qt::AlignCenter, double(p.horizon_days));
-        cell(r, 3, QString("%1 %2").arg(p.direction.toUpper(), pct_str(p.predicted_pct)), dir_col, Qt::AlignCenter,
-             p.predicted_pct);
-        cell(r, 4, p.target_price > 0 ? fmt::format_money(p.target_price) : fmt::placeholder(), colors::TEXT_PRIMARY(),
-             Qt::AlignRight | Qt::AlignVCenter,
-             p.target_price > 0 ? p.target_price : std::numeric_limits<double>::quiet_NaN());
-        cell(r, 5, p.confidence > 0 ? QString::number(p.confidence) : fmt::placeholder(), colors::TEXT_SECONDARY(),
-             Qt::AlignCenter, p.confidence > 0 ? double(p.confidence) : std::numeric_limits<double>::quiet_NaN());
-        cell(r, 6, p.resolved ? pct_str(p.actual_pct) : fmt::placeholder(),
+        // The call, and the real close it was made at. A legacy record still
+        // shows the percentage the model stated then (call_str).
+        cell(r, 3, call_str(p), dir_col, Qt::AlignCenter);
+        cell(r, 4, p.price_at_pred > 0 ? fmt::format_money(p.price_at_pred) : fmt::placeholder(),
+             colors::TEXT_PRIMARY(), Qt::AlignRight | Qt::AlignVCenter,
+             p.price_at_pred > 0 ? p.price_at_pred : std::numeric_limits<double>::quiet_NaN());
+        cell(r, 5, p.resolved ? pct_str(p.actual_pct) : fmt::placeholder(),
              p.resolved ? (p.actual_pct >= 0 ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
              Qt::AlignRight | Qt::AlignVCenter, p.resolved ? p.actual_pct : std::numeric_limits<double>::quiet_NaN());
-        // Result = direction hit/miss + the magnitude error (|predicted − actual| move).
-        cell(r, 7,
-             p.resolved ? QString("%1 %2pp")
-                              .arg(p.correct ? QStringLiteral("✓") : QStringLiteral("✗"))
-                              .arg(std::abs(p.predicted_pct - p.actual_pct), 0, 'f', 1)
-                        : QStringLiteral("pending"),
+        // Result = did the real move go the way it was called.
+        cell(r, 6, p.resolved ? (p.correct ? QStringLiteral("✓ hit") : QStringLiteral("✗ miss")) : QStringLiteral("pending"),
              p.resolved ? (p.correct ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
-             Qt::AlignCenter,
-             p.resolved ? std::abs(p.predicted_pct - p.actual_pct) : std::numeric_limits<double>::quiet_NaN());
+             Qt::AlignCenter);
     }
     record_table_->setSortingEnabled(was_sorting);
 }

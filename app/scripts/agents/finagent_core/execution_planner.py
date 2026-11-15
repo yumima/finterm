@@ -676,7 +676,9 @@ def generate_dynamic_plan(query: str, api_keys: Dict[str, str] = None, caller_co
         )
 
         response = agent.run(prompt, config)
-        raw = agent.get_response_content(response) or ""
+        # A plan with tool arguments ({"period": 30} is a parameter, not a
+        # claim), parsed by code: the raw text, not the number-grounded one.
+        raw = agent._raw_response_content(response) or ""
 
         # Strip markdown fences (```json ... ``` or ``` ... ```)
         raw = raw.strip()

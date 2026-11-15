@@ -306,7 +306,9 @@ Return ONLY a JSON array of step descriptions, e.g.:
 
         agent = CoreAgent(api_keys=self.api_keys)
         response = agent.run("Plan the steps.", plan_config)
-        text = agent.get_response_content(response).strip()
+        # A plan (JSON array of steps) read by code, not shown as an answer:
+        # the raw text, not the number-grounded one.
+        text = agent._raw_response_content(response).strip()
 
         # Strip markdown fences
         if text.startswith("```"):

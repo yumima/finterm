@@ -544,7 +544,8 @@ std::vector<ToolDef> get_news_tools() {
             auto num_or_null = [](double v) { return std::isfinite(v) ? QJsonValue(v) : QJsonValue(); };
             return ToolResult::ok_data(
                 QJsonObject{{"summary", analysis.summary},
-                            {"sentiment", QJsonObject{{"score", num_or_null(analysis.sentiment.score)},
+                            {"sentiment", QJsonObject{{"label", analysis.sentiment.label},
+                                                      {"score", num_or_null(analysis.sentiment.score)},
                                                       {"intensity", num_or_null(analysis.sentiment.intensity)},
                                                       {"confidence", num_or_null(analysis.sentiment.confidence)}}},
                             {"market_impact", QJsonObject{{"urgency", analysis.market_impact.urgency},

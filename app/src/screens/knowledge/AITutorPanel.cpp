@@ -249,7 +249,17 @@ void AITutorPanel::send_user_message(const QString& text) {
     // (excluding the user message we just appended — service takes that
     // separately as user_message).
     std::vector<ai_chat::ConversationMessage> hist;
-    hist.push_back({QStringLiteral("system"), build_system_prompt()});
+    // The tutor is the one surface exempt from number grounding (see below):
+    // a lesson needs worked examples — "a bond with a 5% coupon" — and those
+    // figures are illustrations, not data. The line is drawn in the prompt
+    // instead: examples must be marked as examples, facts are not to be quoted.
+    hist.push_back({QStringLiteral("system"),
+                    build_system_prompt() +
+                        QStringLiteral("\n\nNumbers: you may use numbers from the lesson material above, and "
+                                       "invented numbers ONLY inside an example you clearly introduce as "
+                                       "hypothetical (\"suppose\", \"for example\"). Never state a real "
+                                       "price, return, rate, statistic or date as fact from memory — say it "
+                                       "should be looked up in the terminal's data screens.")});
     for (int i = 0; i < thread_.size() - 1; ++i)
         hist.push_back({thread_[i].role, thread_[i].content});
 
@@ -258,6 +268,7 @@ void AITutorPanel::send_user_message(const QString& text) {
     // dereference dead memory.
     QPointer<AITutorPanel> guard(this);
     finterm::ai_chat::PersonaScope persona;
+    persona.ground_numbers = false; // teaching examples — see the system prompt above
     {
         const auto target = finterm::ai_chat::LlmService::instance().scope_for_role(QStringLiteral("knowledge"));
         persona.provider = target.provider;
