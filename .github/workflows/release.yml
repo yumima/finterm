@@ -1222,16 +1222,16 @@ jobs:
           START_MARKER="<!-- DOWNLOAD-TABLE-START -->"
           END_MARKER="<!-- DOWNLOAD-TABLE-END -->"
 
+          # Same three rows as the hand-written table in README.md, with
+          # this release's direct links in place of the file-name patterns.
           NEW_BLOCK="${START_MARKER}
-          ### Option 1 — Download Installer (Recommended)
+          | System | Download | First launch |
+          |---|---|---|
+          | **Linux** x86-64 | [AppImage (.run)](${LIN_URL}) | \`chmod +x finterm-*.run && ./finterm-*.run\` |
+          | **Windows** 10/11 x64 | [Installer (.exe)](${WIN_URL}) | Run it. At SmartScreen: **More info → Run anyway** |
+          | **macOS** 13+ Apple Silicon | [Disk image (.dmg)](${MAC_URL}) | Drag to Applications, then **right-click → Open → Open** |
 
-          Latest release: **${TAG}** — [View all releases](${RELEASE_URL})
-
-          | Platform | Download | Run |
-          |----------|----------|-----|
-          | **Windows x64** | [finterm-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`finterm.exe\` |
-          | **Linux x64** | [finterm-Linux-x64.run](${LIN_URL}) | AppImage: \`chmod +x\` and run |
-          | **macOS Apple Silicon** | [finterm-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
+          Current release: [${TAG}](${RELEASE_URL}) · [all releases](https://github.com/yumima/finterm/releases)
           ${END_MARKER}"
 
           README="README.md"
