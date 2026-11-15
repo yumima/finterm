@@ -115,6 +115,18 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     header_layout->addWidget(title);
     header_layout->addStretch();
 
+    // The article's speaker sits where the TL;DR's does, and works the same
+    // way (play / pause / resume, ■ beside it, right-click for the voice).
+    // It used to be a LISTEN text button among the article's actions, unlike
+    // the brief's — one control, two looks. Whichever owns the pane shows.
+    listen_btn_ = new QPushButton(header);
+    listen_btn_->setObjectName("newsDetailHeaderBtn");
+    listen_btn_->setCursor(Qt::PointingHandCursor);
+    listen_btn_->setFixedSize(28, 22);
+    listen_btn_->setIconSize(QSize(16, 16));
+    listen_btn_->hide();
+    header_layout->addWidget(listen_btn_);
+
     tldr_listen_btn_ = new QPushButton(header);
     tldr_listen_btn_->setObjectName("newsDetailHeaderBtn");
     tldr_listen_btn_->setCursor(Qt::PointingHandCursor);
@@ -131,8 +143,10 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     // A prewarm that finds the engine dead (or route-less) lands after the
     // brief rendered on a cache hit: re-check, so the speaker goes away rather
     // than offering a voice that is not there.
-    connect(&services::TtsService::instance(), &services::TtsService::availability_changed, this,
-            [this]() { sync_tldr_listen(); });
+    connect(&services::TtsService::instance(), &services::TtsService::availability_changed, this, [this]() {
+        sync_tldr_listen();
+        sync_article_listen();
+    });
     connect(tldr_listen_btn_, &QPushButton::clicked, this, [this]() {
         if (tldr_text_.trimmed().isEmpty() && !tldr_listen_->active())
             return;
@@ -308,10 +322,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     analyze_btn_->setObjectName("newsDetailAnalyzeBtn");
     analyze_btn_->setFixedHeight(24);
 
-    listen_btn_ = new QPushButton("LISTEN", content);
-    listen_btn_->setObjectName("newsDetailOpenBtn");
-    listen_btn_->setFixedHeight(24);
-
     save_btn_ = new QPushButton("SAVE", content);
     save_btn_->setObjectName("newsDetailSaveBtn");
     save_btn_->setFixedHeight(24);
@@ -331,7 +341,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     action_layout->addWidget(copy_btn_);
     action_layout->addWidget(copy_title_btn_);
     action_layout->addWidget(analyze_btn_);
-    action_layout->addWidget(listen_btn_);
     action_layout->addWidget(save_btn_);
     action_layout->addWidget(bookmark_btn_);
     action_layout->addWidget(translate_btn_);
@@ -361,7 +370,9 @@ QWidget* NewsDetailPanel::build_content_view() {
         emit analyze_requested(current_article_.link);
     });
     listen_toggle_ = new ui::ReadAloudToggle(
-        listen_btn_, {QStringLiteral("LISTEN"), QStringLiteral("PAUSE"), QStringLiteral("RESUME"), QStringLiteral("STOP")},
+        listen_btn_,
+        {QStringLiteral("Listen"), QStringLiteral("Pause"), QStringLiteral("Resume"), QStringLiteral("Stop"),
+         QStringLiteral("Preparing"), /*icons=*/true},
         QStringLiteral("Read the article aloud (voice from the configured LLM engine, else the on-device voice)"));
     connect(listen_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_ && !listen_toggle_->active())
@@ -693,6 +704,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // restored from the previous story — every section is reset just below.
     sections_hidden_by_brief_.clear();
     hide_tldr();
+    sync_article_listen();
     // Every per-story section belongs to the story that populated it.
     // ENTITIES and INFRASTRUCTURE were never reset here, so a late callback
     // for the previous article could leave its findings under this headline.
@@ -1060,6 +1072,7 @@ void NewsDetailPanel::show_infrastructure(const QVector<services::Infrastructure
 void NewsDetailPanel::clear() {
     has_article_ = false;
     listen_toggle_->stop(); // its button leaves with the article page
+    sync_article_listen();
     stack_->setCurrentIndex(0);
     conceal_article_section(analysis_section_);
     conceal_article_section(related_section_);
@@ -1169,6 +1182,7 @@ void NewsDetailPanel::set_article_visible(bool visible) {
         article_actions_->setVisible(visible);
     if (article_separator_)
         article_separator_->setVisible(visible);
+    sync_article_listen();
     sync_article_block();
 
     if (visible) {
@@ -1275,6 +1289,17 @@ void NewsDetailPanel::prewarm_brief(const QString& partial) {
     // category tail — so the opening sentences match what the click speaks.
     // prewarm_engine() does its own gating (engine local, usable, not off).
     services::TtsService::instance().prewarm_engine(spoken_text(brief::split(partial).first));
+}
+
+void NewsDetailPanel::sync_article_listen() {
+    // Shown while a story is on screen and a voice exists — the TL;DR's rule.
+    const bool show = has_article_ && !brief_owns_pane_ && headline_label_ && !headline_label_->isHidden() &&
+                      services::TtsService::instance().engine_or_local_available();
+    // Hiding does NOT stop the reading: a brief taking the pane must not cut
+    // off an article being read (the old LISTEN button hid with the actions
+    // and kept reading). A new article or clear() stops it.
+    if (listen_btn_)
+        listen_btn_->setVisible(show);
 }
 
 void NewsDetailPanel::sync_tldr_listen() {

@@ -88,6 +88,9 @@ class NewsDetailPanel : public QWidget {
     /// how it was reported. The opposite direction is already handled:
     /// opening an article calls hide_tldr().
     void set_article_visible(bool visible);
+    /// The article's header speaker: shown while a story owns the pane and a
+    /// voice exists (sync_tldr_listen's rule for the brief).
+    void sync_article_listen();
     /// Hide one per-story section and forget it, so it is not restored when a
     /// brief gives the pane back.
     void conceal_article_section(QWidget* section);

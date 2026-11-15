@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStackedWidget>
 #include <QTextEdit>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -20,24 +21,35 @@
 
 namespace finterm {
 
+namespace ai_chat {
+class VoiceOrb;
+}
+
 // ── AiChatBubble ─────────────────────────────────────────────────────────────
 // AI assistant launcher + chat panel.
 //
 // The launcher button sits in the main window's status bar (reserved space),
-// so it never covers screen content — it used to float over the bottom-right
-// corner of every screen, on top of the News TL;DR and the Equity Research
-// FINANCIAL HEALTH values. The chat panel is an on-demand overlay anchored to
-// the bottom-right of `panel_host` (the dock area), shown only while open, and
-// resizable by its top-left grip; the chosen size persists.
-// Features: streaming chat, voice input (Python speech_recognition + Google STT),
-// TTS output via QMediaPlayer, session persistence via ChatRepository.
+// so it never covers screen content. The chat panel is an on-demand overlay
+// anchored to the bottom-right of `panel_host` (the dock area), resizable by
+// its top-left grip, or EXPANDED to fill the host (⤢ in the header). Both
+// persist.
 //
-// Voice flow:
-//   mic_btn / voice_mode_btn
-//       → SpeechService::start_listening()
-//       → SpeechService::transcription_ready(text)   [signal on UI thread]
-//       → on_transcription(text)
-//       → input_box_ populated → on_send()
+// Reading (Claude / Gemini style): the assistant's reply is rendered Markdown
+// across the full width of the conversation column — no bubble — with Copy
+// and a read-aloud speaker under it; the user's message is a compact bubble on
+// the right. On a wide panel the column is centred at a reading width.
+//
+// Voice:
+//   🎤  dictation — one utterance into the composer
+//   ◉ LIVE  a spoken conversation (Gemini Live style): the orb listens, you
+//       speak, it thinks, it answers aloud in the engine's voice (the same
+//       Kokoro/Piper voice as News' read-aloud), then listens again. Click
+//       the orb to interrupt it; Mute pauses the mic; End returns to text.
+//       The conversation is the same thread: every turn is in the transcript.
+//   Listening       → SpeechService::start_listening()
+//   transcription   → on_transcription() → sent
+//   reply done      → speak_text() → TtsService (QTextToSpeech fallback)
+//   speech finished → listen again
 
 class AiChatBubble : public QWidget {
     Q_OBJECT
@@ -60,13 +72,10 @@ class AiChatBubble : public QWidget {
     void on_new_session();
     void on_stream_chunk(const QString& chunk, bool done);
     void on_streaming_done(ai_chat::LlmResponse response);
-    void on_toggle_voice_mode();
     void on_toggle_mic();
-    void on_stop_speech();
     void on_transcription(const QString& text);
     void on_stt_listening_changed(bool active);
     void on_stt_error(const QString& message);
-    void on_tts_media_status(QMediaPlayer::MediaStatus status);
 
   private:
     // ── UI panels ────────────────────────────────────────────────────────────
@@ -77,26 +86,40 @@ class AiChatBubble : public QWidget {
     QLabel* unread_badge_ = nullptr;
 
     // Panel internals
+    QStackedWidget* stack_ = nullptr; ///< 0 = conversation, 1 = live voice
     QScrollArea* scroll_area_ = nullptr;
     QWidget* msg_container_ = nullptr;
+    QWidget* column_ = nullptr; ///< the centred conversation column
     QVBoxLayout* msg_layout_ = nullptr;
     QPlainTextEdit* input_box_ = nullptr;
     QPushButton* send_btn_ = nullptr;
     QPushButton* mic_btn_ = nullptr;
-    QPushButton* voice_mode_btn_ = nullptr;
-    QPushButton* stop_speech_btn_ = nullptr;
+    QPushButton* live_btn_ = nullptr;
+    QPushButton* expand_btn_ = nullptr;
     QPushButton* new_btn_ = nullptr;
     QPushButton* close_btn_ = nullptr;
-    QWidget* voice_status_bar_ = nullptr;
-    QLabel* voice_status_lbl_ = nullptr;
+    QLabel* status_lbl_ = nullptr; ///< thinking / listening / errors, under the conversation
+
+    // Live voice page
+    ai_chat::VoiceOrb* orb_ = nullptr;
+    QLabel* live_state_lbl_ = nullptr;
+    QLabel* live_you_lbl_ = nullptr;
+    QLabel* live_reply_lbl_ = nullptr;
+    QPushButton* live_mute_btn_ = nullptr;
+    QPushButton* live_end_btn_ = nullptr;
 
     // ── State ────────────────────────────────────────────────────────────────
     bool is_open_ = false;
-    bool voice_mode_ = false;
+    bool expanded_ = false;
+    bool live_ = false;
+    bool live_muted_ = false;
     bool is_listening_ = false;
     bool is_speaking_ = false;
     bool streaming_ = false;
     int unread_count_ = 0;
+    int tts_session_ = -1; ///< TtsService session of the reply being spoken
+    QString stream_text_;  ///< the reply so far (live captions)
+    QString voice_error_;  ///< last voice/STT failure, shown until the next listen or send
 
     QString active_session_id_;
     std::vector<ai_chat::ConversationMessage> history_;
@@ -104,26 +127,17 @@ class AiChatBubble : public QWidget {
 
     // Panel size. Invalid until the user resizes: then reposition() uses the
     // default for the current host size. Persisted to SettingsRepository under
-    // ui.chat_panel.w / .h on release of the grip.
+    // ui.chat_panel.w / .h on release of the grip; expanded under .expanded.
     QSize user_panel_size_;
     bool resizing_ = false;
     QPoint resize_press_pos_; // global press position
     QSize resize_start_size_;
 
-    // Message columns, re-wrapped when the panel width changes.
-    struct MsgCol {
-        QPointer<QWidget> col;
-        QPointer<QTextEdit> body;
-        int min_h = 18;
-    };
-    std::vector<MsgCol> msg_cols_;
-    int msg_col_width() const;
+    // User bubbles are as wide as their text, up to a share of the column.
+    std::vector<QPointer<QWidget>> user_bubbles_;
     void rewrap_messages();
 
     // ── TTS ──────────────────────────────────────────────────────────────────
-    QMediaPlayer* tts_player_ = nullptr;
-    QTimer* pulse_timer_ = nullptr;
-    int pulse_step_ = 0;
 #ifdef HAS_QT_TTS
     QTextToSpeech* tts_engine_ = nullptr;
 #endif
@@ -133,24 +147,31 @@ class AiChatBubble : public QWidget {
     void build_chat_panel();
     QWidget* build_panel_header();
     QWidget* build_input_row();
-    QWidget* build_voice_status_bar();
+    QWidget* build_live_page();
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     void refresh_theme();
     void open_panel();
     void close_panel();
+    void set_expanded(bool on);
+    void update_expand_button();
+    void resume_live_listening();
     void ensure_session();
-    void add_bubble(const QString& role, const QString& text);
-    QTextEdit* add_streaming_bubble();
+    void add_user_message(const QString& text);
+    QWidget* add_assistant_message(const QString& markdown, bool streaming);
+    void finish_assistant_message(QWidget* row, const QString& markdown);
     void scroll_to_bottom();
     void set_ui_enabled(bool enabled);
     void update_unread(int delta);
+    void fit_input();
     void start_listening();
     void stop_listening();
     void speak_text(const QString& text);
     void stop_tts();
-    void update_voice_status();
-    void animate_pulse();
+    void speech_finished();
+    void enter_live();
+    void exit_live();
+    void update_status();
 };
 
 } // namespace finterm
