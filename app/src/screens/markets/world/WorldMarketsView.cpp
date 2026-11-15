@@ -60,7 +60,7 @@ const QStringList& column_order(int col) {
 }
 
 QFont data_font(int px_offset, bool bold = false) {
-    QFont f(QString(ui::fonts::DATA_FAMILY));
+    QFont f{QString(ui::fonts::DATA_FAMILY)}; // braces: with () Clang parses a function declaration
     f.setPixelSize(ui::fonts::font_px(px_offset));
     f.setBold(bold);
     return f;
