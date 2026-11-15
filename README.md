@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`4d0828849`](https://github.com/yumima/finterm/commit/4d0828849) **chore(release):** update README download links and updates.json for v4.0.4
+- [`14161f3e7`](https://github.com/yumima/finterm/commit/14161f3e7) release: 4.0.4
 - [`8e5f5c935`](https://github.com/yumima/finterm/commit/8e5f5c935) readme: rewritten short — install first, what's inside, AI, privacy, build, troubleshooting
 - [`9f01a198e`](https://github.com/yumima/finterm/commit/9f01a198e) **ci:** world markets font declaration parses as a variable on Clang and MSVC
 - [`26ee2309e`](https://github.com/yumima/finterm/commit/26ee2309e) ai chat: full-width replies, expandable window, live voice conversation; news listen survives a brief

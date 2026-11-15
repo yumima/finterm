@@ -1,0 +1,7 @@
+{
+  "version": "4.0.4",
+  "page": "https://github.com/yumima/finterm/releases/tag/v4.0.4",
+  "linux": "https://github.com/yumima/finterm/releases/download/v4.0.4/finterm-4.0.4-linux-x64-setup.run",
+  "windows": "https://github.com/yumima/finterm/releases/download/v4.0.4/finterm-4.0.4-windows-x64-setup.exe",
+  "macos": "https://github.com/yumima/finterm/releases/download/v4.0.4/finterm-4.0.4-macos-arm64-setup.dmg"
+}

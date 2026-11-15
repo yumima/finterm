@@ -13,7 +13,7 @@ timezone: UTC
 future: true
 
 repo_url: https://github.com/yumima/finterm
-download_url: https://github.com/yumima/finterm/releases/latest
+download_url: https://yumima.github.io/finterm/download/
 install_url: https://github.com/yumima/finterm#install
 
 permalink: /brief/:year-:month-:day/
