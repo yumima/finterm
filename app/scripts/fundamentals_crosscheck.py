@@ -167,29 +167,22 @@ def check_frames(symbol: str, frames: Dict[str, Dict[str, Dict[str, float]]],
 
 # ── Network side ─────────────────────────────────────────────────────────────
 
-_CIK: Dict[str, str] = {}
-
-
 class SourceUnavailable(RuntimeError):
     """A source refused or failed. Never the same thing as "nothing there"."""
 
 
 def cik_for(symbol: str) -> Optional[str]:
-    """CIK for a ticker, for this script's batch runs (one thread). The data
-    daemon uses sec_statement_overlay's own cached, locked lookup instead."""
-    global _CIK
-    import sec_xbrl_data as sx
-    if not _CIK:
-        data = sx.get_company_tickers()  # {"count", "tickers": [{cik, ticker, title}]} or {"error"}
-        rows = (data.get("tickers") if isinstance(data, dict) else None) or []
-        if not rows:
-            # Not cached, so the next symbol asks again — and no ticker is ever
-            # reported as "not an SEC registrant" because the directory was refused.
-            raise SourceUnavailable(f"SEC ticker directory unavailable: {str(data)[:120]}")
-        # Built whole, then assigned: a reader never sees a half-filled table.
-        _CIK = {str(r["ticker"]).upper(): str(r["cik"]) for r in rows
-                if r.get("ticker") and r.get("cik") is not None}
-    return _CIK.get(symbol.upper().replace(".", "-")) or _CIK.get(symbol.upper())
+    """CIK for a ticker: sec_statement_overlay's cached lookup, so there is one
+    implementation of the directory fetch and the "." → "-" rule. A refused
+    directory raises — no ticker is ever reported as "not an SEC registrant"
+    because the directory could not be read."""
+    import sec_statement_overlay as so
+    try:
+        return so.cik(symbol)
+    except SourceUnavailable:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise SourceUnavailable(f"SEC ticker directory unavailable: {type(e).__name__}: {str(e)[:100]}") from e
 
 
 def yahoo_frames(symbol: str) -> Dict[str, Dict[str, Dict[str, float]]]:
@@ -257,10 +250,14 @@ def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 def sample_universe(n: int) -> List[str]:
     """`n` tickers spread evenly across the screener's universe by market cap,
     so the measurement is not only the mega-caps everyone checks."""
-    base = os.path.expanduser("~/.local/share/finterm/cache/screener")
+    import finterm_paths
+    base = str(finterm_paths.cache_dir("screener"))
     scans = sorted((f for f in os.listdir(base) if f.startswith("scan_v") and f.endswith(".json")),
                    key=lambda f: os.path.getmtime(os.path.join(base, f)))
-    rows = json.load(open(os.path.join(base, scans[-1]))).get("rows") or {}
+    if not scans:
+        raise SystemExit(f"no screener scan in {base}: open the Screener once, or pass tickers to `batch`")
+    with open(os.path.join(base, scans[-1]), encoding="utf-8") as f:
+        rows = json.load(f).get("rows") or {}
     ranked = sorted(rows, key=lambda s: -(rows[s].get("mcap") or rows[s].get("market_cap") or 0))
     if n >= len(ranked):
         return ranked
@@ -289,6 +286,9 @@ def main(argv: List[str]) -> int:
             print("note: no SEC contact email configured (Settings › Credentials › Contact email); "
                   "SEC will refuse the requests.", file=sys.stderr)
     cmd = argv[0]
+    if cmd not in ("check", "batch", "sample") or (cmd == "sample" and not argv[1].isdigit()):
+        print(__doc__)
+        return 2
     if cmd == "check":
         print(json.dumps(check(argv[1].upper()), indent=1))
         return 0

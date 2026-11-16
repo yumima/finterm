@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`a415a6cc0`](https://github.com/yumima/finterm/commit/a415a6cc0) release: 4.0.5
 - [`fa080b8b5`](https://github.com/yumima/finterm/commit/fa080b8b5) data: operating income is the figure the company filed; a zero equity is not shown
 - [`cdcf7145b`](https://github.com/yumima/finterm/commit/cdcf7145b) **ui:** tooltips are one short line
 - [`f047bdb79`](https://github.com/yumima/finterm/commit/f047bdb79) data: cross-check Yahoo's statements against the company's own SEC filings

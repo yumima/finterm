@@ -14,10 +14,13 @@ What this changes, and only this:
                      two bases: the annual columns are switched only if the
                      company filed the line for EVERY year Yahoo shows, and the
                      quarterly columns (and the TTM sum built on them) only if
-                     it filed every one of the four newest quarters. A fourth
-                     quarter is never filed alone; it is the filed year minus
-                     the filed nine months, used only when every filing of the
-                     two gives the same answer.
+                     it filed EVERY quarter Yahoo shows. A fourth quarter is
+                     never filed alone; it is the filed year minus the filed
+                     nine months — used only when every filing of the two gives
+                     the same answer, and never for a year in which the company
+                     reported discontinued operations (the year is then recast
+                     in the 10-K before the nine months are, and the difference
+                     would be a number nobody filed).
   equity             "Stockholders Equity" that Yahoo reports as exactly 0 when
                      the company filed a figure: replaced by the filed
                      StockholdersEquity, or — when only total equity including
@@ -33,8 +36,10 @@ stay on Yahoo's basis and may not reconcile with a replaced operating income.
 
 Each change is listed in the payload under `sec_overrides`. No SEC answer
 (foreign filer, no contact configured, a refusal, a slow response) means no
-change and a stated reason — never a guess, and never a wait the statements
-have to sit through twice: a failure is not retried for ten minutes.
+change and a stated reason — never a guess. One short request per tag, no
+retries, and a network failure is not retried for ten minutes; when SEC cannot
+be reached, figures cached from an earlier day are used rather than dropping
+back to Yahoo's basis, so the same cell does not change between two loads.
 """
 
 from __future__ import annotations
@@ -54,7 +59,8 @@ OPINC_ROWS = ("Operating Income",)
 EQUITY_ROW = "Stockholders Equity"
 EQUITY_TAG = "StockholdersEquity"
 EQUITY_TOTAL_TAG = "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
-KEPT_TAGS = OPINC_TAGS + (EQUITY_TAG, EQUITY_TOTAL_TAG)
+DISCONTINUED_TAG = "IncomeLossFromDiscontinuedOperationsNetOfTax"
+KEPT_TAGS = OPINC_TAGS + (EQUITY_TAG, EQUITY_TOTAL_TAG, DISCONTINUED_TAG)
 
 FACTS_TTL_S = 24 * 3600
 DIRECTORY_TTL_S = 7 * 24 * 3600
@@ -98,6 +104,7 @@ def filed_quarter_values(facts: Dict[str, Any], tags: Tuple[str, ...], end: date
     when they all agree, so a year and a nine-month figure from different
     restatement vintages can never be subtracted into a number nobody filed.
     """
+    derived_basis = f"{tags[0]} (year − nine months)"
     direct = _flows(facts, tags, 80, 100, end)
     if direct:
         # newest filing first
@@ -106,11 +113,25 @@ def filed_quarter_values(facts: Dict[str, Any], tags: Tuple[str, ...], end: date
     out: List[float] = []
     for year in _flows(facts, tags, 350, 380, end):
         y_start = fx._d(year["start"])
+        if y_start is None or _discontinued_in(facts, y_start, end):
+            return [], derived_basis
         for nine in _flows(facts, tags, 260, 285):
             n_start = fx._d(nine["start"])
             if y_start and n_start and abs((n_start - y_start).days) <= fx.PERIOD_SLACK_DAYS:
                 out.append(year["value"] - nine["value"])
-    return out, f"{tags[0]} (year − nine months)"
+    return out, derived_basis
+
+
+def _discontinued_in(facts: Dict[str, Any], start: date, end: date) -> bool:
+    """Did the company report a discontinued operation in a period ending
+    inside this fiscal year? Then its year and its nine months may be on
+    different bases, and their difference is not a filed quarter."""
+    rows = ((((facts.get("facts") or {}).get("us-gaap") or {}).get(DISCONTINUED_TAG) or {}).get("units") or {}).get("USD") or []
+    for row in rows:
+        e = fx._d(row.get("end", ""))
+        if e and start < e <= end and isinstance(row.get("val"), (int, float)) and row["val"] != 0:
+            return True
+    return False
 
 
 def apply_overlay(payload: Dict[str, Any], facts: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -158,22 +179,21 @@ def apply_overlay(payload: Dict[str, Any], facts: Dict[str, Any]) -> List[Dict[s
 
     switch_series("income_statement", sorted(annual, reverse=True), annual_filed)
 
-    # The four quarters TTM is built from (the payload names them), and TTM
-    # itself, move together: three filed quarters and one adjusted one would be
-    # a sum on neither basis.
+    # Every quarterly column moves together, and the TTM sum with them: three
+    # filed quarters beside an adjusted one — or a filed quarter compared with
+    # the adjusted one a year earlier — would be figures on two bases.
     quarterly = payload.get("quarterly_income_statement") or {}
     ttm = payload.get("ttm") if isinstance(payload.get("ttm"), dict) else None
-    newest = sorted(quarterly, reverse=True)[:4]
-    if ttm and ttm.get("quarters"):
-        named = [p for p in quarterly if str(p)[:10] in set(ttm["quarters"])]
-        if len(named) == 4:
-            newest = sorted(named, reverse=True)
     before = len(done)
-    if len(newest) == 4 and switch_series("quarterly_income_statement", newest,
-                                          lambda end: filed_quarter_values(facts, OPINC_TAGS, end)):
+    if quarterly and switch_series("quarterly_income_statement", sorted(quarterly, reverse=True),
+                                   lambda end: filed_quarter_values(facts, OPINC_TAGS, end)):
         if len(done) > before and ttm is not None and "operating_income" in ttm:
-            vals = [yahoo_of(quarterly[p], OPINC_ROWS) for p in newest]
-            if all(v is not None for v in vals):
+            named = set(ttm.get("quarters") or [])
+            four = [p for p in quarterly if str(p)[:10] in named] if len(named) == 4 else []
+            if len(four) != 4:
+                four = sorted(quarterly, reverse=True)[:4]
+            vals = [yahoo_of(quarterly[p], OPINC_ROWS) for p in four]
+            if len(vals) == 4 and all(v is not None for v in vals):
                 ttm["operating_income"] = float(sum(v[1] for v in vals))
 
     for period, cells in (payload.get("balance_sheet") or {}).items():
@@ -237,16 +257,26 @@ def _write_cache(path: str, obj: Any) -> None:
         pass
 
 
+class _NoSuch(Exception):
+    """SEC answered 404: the thing asked for does not exist (not a failure)."""
+
+
 def _get(url: str) -> Any:
-    """One short SEC request through sec_xbrl_data's session (its declared
-    identity). Raises on anything but a JSON answer."""
+    """One short SEC request, declared with sec_xbrl_data's identity but NOT
+    through its session: that session retries three times, which would turn an
+    8-second limit into half a minute of holding statements already in hand."""
+    import requests
     import sec_xbrl_data as sx
-    r = sx.session.get(url, timeout=TIMEOUT)
+    r = requests.get(url, headers=dict(sx.session.headers), timeout=TIMEOUT)
+    if r.status_code == 404:
+        raise _NoSuch(url)
     r.raise_for_status()
     return r.json()
 
 
-def _cik(symbol: str) -> Optional[str]:
+def cik(symbol: str) -> Optional[str]:
+    """CIK for a ticker — the one lookup both this module and the cross-check
+    script use. The directory is cached on disk for a week."""
     path = _cache_path("tickers.json")
     table = _read_cache(path, DIRECTORY_TTL_S)
     if not isinstance(table, dict) or not table:
@@ -260,51 +290,64 @@ def _cik(symbol: str) -> Optional[str]:
     return table.get(s.replace(".", "-")) or table.get(s)
 
 
-def _facts(cik: str) -> Optional[Dict[str, Any]]:
-    """The tags this module reads, for one registrant — a few kilobytes cached,
-    not the multi-megabyte document. None when the registrant has no XBRL facts."""
-    path = _cache_path(f"CIK{int(cik):010d}.json")
+def _facts(cik_: str) -> Optional[Dict[str, Any]]:
+    """The tags this module reads, for one registrant: one small request per
+    tag (the whole company-facts document is megabytes). None when the
+    registrant reports none of them. On a network failure, figures cached on an
+    earlier day are returned rather than nothing."""
+    path = _cache_path(f"CIK{int(cik_):010d}.json")
     slim = _read_cache(path, FACTS_TTL_S)
     if isinstance(slim, dict) and "facts" in slim:
         return slim
-    import requests
     try:
-        full = _get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{int(cik):010d}.json")
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            return None  # a registrant with no XBRL facts (a fund, a brand-new filer)
+        gaap: Dict[str, Any] = {}
+        for tag in KEPT_TAGS:
+            try:
+                doc = _get(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{int(cik_):010d}/us-gaap/{tag}.json")
+            except _NoSuch:
+                continue  # the company does not report this tag
+            if isinstance(doc, dict) and isinstance(doc.get("units"), dict):
+                gaap[tag] = {"units": doc["units"]}
+    except Exception:
+        stale = _read_cache(path, float("inf"))
+        if isinstance(stale, dict) and "facts" in stale:
+            return stale
         raise
-    gaap = (full.get("facts") or {}).get("us-gaap") or {}
-    slim = {"facts": {"us-gaap": {t: gaap[t] for t in KEPT_TAGS if t in gaap}}}
-    _write_cache(path, slim)
-    return slim
+    slim = {"facts": {"us-gaap": gaap}}
+    _write_cache(path, slim)  # an empty set is cached too: "reports none of them" is an answer
+    return slim if gaap else None
 
 
 def facts_for(symbol: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
-    """(facts or None, status). Never raises; a failure starts a back-off so a
-    slow or refusing SEC is paid for once, not on every statement."""
+    """(facts or None, status). Never raises. A NETWORK failure starts a
+    back-off so a slow or refusing SEC is paid for once, not on every
+    statement; a failure particular to one symbol does not."""
     global _backoff_until
+    import requests
     now = time.monotonic()
     with _lock:
         if now < _backoff_until:
             return None, {"status": "unavailable", "reason": "SEC unavailable; retrying later"}
+        if now < _no_facts_until.get(symbol.upper(), 0.0):
+            return None, {"status": "no_facts"}
     try:
-        cik = _cik(symbol)
-        if not cik:
+        cik_ = cik(symbol)
+        if not cik_:
             return None, {"status": "not_a_registrant"}
-        with _lock:
-            if now < _no_facts_until.get(cik, 0.0):
-                return None, {"status": "no_facts", "cik": cik}
-        facts = _facts(cik)
+        facts = _facts(cik_)
         if facts is None:
             with _lock:
-                _no_facts_until[cik] = now + FACTS_TTL_S
-            return None, {"status": "no_facts", "cik": cik}
-        return facts, {"status": "applied", "cik": cik}
-    except Exception as e:  # noqa: BLE001 — refusal, timeout, bad JSON: all "no answer"
+                _no_facts_until[symbol.upper()] = now + FACTS_TTL_S
+            return None, {"status": "no_facts", "cik": cik_}
+        return facts, {"status": "applied", "cik": cik_}
+    except (requests.exceptions.RequestException, fx.SourceUnavailable, _NoSuch, OSError) as e:
         with _lock:
             _backoff_until = time.monotonic() + BACKOFF_S
         return None, {"status": "unavailable", "reason": f"{type(e).__name__}: {str(e)[:120]}"}
+    except Exception as e:  # noqa: BLE001 — this symbol's document, not SEC: no global back-off
+        with _lock:
+            _no_facts_until[symbol.upper()] = now + BACKOFF_S
+        return None, {"status": "error", "reason": f"{type(e).__name__}: {str(e)[:120]}"}
 
 
 def overlay(symbol: str, payload: Dict[str, Any]) -> None:

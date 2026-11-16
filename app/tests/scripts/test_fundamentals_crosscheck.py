@@ -98,14 +98,18 @@ def test_a_filed_zero_has_no_percentage_and_stays_json():
 
 
 def test_a_refused_directory_is_not_an_unknown_ticker():
-    import types
-    fx._CIK = {}
-    sys.modules["sec_xbrl_data"] = types.SimpleNamespace(get_company_tickers=lambda: {"error": "403"})
+    import sec_statement_overlay as so
+
+    def refused(url):
+        raise OSError("403")
+
+    real_get, real_read = so._get, so._read_cache
+    so._get, so._read_cache = refused, lambda path, ttl: None
     try:
         r = fx.check("AAPL")
     finally:
-        del sys.modules["sec_xbrl_data"]
-    assert "unavailable" in r["error"] and "registrant" not in r["error"] and not fx._CIK
+        so._get, so._read_cache = real_get, real_read
+    assert "unavailable" in r["error"] and "registrant" not in r["error"]
 
 
 def test_nothing_filed_is_not_a_mismatch():

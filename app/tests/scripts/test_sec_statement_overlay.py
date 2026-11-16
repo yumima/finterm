@@ -9,6 +9,7 @@ different rather than zero.
 
 import os
 import sys
+import time
 import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
@@ -167,24 +168,108 @@ def test_the_series_form_follows_the_same_rule():
     assert so.filed_annual_operating_income(f, s + [{"date": "2022-12-31", "value": 220e6}]) is None
 
 
+def test_no_derived_quarter_in_a_year_with_discontinued_operations():
+    # The 10-K recasts the year to continuing operations; the nine months are
+    # not recast until next year's Q3. One filing of each, so "they all agree"
+    # is trivially true — and the difference is a number nobody filed.
+    q = quarters()
+    p = payload(quarterly_income_statement=q, ttm={"operating_income": -14e6, "quarters": sorted(q, reverse=True)})
+    f = facts(OperatingIncomeLoss=FILED,
+              IncomeLossFromDiscontinuedOperationsNetOfTax=[("2025-01-01", "2025-12-31", -30e6, "2026-02-09")])
+    assert so.apply_overlay(p, f) == [] and q == QUARTERS and p["ttm"]["operating_income"] == -14e6
+
+
+def test_an_older_quarter_with_nothing_filed_keeps_the_whole_table_on_one_basis():
+    # Five columns, as yfinance usually returns. Switching the newest four and
+    # leaving the fifth would compare a filed quarter with an adjusted one.
+    q = quarters()
+    q["2024-12-31"] = {"Operating Income": 3e6}
+    p = payload(quarterly_income_statement=q, ttm={"operating_income": -14e6})
+    assert so.apply_overlay(p, facts(OperatingIncomeLoss=FILED)) == []
+    assert q["2025-03-31"]["Operating Income"] == -20e6
+
+
+class _Net:
+    """so's network and cache, replaced: a temp directory and a scripted SEC."""
+
+    def __init__(self, answers):
+        import tempfile
+        self.answers, self.calls, self.dir = answers, [], tempfile.mkdtemp()
+
+    def __enter__(self):
+        self.saved = (so._get, so._cache_path)
+        so._get = self.get
+        so._cache_path = lambda *parts: os.path.join(self.dir, *parts)
+        so._backoff_until = 0.0
+        so._no_facts_until.clear()
+        return self
+
+    def __exit__(self, *exc):
+        import shutil
+        so._get, so._cache_path = self.saved
+        so._backoff_until = 0.0
+        so._no_facts_until.clear()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def get(self, url):
+        self.calls.append(url)
+        for key, answer in self.answers.items():
+            if key in url:
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+        raise so._NoSuch(url)
+
+
+DIRECTORY = {"0": {"cik_str": 320193, "ticker": "AAPL"}, "1": {"cik_str": 1067983, "ticker": "BRK-B"}}
+CONCEPT = {"units": {"USD": [{"start": "2024-01-01", "end": "2024-12-31", "val": -56e6, "form": "10-K",
+                              "filed": "2025-02-27", "accn": "a"}]}}
+
+
 def test_a_failing_sec_is_asked_once_not_on_every_statement():
-    calls = []
-
-    def boom(url):
-        calls.append(url)
-        raise TimeoutError("slow")
-
-    so._backoff_until = 0.0
-    real_get, real_read = so._get, so._read_cache
-    so._get, so._read_cache = boom, lambda path, ttl: None
-    try:
+    with _Net({"company_tickers": TimeoutError("slow")}) as net:
         a = so.facts_for("AAPL")
         b = so.facts_for("MSFT")
-    finally:
-        so._get, so._read_cache = real_get, real_read
-        so._backoff_until = 0.0
-    assert a[0] is None and b[0] is None and a[1]["status"] == b[1]["status"] == "unavailable"
-    assert len(calls) == 1
+        assert a[0] is None and b[0] is None and a[1]["status"] == b[1]["status"] == "unavailable"
+        assert len(net.calls) == 1
+
+
+def test_facts_come_tag_by_tag_and_are_cached():
+    with _Net({"company_tickers": DIRECTORY, "OperatingIncomeLoss": CONCEPT}) as net:
+        facts_, status = so.facts_for("AAPL")
+        assert status["status"] == "applied" and status["cik"] == "320193"
+        assert list(facts_["facts"]["us-gaap"]) == ["OperatingIncomeLoss"]
+        assert not any("companyfacts" in u for u in net.calls)      # never the multi-megabyte document
+        n = len(net.calls)
+        again, _ = so.facts_for("AAPL")
+        assert again == facts_ and len(net.calls) == n               # second call: disk cache only
+
+
+def test_a_dotted_ticker_finds_its_dashed_registrant():
+    with _Net({"company_tickers": DIRECTORY}):
+        assert so.cik("BRK.B") == "1067983" and so.cik("ZZZZ") is None
+
+
+def test_a_registrant_reporting_none_of_the_tags_is_not_a_failure():
+    with _Net({"company_tickers": DIRECTORY}) as net:      # every concept request answers 404
+        facts_, status = so.facts_for("AAPL")
+        assert facts_ is None and status["status"] == "no_facts"
+        n = len(net.calls)
+        assert so.facts_for("AAPL")[1]["status"] == "no_facts" and len(net.calls) == n   # not asked again
+        assert so._backoff_until == 0.0                     # and SEC is not treated as down
+
+
+def test_a_network_failure_falls_back_to_figures_cached_earlier():
+    # Without this the same cell would read the filed figure on one load and
+    # Yahoo's adjusted one on the next, whenever SEC happened to be slow.
+    with _Net({"company_tickers": DIRECTORY, "OperatingIncomeLoss": CONCEPT}) as net:
+        first, _ = so.facts_for("AAPL")
+        path = so._cache_path("CIK0000320193.json")
+        old = time.time() - 2 * so.FACTS_TTL_S
+        os.utime(path, (old, old))                           # the cache has expired
+        net.answers["OperatingIncomeLoss"] = ConnectionError("down")
+        again, status = so.facts_for("AAPL")
+        assert again == first and status["status"] == "applied"
 
 
 def main():
