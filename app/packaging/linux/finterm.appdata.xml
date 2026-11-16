@@ -28,6 +28,11 @@
     <binary>finterm</binary>
   </provides>
   <releases>
+    <release version="4.0.6" date="2026-11-15">
+      <description>
+        <p>Version 4.0.6 — market data on Windows (the data process could not start there); every installer is now installed and checked for data before release.</p>
+      </description>
+    </release>
     <release version="4.0.5" date="2026-11-15">
       <description>
         <p>Version 4.0.5 — AI replies carry only figures from the data they were given; forecasts state a direction, not a target; operating income as filed with the SEC; one-line tooltips.</p>

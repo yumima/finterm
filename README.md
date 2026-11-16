@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`5efa629dc`](https://github.com/yumima/finterm/commit/5efa629dc) **ci:** unused lambda captures in the daemon socket error handlers (Clang -Werror)
 - [`10f278adc`](https://github.com/yumima/finterm/commit/10f278adc) selftest: the Linux AppImage and the macOS disk image are run and must fetch data too
 - [`a0b52e98d`](https://github.com/yumima/finterm/commit/a0b52e98d) selftest: `finterm --selftest` proves an install gets data; the Windows release installs itself and runs it
 - [`6705c6439`](https://github.com/yumima/finterm/commit/6705c6439) windows: the data daemon connects over loopback TCP — there was no data at all
