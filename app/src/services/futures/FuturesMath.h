@@ -455,6 +455,65 @@ inline TicketResult evaluate(const Ticket& t, const ContractSpec& spec) {
     return r;
 }
 
+// ── Stops and targets on an open position ───────────────────────────────────
+
+/// The levels a position is watched against; NaN = none. They belong to ONE
+/// position — its side and the moment it was opened are kept with them, so
+/// levels set for a long are never applied to a short that later takes its
+/// place in the same contract.
+struct Bracket {
+    double stop = kNaN;
+    double target = kNaN;
+    bool is_long = true;
+    QString opened_at; ///< the position's own open stamp, as the paper store gives it
+    bool any() const { return std::isfinite(stop) || std::isfinite(target); }
+    /// Whether these levels are the given position's.
+    bool belongs_to(bool position_long, const QString& position_opened_at) const {
+        return is_long == position_long && opened_at == position_opened_at;
+    }
+};
+
+/// Why a stop or target cannot stand against an entry price; empty when it
+/// can. Checked against the price the order actually FILLED at — the ticket
+/// showed an earlier print.
+inline QString bracket_problem(bool is_long, double entry, const Bracket& b) {
+    if (!(entry > 0))
+        return QStringLiteral("no fill price to set the levels against");
+    if (std::isfinite(b.stop) && !(is_long ? b.stop < entry : b.stop > entry))
+        return is_long ? QStringLiteral("the stop is not below the fill price") : QStringLiteral("the stop is not above the fill price");
+    if (std::isfinite(b.target) && !(is_long ? b.target > entry : b.target < entry))
+        return is_long ? QStringLiteral("the target is not above the fill price") : QStringLiteral("the target is not below the fill price");
+    return {};
+}
+
+/// A print is acted on only while it is news: one received longer ago than
+/// this is where the market was, not where it is.
+inline constexpr qint64 kMarkFreshMs = 90 * 1000;
+inline bool mark_is_fresh(qint64 received_ms, qint64 now_ms) {
+    return received_ms > 0 && now_ms >= received_ms && now_ms - received_ms <= kMarkFreshMs;
+}
+
+enum class BracketHit { None, Stop, Target };
+
+/// Whether a print has reached a position's stop or target. A long is stopped
+/// at or below its stop and takes profit at or above its target; a short the
+/// other way round. A print through both (a gap) is the stop: the worse case
+/// is the one assumed.
+inline BracketHit bracket_hit(bool is_long, double mark, const Bracket& b) {
+    if (!(mark > 0))
+        return BracketHit::None;
+    const bool stopped = std::isfinite(b.stop) && (is_long ? mark <= b.stop : mark >= b.stop);
+    const bool reached = std::isfinite(b.target) && (is_long ? mark >= b.target : mark <= b.target);
+    return stopped ? BracketHit::Stop : reached ? BracketHit::Target : BracketHit::None;
+}
+
+/// The implied-rate change a 100-minus-rate curve prices between two months,
+/// in basis points: negative = cuts priced in.
+inline double priced_change_bp(double near_price, double far_price) {
+    const double a = implied_rate(near_price), b = implied_rate(far_price);
+    return std::isfinite(a) && std::isfinite(b) ? (b - a) * 100.0 : kNaN;
+}
+
 /// Open profit of a position in dollars. `quantity_units` is contracts times
 /// the point value — the form the paper engine stores a futures position in.
 inline double contracts_from_units(double quantity_units, const ContractSpec& spec) {

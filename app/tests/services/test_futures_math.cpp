@@ -175,6 +175,47 @@ class TestFuturesMath : public QObject {
         QVERIFY(!rolls_soon(k("A", 2026, 12, 1.0), today)); // no expiry known: no warning made up
     }
 
+    void stops_and_targets() {
+        const Bracket b{95.0, 110.0, true, {}};
+        QCOMPARE(bracket_hit(true, 100.0, b), BracketHit::None);
+        QCOMPARE(bracket_hit(true, 95.0, b), BracketHit::Stop);    // at the level counts
+        QCOMPARE(bracket_hit(true, 90.0, b), BracketHit::Stop);    // gapped through it
+        QCOMPARE(bracket_hit(true, 110.5, b), BracketHit::Target);
+        const Bracket s{105.0, 90.0, false, {}}; // a short: stop above, target below
+        QCOMPARE(bracket_hit(false, 100.0, s), BracketHit::None);
+        QCOMPARE(bracket_hit(false, 106.0, s), BracketHit::Stop);
+        QCOMPARE(bracket_hit(false, 89.0, s), BracketHit::Target);
+        QCOMPARE(bracket_hit(true, 100.0, Bracket{}), BracketHit::None);     // no levels: nothing to hit
+        QCOMPARE(bracket_hit(true, kNaN, b), BracketHit::None);              // no print: nothing is concluded
+        QCOMPARE(bracket_hit(true, 100.0, Bracket{kNaN, 99.0, true, {}}), BracketHit::Target); // a target alone
+        QVERIFY(!Bracket{}.any() && Bracket({kNaN, 1.0, true, {}}).any());
+
+        // Levels belong to one position: a short that later takes the long's
+        // place in the same contract does not inherit them.
+        const Bracket mine{95.0, 110.0, true, "2026-11-16T10:00:00Z"};
+        QVERIFY(mine.belongs_to(true, "2026-11-16T10:00:00Z"));
+        QVERIFY(!mine.belongs_to(false, "2026-11-16T10:00:00Z")); // reversed
+        QVERIFY(!mine.belongs_to(true, "2026-11-17T09:00:00Z"));  // a later position in the same month
+
+        // Against the price the order FILLED at.
+        QVERIFY(bracket_problem(true, 100.0, {95.0, 110.0, true, {}}).isEmpty());
+        QVERIFY(!bracket_problem(true, 99.3, {99.5, 110.0, true, {}}).isEmpty()); // the market ticked through the stop before the fill
+        QVERIFY(!bracket_problem(false, 100.0, {95.0, kNaN, false, {}}).isEmpty());
+        QVERIFY(bracket_problem(false, 100.0, {105.0, 90.0, false, {}}).isEmpty());
+        QVERIFY(!bracket_problem(true, kNaN, {95.0, kNaN, true, {}}).isEmpty());
+
+        // A print is acted on only while it is news.
+        QVERIFY(mark_is_fresh(1'000'000, 1'000'000 + 30'000));
+        QVERIFY(!mark_is_fresh(1'000'000, 1'000'000 + 6 * 3600 * 1000LL)); // six hours old
+        QVERIFY(!mark_is_fresh(0, 1'000'000));                             // never seen
+    }
+
+    void rate_curve_prices_cuts_in_basis_points() {
+        QVERIFY(std::abs(priced_change_bp(95.70, 96.15) - (-45.0)) < 1e-9); // 4.30% → 3.85%
+        QVERIFY(priced_change_bp(96.15, 95.70) > 0);                        // hikes
+        QVERIFY(std::isnan(priced_change_bp(kNaN, 96.0)));
+    }
+
     void implied_rate_is_100_minus_price() {
         QCOMPARE(implied_rate(95.83), 100.0 - 95.83);
         QVERIFY(std::isnan(implied_rate(kNaN)));

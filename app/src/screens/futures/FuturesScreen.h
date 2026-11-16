@@ -100,8 +100,15 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     void render_contract_terms();
     void render_ticket();
     void place_order();
-    void close_position(const QString& symbol);
+    /// Close whatever is open in `symbol` at its newest print. True when a
+    /// position was closed; `report` puts the outcome on the ticket's status line.
+    bool close_position(const QString& symbol, bool report);
+    void reconcile_brackets();
+    static double ticket_level(const QLineEdit* field);
     void reload_positions();
+    void load_brackets();
+    void save_brackets();
+    void check_brackets();
     void render_positions();
     void sync_stream();
     QString paper_portfolio_id();
@@ -184,6 +191,9 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     QString ticket_symbol_; ///< empty = the front month
     QString portfolio_id_;
     QHash<QString, double> marks_; ///< newest print known this session, by contract symbol
+    QHash<QString, services::futures::Bracket> brackets_; ///< stop / target by contract symbol
+    bool brackets_loaded_ = false;
+    QHash<QString, qint64> mark_seen_ms_; ///< when each mark reached this screen (wall clock)
     QHash<QString, qint64> mark_ts_; ///< when that print was, unix seconds
     // The paper book as last read from its store (reload_positions).
     QVector<trading::PtPosition> open_;

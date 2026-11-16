@@ -6,25 +6,28 @@ to be configured for the figures and charts.
 
 ## What is in it
 
-1. **At a glance** — the summary, what the numbers show for and against the
-   company, the year against the S&P 500.
+1. **At a glance** — the brief: the summary, what has changed since the last
+   report, what the numbers show for and against the company, the case for
+   and against, what to watch, the three-month reading with its own record,
+   and the year against the S&P 500.
 2. **The business** — what it sells and to whom, revenue by segment, product
    and geography, the customers its annual report singles out, competition.
 3. **What is new** — this quarter's developments, new products, new business,
-   headlines about the company.
+   the latest quarter in numbers (against the quarter before and a year
+   earlier), headlines about the company.
 4. **Financial performance** — revenue, profit and margins by year and quarter.
 5. **Cash and where it goes** — cash generated; R&D, capex, acquisitions,
    buybacks and dividends; cash against debt.
 6. **Earnings against expectations** — reported against consensus, how the
    stock moved, where estimates are heading, the coming report.
 7. **Valuation and peers** — multiples, what a multiple would put on next
-   year's earnings, the company against its peers.
+   year's earnings, the P/E against its own past, the company against its peers.
 8. **Analysts and ownership** — ratings, price targets, rating changes,
    institutions, insiders, short interest.
-9. **Advantages and risks** — as the annual report describes them, and how
-   the shares have actually traded (volatility, drawdown, beta).
-10. **Outlook** — what analysts expect, the case for and against, what to
-    watch, and a direction for the next three months.
+9. **Advantages and risks** — as the annual report describes them, how the
+   shares have actually traded (volatility, drawdown, beta), and what they
+   have moved with (rates, oil, gold, the industry's own commodity).
+10. **Outlook** — what analysts expect for the coming quarters and years.
 
 The last table, **Sources**, lists every input, when it was read, and what
 could not be loaded and why — with links to the filings on sec.gov.
@@ -47,6 +50,20 @@ could not be loaded and why — with links to the filings on sec.gov.
   against the real close when its three months are up.
 - **Peers** are a hand-kept group where one exists; otherwise the companies
   nearest in size in the same Yahoo industry, and the report says which.
+
+## What changes with the kind of company
+
+A bank, insurer, broker or REIT is not judged by an industrial company's
+yardsticks: its borrowing is not leverage and its cash flow is not "burn".
+For these the leverage and free-cash-flow readings and charts are left out,
+with a line saying so.
+
+## Memory
+
+Each report is remembered (one a day, for about a year). The next report
+opens with what has changed since the last one that is at least a week old:
+price, targets, consensus earnings, a newly reported quarter, analyst
+ratings, and which findings appeared or went.
 
 ## Practical notes
 

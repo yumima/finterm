@@ -8,6 +8,7 @@
 #include "screens/futures/FuturesCharts.h"
 #include "services/futures/FuturesService.h"
 #include "services/markets/LastKnownQuote.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "trading/PaperTrading.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -20,6 +21,7 @@
 #include <QDoubleValidator>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
@@ -71,7 +73,10 @@ const PeriodDef& period_def(const QString& label) {
 
 enum BoardCol { BRoot, BName, BLast, BChg, BPct, BVol, BCount };
 enum MonthCol { MMonth, MCode, MLast, MChg, MPct, MSpread, MCarry, MVol, MOi, MExpiry, MDays, MCount };
-enum PosCol { PContract, PSide, PQty, PEntry, PLast, PPnl, PClose, PCount };
+enum PosCol { PContract, PPosition, PEntry, PLast, PPnl, PLevels, PClose, PCount };
+
+// Stops and targets of the paper positions, kept across sessions.
+const QString kBracketsKey = QStringLiteral("futures.paper_brackets");
 
 QString num(double v, int dp) {
     return std::isfinite(v) ? QLocale(QLocale::English).toString(v, 'f', dp) : fmt::placeholder();
@@ -189,11 +194,14 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
                     if (marks_.contains(t.symbol) && marks_.value(t.symbol) != t.price) {
                         marks_.insert(t.symbol, t.price);
                         mark_ts_.insert(t.symbol, t.time_ms / 1000);
+                        mark_seen_ms_.insert(t.symbol, QDateTime::currentMSecsSinceEpoch());
                         moved = true;
                     }
                 }
-                if (moved)
+                if (moved) {
+                    check_brackets();
                     positions_render_.request(); // one repaint per burst, from the cached book
+                }
             });
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
@@ -534,10 +542,13 @@ QWidget* FuturesScreen::build_side_tabs() {
     account_->setToolTip(QStringLiteral(
         "A simulated account. Orders fill at the contract's last print (about ten minutes behind the exchange), "
         "with no commission. Margin is modelled as 5% of notional — not any exchange's requirement. "
-        "Stop and target only size the trade; they are not resting orders."));
+        "A stop or target entered with an order stays on the position: it is closed at the first print at or "
+        "beyond the level — not at the level itself — and only while this screen is open to see the print."));
     tv->addWidget(account_);
-    positions_ = make_table({QStringLiteral("CONTRACT"), QStringLiteral("SIDE"), QStringLiteral("QTY"),
-                             QStringLiteral("ENTRY"), QStringLiteral("LAST"), QStringLiteral("P&L"), QString()},
+    // Seven columns in a narrow pane: side and size share one ("LONG 2").
+    positions_ = make_table({QStringLiteral("CONTRACT"), QStringLiteral("POSITION"),
+                             QStringLiteral("ENTRY"), QStringLiteral("LAST"), QStringLiteral("P&L"),
+                             QStringLiteral("STOP / TARGET"), QString()},
                             tk);
     positions_->horizontalHeaderItem(PContract)->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     // The button column keeps the width its label needs; the name takes the slack.
@@ -665,6 +676,7 @@ void FuturesScreen::showEvent(QShowEvent* e) {
         spread_for_.clear();
     }
     fetch_spread();
+    load_brackets();
     reload_positions();
     render_positions();
     sync_stream();
@@ -677,6 +689,11 @@ void FuturesScreen::hideEvent(QHideEvent* e) {
     unsubscribe_board();
     curve_timer_->stop();
     sync_stream();
+    // Prices seen before the screen was put away are not prices on return:
+    // positions show a dash, and no level is acted on, until a new print.
+    marks_.clear();
+    mark_ts_.clear();
+    mark_seen_ms_.clear();
 }
 
 // ── board ──────────────────────────────────────────────────────────────────
@@ -841,6 +858,7 @@ void FuturesScreen::fetch_curve() {
                 continue;
             marks_.insert(c.symbol, c.price);
             mark_ts_.insert(c.symbol, c.ts);
+            mark_seen_ms_.insert(c.symbol, QDateTime::currentMSecsSinceEpoch());
         }
         // EVENT-STAMP: when the curve was read — an instant, shown in local time.
         status_->set_idle(QStringLiteral("Yahoo · ~10 min delayed · %1")
@@ -848,6 +866,7 @@ void FuturesScreen::fetch_curve() {
         render_curve();
         render_strip();
         render_ticket();
+        check_brackets();
         render_positions();
         sync_stream();
         fetch_spread();
@@ -904,10 +923,21 @@ void FuturesScreen::render_strip() {
         facts << QStringLiteral("front <b>%1</b> (%2)").arg(front.month_label(), front.code());
         if (s && s->rate_quoted) {
             facts << QStringLiteral("implies <b>%1%</b>").arg(num(implied_rate(front.price), 3));
-            if (sum.far >= 0)
+            if (sum.far >= 0) {
                 facts << QStringLiteral("%1 implies <b>%2%</b>")
                              .arg(curve_.contracts[sum.far].month_label(),
                                   num(implied_rate(curve_.contracts[sum.far].price), 3));
+                // The question a stock investor asks of this curve: how much easing or tightening is priced?
+                const double bp = priced_change_bp(front.price, curve_.contracts[sum.far].price);
+                if (std::isfinite(bp) && std::abs(bp) >= 1.0)
+                    // Between the two MONTHS named, not from today's policy rate:
+                    // the front contract already averages what is expected in it.
+                    facts << QStringLiteral("<span style='color:%1'><b>%2 bp %3</b></span> from %4 to %5")
+                                 .arg(bp < 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
+                                      QString::number(std::abs(bp), 'f', 0),
+                                      bp < 0 ? QStringLiteral("lower") : QStringLiteral("higher"), front.month_label(),
+                                      curve_.contracts[sum.far].month_label());
+            }
         } else {
             if (sum.shape != Shape::Unknown && sum.far >= 0)
                 facts << QStringLiteral("<span style='color:%1'><b>%2</b></span> · %3 %4 vs front")
@@ -1248,13 +1278,8 @@ void FuturesScreen::render_ticket() {
     t.is_long = buy_btn_->isChecked();
     t.contracts = qty_->value();
     t.entry = c->price;
-    auto parse = [](const QLineEdit* e) {
-        bool ok = false;
-        const double v = QLocale::c().toDouble(e->text().trimmed(), &ok);
-        return ok && v > 0 ? v : kNaN;
-    };
-    t.stop = parse(stop_);
-    t.target = parse(target_);
+    t.stop = ticket_level(stop_);
+    t.target = ticket_level(target_);
     const TicketResult r = evaluate(t, *s);
     QStringList parts;
     parts << QStringLiteral("Notional <b>%1</b>").arg(dollars(r.notional));
@@ -1309,32 +1334,168 @@ void FuturesScreen::place_order() {
     }
     const bool is_long = buy_btn_->isChecked();
     const double contracts = qty_->value();
+    const QString symbol = c->symbol;
+    const double fill = c->price;
+    const int dp = price_decimals(s->tick);
     // The paper engine prices a position as quantity × price, so a futures
     // position is stored in units of the quoted price: contracts × point value.
     const double units = contracts * s->point_value;
     try {
-        const auto order = trading::pt_place_order(pid, c->symbol, is_long ? QStringLiteral("buy") : QStringLiteral("sell"),
-                                                   QStringLiteral("market"), units, c->price);
-        trading::pt_fill_order(order.id, c->price);
-        ticket_status_->setText(QStringLiteral("Filled: %1 %2 %3 @ %4")
-                                    .arg(is_long ? QStringLiteral("bought") : QStringLiteral("sold"))
-                                    .arg(contracts)
-                                    .arg(c->code(), num(c->price, price_decimals(s->tick))));
+        const auto order = trading::pt_place_order(pid, symbol, is_long ? QStringLiteral("buy") : QStringLiteral("sell"),
+                                                   QStringLiteral("market"), units, fill);
+        trading::pt_fill_order(order.id, fill);
     } catch (const std::exception& e) {
         ticket_status_->setText(QStringLiteral("Order refused: %1").arg(QString::fromUtf8(e.what())));
+        return;
     }
-    reload_positions();
+    QString status = QStringLiteral("Filled: %1 %2 %3 @ %4")
+                         .arg(is_long ? QStringLiteral("bought") : QStringLiteral("sold"))
+                         .arg(contracts)
+                         .arg(c->code(), num(fill, dp));
+    const Bracket typed{ticket_level(stop_), ticket_level(target_), is_long, {}};
+    reload_positions(); // also drops levels that no longer have their position
+
+    // What the order left open in this contract decides what the levels mean.
+    const trading::PtPosition* pos = nullptr;
+    for (const auto& p : std::as_const(open_))
+        if (p.symbol == symbol)
+            pos = &p;
+    if (typed.any()) {
+        const bool same_side = pos && (pos->side == QLatin1String("long")) == is_long;
+        // Levels typed with an order that only reduced, closed or reversed a
+        // position were sized for a trade that did not open: they are not kept.
+        const QString problem = !same_side ? QStringLiteral("the order did not open or add to a position on its own side")
+                                           : bracket_problem(is_long, fill, typed);
+        if (problem.isEmpty()) {
+            Bracket b = typed;
+            b.opened_at = pos->opened_at;
+            brackets_.insert(symbol, b);
+            save_brackets();
+        } else {
+            status += QStringLiteral(" · stop/target not set: %1").arg(problem);
+        }
+    }
+    // Left in the fields they would be measured against the next entry price.
+    stop_->clear();
+    target_->clear();
+    ticket_status_->setText(status);
     render_positions();
     sync_stream();
 }
 
-void FuturesScreen::close_position(const QString& symbol) {
+double FuturesScreen::ticket_level(const QLineEdit* field) {
+    bool ok = false;
+    const double v = QLocale::c().toDouble(field->text().trimmed(), &ok);
+    return ok && v > 0 ? v : kNaN;
+}
+
+void FuturesScreen::load_brackets() {
+    // Once per session: the map in memory is the truth after that, and a
+    // failed read on some later tab switch must not be saved back as "none".
+    if (brackets_loaded_)
+        return;
+    const auto r = SettingsRepository::instance().get(kBracketsKey);
+    if (r.is_err())
+        return; // tried again on the next show
+    brackets_loaded_ = true;
+    const QJsonObject o = QJsonDocument::fromJson(r.value().toUtf8()).object();
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        const QJsonObject b = it.value().toObject();
+        Bracket br{json_num(b, "stop"), json_num(b, "target"), b.value(QLatin1String("long")).toBool(true),
+                   b.value(QLatin1String("opened_at")).toString()};
+        if (br.any())
+            brackets_.insert(it.key(), br);
+    }
+}
+
+void FuturesScreen::save_brackets() {
+    if (!brackets_loaded_)
+        return; // never write a map that was not read first
+    QJsonObject o;
+    for (auto it = brackets_.constBegin(); it != brackets_.constEnd(); ++it) {
+        QJsonObject b{{"long", it->is_long}, {"opened_at", it->opened_at}};
+        if (std::isfinite(it->stop))
+            b.insert(QStringLiteral("stop"), it->stop);
+        if (std::isfinite(it->target))
+            b.insert(QStringLiteral("target"), it->target);
+        o.insert(it.key(), b);
+    }
+    SettingsRepository::instance().set(kBracketsKey, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)),
+                                       QStringLiteral("futures"));
+}
+
+void FuturesScreen::reconcile_brackets() {
+    // Levels live only as long as the position they were set for. Whatever
+    // closed it — the CLOSE button, an opposite order, an agent, a reset —
+    // the book is what says so, and levels without their position go.
+    if (!brackets_loaded_ || !book_ok_)
+        return;
+    bool changed = false;
+    for (auto it = brackets_.begin(); it != brackets_.end();) {
+        bool kept = false;
+        for (const auto& p : std::as_const(open_))
+            kept = kept || (p.symbol == it.key() && it->belongs_to(p.side == QLatin1String("long"), p.opened_at));
+        if (kept) {
+            ++it;
+        } else {
+            it = brackets_.erase(it);
+            changed = true;
+        }
+    }
+    if (changed)
+        save_brackets();
+}
+
+void FuturesScreen::check_brackets() {
+    // Only while the screen is open to see the print, and only on a print
+    // that is still news. The fill is at that print, not at the level: a
+    // market that gaps through a stop fills worse than the stop.
+    if (!shown_)
+        return;
+    struct Hit {
+        QString symbol;
+        BracketHit which;
+        double px;
+    };
+    QVector<Hit> hits;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (const auto& p : std::as_const(open_)) {
+        const auto it = brackets_.constFind(p.symbol);
+        const bool is_long = p.side == QLatin1String("long");
+        if (it == brackets_.constEnd() || !it->belongs_to(is_long, p.opened_at))
+            continue;
+        if (!mark_is_fresh(mark_seen_ms_.value(p.symbol, 0), now))
+            continue;
+        const double px = last_price(p.symbol);
+        const BracketHit which = bracket_hit(is_long, px, *it);
+        if (which != BracketHit::None)
+            hits.append({p.symbol, which, px});
+    }
+    QStringList said;
+    for (const Hit& h : std::as_const(hits)) {
+        const auto* s = find_contract(root_of(h.symbol));
+        const QString what = h.which == BracketHit::Stop ? QStringLiteral("Stop reached") : QStringLiteral("Target reached");
+        const QString code = h.symbol.section(QLatin1Char('.'), 0, 0);
+        said << (close_position(h.symbol, /*report=*/false)
+                     ? QStringLiteral("%1: %2 closed at %3").arg(what, code, num(h.px, s ? price_decimals(s->tick) : 2))
+                     : QStringLiteral("%1 on %2, but the close was refused — the position and its levels stand").arg(what, code));
+    }
+    if (!said.isEmpty())
+        ticket_status_->setText(said.join(QStringLiteral(" · ")));
+}
+
+bool FuturesScreen::close_position(const QString& symbol, bool report) {
     const QString pid = paper_portfolio_id();
     const double px = last_price(symbol);
+    auto say = [this, report](const QString& text) {
+        if (report)
+            ticket_status_->setText(text);
+    };
     if (pid.isEmpty() || !(px > 0)) {
-        ticket_status_->setText(QStringLiteral("No price for %1 yet — cannot close.").arg(symbol));
-        return;
+        say(QStringLiteral("No price for %1 yet — cannot close.").arg(symbol));
+        return false;
     }
+    bool closed = false;
     try {
         for (const auto& pos : trading::pt_get_positions(pid)) {
             if (pos.symbol != symbol || !(pos.quantity > 0))
@@ -1344,17 +1505,24 @@ void FuturesScreen::close_position(const QString& symbol) {
                                                                                         : QStringLiteral("buy"),
                                         QStringLiteral("market"), pos.quantity, px, std::nullopt, true);
             trading::pt_fill_order(order.id, px);
+            closed = true;
         }
-        const auto* closed_spec = find_contract(root_of(symbol));
-        ticket_status_->setText(QStringLiteral("Closed %1 @ %2")
-                                    .arg(symbol.section(QLatin1Char('.'), 0, 0),
-                                         num(px, closed_spec ? price_decimals(closed_spec->tick) : 2)));
     } catch (const std::exception& e) {
-        ticket_status_->setText(QStringLiteral("Close refused: %1").arg(QString::fromUtf8(e.what())));
+        say(QStringLiteral("Close refused: %1").arg(QString::fromUtf8(e.what())));
+        reload_positions();
+        render_positions();
+        return false;
     }
-    reload_positions();
+    if (closed) {
+        const auto* closed_spec = find_contract(root_of(symbol));
+        say(QStringLiteral("Closed %1 @ %2")
+                .arg(symbol.section(QLatin1Char('.'), 0, 0), num(px, closed_spec ? price_decimals(closed_spec->tick) : 2)));
+    }
+    // A click that arrives after the position is already gone says nothing.
+    reload_positions(); // drops the closed position's levels with it
     render_positions();
     sync_stream();
+    return closed;
 }
 
 void FuturesScreen::reload_positions() {
@@ -1378,6 +1546,7 @@ void FuturesScreen::reload_positions() {
         book_error_ = QString::fromUtf8(e.what());
         return;
     }
+    reconcile_brackets();
     try {
         const auto stats = trading::pt_get_stats(pid);
         const qint64 closed = stats.winning_trades + stats.losing_trades;
@@ -1421,11 +1590,15 @@ void FuturesScreen::render_positions() {
         else
             all_marked = false;
         put(positions_, r, PContract, p.symbol.section(QLatin1Char('.'), 0, 0), primary, false);
-        put(positions_, r, PSide, p.side.toUpper(), tone(dir));
-        put(positions_, r, PQty, s ? num(contracts_from_units(p.quantity, *s), 0) : fmt::placeholder(), primary);
+        put(positions_, r, PPosition,
+            s ? QStringLiteral("%1 %2").arg(p.side.toUpper(), num(contracts_from_units(p.quantity, *s), 0)) : p.side.toUpper(),
+            tone(dir));
         put(positions_, r, PEntry, num(p.entry_price, dp), secondary);
         put(positions_, r, PLast, num(last, dp), primary);
         put(positions_, r, PPnl, std::isfinite(pnl) ? dollars(pnl) : fmt::placeholder(), tone(pnl));
+        const Bracket br = brackets_.value(p.symbol);
+        put(positions_, r, PLevels,
+            br.any() ? QStringLiteral("%1 / %2").arg(num(br.stop, dp), num(br.target, dp)) : fmt::placeholder(), secondary);
         auto* btn = qobject_cast<QPushButton*>(positions_->cellWidget(r, PClose));
         if (!btn || btn->property("symbol").toString() != p.symbol) {
             btn = new QPushButton(QStringLiteral("CLOSE"), positions_);
@@ -1434,7 +1607,7 @@ void FuturesScreen::render_positions() {
             btn->setProperty("symbol", p.symbol);
             const QString sym = p.symbol;
             // Queued: closing rebuilds this table, which deletes the button.
-            connect(btn, &QPushButton::clicked, this, [this, sym]() { close_position(sym); }, Qt::QueuedConnection);
+            connect(btn, &QPushButton::clicked, this, [this, sym]() { close_position(sym, true); }, Qt::QueuedConnection);
             positions_->setCellWidget(r, PClose, btn);
         }
         btn->setEnabled(last > 0);
