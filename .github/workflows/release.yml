@@ -542,6 +542,31 @@ jobs:
               zsyncmake "build/${OUTPUT}" -o "build/${OUTPUT}.zsync" || true
           fi
 
+      # ── Run it and prove it gets data ─────────────────────────────────────
+      # The same check as the Windows job, on the file a Linux user downloads:
+      # the AppImage itself, started the way they start it. See SelfTest.h.
+      - name: Self-test the AppImage (Python setup, data daemon, one quote)
+        timeout-minutes: 50
+        working-directory: app/build
+        run: |
+          set -uo pipefail
+          sudo apt-get install -y xvfb -qq
+          APPIMAGE="$(ls finterm-*-linux-x64-setup.run | head -1)"
+          REPORT="${RUNNER_TEMP}/selftest.json"
+          rm -f "${REPORT}"
+          # No FUSE on the runner: extract-and-run is the documented fallback
+          # and runs the same payload. xvfb gives Qt a display; nothing is shown.
+          xvfb-run -a "./${APPIMAGE}" --appimage-extract-and-run --profile selftest --selftest "${REPORT}"
+          CODE=$?
+          echo "exit code: ${CODE}"
+          cat "${REPORT}" 2>/dev/null || echo "(no report written)"
+          if [ "${CODE}" -ne 0 ] || ! grep -q '"ok": true' "${REPORT}" 2>/dev/null; then
+            find "${HOME}/.local/share/finterm" -name 'finterm.log' 2>/dev/null \
+              | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
+            echo "::error::the AppImage could not fetch market data (see the report and log above)"
+            exit 1
+          fi
+
       # ── Upload ────────────────────────────────────────────────────────────
       # Version-stamped filename so update-manifest regex picks it up.
       - name: Upload artifact
@@ -1050,6 +1075,35 @@ jobs:
             "build/${DMG_NAME}"
 
           ls -lh "build/${DMG_NAME}"
+
+      # ── Install it and prove it gets data ─────────────────────────────────
+      # The same check as the Windows job, on what a Mac user does: open the
+      # disk image, copy the app out, start it. See SelfTest.h.
+      - name: Self-test the app from the disk image (Python setup, data daemon, one quote)
+        timeout-minutes: 50
+        working-directory: app
+        run: |
+          set -uo pipefail
+          DMG="$(ls build/finterm-*-macos-arm64-setup.dmg | head -1)"
+          MNT="${RUNNER_TEMP}/finterm-dmg"
+          DEST="${RUNNER_TEMP}/finterm-install"
+          REPORT="${RUNNER_TEMP}/selftest.json"
+          rm -rf "${DEST}" "${REPORT}"; mkdir -p "${MNT}" "${DEST}"
+          hdiutil attach "${DMG}" -nobrowse -readonly -mountpoint "${MNT}"
+          cp -R "${MNT}/${{ env.APP_NAME }}.app" "${DEST}/"
+          hdiutil detach "${MNT}" || true
+          EXE="${DEST}/${{ env.APP_NAME }}.app/Contents/MacOS/${{ env.APP_NAME }}"
+          [ -x "${EXE}" ] || { echo "::error::the disk image has no runnable app"; ls -R "${DEST}" | head -40; exit 1; }
+          "${EXE}" --profile selftest --selftest "${REPORT}"
+          CODE=$?
+          echo "exit code: ${CODE}"
+          cat "${REPORT}" 2>/dev/null || echo "(no report written)"
+          if [ "${CODE}" -ne 0 ] || ! grep -q '"ok": true' "${REPORT}" 2>/dev/null; then
+            find "${HOME}/Library/Application Support" "${HOME}/.local/share" -name 'finterm.log' 2>/dev/null \
+              | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
+            echo "::error::the installed app could not fetch market data (see the report and log above)"
+            exit 1
+          fi
 
       # ── Upload ────────────────────────────────────────────────────────────
       - name: Upload artifact
