@@ -38,6 +38,9 @@ class PythonWorker : public QObject {
   public:
     using Callback = std::function<void(bool ok, QJsonObject result, QString error)>;
 
+    /// Whether the worker has been built — asked at quit, so stopping it never
+    /// builds it.
+    static bool exists();
     static PythonWorker& instance();
 
     bool is_ready() const { return ready_; }
@@ -121,6 +124,8 @@ class PythonWorker : public QObject {
     int restart_count_ = 0;
     static constexpr int kMaxRestarts = 5;
     static constexpr int kReadyTimeoutMs = 15'000;
+    bool stopped_ = false;
+    static constexpr int kFirstReadyTimeoutMs = 45'000; ///< a session's first start: cold imports
 
     QHash<int, Pending> in_flight_;
     QDeadlineTimer bg_backoff_{0}; // no background sends until it expires (monotonic)

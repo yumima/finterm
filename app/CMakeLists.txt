@@ -613,6 +613,7 @@ set(CORE_SOURCES
     src/core/components/PopularityTracker.cpp
     src/core/crash/CrashHandler.cpp
     src/core/util/VisibilityAwareTimer.cpp
+    src/core/util/AppLifecycle.cpp
 )
 
 # Network

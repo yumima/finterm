@@ -1,5 +1,6 @@
 #include "ai_chat/HearthSupervisor.h"
 
+#include "core/util/AppLifecycle.h"
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
@@ -98,6 +99,7 @@ void HearthSupervisor::start_process() {
 
     if (!process_) {
         process_ = new QProcess(this);
+        finterm::lifecycle::bind_to_app(process_); // ends with the app, however the app ends
         process_->setProcessChannelMode(QProcess::MergedChannels);
         connect(process_, &QProcess::finished, this, &HearthSupervisor::on_process_finished);
     }

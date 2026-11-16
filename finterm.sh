@@ -606,9 +606,35 @@ cmd_reset() {
 # ── Subcommand: stop ─────────────────────────────────────────────────────────
 
 cmd_stop() {
-    local stopped=0
+    # SIGTERM is a normal quit for the app: it stops its own helpers (the data
+    # daemon, the local model server, exchange feeds) on the way out. Give it
+    # a few seconds to do so; only then force it, and sweep up any data daemon
+    # an older build left behind.
+    local stopped=0 i
     if pgrep -f "$FINTERM_PROC" >/dev/null; then
-        pkill -f "$FINTERM_PROC" && echo "Stopped finterm" && stopped=1
+        pkill -TERM -f "$FINTERM_PROC" && stopped=1
+        # Its own shutdown saves state and stops helpers: allow it 15 s.
+        for i in $(seq 1 30); do
+            pgrep -f "$FINTERM_PROC" >/dev/null || break
+            sleep 0.5
+        done
+        if pgrep -f "$FINTERM_PROC" >/dev/null; then
+            echo "finterm did not quit in 15 s — forcing it." >&2
+            pkill -KILL -f "$FINTERM_PROC" 2>/dev/null || true
+        fi
+        echo "Stopped finterm"
+    fi
+    # Only a daemon nobody owns any more (re-parented to init or a session
+    # reaper): one whose app is alive — another checkout, a test session — is
+    # that app's, not a leftover.
+    local orphans
+    orphans=$(ps -eo pid=,ppid=,args= | awk '/yfinance_data\.py --daemon/ && !/awk/ {
+        cmd = "ps -o comm= -p " $2; cmd | getline parent; close(cmd)
+        if ($2 == 1 || parent !~ /finterm/) print $1 }')
+    if [[ -n "$orphans" ]]; then
+        kill -TERM $orphans 2>/dev/null || true
+        echo "Stopped a leftover data daemon"
+        stopped=1
     fi
     if [[ "$stopped" == 0 ]]; then
         echo "Nothing to stop — finterm is not running."

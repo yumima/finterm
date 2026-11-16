@@ -1,5 +1,6 @@
 ﻿#include "trading/ExchangeSession.h"
 
+#include "core/util/AppLifecycle.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "storage/secure/SecureStorage.h"
@@ -174,6 +175,7 @@ bool ExchangeSession::start_ws(const QString& primary_symbol, const QStringList&
         args << sym;
 
     ws_process_ = new QProcess(this);
+    finterm::lifecycle::bind_to_app(ws_process_); // ends with the app, however the app ends
     connect(ws_process_, &QProcess::readyReadStandardOutput, this, &ExchangeSession::drain_ws_buffer);
     connect(ws_process_, &QProcess::readyReadStandardError, this, [this]() {
         if (!ws_process_)

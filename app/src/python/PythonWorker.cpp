@@ -1,5 +1,6 @@
 #include "python/PythonWorker.h"
 
+#include "core/util/AppLifecycle.h"
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
@@ -42,12 +43,21 @@ QByteArray encode_frame(const QJsonObject& obj) {
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
+namespace {
+bool g_worker_built = false;
+}
+
 PythonWorker& PythonWorker::instance() {
     static PythonWorker s;
     return s;
 }
 
+bool PythonWorker::exists() {
+    return g_worker_built;
+}
+
 PythonWorker::PythonWorker() {
+    g_worker_built = true;
     ready_watchdog_.setSingleShot(true);
     ready_watchdog_.setInterval(kReadyTimeoutMs);
     connect(&ready_watchdog_, &QTimer::timeout, this, [this]() {
@@ -261,6 +271,9 @@ void PythonWorker::send_to_daemon(int id, Pending p) {
 // ── stop ──────────────────────────────────────────────────────────────────────
 
 void PythonWorker::stop() {
+    if (stopped_)
+        return; // at quit, and again from the destructor at exit
+    stopped_ = true;
     shutting_down_ = true;
     if (socket_connected()) {
         QJsonObject req;
@@ -348,6 +361,7 @@ void PythonWorker::launch_process() {
     }
 
     proc_ = new QProcess(this);
+    lifecycle::bind_to_app(proc_); // ends with the app, however the app ends
     proc_->setProcessEnvironment(runner.build_python_env());
     proc_->setWorkingDirectory(scripts_dir);
     proc_->setReadChannel(QProcess::StandardOutput);
@@ -394,6 +408,10 @@ void PythonWorker::launch_process() {
                                      .arg(socket_path_));
         proc_->start(python_exe, {script_path, "--daemon", "--socket", socket_path_});
     }
+    // The first start of a session loads Python's data libraries from a cold
+    // disk cache; a restart finds them warm. Killing a first start that is
+    // merely slow would only begin the same slow start again.
+    ready_watchdog_.setInterval(restart_count_ == 0 ? kFirstReadyTimeoutMs : kReadyTimeoutMs);
     ready_watchdog_.start();
 }
 

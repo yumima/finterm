@@ -26,6 +26,7 @@
 #include "app/SelfTest.h"
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
+#include "core/util/AppLifecycle.h"
 #include "screens/setup/SetupScreen.h"
 #include "services/agents/AgentScheduler.h"
 #include "services/agents/AgentService.h"
@@ -215,6 +216,15 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Primary instance from here on ────────────────────────────────────────
+
+    // Quitting stops the data daemon in order rather than leaving it to find
+    // its socket closed — but only one that exists: asking for the worker
+    // here would build it during teardown. Helpers are also bound to the app
+    // at start, so even a crash takes them down — see core/util/AppLifecycle.h.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
+        if (finterm::python::PythonWorker::exists())
+            finterm::python::PythonWorker::instance().stop();
+    });
 
     // An older build's data folder that could not be moved (that build is still
     // running, or the rename failed): stop here. Running on it would split the
@@ -715,7 +725,12 @@ int main(int argc, char* argv[]) {
             LOG_INFO("App", "Application ready (after setup)");
         });
 
-        return app.exec();
+        finterm::lifecycle::quit_on_terminate_signals(); // see below
+        // A terminate signal (finterm.sh stop, logout, kill) becomes a normal
+    // quit — installed only now, at the main loop: during startup's own
+    // dialogs a quit would end just that dialog and startup would carry on.
+    finterm::lifecycle::quit_on_terminate_signals();
+    return app.exec();
     }
 
     // Ensure KeyConfigManager is initialized before MainWindow registers shortcuts

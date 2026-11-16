@@ -1,5 +1,6 @@
 #include "python/OptionGreeksWorker.h"
 
+#include "core/util/AppLifecycle.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonSetupManager.h"
@@ -122,6 +123,7 @@ void OptionGreeksWorker::launch_process() {
         proc_ = nullptr;
     }
     proc_ = new QProcess(this);
+    finterm::lifecycle::bind_to_app(proc_); // ends with the app, however the app ends
     proc_->setProcessEnvironment(runner.build_python_env());
     proc_->setWorkingDirectory(scripts_dir);
     proc_->setReadChannel(QProcess::StandardOutput);

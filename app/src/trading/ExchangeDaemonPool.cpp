@@ -1,5 +1,6 @@
 #include "trading/ExchangeDaemonPool.h"
 
+#include "core/util/AppLifecycle.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 
@@ -50,6 +51,7 @@ void ExchangeDaemonPool::start() {
     }
 
     process_ = new QProcess(this);
+    finterm::lifecycle::bind_to_app(process_); // ends with the app, however the app ends
     process_->setProcessChannelMode(QProcess::SeparateChannels);
 
     connect(process_, &QProcess::readyReadStandardOutput, this, &ExchangeDaemonPool::drain_buffer);
