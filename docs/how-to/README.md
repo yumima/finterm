@@ -7,6 +7,7 @@ self-contained.
 |---|---|
 | [AI features](ai-features.md) | Configure a runtime, find the chat/forecast surfaces, bind models per role, schedule agents, kill-switches + spend |
 | [Quant features](quant-features.md) | Build factor models / backtests, run paper trades, read the quant strategy book, attach the quant_critic agent |
+| [Futures](futures.md) | Read a forward curve, calendar spreads and CFTC positioning; size and paper-trade a contract |
 | [Capability matrix](capabilities.md) | What works on which runtime — generated from the JSON the runtime gating layer reads |
 
 Looking for architecture / engineering background?  See

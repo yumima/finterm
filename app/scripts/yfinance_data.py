@@ -4981,7 +4981,7 @@ _CACHE_TTL = {
     "index_futures": 55, "batch_sparklines": 30, "top_movers": 30,
     # one batch-quote request per curve; the back months print rarely, and the
     # past sessions' settles behind the comparison curves do not change at all.
-    "futures_curve": 20, "futures_curve_history": 1800,
+    "futures_curve": 20, "futures_curve_history": 1800, "futures_spread_history": 900,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     # quarterly statements and rating changes — move a few times a quarter
@@ -5402,6 +5402,9 @@ def _daemon_dispatch_inner(action, payload):
     if action == "futures_curve":
         p = payload or {}
         return get_futures_curve(p.get("root"), p.get("exchange"), p.get("months", 30))
+    if action == "futures_spread_history":
+        p = payload or {}
+        return get_futures_spread_history(p.get("near"), p.get("far"), p.get("period", "6mo"))
     if action == "futures_curve_history":
         return get_futures_curve_history((payload or {}).get("symbols") or [])
     if action == "financial_ratios":
@@ -6188,6 +6191,36 @@ def get_futures_curve_history(symbols):
             out["curves"].append({"label": label, "sessions_back": back, "date": ref,
                                   "closes": fc.curve_on_date(closes, ref)})
     return out
+
+
+def get_futures_spread_history(near, far, period="6mo"):
+    """Daily history of a calendar spread: `far` minus `near`, two contract
+    months of the same root, on the sessions both traded."""
+    import futures_curve as fc
+    a, b = fc.split_contract(near), fc.split_contract(far)
+    if not a or not b or a[0] != b[0] or near == far:
+        return {"error": "a spread needs two different months of one contract"}
+    import io, contextlib
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            data = yf.download([near, far], period=period if period in ("3mo", "6mo", "1y") else "6mo",
+                               interval="1d", group_by="ticker", progress=False, threads=True, auto_adjust=False)
+        except Exception as e:
+            return {"error": f"Yahoo refused or did not answer ({str(e)[:120]})", "transient": True}
+    if data is None or getattr(data, "empty", True):
+        return {"error": "Yahoo returned no bars for the spread", "transient": True}
+    closes = {}
+    for sym in (near, far):
+        try:
+            col = data[sym]["Close"].dropna()
+        except Exception:
+            col = []
+        closes[sym] = {ts.date().isoformat(): float(f"{float(v):.7g}") for ts, v in getattr(col, "items", lambda: [])()
+                       if v > 0}
+    rows = fc.spread_series(closes[near], closes[far])
+    if len(rows) < 2:
+        return {"error": "the two months have not traded on enough of the same sessions"}
+    return {"near": near, "far": far, "rows": rows}
 
 
 def _empty_ext_row(sym, session):

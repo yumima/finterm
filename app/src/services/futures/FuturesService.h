@@ -21,6 +21,10 @@ void fetch_curve(const QString& root, QObject* ctx, std::function<void(bool, Cur
 void fetch_curve_history(const QStringList& contract_symbols, QObject* ctx,
                          std::function<void(bool, QVector<PastCurve>, QString)> cb);
 
+/// Six months of a calendar spread (`far` minus `near`), on sessions both traded.
+void fetch_spread_history(const QString& near, const QString& far, QObject* ctx,
+                          std::function<void(bool, SpreadHistory, QString)> cb);
+
 /// Three years of weekly reports. Published once a week (Friday, for the
 /// Tuesday before), so a copy is kept for six hours.
 void fetch_cot(const QString& cftc_code, QObject* ctx, std::function<void(bool, CotReport, QString)> cb);

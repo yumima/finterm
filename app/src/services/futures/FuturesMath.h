@@ -224,6 +224,88 @@ inline CurveSummary summarize(const Curve& curve) {
     return s;
 }
 
+// ── Calendar spread history ─────────────────────────────────────────────────
+
+struct SpreadPoint {
+    QDate date;
+    double near = kNaN, far = kNaN;
+    double spread = kNaN; ///< far − near
+};
+
+struct SpreadHistory {
+    QString near, far; ///< contract symbols
+    QVector<SpreadPoint> points; ///< oldest first; only sessions both months traded
+};
+
+inline SpreadHistory parse_spread(const QJsonObject& o) {
+    SpreadHistory h;
+    h.near = o.value(QLatin1String("near")).toString();
+    h.far = o.value(QLatin1String("far")).toString();
+    for (const auto& v : o.value(QLatin1String("rows")).toArray()) {
+        const QJsonObject r = v.toObject();
+        SpreadPoint p;
+        p.date = QDate::fromString(r.value(QLatin1String("date")).toString(), Qt::ISODate);
+        p.near = json_num(r, "near");
+        p.far = json_num(r, "far");
+        p.spread = json_num(r, "spread");
+        if (p.date.isValid() && std::isfinite(p.spread))
+            h.points.append(p);
+    }
+    return h;
+}
+
+struct SpreadStats {
+    int sessions = 0;
+    double last = kNaN, low = kNaN, high = kNaN, mean = kNaN;
+    double change = kNaN; ///< last minus first of the window
+    /// Where the last value sits between the window's low (0) and high (100).
+    double range_pct = kNaN;
+};
+
+inline SpreadStats spread_stats(const SpreadHistory& h) {
+    SpreadStats s;
+    double sum = 0;
+    for (const auto& p : h.points) {
+        ++s.sessions;
+        sum += p.spread;
+        s.low = std::isfinite(s.low) ? std::min(s.low, p.spread) : p.spread;
+        s.high = std::isfinite(s.high) ? std::max(s.high, p.spread) : p.spread;
+    }
+    if (s.sessions == 0)
+        return s;
+    s.last = h.points.last().spread;
+    s.mean = sum / s.sessions;
+    s.change = s.last - h.points.first().spread;
+    // A range needs history: a place in a week of sessions says nothing.
+    if (s.sessions >= 20 && s.high > s.low)
+        s.range_pct = (s.last - s.low) / (s.high - s.low) * 100.0;
+    return s;
+}
+
+/// The pair a spread view shows for a curve: the front month against the
+/// month picked (or, with none picked, the next month that has printed
+/// lately). Always nearer month first. Empty strings when there is no pair.
+inline QPair<QString, QString> spread_pair(const Curve& curve, const QString& picked) {
+    const CurveSummary sum = summarize(curve);
+    if (sum.anchor < 0)
+        return {};
+    int other = curve.index_of(picked);
+    if (other < 0 || other == sum.anchor)
+        other = sum.next;
+    if (other < 0)
+        return {};
+    const int a = std::min(sum.anchor, other), b = std::max(sum.anchor, other);
+    return {curve.contracts[a].symbol, curve.contracts[b].symbol};
+}
+
+/// Days from `today` to a contract's last trading day at or under which the
+/// screen says so: the position must be closed or rolled before then.
+inline constexpr int kRollWarningDays = 5;
+
+inline bool rolls_soon(const CurveContract& c, const QDate& today) {
+    return c.expiry.isValid() && today.daysTo(c.expiry) <= kRollWarningDays;
+}
+
 // ── Positioning (CFTC Commitments of Traders) ───────────────────────────────
 
 struct CotRow {

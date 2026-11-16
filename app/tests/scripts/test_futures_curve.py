@@ -89,6 +89,12 @@ past = fc.curve_on_date({"A": {"2026-11-09": 10.0, "2026-11-10": 11.0}, "B": {"2
                          "C": {"2026-11-09": float("nan")}}, "2026-11-09")
 check("past curve exact session only", past, {"A": 10.0})
 
+sp = fc.spread_series({"2026-11-09": 80.0, "2026-11-10": 81.0, "2026-11-11": 82.0},
+                      {"2026-11-09": 78.5, "2026-11-11": 80.0, "2026-11-12": 79.0})
+check("spread only where both traded", [(r["date"], r["spread"]) for r in sp],
+      [("2026-11-09", -1.5), ("2026-11-11", -2.0)])
+check("spread of nothing", fc.spread_series({}, None), [])
+
 try:
     import futures_cot  # noqa: E402  (needs requests)
 except ImportError:

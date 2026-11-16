@@ -50,6 +50,7 @@ static const TabEntry TAB_MAP[] = {
     {"data_sources", "Data Sources", 23},
     {"gov_data", "Government Data", 24},
     {"docs", "Documentation", 26},
+    {"futures", "Futures", 27},
 };
 
 static constexpr int TAB_COUNT = static_cast<int>(sizeof(TAB_MAP) / sizeof(TAB_MAP[0]));
@@ -168,11 +169,15 @@ std::vector<ToolDef> get_navigation_tools() {
                     return;
                 }
                 QJsonObject out{{"screen_id", screen_id}};
+                // The screen index is an id, not a position: the table has gaps
+                // (12, 13, 25), so indexing the array with it reads past its end.
                 const int idx = find_tab_index(screen_id);
-                if (idx >= 0) {
-                    out["display_name"] = TAB_MAP[idx].display_name;
-                    out["tab_index"] = TAB_MAP[idx].index;
-                }
+                for (int i = 0; idx >= 0 && i < TAB_COUNT; ++i)
+                    if (TAB_MAP[i].index == idx) {
+                        out["display_name"] = TAB_MAP[i].display_name;
+                        out["tab_index"] = TAB_MAP[i].index;
+                        break;
+                    }
                 resolve(ToolResult::ok_data(out));
             });
         };

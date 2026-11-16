@@ -113,8 +113,22 @@ inline const QVector<ContractSpec>& all_contracts() {
     return k;
 }
 
+/// The first page: one screen of the contracts that set the tone for each
+/// asset class, so the whole tape is read before any one market is opened.
+inline const QString& majors_group() {
+    static const QString k = QStringLiteral("MAJORS");
+    return k;
+}
+
+inline const QStringList& major_roots() {
+    static const QStringList k = {"ES", "NQ", "RTY", "ZN", "ZB", "SR3", "CL", "NG", "GC", "SI",
+                                  "HG", "ZC", "ZS", "KC", "LE", "6E", "6J", "BTC"};
+    return k;
+}
+
 inline const QStringList& groups() {
-    static const QStringList k = {"INDEX", "RATES", "ENERGY", "METALS", "GRAINS", "SOFTS", "LIVESTOCK", "FX", "CRYPTO"};
+    static const QStringList k = {majors_group(), "INDEX", "RATES", "ENERGY", "METALS", "GRAINS",
+                                  "SOFTS",        "LIVESTOCK", "FX", "CRYPTO"};
     return k;
 }
 
@@ -125,8 +139,16 @@ inline const ContractSpec* find_contract(const QString& root) {
     return nullptr;
 }
 
+/// The contracts a group's board lists. MAJORS is a view across the classes,
+/// in the order major_roots() gives; every other group is a contract's own.
 inline QVector<const ContractSpec*> contracts_in(const QString& group) {
     QVector<const ContractSpec*> out;
+    if (group == majors_group()) {
+        for (const QString& root : major_roots())
+            if (const auto* c = find_contract(root))
+                out.append(c);
+        return out;
+    }
     for (const auto& c : all_contracts())
         if (c.group == group)
             out.append(&c);

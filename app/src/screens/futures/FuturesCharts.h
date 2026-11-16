@@ -52,6 +52,28 @@ class CurveChart : public QWidget {
     int hover_ = -1;
 };
 
+/// A calendar spread over time: far month minus near, with a zero line.
+class SpreadChart : public QWidget {
+    Q_OBJECT
+  public:
+    explicit SpreadChart(QWidget* parent = nullptr);
+    void set_history(const services::futures::SpreadHistory& history, int decimals);
+    void set_message(const QString& message);
+
+  protected:
+    void paintEvent(QPaintEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
+
+  private:
+    QRectF plot_rect() const;
+
+    services::futures::SpreadHistory history_;
+    int decimals_ = 2;
+    QString message_;
+    int hover_ = -1;
+};
+
 class CotChart : public QWidget {
     Q_OBJECT
   public:

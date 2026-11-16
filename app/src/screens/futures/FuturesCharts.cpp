@@ -324,6 +324,123 @@ void CurveChart::leaveEvent(QEvent*) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// SpreadChart
+// ════════════════════════════════════════════════════════════════════════════
+
+SpreadChart::SpreadChart(QWidget* parent) : QWidget(parent) {
+    setMouseTracking(true);
+    setMinimumHeight(120);
+}
+
+void SpreadChart::set_history(const SpreadHistory& history, int decimals) {
+    history_ = history;
+    decimals_ = decimals;
+    message_.clear();
+    hover_ = -1;
+    update();
+}
+
+void SpreadChart::set_message(const QString& message) {
+    history_ = {};
+    message_ = message;
+    hover_ = -1;
+    update();
+}
+
+QRectF SpreadChart::plot_rect() const {
+    return QRectF(kLeft, 10, width() - kLeft - kRight, height() - 10 - kBottom);
+}
+
+void SpreadChart::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    p.fillRect(rect(), QColor(ui::colors::BG_BASE()));
+    const auto& pts = history_.points;
+    const int n = pts.size();
+    if (n < 2) {
+        draw_message(p, rect(), message_);
+        return;
+    }
+    p.setRenderHint(QPainter::Antialiasing);
+    const QRectF plot = plot_rect();
+    Range range;
+    for (const auto& pt : pts)
+        range.add(pt.spread);
+    // Zero is where contango turns to backwardation, so it is kept in view
+    // when the spread has been anywhere near it — but not when that would
+    // flatten the line against one edge (an index spread sits 70 points up).
+    if (range.valid && (range.lo <= 0 || range.hi >= 0) && std::min(std::abs(range.lo), std::abs(range.hi)) <= (range.hi - range.lo))
+        range.add(0.0);
+    range.pad();
+    auto x_at = [&](int i) { return plot.left() + plot.width() * i / (n - 1); };
+
+    p.setFont(data_font());
+    const double step = nice_step(range.hi - range.lo, std::max(2, static_cast<int>(plot.height() / 36)));
+    const int dp = std::min(decimals_, 4);
+    for (double v = std::ceil(range.lo / step) * step; v <= range.hi; v += step) {
+        const double y = range.y(v, plot);
+        const bool zero = std::abs(v) < step * 1e-6;
+        p.setPen(QPen(QColor(zero ? ui::colors::BORDER_BRIGHT() : ui::colors::BORDER_DIM()), 1));
+        p.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
+        p.setPen(QColor(ui::colors::TEXT_TERTIARY()));
+        p.drawText(QRectF(plot.right() + 6, y - 8, kRight - 8, 16), Qt::AlignLeft | Qt::AlignVCenter,
+                   zero ? QStringLiteral("0") : QLocale::c().toString(v, 'f', dp));
+    }
+    // A label at each new month.
+    double last_label = -1e9;
+    for (int i = 1; i < n; ++i)
+        if (pts[i].date.month() != pts[i - 1].date.month() && x_at(i) - last_label > 46) {
+            p.setPen(QColor(ui::colors::TEXT_TERTIARY()));
+            p.drawText(QPointF(x_at(i) + 2, plot.bottom() + 14), pts[i].date.toString(QStringLiteral("MMM")));
+            last_label = x_at(i);
+        }
+    QPainterPath path;
+    for (int i = 0; i < n; ++i) {
+        const QPointF pt(x_at(i), range.y(pts[i].spread, plot));
+        if (i == 0)
+            path.moveTo(pt);
+        else
+            path.lineTo(pt);
+    }
+    p.setBrush(Qt::NoBrush);
+    p.setPen(QPen(QColor(ui::colors::AMBER()), 2));
+    p.drawPath(path);
+
+    if (hover_ >= 0 && hover_ < n) {
+        const double x = x_at(hover_);
+        p.setPen(QPen(QColor(ui::colors::BORDER_BRIGHT()), 1, Qt::DashLine));
+        p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+        const auto& pt = pts[hover_];
+        draw_readout(p, rect(), QPointF(x, range.y(pt.spread, plot)),
+                     {pt.date.toString(QStringLiteral("d MMM yyyy")),
+                      QStringLiteral("Spread  %1").arg(QLocale::c().toString(pt.spread, 'f', dp)),
+                      QStringLiteral("Far     %1").arg(QLocale::c().toString(pt.far, 'f', dp)),
+                      QStringLiteral("Near    %1").arg(QLocale::c().toString(pt.near, 'f', dp))},
+                     {QColor(ui::colors::TEXT_PRIMARY()), QColor(ui::colors::AMBER()),
+                      QColor(ui::colors::TEXT_SECONDARY()), QColor(ui::colors::TEXT_SECONDARY())});
+    }
+}
+
+void SpreadChart::mouseMoveEvent(QMouseEvent* e) {
+    const int n = history_.points.size();
+    const QRectF plot = plot_rect();
+    int i = -1;
+    if (n >= 2 && plot.adjusted(-kLeft, 0, kRight, 0).contains(e->position()))
+        i = std::clamp(static_cast<int>(std::lround((e->position().x() - plot.left()) / plot.width() * (n - 1))), 0,
+                       n - 1);
+    if (i != hover_) {
+        hover_ = i;
+        update();
+    }
+}
+
+void SpreadChart::leaveEvent(QEvent*) {
+    if (hover_ != -1) {
+        hover_ = -1;
+        update();
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // CotChart
 // ════════════════════════════════════════════════════════════════════════════
 

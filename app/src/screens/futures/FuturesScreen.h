@@ -31,6 +31,7 @@ class ResearchCandleCanvas;
 namespace futures {
 class CurveChart;
 class CotChart;
+class SpreadChart;
 } // namespace futures
 
 /// FUTURES — one market at a time, the way a futures desk reads it.
@@ -46,6 +47,8 @@ class CotChart;
 ///   months     the contract table behind the curve: last, change, calendar
 ///              spread to the front, annualised carry, volume, open interest,
 ///              last trading day
+///   spread     six months of the calendar spread between the front month and
+///              the one picked: where it is in its own range
 ///   positioning  the CFTC's weekly Commitments of Traders, three years
 ///   ticket     size a trade in dollars (notional, tick value, risk, reward)
 ///              and fill it in the paper account; open positions marked live
@@ -85,6 +88,8 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     void fetch_curve();
     void fetch_curve_history();
     void render_curve();
+    void fetch_spread();
+    void on_front_tick(const services::StreamTick& tick);
     void fetch_cot();
     void render_cot(const services::futures::CotReport& report);
 
@@ -114,6 +119,11 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     QTableWidget* board_ = nullptr;
     QButtonGroup* group_buttons_ = nullptr;
     ui::RenderCoalescer board_render_{this, [this]() { render_board(); }};
+    ui::RenderCoalescer strip_render_{this, [this]() {
+                                          render_strip();
+                                          render_curve(); // the table and chart show the same front price as the strip
+                                          render_ticket();
+                                      }};
 
     // Selected market
     services::futures::Curve curve_;
@@ -150,6 +160,11 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     futures::CotChart* cot_chart_ = nullptr;
     QLabel* cot_summary_ = nullptr;
     QString cot_for_;
+    futures::SpreadChart* spread_chart_ = nullptr;
+    QLabel* spread_summary_ = nullptr;
+    QString spread_for_; ///< "near|far" the spread view shows or is loading
+    bool spread_failed_ = false;
+    services::futures::CurveContract front_live_; ///< the front month's newest stream print
     QLabel* terms_ = nullptr;
 
     // Ticket

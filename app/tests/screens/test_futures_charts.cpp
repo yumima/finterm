@@ -79,6 +79,18 @@ class TestFuturesCharts : public QObject {
             }
             rep.rows.append(r);
         }
+        fut::SpreadHistory sh;
+        for (int i = 0; i < 120; ++i)
+            sh.points.append({QDate(2026, 5, 18).addDays(i), 85.0, 85.0 - 2.0 + std::sin(i / 15.0), -2.0 + std::sin(i / 15.0) * 2.5});
+        futures::SpreadChart spread;
+        spread.resize(520, 220);
+        spread.set_history(sh, 2);
+        const QImage spread_img = spread.grab().toImage();
+        keep(spread_img, QStringLiteral("futures_spread.png"));
+        QVERIFY(inked(spread_img) > 1000);
+        spread.set_message(QStringLiteral("no second month"));
+        QVERIFY(!spread.grab().isNull());
+
         futures::CotChart cot;
         cot.resize(620, 240);
         cot.set_report(rep);

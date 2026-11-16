@@ -126,6 +126,55 @@ class TestFuturesMath : public QObject {
         QCOMPARE(summarize(Curve{}).anchor, -1);
     }
 
+    void majors_are_a_view_across_classes() {
+        const auto majors = contracts_in(majors_group());
+        QCOMPARE(majors.size(), major_roots().size()); // every major is a carried contract
+        QCOMPARE(majors.first()->root, QStringLiteral("ES"));
+        QSet<QString> classes;
+        for (const auto* c : majors)
+            classes.insert(c->group);
+        QVERIFY(classes.size() >= 8);
+        QVERIFY(!classes.contains(majors_group())); // a view, never a contract's own class
+    }
+
+    void spread_history_and_pair() {
+        const auto doc = QJsonDocument::fromJson(R"({"near":"CLZ26.NYM","far":"CLF27.NYM","rows":[
+            {"date":"2026-11-09","near":80,"far":78.5,"spread":-1.5},
+            {"date":"bad","near":1,"far":1,"spread":0},
+            {"date":"2026-11-10","near":81,"far":80,"spread":null},
+            {"date":"2026-11-11","near":82,"far":81.5,"spread":-0.5}]})");
+        SpreadHistory h = parse_spread(doc.object());
+        QCOMPARE(h.points.size(), 2);
+        SpreadStats s = spread_stats(h);
+        QCOMPARE(s.last, -0.5);
+        QCOMPARE(s.change, 1.0);
+        QCOMPARE(s.low, -1.5);
+        QCOMPARE(s.mean, -1.0);
+        QVERIFY(std::isnan(s.range_pct)); // two sessions are not a range
+        for (int i = 0; i < 20; ++i)
+            h.points.append({QDate(2026, 11, 12).addDays(i), 80, 80 - 0.1 * i, -0.1 * i});
+        s = spread_stats(h);
+        QVERIFY(std::abs(s.range_pct - (-1.9 - -1.9) / (0.0 - -1.9) * 100.0) < 1e-9); // at its low
+        QVERIFY(std::isnan(spread_stats(SpreadHistory{}).last));
+
+        Curve c;
+        c.front = "M2";
+        c.contracts = {k("M1", 2026, 11, 101.0), k("M2", 2026, 12, 100.0), k("M3", 2027, 1, 99.5, {}, true),
+                       k("M4", 2027, 2, 99.0)};
+        QCOMPARE(spread_pair(c, {}), qMakePair(QStringLiteral("M2"), QStringLiteral("M4"))); // next FRESH month
+        QCOMPARE(spread_pair(c, "M3"), qMakePair(QStringLiteral("M2"), QStringLiteral("M3")));
+        QCOMPARE(spread_pair(c, "M1"), qMakePair(QStringLiteral("M1"), QStringLiteral("M2"))); // nearer month first
+        QCOMPARE(spread_pair(c, "M2"), qMakePair(QStringLiteral("M2"), QStringLiteral("M4"))); // the front against itself is no pair
+        QVERIFY(spread_pair(Curve{}, {}).first.isEmpty());
+    }
+
+    void roll_warning() {
+        const QDate today(2026, 11, 16);
+        QVERIFY(rolls_soon(k("A", 2026, 12, 1.0, QDate(2026, 11, 20)), today));
+        QVERIFY(!rolls_soon(k("A", 2026, 12, 1.0, QDate(2026, 11, 22)), today));
+        QVERIFY(!rolls_soon(k("A", 2026, 12, 1.0), today)); // no expiry known: no warning made up
+    }
+
     void implied_rate_is_100_minus_price() {
         QCOMPARE(implied_rate(95.83), 100.0 - 95.83);
         QVERIFY(std::isnan(implied_rate(kNaN)));

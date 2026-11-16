@@ -181,11 +181,16 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
                 if (!shown_)
                     return;
                 bool moved = false;
-                for (const auto& t : ticks)
-                    if (t.price > 0 && marks_.contains(t.symbol) && marks_.value(t.symbol) != t.price) {
+                for (const auto& t : ticks) {
+                    if (!(t.price > 0))
+                        continue;
+                    if (t.symbol == curve_.front)
+                        on_front_tick(t);
+                    if (marks_.contains(t.symbol) && marks_.value(t.symbol) != t.price) {
                         marks_.insert(t.symbol, t.price);
                         moved = true;
                     }
+                }
                 if (moved)
                     render_positions();
             });
@@ -197,6 +202,31 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
     group_ = groups().first();
     root_ = contracts_in(group_).first()->root;
     set_group(group_);
+}
+
+void FuturesScreen::on_front_tick(const services::StreamTick& tick) {
+    // Between curve reads the front month moves with the tape. A print
+    // carries its own change against the vendor's previous close, so price
+    // and change stay a pair; a print without one moves neither.
+    const int i = curve_.index_of(curve_.front);
+    if (i < 0 || !std::isfinite(tick.change))
+        return;
+    const double prev = tick.price - tick.change;
+    if (!(prev > 0))
+        return;
+    auto& c = curve_.contracts[i];
+    if (c.price == tick.price)
+        return;
+    c.price = tick.price;
+    c.prev_close = prev;
+    c.change = tick.change;
+    c.pct = tick.change / prev * 100.0;
+    if (tick.time_ms > 0)
+        c.ts = tick.time_ms / 1000;
+    front_live_ = c; // kept across the next curve read, which is ~10 minutes older
+    // marks_ is left to the caller's loop: it compares against the old mark to
+    // decide whether the positions table needs repainting.
+    strip_render_.request();
 }
 
 const ContractSpec* FuturesScreen::spec() const {
@@ -408,6 +438,22 @@ QWidget* FuturesScreen::build_side_tabs() {
     cot_chart_ = new futures::CotChart(pos);
     pv->addWidget(cot_summary_);
     pv->addWidget(cot_chart_, 1);
+    // Calendar spread
+    auto* sp = new QWidget(tabs_);
+    auto* sv = new QVBoxLayout(sp);
+    sv->setContentsMargins(0, 0, 0, 0);
+    sv->setSpacing(0);
+    spread_summary_ = new QLabel(sp);
+    spread_summary_->setObjectName(QStringLiteral("futNote"));
+    spread_summary_->setWordWrap(true);
+    spread_summary_->setTextFormat(Qt::RichText);
+    spread_summary_->setToolTip(QStringLiteral(
+        "The later month's price minus the nearer one's, on the sessions both traded. Above zero the curve between "
+        "them is in contango, below it in backwardation. Click a month in the table to pair it with the front."));
+    spread_chart_ = new futures::SpreadChart(sp);
+    sv->addWidget(spread_summary_);
+    sv->addWidget(spread_chart_, 1);
+    tabs_->addTab(sp, QStringLiteral("SPREAD"));
     tabs_->addTab(pos, QStringLiteral("POSITIONING"));
 
     // Ticket
@@ -487,7 +533,10 @@ QWidget* FuturesScreen::build_side_tabs() {
                              QStringLiteral("ENTRY"), QStringLiteral("LAST"), QStringLiteral("P&L"), QString()},
                             tk);
     positions_->horizontalHeaderItem(PContract)->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    positions_->horizontalHeader()->setStretchLastSection(true);
+    // The button column keeps the width its label needs; the name takes the slack.
+    positions_->horizontalHeader()->setSectionResizeMode(PContract, QHeaderView::Stretch);
+    positions_->horizontalHeader()->setSectionResizeMode(PClose, QHeaderView::Fixed);
+    positions_->setColumnWidth(PClose, 68);
     positions_->setSelectionMode(QAbstractItemView::NoSelection);
     tv->addWidget(positions_, 1);
     tabs_->addTab(tk, QStringLiteral("TICKET"));
@@ -562,6 +611,8 @@ void FuturesScreen::apply_theme() {
         curve_chart_->update();
     if (cot_chart_)
         cot_chart_->update();
+    if (spread_chart_)
+        spread_chart_->update();
     render_board();
     render_strip();
     render_curve();
@@ -580,12 +631,16 @@ void FuturesScreen::restore_state(const QVariantMap& state) {
         b->setChecked(b->text() == period_);
     if (const auto* s = find_contract(root)) {
         root_ = s->root;
-        set_group(s->group);
+        const QString group = state.value(QStringLiteral("group")).toString();
+        bool listed = false;
+        for (const auto* c : contracts_in(group))
+            listed = listed || c->root == root_;
+        set_group(listed ? group : s->group);
     }
 }
 
 QVariantMap FuturesScreen::save_state() const {
-    return {{QStringLiteral("root"), root_}, {QStringLiteral("period"), period_}};
+    return {{QStringLiteral("root"), root_}, {QStringLiteral("group"), group_}, {QStringLiteral("period"), period_}};
 }
 
 void FuturesScreen::showEvent(QShowEvent* e) {
@@ -598,6 +653,11 @@ void FuturesScreen::showEvent(QShowEvent* e) {
         load_chart();
     if (cot_for_ != root_)
         fetch_cot();
+    if (spread_failed_) { // a failed spread is tried again on return
+        spread_failed_ = false;
+        spread_for_.clear();
+    }
+    fetch_spread();
     render_positions();
     sync_stream();
 }
@@ -622,8 +682,10 @@ void FuturesScreen::set_group(const QString& group) {
     const auto list = contracts_in(group_);
     board_->setRowCount(list.size());
     QString root = root_;
-    const auto* current = find_contract(root_);
-    if (!current || current->group != group_)
+    bool listed = false;
+    for (const auto* c : list)
+        listed = listed || c->root == root_;
+    if (!listed)
         root = list.first()->root;
     if (was_subscribed || shown_)
         subscribe_board();
@@ -703,12 +765,17 @@ void FuturesScreen::set_root(const QString& root) {
     past_.clear();
     past_for_.clear();
     past_failed_at_ = 0;
+    front_live_ = {};
     chart_symbol_.clear();
     ticket_symbol_.clear();
     ticket_status_->clear();
     stop_->clear();
     target_->clear();
     cot_for_.clear();
+    spread_for_.clear();
+    spread_failed_ = false;
+    spread_summary_->clear();
+    spread_chart_->set_message(QStringLiteral("Loading the calendar spread…"));
     months_->setRowCount(0);
     curve_chart_->set_message(QStringLiteral("Loading the %1 curve…").arg(root_));
     cot_chart_->set_message(QStringLiteral("Loading positioning…"));
@@ -744,6 +811,19 @@ void FuturesScreen::fetch_curve() {
             return;
         }
         curve_ = curve;
+        // The batch quote runs about ten minutes behind the stream. Where a
+        // live print of the front month is newer than the read, the print
+        // stands — otherwise the strip would snap back on every refresh.
+        if (const int fi = curve_.index_of(curve_.front);
+            fi >= 0 && front_live_.symbol == curve_.front && front_live_.ts > curve_.contracts[fi].ts) {
+            auto& c = curve_.contracts[fi];
+            c.price = front_live_.price;
+            c.prev_close = front_live_.prev_close;
+            c.change = front_live_.change;
+            c.pct = front_live_.pct;
+            c.ts = front_live_.ts;
+            c.stale = false;
+        }
         for (const auto& c : curve_.contracts)
             marks_.insert(c.symbol, c.price);
         // EVENT-STAMP: when the curve was read — an instant, shown in local time.
@@ -753,6 +833,8 @@ void FuturesScreen::fetch_curve() {
         render_strip();
         render_ticket();
         render_positions();
+        sync_stream();
+        fetch_spread();
         if (chart_symbol_.isEmpty())
             chart_title_->setText(QStringLiteral("%1 CONTINUOUS").arg(root_));
         QStringList symbols;
@@ -823,10 +905,14 @@ void FuturesScreen::render_strip() {
                              .arg(fmt::format_percent(sum.roll_yield_pct, 1, true), front.month_label(),
                                   curve_.contracts[sum.next].month_label());
         }
-        if (front.expiry.isValid())
-            facts << QStringLiteral("front's last day %1 (%2d)")
-                         .arg(front.expiry.toString(QStringLiteral("d MMM")))
-                         .arg(QDate::currentDate().daysTo(front.expiry));
+        if (front.expiry.isValid()) {
+            const QString last = QStringLiteral("front's last day %1 (%2d)")
+                                     .arg(front.expiry.toString(QStringLiteral("d MMM")))
+                                     .arg(QDate::currentDate().daysTo(front.expiry));
+            facts << (rolls_soon(front, QDate::currentDate())
+                          ? QStringLiteral("<span style='color:%1'><b>%2 — rolls soon</b></span>").arg(ui::colors::WARNING(), last)
+                          : last);
+        }
         double oi = 0;
         bool any_oi = false;
         for (const auto& c : curve_.contracts)
@@ -913,6 +999,58 @@ void FuturesScreen::render_curve() {
     }
 }
 
+// ── calendar spread ────────────────────────────────────────────────────────
+
+void FuturesScreen::fetch_spread() {
+    if (curve_.contracts.isEmpty())
+        return; // nothing is known yet: the pane keeps saying it is loading
+    const auto pair = spread_pair(curve_, ticket_symbol_);
+    if (pair.first.isEmpty()) {
+        spread_for_.clear();
+        spread_summary_->clear();
+        spread_chart_->set_message(QStringLiteral("%1 lists no second month to spread against.").arg(root_));
+        return;
+    }
+    const QString key = pair.first + QLatin1Char('|') + pair.second;
+    if (key == spread_for_ || !shown_)
+        return;
+    spread_for_ = key;
+    const int ia = curve_.index_of(pair.first), ib = curve_.index_of(pair.second);
+    const QString title = QStringLiteral("<b>%1 − %2</b> · %3 less %4")
+                              .arg(curve_.contracts[ib].code(), curve_.contracts[ia].code(),
+                                   curve_.contracts[ib].month_label(), curve_.contracts[ia].month_label());
+    spread_summary_->setText(title);
+    spread_chart_->set_message(QStringLiteral("Loading the calendar spread…"));
+    services::futures::fetch_spread_history(pair.first, pair.second, this,
+                                            [this, key, title](bool ok, SpreadHistory history, QString err) {
+        if (key != spread_for_)
+            return; // another pair was picked meanwhile
+        if (!ok) {
+            // spread_for_ stays: the same pair is not asked for again on every
+            // curve refresh. Another pick, or coming back to the screen, asks.
+            spread_failed_ = true;
+            spread_chart_->set_message(QStringLiteral("The spread did not load: %1").arg(err));
+            return;
+        }
+        spread_failed_ = false;
+        const auto* s = spec();
+        const int dp = s ? price_decimals(s->tick) : 2;
+        spread_chart_->set_history(history, dp);
+        const SpreadStats st = spread_stats(history);
+        QString text = title + QStringLiteral("<br>Now <b>%1</b> (%2 over %3 sessions) · range %4 to %5 · average %6")
+                                   .arg(signed_num(st.last, dp), signed_num(st.change, dp))
+                                   .arg(st.sessions)
+                                   .arg(signed_num(st.low, dp), signed_num(st.high, dp), signed_num(st.mean, dp));
+        if (std::isfinite(st.range_pct))
+            text += QStringLiteral(" · at <b>%1%</b> of that range").arg(QString::number(st.range_pct, 'f', 0));
+        if (s && std::isfinite(st.last))
+            text += QStringLiteral("<br>One spread (long the later month, short the nearer) is worth %1 per 1.00; "
+                                   "it has moved %2 a contract pair over the window.")
+                        .arg(dollars(s->point_value), dollars(st.change * s->point_value));
+        spread_summary_->setText(text);
+    });
+}
+
 // ── positioning ────────────────────────────────────────────────────────────
 
 void FuturesScreen::fetch_cot() {
@@ -977,6 +1115,7 @@ void FuturesScreen::set_chart_symbol(const QString& symbol) {
     load_chart();
     render_curve();
     render_ticket();
+    fetch_spread();
 }
 
 void FuturesScreen::load_chart() {
@@ -1113,6 +1252,11 @@ void FuturesScreen::render_ticket() {
     if (std::isfinite(r.reward_to_risk))
         parts << QStringLiteral("reward : risk <b>%1</b>").arg(num(r.reward_to_risk, 2));
     QString text = parts.join(QStringLiteral(" · "));
+    if (rolls_soon(*c, QDate::currentDate()))
+        text += QStringLiteral("<br><span style='color:%1'>%2 stops trading %3 (%4 days). A position held to then is "
+                               "settled or delivered — close it or roll it to a later month first.</span>")
+                    .arg(ui::colors::WARNING(), c->code(), c->expiry.toString(QStringLiteral("d MMM")))
+                    .arg(QDate::currentDate().daysTo(c->expiry));
     if (!r.problem.isEmpty())
         text += QStringLiteral("<br><span style='color:%1'>%2</span>").arg(ui::colors::WARNING(), r.problem);
     ticket_math_->setText(text);
@@ -1184,7 +1328,10 @@ void FuturesScreen::close_position(const QString& symbol) {
                                         QStringLiteral("market"), pos.quantity, px, std::nullopt, true);
             trading::pt_fill_order(order.id, px);
         }
-        ticket_status_->setText(QStringLiteral("Closed %1 @ %2").arg(symbol.section(QLatin1Char('.'), 0, 0)).arg(px));
+        const auto* closed_spec = find_contract(root_of(symbol));
+        ticket_status_->setText(QStringLiteral("Closed %1 @ %2")
+                                    .arg(symbol.section(QLatin1Char('.'), 0, 0),
+                                         num(px, closed_spec ? price_decimals(closed_spec->tick) : 2)));
     } catch (const std::exception& e) {
         ticket_status_->setText(QStringLiteral("Close refused: %1").arg(QString::fromUtf8(e.what())));
     }
@@ -1250,6 +1397,17 @@ void FuturesScreen::render_positions() {
         btn->setEnabled(last > 0);
     }
     QString text = QStringLiteral("Paper account · cash %1").arg(dollars(balance));
+    try {
+        const auto stats = trading::pt_get_stats(pid);
+        const qint64 closed = stats.winning_trades + stats.losing_trades;
+        if (closed > 0)
+            text += QStringLiteral(" · realised P&L %1 over %2 closed trade%3")
+                        .arg(dollars(stats.total_pnl))
+                        .arg(closed)
+                        .arg(closed == 1 ? QString() : QStringLiteral("s"));
+    } catch (const std::exception&) {
+        // the account line stands without it
+    }
     if (!open.isEmpty())
         text += QStringLiteral(" · open P&L %1%2").arg(dollars(open_pnl),
                                                          all_marked ? QString() : QStringLiteral(" (priced positions only)"));
@@ -1259,10 +1417,13 @@ void FuturesScreen::render_positions() {
 
 void FuturesScreen::sync_stream() {
     QStringList symbols;
+    // The front month, so the strip moves with the tape between curve reads.
+    if (shown_ && !curve_.front.isEmpty())
+        symbols << curve_.front;
     if (shown_ && !portfolio_id_.isEmpty()) {
         try {
             for (const auto& p : trading::pt_get_positions(portfolio_id_))
-                if (p.quantity > 0)
+                if (p.quantity > 0 && !symbols.contains(p.symbol))
                     symbols << p.symbol;
         } catch (const std::exception&) {
         }

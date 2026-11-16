@@ -827,6 +827,7 @@ set(MCP_SOURCES
     src/mcp/tools/AgentsTools_Repos.cpp
     src/mcp/tools/DBnomicsTools.cpp
     src/mcp/tools/EquityResearchTools.cpp
+    src/mcp/tools/FuturesTools.cpp
     src/mcp/tools/GeopoliticsTools.cpp
     src/mcp/tools/GovDataTools.cpp
     src/mcp/tools/MetaTools.cpp

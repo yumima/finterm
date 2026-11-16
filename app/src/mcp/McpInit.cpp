@@ -16,6 +16,7 @@
 #include "mcp/tools/DataSourcesTools.h"
 #include "mcp/tools/EdgarTools.h"
 #include "mcp/tools/EquityResearchTools.h"
+#include "mcp/tools/FuturesTools.h"
 #include "mcp/tools/FileManagerTools.h"
 #include "mcp/tools/FinancialDatasetsTools.h"
 #include "mcp/tools/GeopoliticsTools.h"
@@ -131,6 +132,9 @@ void initialize_all_tools() {
 
     // equity research — fundamentals, sentiment, ratings, transcripts
     provider.register_tools(tools::get_equity_research_tools());
+
+    // futures — contract terms, forward curves, CFTC positioning
+    provider.register_tools(tools::get_futures_tools());
 
     // geopolitics — conflict events, sanctions, maritime, ACLED-style
     provider.register_tools(tools::get_geopolitics_tools());

@@ -75,6 +75,28 @@ void fetch_curve_history(const QStringList& contract_symbols, QObject* ctx,
         python::PythonWorker::kComputeActionTimeoutMs);
 }
 
+void fetch_spread_history(const QString& near, const QString& far, QObject* ctx,
+                          std::function<void(bool, SpreadHistory, QString)> cb) {
+    QPointer<QObject> guard(ctx);
+    python::PythonWorker::instance().submit(
+        QStringLiteral("futures_spread_history"), QJsonObject{{"near", near}, {"far", far}},
+        [guard, cb](bool ok, QJsonObject result, QString err) {
+            if (!guard)
+                return;
+            if (!ok || result.contains(QStringLiteral("error"))) {
+                cb(false, {}, failure_text(result, err));
+                return;
+            }
+            const SpreadHistory h = parse_spread(result);
+            if (h.points.size() < 2) {
+                cb(false, {}, QStringLiteral("the two months share too few sessions"));
+                return;
+            }
+            cb(true, h, {});
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
+}
+
 void fetch_cot(const QString& cftc_code, QObject* ctx, std::function<void(bool, CotReport, QString)> cb) {
     const qint64 now = QDateTime::currentSecsSinceEpoch();
     const auto hit = cot_cache().constFind(cftc_code);

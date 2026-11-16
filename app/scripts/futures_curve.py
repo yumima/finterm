@@ -162,3 +162,15 @@ def curve_on_date(closes_by_symbol, ref_date):
         if isinstance(v, (int, float)) and v == v and v > 0:
             out[sym] = float(v)
     return out
+
+
+def spread_series(near_closes, far_closes):
+    """[{date, near, far, spread}] oldest first — far minus near, on sessions
+    BOTH months traded. A session only one of them printed has no spread; none
+    is made by carrying the other's last close forward."""
+    out = []
+    for d in sorted(set(near_closes or {}) & set(far_closes or {})):
+        a, b = near_closes[d], far_closes[d]
+        if all(isinstance(v, (int, float)) and v == v and v > 0 for v in (a, b)):
+            out.append({"date": d, "near": float(a), "far": float(b), "spread": float(b) - float(a)})
+    return out
