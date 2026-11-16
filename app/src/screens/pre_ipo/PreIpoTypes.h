@@ -229,6 +229,11 @@ struct PrivateCompany {
     QStringList key_investors;
     QStringList public_comps;
     QDate s1_filed_date;
+    /// Set once SEC lists the company's shares as traded: its ticker and its
+    /// first trading day (invalid when the vendor does not give one). A
+    /// company with a ticker is no longer pre-IPO — see listing_state().
+    QString listed_ticker;
+    QDate listed_on;
 
     // Layered data -----------------------------------------------------------
     QVector<PrimaryRound> rounds;
@@ -286,6 +291,29 @@ enum class SignalKind {
     RoundFiled,
     Withdrawn
 };
+
+// ── Has it listed? ──────────────────────────────────────────────────────────
+/// A pre-IPO list has to let go of a company once it trades. It stays for a
+/// week after its first trading day, marked as listed with its ticker — the
+/// week in which someone following it into the IPO still looks for it here —
+/// and is then gone: its place is Equity Research, under the ticker.
+inline constexpr int kListedGraceDays = 7;
+
+enum class ListingState {
+    Private,    ///< no listing known
+    JustListed, ///< listed within the grace period: shown, and marked
+    Listed,     ///< listed longer ago, or on a day unknown: not shown
+};
+
+inline ListingState listing_state(const QString& ticker, const QDate& listed_on, const QDate& today) {
+    if (ticker.isEmpty())
+        return ListingState::Private;
+    // A listing with no date cannot be placed inside the week, and a company
+    // that trades is not pre-IPO whatever the date: it goes.
+    if (!listed_on.isValid() || listed_on.daysTo(today) > kListedGraceDays)
+        return ListingState::Listed;
+    return ListingState::JustListed;
+}
 
 struct Signal {
     QString company_id;

@@ -223,6 +223,20 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+namespace {
+QHash<QString, QPair<QString, QDate>> parse_listings(const QJsonObject& o) {
+    QHash<QString, QPair<QString, QDate>> out;
+    const QJsonObject listed = o.value(QStringLiteral("listed")).toObject();
+    for (auto it = listed.begin(); it != listed.end(); ++it) {
+        const QJsonObject row = it.value().toObject();
+        const QString ticker = row.value(QStringLiteral("ticker")).toString();
+        if (!ticker.isEmpty())
+            out.insert(it.key(), {ticker, QDate::fromString(row.value(QStringLiteral("listed_on")).toString(), Qt::ISODate)});
+    }
+    return out;
+}
+} // namespace
+
 void PreIpoService::load_data() {
     if (loading_)
         return;
@@ -321,7 +335,13 @@ void PreIpoService::refresh_internal(bool force) {
 }
 
 QVector<PrivateCompany> PreIpoService::companies() const {
-    return companies_;
+    // Only those still pre-IPO (or within a week of listing): a company that
+    // trades belongs to Equity Research, not to a list of private companies.
+    QVector<PrivateCompany> out;
+    for (const auto& c : companies_)
+        if (listing_state(c.listed_ticker, c.listed_on, QDate::currentDate()) != ListingState::Listed)
+            out.append(c);
+    return out;
 }
 
 PrivateCompany PreIpoService::company(const QString& id) const {
@@ -1924,15 +1944,87 @@ void PreIpoService::emit_summary() {
     attach_spv_activity(); // re-join the SPV side table to the latest companies_
     recompute_analytics();
     seed_apply_valuation();
+    apply_listings();
+    run_listings_fetch(); // no-op unless the set of companies has changed
     PreIpoSummary summary;
-    summary.companies = companies_;
+    summary.companies = companies();
     summary.recent_form_d = form_d_;
     summary.ipo_pipeline = pipeline_;
-    summary.signal_list = signals_;
+    // A signal about a company that has left the list would open nothing.
+    QSet<QString> shown;
+    for (const auto& c : std::as_const(summary.companies))
+        shown.insert(c.id);
+    for (const auto& s : std::as_const(signals_))
+        if (s.company_id.isEmpty() || shown.contains(s.company_id))
+            summary.signal_list.append(s);
     summary.funds = funds_;
     summary.last_updated = QDateTime::currentDateTime();
     summary.loaded = (pending_bits_ == 0 && failed_bits_ == 0);
     emit data_loaded(summary);
+}
+
+// ── Listings ─────────────────────────────────────────────────────────────────
+
+
+void PreIpoService::apply_listings() {
+    const QDate today = QDate::currentDate();
+    for (auto& c : companies_) {
+        const auto it = listings_.constFind(c.cik);
+        if (c.cik.isEmpty() || it == listings_.constEnd()) {
+            c.listed_ticker.clear();
+            c.listed_on = {};
+            continue;
+        }
+        c.listed_ticker = it->first;
+        c.listed_on = it->second;
+        if (listing_state(c.listed_ticker, c.listed_on, today) == ListingState::JustListed) {
+            // Its last week on the list: say plainly what it now is.
+            c.ipo_status = IpoStatus::Listed;
+            c.ipo_expected_window = QStringLiteral("Listed %1 as %2")
+                                        .arg(c.listed_on.toString(QStringLiteral("d MMM yyyy")), c.listed_ticker);
+        }
+    }
+}
+
+void PreIpoService::run_listings_fetch() {
+    QStringList ciks;
+    for (const auto& c : std::as_const(companies_))
+        if (!c.cik.isEmpty())
+            ciks << c.cik;
+    ciks.removeDuplicates();
+    ciks.sort();
+    // Asked once per set of companies and once a day: a listing is news at
+    // most daily, and emit_summary() runs many times per load.
+    const QString key = QDate::currentDate().toString(Qt::ISODate) + QLatin1Char('|') + ciks.join(QLatin1Char(','));
+    if (ciks.isEmpty() || key == listings_asked_for_)
+        return;
+    listings_asked_for_ = key;
+    QPointer<PreIpoService> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"ciks", QJsonArray::fromStringList(ciks)}}).toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("pre_ipo_listings.py"), {QStringLiteral("listings"), payload},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            const QJsonObject o = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+            if (!result.success || o.isEmpty() || o.contains(QStringLiteral("error"))) {
+                // Not an answer: the last known listings stand, and the
+                // question is asked again on the next load.
+                LOG_WARN("PreIpo", "listing check failed (non-fatal): " +
+                                       o.value(QStringLiteral("error")).toString(result.error).left(200));
+                self->listings_asked_for_.clear();
+                return;
+            }
+            const auto fresh = parse_listings(o);
+            self->save_cache(QStringLiteral("listings.json"), QJsonDocument(o));
+            if (fresh == self->listings_)
+                return;
+            self->listings_ = fresh;
+            LOG_INFO("PreIpo", QString("%1 followed companies have listed").arg(fresh.size()));
+            self->emit_summary();
+        },
+        /*stream*/ {}, /*timeout*/ 60'000);
 }
 
 void PreIpoService::finalize_load() {
@@ -2047,6 +2139,11 @@ bool PreIpoService::load_from_cache() {
         parse_spv_response(d.object()); // attached on the next emit_summary()
         return true;
     });
+
+    // What was last known about who has listed, so a company that trades is
+    // not shown as private for the seconds until SEC is asked again.
+    if (const QJsonDocument d = read(QStringLiteral("listings.json")); d.isObject())
+        listings_ = parse_listings(d.object());
 
     if (cursors_changed)
         save_cursors();

@@ -1166,6 +1166,13 @@ set_target_properties(test_report_render PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME report_render COMMAND test_report_render)
 set_tests_properties(report_render PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── IPO Watch: a company that has listed leaves the pre-IPO list ─────────────
+add_executable(test_pre_ipo_listing screens/test_pre_ipo_listing.cpp)
+target_include_directories(test_pre_ipo_listing PRIVATE ../src)
+target_link_libraries(test_pre_ipo_listing PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_pre_ipo_listing PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME pre_ipo_listing COMMAND test_pre_ipo_listing)
+
 # ── Futures: curve shape and carry, COT summary, the trade ticket ────────────
 # Every number the Futures screen derives. The contract terms are checked
 # against the exchanges' published dollars-per-tick; a vendor null stays NaN.
@@ -1194,6 +1201,11 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_futures_curve.py
     )
     set_tests_properties(futures_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    add_test(
+        NAME pre_ipo_listings
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_pre_ipo_listings.py
+    )
+    set_tests_properties(pre_ipo_listings PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
     # ER Report data shaping: filing excerpts and quarterly rows.
     add_test(
         NAME report_data

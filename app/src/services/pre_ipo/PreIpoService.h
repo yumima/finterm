@@ -134,6 +134,10 @@ class PreIpoService : public QObject {
     /// capped XML enrichment). Independent of the 3-bit finalize_load flow —
     /// a slow/failed scan never blocks the core Form D / N-PORT / S-1 load.
     void run_spv_fetch();
+    /// Ask SEC which of the companies have since listed (and the vendor when).
+    void run_listings_fetch();
+    /// Stamp each company with its listing and say which are still pre-IPO.
+    void apply_listings();
 
     /// Arm a one-shot timer that fires at the next 05:00 America/New_York
     /// to pre-warm the cache before the user opens the screen. Re-arms
@@ -292,6 +296,9 @@ class PreIpoService : public QObject {
     QVector<pre_ipo::FormDFiling> form_d_;
     QVector<pre_ipo::S1Filing> pipeline_;
     QVector<pre_ipo::Signal> signals_;
+    /// CIK → (ticker, first trading day) for companies that have listed.
+    QHash<QString, QPair<QString, QDate>> listings_;
+    QString listings_asked_for_; ///< the CIK set the last answer covers
     QVector<pre_ipo::FundEntry> funds_;
     bool loaded_ = false;
 };
