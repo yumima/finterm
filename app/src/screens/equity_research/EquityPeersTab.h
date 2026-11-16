@@ -26,6 +26,9 @@ class EquityPeersTab : public QWidget {
     /// on another tab.
     void set_active_comparisons(const QStringList& symbols);
 
+    /// The hand-kept peer basket for `symbol`; {SPY, QQQ, DIA} when it has none.
+    static QStringList default_peers(const QString& symbol);
+
   signals:
     /// Emitted when the user ticks the COMP checkbox on a peer row. The
     /// hosting screen routes this to EquityOverviewTab::add_comparison so
@@ -43,7 +46,6 @@ class EquityPeersTab : public QWidget {
     void apply_peers_state(const services::query::QueryStore::State& s);
     void build_ui();
     void populate_table(const QVector<services::equity::PeerData>& peers);
-    QStringList default_peers(const QString& symbol) const;
     /// Re-apply active_comp_set_ to the QCheckBox at the last column of
     /// each row. Walks visual rows and reads the SYMBOL cell text — so
     /// after a sort, each checkbox reflects the symbol now occupying that

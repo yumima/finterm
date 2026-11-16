@@ -1318,6 +1318,134 @@ def get_financials(symbol):
         return {"error": str(e), "symbol": symbol}
 
 
+# ── Report extras (ER "Report" tab) ────────────────────────────────────────
+_REPORT_QUARTER_LINES = {
+    # out key: (statement, aliases)
+    "revenue": ("income", ("Total Revenue", "Operating Revenue")),
+    "gross_profit": ("income", ("Gross Profit",)),
+    "operating_income": ("income", ("Operating Income",)),
+    "net_income": ("income", ("Net Income", "Net Income Common Stockholders")),
+    "eps": ("income", ("Diluted EPS", "Basic EPS")),
+    "rd": ("income", ("Research And Development",)),
+    "ocf": ("cash", ("Operating Cash Flow",)),
+    "capex": ("cash", ("Capital Expenditure",)),
+    "fcf": ("cash", ("Free Cash Flow",)),
+    "buybacks": ("cash", ("Repurchase Of Capital Stock",)),
+    "dividends": ("cash", ("Cash Dividends Paid", "Common Stock Dividend Paid")),
+}
+
+
+def _report_quarters(q_income, q_cash, limit=8):
+    """Quarterly rows, newest first. A line the company did not report for a
+    quarter is None — never 0 (a bank has no gross profit; that is not a
+    gross profit of zero)."""
+    frames = {"income": q_income, "cash": q_cash}
+    periods = []
+    for df in frames.values():
+        if df is not None and not getattr(df, "empty", True):
+            periods += [c for c in df.columns if c not in periods]
+    periods = sorted(periods, reverse=True)[:limit]
+    rows = []
+    for col in periods:
+        row = {"period": str(col)[:10]}
+        for key, (stmt, aliases) in _REPORT_QUARTER_LINES.items():
+            df = frames[stmt]
+            val = None
+            if df is not None and not getattr(df, "empty", True) and col in df.columns:
+                for alias in aliases:
+                    if alias in df.index:
+                        v = df.loc[alias, col]
+                        if pd.notna(v):
+                            val = float(v)
+                            break  # only a reported value ends the search
+            row[key] = val
+        if any(row[k] is not None for k in _REPORT_QUARTER_LINES):
+            rows.append(row)
+    return rows
+
+
+def get_report_extras(symbol):
+    """What the Report tab needs beyond the other tabs' data: the last eight
+    quarters (income and cash-flow lines), recent analyst rating changes and
+    the recommendation distribution. Each part fails on its own
+    (`<part>_error`), so one refusal does not cost the others."""
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        return {"error": "no symbol given"}
+    out = {"symbol": symbol, "as_of": int(datetime.now().timestamp())}
+    try:
+        ticker = yf.Ticker(symbol)
+    except Exception as e:
+        return {"error": str(e)[:160], "transient": _is_refusal_text(str(e)), "symbol": symbol}
+
+    # The currency the STATEMENTS are in — not always the quote's (TSM trades
+    # in dollars and reports in Taiwan dollars). Absent stays absent.
+    try:
+        fc = (ticker.get_info() or {}).get("financialCurrency")
+        out["financial_currency"] = str(fc) if fc else None
+    except Exception:
+        out["financial_currency"] = None
+
+    try:
+        try:
+            q_cash = ticker.quarterly_cashflow
+        except Exception:
+            q_cash = None
+        out["quarters"] = _report_quarters(ticker.quarterly_financials, q_cash)
+    except Exception as e:
+        out["quarters"] = []
+        out["quarters_error"] = str(e)[:160]
+        out["quarters_transient"] = _is_refusal_text(str(e))
+
+    try:
+        ud = ticker.upgrades_downgrades
+        actions = []
+        if ud is not None and not ud.empty:
+            cutoff = pd.Timestamp.now() - pd.Timedelta(days=180)
+            for ts, r in ud.sort_index(ascending=False).iterrows():
+                when = pd.Timestamp(ts).tz_localize(None) if pd.Timestamp(ts).tzinfo else pd.Timestamp(ts)
+                if when < cutoff:
+                    break
+                # A reiterated rating (a target change) is not a rating
+                # change. Dropped HERE, before the list is cut: a heavily
+                # covered stock has dozens a month, and they would crowd the
+                # six months' real upgrades and downgrades out of the limit.
+                if str(r.get("Action") or "") in ("main", "reit"):
+                    continue
+                actions.append({
+                    "date": when.date().isoformat(),
+                    "firm": str(r.get("Firm") or ""),
+                    "to_grade": str(r.get("ToGrade") or ""),
+                    "from_grade": str(r.get("FromGrade") or ""),
+                    "action": str(r.get("Action") or ""),
+                })
+        out["actions"] = actions[:25]
+    except Exception as e:
+        out["actions"] = []
+        out["actions_error"] = str(e)[:160]
+
+    try:
+        rec = ticker.recommendations
+        trend = []
+        if rec is not None and not rec.empty:
+            for _, r in rec.iterrows():
+                row = {"period": str(r.get("period") or "")}
+                for src, key in (("strongBuy", "strong_buy"), ("buy", "buy"), ("hold", "hold"),
+                                 ("sell", "sell"), ("strongSell", "strong_sell")):
+                    v = r.get(src)
+                    row[key] = int(v) if pd.notna(v) else None
+                trend.append(row)
+        out["rec_trend"] = trend
+    except Exception as e:
+        out["rec_trend"] = []
+        out["rec_trend_error"] = str(e)[:160]
+
+    if not out["quarters"] and not out["actions"] and not out["rec_trend"]:
+        why = out.get("quarters_error") or "Yahoo returned nothing for this symbol"
+        return {"error": why, "transient": bool(out.get("quarters_transient")), "symbol": symbol}
+    return out
+
+
 def get_ipo_extras(symbol):
     """Single round-trip aggregator powering the IPO Watch detail rail's
     NEWS / FINANCIALS / HOLDERS tabs. Each sub-fetch is wrapped in its own
@@ -4856,6 +4984,8 @@ _CACHE_TTL = {
     "futures_curve": 20, "futures_curve_history": 1800,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
+    # quarterly statements and rating changes — move a few times a quarter
+    "report_extras": 600,
     "multiple_ratios": 600, "ipo_extras": 600,
     # earnings_dates carries the reported figure for the quarter that just
     # printed, which Yahoo fills in within hours of the call — the tile is
@@ -5267,6 +5397,8 @@ def _daemon_dispatch_inner(action, payload):
         return get_extended_hours_quotes(symbols)
     if action == "index_futures":
         return get_index_futures((payload or {}).get("pairs") or [])
+    if action == "report_extras":
+        return get_report_extras((payload or {}).get("symbol"))
     if action == "futures_curve":
         p = payload or {}
         return get_futures_curve(p.get("root"), p.get("exchange"), p.get("months", 30))

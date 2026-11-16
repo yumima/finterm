@@ -882,6 +882,7 @@ set(SERVICE_SOURCES
     src/services/gov_data/GovDataService.cpp
     src/services/equity/EarningsSignal.cpp
     src/services/equity/EquityResearchService.cpp
+    src/services/equity/ReportService.cpp
     src/services/equity/TechnicalRating.cpp
     src/services/finnhub/FinnhubService.cpp
     src/services/finnhub/FinnhubLiveTicks.cpp
@@ -1356,6 +1357,9 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EquityOptionsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityPeersTab.cpp
+    src/screens/equity_research/EquityReportTab.cpp
+    src/screens/equity_research/ReportBuilder.cpp
+    src/screens/equity_research/ReportCharts.cpp
     src/screens/equity_research/EquityNewsTab.cpp
 
     # Portfolio
@@ -1570,6 +1574,9 @@ set_source_files_properties(
     src/screens/equity_research/EquityOverviewTab.cpp
     src/screens/equity_research/PriceRangeStrip.cpp
     src/screens/equity_research/EquityPeersTab.cpp
+    src/screens/equity_research/EquityReportTab.cpp
+    src/screens/equity_research/ReportBuilder.cpp
+    src/screens/equity_research/ReportCharts.cpp
     src/screens/equity_research/EquityResearchScreen.cpp
     src/screens/equity_research/EquityOptionsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp

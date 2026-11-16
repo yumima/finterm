@@ -16,6 +16,7 @@
 #include "screens/equity_research/EquityOptionsTab.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/equity_research/EquityPeersTab.h"
+#include "screens/equity_research/EquityReportTab.h"
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "screens/ownership/StockOwnershipPanel.h"
@@ -448,6 +449,7 @@ void EquityResearchScreen::build_ui() {
     options_tab_ = new EquityOptionsTab;
     peers_tab_ = new EquityPeersTab;
     news_tab_ = new EquityNewsTab;
+    report_tab_ = new EquityReportTab;
     // Relationships tab — reuses the full RelationshipMapScreen widget in
     // embedded mode (header/status bar hidden, since ER's title bar already
     // exposes the symbol + freshness chip). The screen still owns its filter
@@ -458,6 +460,9 @@ void EquityResearchScreen::build_ui() {
     relationships_tab_->set_embedded_mode(true);
 
     tab_widget_->addTab(overview_tab_, "Overview");
+    // The synthesis of the tabs after it: one investor report on the company.
+    // Heavy (a dozen fetches, two model calls), so it loads on activation.
+    tab_widget_->addTab(report_tab_, "Report");
     tab_widget_->addTab(financials_tab_, "Financials");
     tab_widget_->addTab(analysis_tab_, "Analysis");
     // Earnings sits directly after Analysis: it is the same "what is this
@@ -891,6 +896,8 @@ void EquityResearchScreen::on_tab_changed(int index) {
     } else if (tab == news_tab_) {
         news_tab_->set_symbol(current_symbol_);
         svc.fetch_news(current_symbol_);
+    } else if (tab == report_tab_) {
+        report_tab_->set_symbol(current_symbol_);
     } else if (tab == ownership_tab_) {
         // Every other tab re-syncs its symbol on activation, and ownership was
         // the one that did not — so if it ever missed a load_symbol (created
@@ -988,6 +995,8 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
         relationships_tab_->set_symbol(symbol);
     if (options_tab_ && cur == options_tab_)
         options_tab_->set_symbol(symbol, force);
+    if (report_tab_ && cur == report_tab_)
+        report_tab_->set_symbol(symbol);
 
     // Prefetch for inactive tabs so whichever tab the user opens next is
     // already populated (or rendering from cache). Overview's own bundle

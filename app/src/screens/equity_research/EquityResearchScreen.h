@@ -31,6 +31,7 @@ class EquityTalippTab;
 class EquityOptionsTab;
 class EquityPeersTab;
 class EquityNewsTab;
+class EquityReportTab;
 class RelationshipMapScreen;
 
 class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
@@ -145,6 +146,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityOptionsTab* options_tab_ = nullptr;
     EquityPeersTab* peers_tab_ = nullptr;
     EquityNewsTab* news_tab_ = nullptr;
+    EquityReportTab* report_tab_ = nullptr;
     RelationshipMapScreen* relationships_tab_ = nullptr;
     /// Who holds this, what the insiders did, what the shorts hold — the one
     /// per-security ownership surface in the app.

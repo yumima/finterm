@@ -1,0 +1,258 @@
+// src/screens/equity_research/ReportPrompts.h
+#pragma once
+// The two language-model requests behind the ER Report's prose, and the
+// parsing of what comes back. Pure, so the prompts are unit-tested.
+//
+//   business  reads the company's own filings (10-K Business, Risk Factors,
+//             Management's Discussion; the latest 10-Q) and recent headlines,
+//             and sorts what they say into the report's topics.
+//   summary   reads the figures the report already computed and writes the
+//             executive summary, the two cases, what to watch — and a
+//             direction, which is a word and never a number.
+//
+// A model may quote a figure, never originate one: every number it can use is
+// in the prompt, and LlmService removes any that is not (NumberGrounding.h).
+// Neither request asks for a price target, a probability or a percentage.
+
+#include "screens/equity_research/ReportModel.h"
+
+#include <QJsonDocument>
+#include <QString>
+#include <QStringList>
+
+namespace finterm::screens::report {
+
+struct Headline {
+    QString title, publisher, date;
+};
+
+/// The DATA wrapper both prompts use; the model is told nothing outside it exists.
+inline QString data_fence(const QString& body) {
+    return QStringLiteral("<<<DATA>>>\n%1\n<<<END>>>").arg(body.trimmed());
+}
+
+inline QString headlines_block(const QVector<Headline>& news, int limit = 14) {
+    QStringList lines;
+    for (int i = 0; i < news.size() && i < limit; ++i)
+        lines << QStringLiteral("- %1 (%2%3)").arg(news[i].title.simplified(), news[i].publisher,
+                                                   news[i].date.isEmpty() ? QString() : QStringLiteral(", ") + news[i].date.left(10));
+    return lines.join(QLatin1Char('\n'));
+}
+
+/// `text` up to `limit` characters, ending on a paragraph where one is near.
+inline QString excerpt(const QString& text, int limit) {
+    if (text.size() <= limit)
+        return text;
+    const QString head = text.left(limit);
+    int stop = head.lastIndexOf(QStringLiteral("\n\n"));
+    if (stop < limit * 6 / 10)
+        stop = head.lastIndexOf(QStringLiteral(". ")) + 1;
+    return (stop < limit * 6 / 10 ? head : head.left(stop)).trimmed();
+}
+
+// How much of each filing section goes to the model. A local model reads a
+// prompt at a few hundred tokens a second and the request is cut off at two
+// minutes, so the whole business prompt is held near five thousand tokens —
+// the opening of each section, which is where a filing puts what matters.
+inline constexpr int kPromptBusinessChars = 6500;
+inline constexpr int kPromptQuarterChars = 4500;
+inline constexpr int kPromptAnnualMdnaChars = 3000;
+inline constexpr int kPromptRiskChars = 3500;
+
+inline QString business_prompt(const QString& symbol, const QString& company, const QString& profile,
+                               const Filings& filings, const QVector<Headline>& news) {
+    QStringList parts;
+    if (!profile.trimmed().isEmpty())
+        parts << QStringLiteral("## Company profile\n") + profile.trimmed();
+    auto add = [&parts](const QString& heading, const Filing& f, const FilingSection& s, int limit) {
+        if (!s.text.isEmpty())
+            parts << QStringLiteral("## %1 — %2\n%3").arg(heading, f.cite(), excerpt(s.text, limit));
+    };
+    add(QStringLiteral("Business (Item 1)"), filings.annual, filings.annual.business, kPromptBusinessChars);
+    add(QStringLiteral("Management's discussion, latest quarter"), filings.quarterly, filings.quarterly.mdna,
+        kPromptQuarterChars);
+    // The year's discussion only when there is no quarter's: they overlap.
+    if (filings.quarterly.mdna.text.isEmpty())
+        add(QStringLiteral("Management's discussion, fiscal year"), filings.annual, filings.annual.mdna,
+            kPromptAnnualMdnaChars);
+    add(QStringLiteral("Risk factors (Item 1A)"), filings.annual, filings.annual.risk_factors, kPromptRiskChars);
+    const QString heads = headlines_block(news, 10);
+    if (!heads.isEmpty())
+        parts << QStringLiteral("## Recent headlines\n") + heads;
+
+    return QStringLiteral(
+               "You are preparing the business section of an investor report on %1 (%2).\n"
+               "Use ONLY the material between <<<DATA>>> and <<<END>>>. It is the company's own filings and recent "
+               "headlines. Do not add facts from memory. Quote a figure only exactly as it appears in the material; "
+               "never estimate, round differently or compute a new one. If the material does not cover a topic, "
+               "return an empty string or empty list for it — do not fill the gap.\n\n"
+               "%3\n\n"
+               "Reply with ONE JSON object and nothing else, with exactly these keys:\n"
+               "{\n"
+               "  \"business_model\": \"2-3 plain sentences: what the company sells, to whom, and how it earns money\",\n"
+               "  \"segments\": [\"one line per business segment or product line: its name, then what is driving it\"],\n"
+               "  \"customers\": \"who the customers are; any concentration or dependence the filings disclose\",\n"
+               "  \"competition\": \"the competitors the filings name and what the company says it competes on\",\n"
+               "  \"new_technology\": [\"new products, platforms or technology described as recent or upcoming\"],\n"
+               "  \"new_business\": [\"new markets, partnerships, acquisitions or business lines\"],\n"
+               "  \"investment\": \"where the company says it is putting capital: R&D, capacity, acquisitions, buybacks\",\n"
+               "  \"advantages\": [\"up to 5 durable advantages the material supports\"],\n"
+               "  \"risks\": [\"up to 6 of the most material risks, each a short sentence in plain words\"],\n"
+               "  \"recent_developments\": [\"up to 5 developments from the latest quarter and the headlines\"]\n"
+               "}\n"
+               "Each list item is one sentence. Plain words, no marketing language, no markdown.")
+        .arg(company.isEmpty() ? symbol : company, symbol, data_fence(parts.join(QStringLiteral("\n\n"))));
+}
+
+inline QString summary_prompt(const QString& symbol, const QString& company, const QString& figures,
+                              const QVector<Finding>& findings, const QVector<Headline>& news) {
+    QStringList f;
+    for (const auto& x : findings)
+        f << QStringLiteral("- [%1] %2: %3 %4")
+                 .arg(x.tone == Tone::Strength ? QStringLiteral("strength") : x.tone == Tone::Risk ? QStringLiteral("risk")
+                                                                                                    : QStringLiteral("note"),
+                      x.area, x.title, x.detail);
+    QStringList parts;
+    parts << QStringLiteral("## Figures\n") + figures.trimmed();
+    if (!f.isEmpty())
+        parts << QStringLiteral("## Findings (computed by fixed rules)\n") + f.join(QLatin1Char('\n'));
+    const QString heads = headlines_block(news);
+    if (!heads.isEmpty())
+        parts << QStringLiteral("## Recent headlines\n") + heads;
+
+    return QStringLiteral(
+               "You are writing the executive summary of a quarterly investor report on %1 (%2).\n"
+               "Use ONLY the material between <<<DATA>>> and <<<END>>>. Quote a figure only exactly as it appears "
+               "there; never estimate or compute a new one. Do not give a price target, a probability, a score or "
+               "an expected return — the direction is a word.\n\n"
+               "%3\n\n"
+               "Reply with ONE JSON object and nothing else, with exactly these keys:\n"
+               "{\n"
+               "  \"summary\": \"4-6 plain sentences an investor can read in half a minute: how the business is "
+               "doing, what changed this quarter, how the stock is priced\",\n"
+               "  \"bull_case\": [\"3 short sentences: the strongest reasons to own it, each tied to a figure above\"],\n"
+               "  \"bear_case\": [\"3 short sentences: the strongest reasons for caution, each tied to a figure above\"],\n"
+               "  \"watch\": [\"3 things to watch in the next report, each one sentence\"],\n"
+               "  \"direction\": \"up\" or \"flat\" or \"down\" — your reading of the next three months,\n"
+               "  \"rationale\": \"one sentence saying which of the figures above decides the direction\"\n"
+               "}\n"
+               "Plain words, no markdown.")
+        .arg(company.isEmpty() ? symbol : company, symbol, data_fence(parts.join(QStringLiteral("\n\n"))));
+}
+
+// ── replies ─────────────────────────────────────────────────────────────────
+
+/// The answer in a reply: the LAST complete JSON object that carries `key`.
+/// A model may think aloud before answering, drafting objects on the way, and
+/// may wrap the answer in prose or a code fence; the final object is the one
+/// it meant.
+inline QJsonObject reply_object(const QString& reply, const char* key) {
+    QJsonObject answer;
+    int depth = 0, start = -1;
+    bool in_string = false, escaped = false;
+    for (int i = 0; i < reply.size(); ++i) {
+        const QChar c = reply[i];
+        if (in_string) {
+            if (escaped)
+                escaped = false;
+            else if (c == QLatin1Char('\\'))
+                escaped = true;
+            else if (c == QLatin1Char('"'))
+                in_string = false;
+            continue;
+        }
+        if (c == QLatin1Char('"'))
+            in_string = true;
+        else if (c == QLatin1Char('{')) {
+            if (depth++ == 0)
+                start = i;
+        } else if (c == QLatin1Char('}') && depth > 0 && --depth == 0) {
+            const QJsonDocument doc = QJsonDocument::fromJson(reply.mid(start, i - start + 1).toUtf8());
+            if (doc.isObject() && doc.object().contains(QLatin1String(key)))
+                answer = doc.object();
+            start = -1;
+        }
+    }
+    return answer;
+}
+
+inline QString text_field(const QJsonObject& o, const char* key) {
+    const QJsonValue v = o.value(QLatin1String(key));
+    if (v.isString())
+        return v.toString().simplified();
+    if (v.isArray()) { // a model that returned a list where a paragraph was asked for
+        QStringList parts;
+        for (const auto& x : v.toArray())
+            if (x.isString() && !x.toString().simplified().isEmpty())
+                parts << x.toString().simplified();
+        return parts.join(QLatin1Char(' '));
+    }
+    return {};
+}
+
+inline QStringList list_field(const QJsonObject& o, const char* key, int limit) {
+    QStringList out;
+    const QJsonValue v = o.value(QLatin1String(key));
+    if (v.isArray()) {
+        for (const auto& x : v.toArray()) {
+            const QString s = x.isString() ? x.toString().simplified() : QString();
+            if (!s.isEmpty() && out.size() < limit)
+                out << s;
+        }
+    } else if (v.isString() && !v.toString().simplified().isEmpty()) {
+        out << v.toString().simplified();
+    }
+    return out;
+}
+
+struct BusinessNarrative {
+    bool valid = false;
+    QString business_model, customers, competition, investment;
+    QStringList segments, new_technology, new_business, advantages, risks, recent_developments;
+};
+
+inline BusinessNarrative parse_business(const QString& reply) {
+    BusinessNarrative n;
+    const QJsonObject o = reply_object(reply, "business_model");
+    if (o.isEmpty())
+        return n;
+    n.business_model = text_field(o, "business_model");
+    n.customers = text_field(o, "customers");
+    n.competition = text_field(o, "competition");
+    n.investment = text_field(o, "investment");
+    n.segments = list_field(o, "segments", 8);
+    n.new_technology = list_field(o, "new_technology", 6);
+    n.new_business = list_field(o, "new_business", 6);
+    n.advantages = list_field(o, "advantages", 5);
+    n.risks = list_field(o, "risks", 6);
+    n.recent_developments = list_field(o, "recent_developments", 5);
+    n.valid = !n.business_model.isEmpty() || !n.segments.isEmpty() || !n.risks.isEmpty() || !n.advantages.isEmpty();
+    return n;
+}
+
+struct SummaryNarrative {
+    bool valid = false;
+    QString summary, rationale;
+    QStringList bull_case, bear_case, watch;
+    QString direction; ///< "up" | "flat" | "down", or empty when the model gave anything else
+};
+
+inline SummaryNarrative parse_summary(const QString& reply) {
+    SummaryNarrative n;
+    const QJsonObject o = reply_object(reply, "summary");
+    if (o.isEmpty())
+        return n;
+    n.summary = text_field(o, "summary");
+    n.rationale = text_field(o, "rationale");
+    n.bull_case = list_field(o, "bull_case", 4);
+    n.bear_case = list_field(o, "bear_case", 4);
+    n.watch = list_field(o, "watch", 4);
+    const QString d = text_field(o, "direction").toLower();
+    // Anything but the three words is not a call: nothing is inferred from it.
+    if (d == QLatin1String("up") || d == QLatin1String("flat") || d == QLatin1String("down"))
+        n.direction = d;
+    n.valid = !n.summary.isEmpty();
+    return n;
+}
+
+} // namespace finterm::screens::report

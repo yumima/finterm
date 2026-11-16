@@ -448,7 +448,7 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
                        [this, prev_scroll]() { peer_table_->verticalScrollBar()->setValue(prev_scroll); });
 }
 
-QStringList EquityPeersTab::default_peers(const QString& symbol) const {
+QStringList EquityPeersTab::default_peers(const QString& symbol) {
     static const QHash<QString, QStringList> kPeers = {
         {"AAPL", {"MSFT", "GOOGL", "META", "AMZN", "NVDA"}},
         {"MSFT", {"AAPL", "GOOGL", "AMZN", "ORCL", "CRM"}},

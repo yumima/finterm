@@ -1144,6 +1144,28 @@ target_link_libraries(test_world_markets PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_world_markets PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME world_markets COMMAND test_world_markets)
 
+# ── ER Report: derived figures, rule-based findings, prompts and parsers ─────
+# Every number the report prints and every rule it applies; a vendor null
+# stays NaN, and the model is never asked for a figure.
+add_executable(test_report_model screens/test_report_model.cpp)
+target_include_directories(test_report_model PRIVATE ../src)
+target_link_libraries(test_report_model PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_report_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME report_model COMMAND test_report_model)
+
+# The report rendered end to end on synthetic data: every section laid out,
+# every chart produced, no "nan" on the page, PDF and HTML written.
+add_executable(test_report_render
+    screens/test_report_render.cpp
+    ../src/screens/equity_research/ReportBuilder.cpp
+    ../src/screens/equity_research/ReportCharts.cpp
+    ../src/ui/theme/Theme.cpp ../src/ui/theme/ThemeManager.cpp ../src/core/logging/Logger.cpp)
+target_include_directories(test_report_render PRIVATE ../src)
+target_link_libraries(test_report_render PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::PrintSupport Qt6::Test)
+set_target_properties(test_report_render PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME report_render COMMAND test_report_render)
+set_tests_properties(report_render PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ── Futures: curve shape and carry, COT summary, the trade ticket ────────────
 # Every number the Futures screen derives. The contract terms are checked
 # against the exchanges' published dollars-per-tick; a vendor null stays NaN.
@@ -1172,6 +1194,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_futures_curve.py
     )
     set_tests_properties(futures_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # ER Report data shaping: filing excerpts and quarterly rows.
+    add_test(
+        NAME report_data
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_report_data.py
+    )
+    set_tests_properties(report_data PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
 if(Python3_Interpreter_FOUND)

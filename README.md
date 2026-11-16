@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`2b21dcabf`](https://github.com/yumima/finterm/commit/2b21dcabf) futures: the Futures screen is back, built around the forward curve
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
