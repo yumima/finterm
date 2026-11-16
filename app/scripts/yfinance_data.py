@@ -1291,6 +1291,16 @@ def get_financials(symbol):
             "timestamp": int(datetime.now().timestamp())
         }
 
+        # Operating income as the company FILED it, where Yahoo's adjusted
+        # figure differs, and equity where Yahoo shows a zero for a filed
+        # number (sec_statement_overlay.py — measured, and narrow on purpose).
+        # Its own try: a failure here must never cost the statements.
+        try:
+            import sec_statement_overlay
+            sec_statement_overlay.overlay(symbol, financials_data)
+        except Exception as e:
+            financials_data["sec_overlay"] = {"status": "error", "reason": str(e)[:160]}
+
         return financials_data
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
@@ -1358,6 +1368,17 @@ def get_ipo_extras(symbol):
                 out["annual_gross_profit"] = _series(af.loc["Gross Profit"])
             if "Operating Income" in af.index:
                 out["annual_operating_income"] = _series(af.loc["Operating Income"])
+                # The same line as the Financials tab shows it: the filed
+                # figure where Yahoo's adjusted one differs (all years or none).
+                try:
+                    import sec_statement_overlay as _sso
+                    _facts, _ = _sso.facts_for(symbol)
+                    if _facts is not None:
+                        _filed = _sso.filed_annual_operating_income(_facts, out["annual_operating_income"])
+                        if _filed is not None:
+                            out["annual_operating_income"] = _filed
+                except Exception:
+                    pass
     except Exception as e:
         out["annual_financials_error"] = str(e)
 

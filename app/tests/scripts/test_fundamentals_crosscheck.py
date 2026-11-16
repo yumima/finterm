@@ -99,7 +99,7 @@ def test_a_filed_zero_has_no_percentage_and_stays_json():
 
 def test_a_refused_directory_is_not_an_unknown_ticker():
     import types
-    fx._CIK.clear()
+    fx._CIK = {}
     sys.modules["sec_xbrl_data"] = types.SimpleNamespace(get_company_tickers=lambda: {"error": "403"})
     try:
         r = fx.check("AAPL")

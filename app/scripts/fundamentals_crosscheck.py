@@ -175,17 +175,20 @@ class SourceUnavailable(RuntimeError):
 
 
 def cik_for(symbol: str) -> Optional[str]:
+    """CIK for a ticker, for this script's batch runs (one thread). The data
+    daemon uses sec_statement_overlay's own cached, locked lookup instead."""
+    global _CIK
     import sec_xbrl_data as sx
     if not _CIK:
         data = sx.get_company_tickers()  # {"count", "tickers": [{cik, ticker, title}]} or {"error"}
         rows = (data.get("tickers") if isinstance(data, dict) else None) or []
         if not rows:
-            # Not cached: the next symbol asks again, and no ticker is ever
+            # Not cached, so the next symbol asks again — and no ticker is ever
             # reported as "not an SEC registrant" because the directory was refused.
             raise SourceUnavailable(f"SEC ticker directory unavailable: {str(data)[:120]}")
-        for r in rows:
-            if r.get("ticker") and r.get("cik") is not None:
-                _CIK[str(r["ticker"]).upper()] = str(r["cik"])
+        # Built whole, then assigned: a reader never sees a half-filled table.
+        _CIK = {str(r["ticker"]).upper(): str(r["cik"]) for r in rows
+                if r.get("ticker") and r.get("cik") is not None}
     return _CIK.get(symbol.upper().replace(".", "-")) or _CIK.get(symbol.upper())
 
 

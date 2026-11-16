@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`cdcf7145b`](https://github.com/yumima/finterm/commit/cdcf7145b) **ui:** tooltips are one short line
 - [`f047bdb79`](https://github.com/yumima/finterm/commit/f047bdb79) data: cross-check Yahoo's statements against the company's own SEC filings
 - [`1b7ddd528`](https://github.com/yumima/finterm/commit/1b7ddd528) ai: a model may quote a figure, never originate one
 

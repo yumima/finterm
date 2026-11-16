@@ -560,6 +560,18 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(fundamentals_crosscheck PROPERTIES TIMEOUT 60)
 endif()
 
+# ── Statement lines replaced by the filed figure ─────────────────────────────
+# sec_statement_overlay.py changes numbers the user reads (operating income to
+# the filed one; a zero equity to the filed one). Mostly pinned: what it must
+# NOT touch — agreeing lines, empty cells, equity that merely differs.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME sec_statement_overlay
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_sec_statement_overlay.py
+    )
+    set_tests_properties(sec_statement_overlay PROPERTIES TIMEOUT 60)
+endif()
+
 # ── Number grounding, agent runtime ──────────────────────────────────────────
 # The Python twin of ai_chat/NumberGrounding.h (ctest number_grounding), for
 # replies that come from the agent runtime instead of LlmService. Same cases,
