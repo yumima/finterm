@@ -51,6 +51,89 @@ mdna = ("Forward-Looking Statements\n\n" + "This report contains forward-looking
 sec = rf.section(mdna, "mdna")
 check("mdna starts at overview", sec["text"].startswith("Overview"), True)
 
+# ── revenue breakdown from XBRL facts ────────────────────────────────────────
+check("humanize", rf.humanize("nvda:ProfessionalVisualizationMember"), "Professional Visualization")
+check("humanize acronym", rf.humanize("nvda:OEMAndOtherMember"), "OEM And Other")
+
+# Data Center = Compute + Networking; charting all three would count it twice.
+leaves = rf.drop_subtotals([("Data Center", 193.7), ("Compute", 162.4), ("Networking", 31.3), ("Gaming", 16.0)])
+check("subtotal dropped", [l for l, _ in leaves], ["Compute", "Networking", "Gaming"])
+check("equal rows are not a sum", len(rf.drop_subtotals([("A", 10.0), ("B", 10.0)])), 2)
+# A breakdown that already sums to revenue has no subtotal in it, even though
+# 60 = 35 + 25 here: with the total known, nothing is removed.
+whole = [("A", 60.0), ("B", 35.0), ("C", 25.0)]
+check("sums to revenue: all kept", len(rf.drop_subtotals(whole, total=120.0)), 3)
+check("over revenue: the subtotal goes", [l for l, _ in rf.drop_subtotals(whole, total=60.0)], ["B", "C"])
+check("non-positive rows dropped", rf.drop_subtotals([("A", 5.0), ("B", 0.0), ("C", None)]), [("A", 5.0)])
+
+
+def fact(concept, value, start, end, **dims):
+    row = {"concept": concept, "numeric_value": value, "period_start": start, "period_end": end,
+           "dim_srt_ProductOrServiceAxis": None, "dim_srt_StatementGeographicalAxis": None,
+           "dim_srt_MajorCustomersAxis": None, "dim_us-gaap_ConcentrationRiskByBenchmarkAxis": None,
+           "dim_us-gaap_StatementBusinessSegmentsAxis": None}
+    row.update({f"dim_{k}": v for k, v in dims.items()})
+    return row
+
+
+R = "us-gaap:Revenues"
+facts = pd.DataFrame([
+    fact(R, 200.0, "2025-01-27", "2026-01-25"),
+    fact(R, 120.0, "2024-01-29", "2025-01-26"),
+    fact(R, 60.0, "2025-10-27", "2026-01-25"),                                  # a quarter: not a year
+    fact(R, 150.0, "2025-01-27", "2026-01-25", srt_ProductOrServiceAxis="x:DataCenterMember"),
+    fact(R, 110.0, "2025-01-27", "2026-01-25", srt_ProductOrServiceAxis="x:ComputeMember"),
+    fact(R, 40.0, "2025-01-27", "2026-01-25", srt_ProductOrServiceAxis="x:NetworkingMember"),
+    fact(R, 50.0, "2025-01-27", "2026-01-25", srt_ProductOrServiceAxis="x:GamingMember"),
+    fact(R, 70.0, "2024-01-29", "2025-01-26", srt_ProductOrServiceAxis="x:ComputeMember"),
+    fact(R, 15.0, "2025-10-27", "2026-01-25", srt_ProductOrServiceAxis="x:GamingMember"),
+    # cut two ways at once: belongs to neither chart
+    fact(R, 30.0, "2025-01-27", "2026-01-25", srt_ProductOrServiceAxis="x:GamingMember",
+         srt_StatementGeographicalAxis="country:US"),
+    fact(R, 90.0, "2025-01-27", "2026-01-25", srt_StatementGeographicalAxis="country:US"),
+    fact("us-gaap:ConcentrationRiskPercentage1", 0.22, "2025-01-27", "2026-01-25",
+         srt_MajorCustomersAxis="x:CustomerOneMember",
+         **{"us-gaap_ConcentrationRiskByBenchmarkAxis": "us-gaap:SalesRevenueNetMember"}),
+    fact("us-gaap:ConcentrationRiskPercentage1", 0.25, "2025-01-27", "2026-01-25",
+         srt_MajorCustomersAxis="x:CustomerOneMember",
+         **{"us-gaap_ConcentrationRiskByBenchmarkAxis": "us-gaap:AccountsReceivableMember"}),
+    # the fourth quarter's share, under the same period end: not the year's
+    fact("us-gaap:ConcentrationRiskPercentage1", 0.31, "2025-10-27", "2026-01-25",
+         srt_MajorCustomersAxis="x:CustomerTwoMember",
+         **{"us-gaap_ConcentrationRiskByBenchmarkAxis": "us-gaap:SalesRevenueNetMember"}),
+    fact("us-gaap:ConcentrationRiskPercentage1", 0.76, "2025-01-27", "2026-01-25",
+         srt_MajorCustomersAxis="x:EndCustomersMember", srt_StatementGeographicalAxis="country:TW",
+         **{"us-gaap_ConcentrationRiskByBenchmarkAxis": "us-gaap:SalesRevenueNetMember"}),
+])
+bd = rf.revenue_breakdown(facts, rf.humanize)
+check("one axis charted (geography has a single row)", [b["axis"] for b in bd], ["product"])
+check("breakdown rows", [(r["label"], r["value"], r["prior"]) for r in bd[0]["rows"]],
+      [("Compute", 110.0, 70.0), ("Gaming", 50.0, None), ("Networking", 40.0, None)])
+check("breakdown years", (bd[0]["period"], bd[0]["prior_period"]), ("2026-01-25", "2025-01-26"))
+check("coverage", bd[0]["coverage_pct"], 100.0)
+check("empty facts", rf.revenue_breakdown(pd.DataFrame(), rf.humanize), [])
+# Segment revenue tagged "operating segments" on the consolidation axis is still
+# the segment's revenue; the eliminations row on that axis is not.
+seg = pd.DataFrame([
+    fact(R, 100.0, "2025-01-01", "2025-12-31"),
+    fact(R, 60.0, "2025-01-01", "2025-12-31", **{"us-gaap_StatementBusinessSegmentsAxis": "x:GovernmentMember",
+                                               "srt_ConsolidationItemsAxis": "us-gaap:OperatingSegmentsMember"}),
+    fact(R, 40.0, "2025-01-01", "2025-12-31", **{"us-gaap_StatementBusinessSegmentsAxis": "x:CommercialMember",
+                                               "srt_ConsolidationItemsAxis": "us-gaap:OperatingSegmentsMember"}),
+    fact(R, -7.0, "2025-01-01", "2025-12-31", **{"us-gaap_StatementBusinessSegmentsAxis": "x:CommercialMember",
+                                               "srt_ConsolidationItemsAxis": "us-gaap:IntersegmentEliminationMember"}),
+])
+sb = rf.revenue_breakdown(seg, rf.humanize)
+check("labelled segments are taken", [(b["axis"], [(r["label"], r["value"]) for r in b["rows"]]) for b in sb],
+      [("segment", [("Government", 60.0), ("Commercial", 40.0)])])
+
+# An axis that does not reconcile to revenue is carrying two cuts at once: not charted.
+mixed = pd.concat([facts, pd.DataFrame([fact(R, 80.0, "2025-01-27", "2026-01-25",
+                                             srt_ProductOrServiceAxis="x:UnrelatedCutMember")])])
+check("unreconciled axis omitted", rf.revenue_breakdown(mixed, rf.humanize), [])
+cc = rf.customer_concentration(facts, rf.humanize)
+check("only revenue concentration, only uncut", [(c["label"], c["pct"]) for c in cc], [("Customer One", 22.0)])
+
 try:
     import yfinance_data as y
 except Exception:  # yfinance not importable outside the venv
@@ -70,6 +153,12 @@ check("missing statement is None", rows[1]["ocf"], None)
 check("no frames", y._report_quarters(None, None), [])
 fallback = pd.DataFrame({cols[0]: {"Diluted EPS": float("nan"), "Basic EPS": 1.4}})
 check("a NaN alias falls through to the next", y._report_quarters(fallback, None)[0]["eps"], 1.4)
+
+ranked = ["A", "B", "C", "D", "E", "F", "G"]
+check("neighbours either side", y.nearest_in_ranking(ranked, "D", 4), ["C", "E", "B", "F"])
+check("at the top", y.nearest_in_ranking(ranked, "A", 3), ["B", "C", "D"])
+check("not ranked", y.nearest_in_ranking(ranked, "Z", 2), ["A", "B"])
+check("alone", y.nearest_in_ranking(["A"], "A", 3), [])
 
 if FAILS:
     print("\n".join(FAILS))

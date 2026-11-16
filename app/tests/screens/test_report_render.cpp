@@ -169,6 +169,14 @@ ReportDoc sample(bool rich) {
               {"Regulators weigh new export rules", "", "https://example.com/b", "Bloomberg", "2026-11-08T09:00:00Z"}};
     d.filings.annual.form = "10-K";
     d.filings.annual.filing_date = "2026-02-25";
+    d.filings.annual.url = "https://www.sec.gov/Archives/edgar/data/1/a-index.html";
+    d.filings.breakdown_source = "10-K filed 2026-02-25";
+    d.filings.breakdowns = {
+        {"product", "2026-01-25", "2025-01-26", 100.0,
+         {{"Compute", 162.4e9, 102.2e9}, {"Networking", 31.4e9, 13.0e9}, {"Gaming", 16.0e9, 11.3e9}, {"New line", 6.1e9, kNaN}}},
+        {"geography", "2026-01-25", "2025-01-26", 100.0, {{"United States", 149.6e9, 77.5e9}, {"Taiwan", 66.3e9, 53e9}}}};
+    d.filings.customers = {{"Customer one", 22.0, "Compute & Networking", "2026-01-25"}, {"Customer two", 14.0, "", "2026-01-25"}};
+    d.peers_basis = "Peers are the companies nearest it in size in its Yahoo industry (Semiconductors), not a hand-picked group.";
     d.filings.quarterly.form = "10-Q";
     d.filings.quarterly.filing_date = "2026-08-26";
     d.insiders = {true, 12, 1, 9, 2.1e6, 310e6};
@@ -229,7 +237,11 @@ class TestReportRender : public QObject {
             const QImage img = page(sample(true), pal, width, &html, &charts);
             keep(img, QLatin1String(name));
             QVERIFY(img.height() > 2500);
-            QVERIFY2(charts >= 16, qPrintable(QString::number(charts)));
+            QVERIFY2(charts >= 18, qPrintable(QString::number(charts)));
+            QVERIFY(html.contains("CUSTOMERS THE ANNUAL REPORT SINGLES OUT") && html.contains("Compute &amp; Networking revenue"));
+            QVERIFY(html.contains("HOW THE SHARES HAVE TRADED") && html.contains("Beta to SPY"));
+            QVERIFY(html.contains("https://www.sec.gov/Archives/edgar/data/1/a-index.html"));
+            QVERIFY(html.contains("nearest it in size in its Yahoo industry"));
             for (const char* section : {"AT A GLANCE", "THE BUSINESS", "WHAT IS NEW", "FINANCIAL PERFORMANCE",
                                         "CASH AND WHERE IT GOES", "EARNINGS AGAINST EXPECTATIONS", "VALUATION AND PEERS",
                                         "ANALYSTS AND OWNERSHIP", "ADVANTAGES AND RISKS", "OUTLOOK", "SOURCES"})
@@ -264,6 +276,15 @@ class TestReportRender : public QObject {
         QVERIFY(!rich.contains("—") && !rich.contains("nan"));
         const QString bare = figures_block(sample(false));
         QVERIFY(bare.contains("Share price") && !bare.contains("Market cap") && !bare.contains("P/E"));
+    }
+
+    void a_fund_is_said_to_be_one() {
+        ReportDoc d = sample(false);
+        d.info.quote_type = "ETF";
+        QString html;
+        int charts = 0;
+        page(d, Palette::paper(), 900, &html, &charts);
+        QVERIFY(html.contains("is listed as etf, not an operating company"));
     }
 
     void mixed_currency_is_named_and_not_cross_multiplied() {

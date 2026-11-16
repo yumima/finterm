@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`28413b3f6`](https://github.com/yumima/finterm/commit/28413b3f6) futures: calendar-spread history, a majors board, live front month, roll warnings, tools for agents
 - [`05fe98315`](https://github.com/yumima/finterm/commit/05fe98315) read-aloud: "A.I." is one word, and a starved reading says so in the log
 - [`0ae2eae41`](https://github.com/yumima/finterm/commit/0ae2eae41) er: a Report tab — one investor report from everything held on a company
 - [`2b21dcabf`](https://github.com/yumima/finterm/commit/2b21dcabf) futures: the Futures screen is back, built around the forward curve

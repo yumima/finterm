@@ -6,6 +6,7 @@
 #include "python/PythonWorker.h"
 #include "storage/cache/CacheManager.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
 
@@ -19,8 +20,11 @@ constexpr int kFilingsTtlSec = 24 * 3600;
 // which — so it is kept just long enough not to refetch on every tab switch.
 constexpr int kPartialFilingsTtlSec = 20 * 60;
 constexpr int kNarrativeTtlSec = 24 * 3600;
+// v3: segment facts tagged on a label-only axis are read (v2 returned an
+// empty breakdown for them, and that emptiness would be served for a day).
+// v2: adds revenue_breakdown, customers, the filing url and 20-F reports.
 // v1: {annual, quarterly} with cleaned, cut sections.
-const QString kFilingsKey = QStringLiteral("equity:report_filings:v1:");
+const QString kFilingsKey = QStringLiteral("equity:report_filings:v3:");
 // v2: keyed by section, symbol and day, holding {reply, model, written_at}.
 // (v1 was keyed by prompt and held raw replies, readable or not.)
 const QString kNarrativeKey = QStringLiteral("equity:report_narrative:v2:");
@@ -51,6 +55,28 @@ void fetch_report_extras(const QString& symbol, QObject* ctx, ReportJsonCallback
         python::PythonWorker::kComputeActionTimeoutMs);
 }
 
+void fetch_industry_peers(const QString& symbol, QObject* ctx,
+                          std::function<void(bool, QStringList, QString)> cb) {
+    QPointer<QObject> guard(ctx);
+    python::PythonWorker::instance().submit(
+        QStringLiteral("industry_peers"), QJsonObject{{"symbol", symbol}},
+        [guard, cb](bool ok, QJsonObject result, QString err) {
+            if (!guard)
+                return;
+            QStringList peers;
+            for (const auto& v : result.value(QStringLiteral("peers")).toArray())
+                if (!v.toString().isEmpty())
+                    peers << v.toString();
+            if (!ok || result.contains(QStringLiteral("error")) || peers.isEmpty()) {
+                const QString body = result.value(QStringLiteral("error")).toString();
+                cb(false, {}, (err.isEmpty() ? body : err).left(160));
+                return;
+            }
+            cb(true, peers, result.value(QStringLiteral("industry")).toString());
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
+}
+
 void fetch_report_filings(const QString& symbol, QObject* ctx, ReportJsonCallback cb) {
     const QString key = kFilingsKey + symbol;
     if (const auto hit = CacheManager::instance().try_get(key)) {
@@ -77,7 +103,13 @@ void fetch_report_filings(const QString& symbol, QObject* ctx, ReportJsonCallbac
                     cb(false, {}, o.value(QStringLiteral("error")).toString(QStringLiteral("unreadable reply")).left(200));
                 return;
             }
-            const bool partial = o.contains(QStringLiteral("annual_error")) || o.contains(QStringLiteral("quarterly_error"));
+            // Something that should have been there is missing: the annual
+            // report, its XBRL figures, or — for a domestic filer — the
+            // quarterly one. A foreign issuer (20-F, 40-F) files no 10-Q, so
+            // its missing quarter is the whole answer, not a gap.
+            const QString annual_form = o.value(QStringLiteral("annual")).toObject().value(QStringLiteral("form")).toString();
+            const bool partial = o.contains(QStringLiteral("annual_error")) || o.contains(QStringLiteral("breakdown_error")) ||
+                                 (o.contains(QStringLiteral("quarterly_error")) && annual_form == QLatin1String("10-K"));
             CacheManager::instance().put(key, json, partial ? kPartialFilingsTtlSec : kFilingsTtlSec,
                                          QStringLiteral("equity"));
             if (guard)

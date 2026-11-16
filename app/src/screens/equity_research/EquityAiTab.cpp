@@ -186,7 +186,10 @@ qint64 ymd_to_secs(const QString& ymd) {
 }
 
 QString source_label(const QString& source) {
-    return source == QLatin1String("fingpt") ? QStringLiteral("News") : QStringLiteral("Quant");
+    // "report": the three-month reading written with the Report tab's summary.
+    return source == QLatin1String("fingpt")   ? QStringLiteral("News")
+           : source == QLatin1String("report") ? QStringLiteral("Report")
+                                               : QStringLiteral("Quant");
 }
 
 // One decoder for an article's display day, shared by the sentiment table and
@@ -454,6 +457,8 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         QPen pen(QColor(col), 1.6);
         if (pr.source == QLatin1String("fingpt"))
             pen.setStyle(Qt::DotLine);
+        else if (pr.source == QLatin1String("report"))
+            pen.setStyle(Qt::DashLine);
         if (!mag) {
             pen.setWidthF(1.0);
             if (pen.style() == Qt::SolidLine)
@@ -2047,6 +2052,8 @@ QString EquityAiTab::chat_context_block() const {
     // numbers appear nowhere else.
     bool have_quant_read = false, have_news_read = false;
     for (const AiPrediction& p : preds) {
+        if (p.source == QLatin1String("report"))
+            continue; // the Report tab's reading carries no analysis text of its own
         const bool is_news = p.source == QLatin1String("fingpt");
         bool& have = is_news ? have_news_read : have_quant_read;
         if (have || p.analysis.isEmpty())
@@ -2100,7 +2107,7 @@ void EquityAiTab::resolve_due() {
         const double actual_pct = (close - p.price_at_pred) / p.price_at_pred * 100.0;
         // The same bucketing the prediction went through — one function, so the
         // two sides of the comparison cannot drift onto different scales again.
-        const QString realized = aif::bucket_direction(actual_pct);
+        const QString realized = aif::bucket_direction(actual_pct, aif::flat_band_for(p.source));
         const bool correct = (realized == p.direction);
         repo.resolve(p.id, close, actual_pct, correct, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     }
@@ -2120,6 +2127,9 @@ void EquityAiTab::refresh_track_record() {
                 ++n_res;
                 if (p.correct)
                     ++n_hit;
+            } else if (p.source == QLatin1String("report")) {
+                // A third method on a three-month horizon: listed and graded
+                // in the table, counted in neither engine's hit-rate.
             } else {
                 ++q_res;
                 if (p.correct)
@@ -2171,7 +2181,10 @@ void EquityAiTab::refresh_track_record() {
         const QDateTime made = QDateTime::fromString(p.created_at, Qt::ISODate);
         cell(r, 0, p.created_at.left(10), colors::TEXT_SECONDARY(), Qt::AlignLeft | Qt::AlignVCenter,
              made.isValid() ? double(made.toSecsSinceEpoch()) : std::numeric_limits<double>::quiet_NaN());
-        cell(r, 1, source_label(p.source), p.source == QLatin1String("fingpt") ? colors::CYAN() : colors::AMBER(),
+        cell(r, 1, source_label(p.source),
+             p.source == QLatin1String("fingpt")   ? colors::CYAN()
+             : p.source == QLatin1String("report") ? colors::INFO()
+                                                   : colors::AMBER(),
              Qt::AlignCenter);
         cell(r, 2,
              p.horizon_days == 1   ? "1d"

@@ -14,6 +14,7 @@
 #include "services/equity/EquityResearchModels.h"
 
 #include <QDate>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLocale>
@@ -215,6 +216,7 @@ struct FilingSection {
 
 struct Filing {
     QString form, filing_date, period, accession;
+    QString url; ///< the filing's index page on sec.gov
     FilingSection business, risk_factors, mdna;
     bool valid() const { return !form.isEmpty(); }
     QString cite() const { // "10-K filed 2026-02-25"
@@ -222,10 +224,56 @@ struct Filing {
     }
 };
 
+/// One slice of the year's revenue, as the company's annual report tags it.
+struct BreakdownRow {
+    QString label;
+    double value = kNaN;
+    double prior = kNaN; ///< the same slice a year earlier; NaN when not reported then
+    double growth_pct() const { return report::growth_pct(value, prior); }
+};
+
+/// Revenue cut one way — by segment, by product or by geography.
+struct Breakdown {
+    QString axis; ///< "segment" | "product" | "geography"
+    QString period, prior_period;
+    double coverage_pct = kNaN; ///< the rows' share of the year's revenue
+    QVector<BreakdownRow> rows; ///< largest first
+    QString title() const {
+        return axis == QLatin1String("geography") ? QStringLiteral("Revenue by geography")
+               : axis == QLatin1String("segment") ? QStringLiteral("Revenue by segment")
+                                                  : QStringLiteral("Revenue by product");
+    }
+    /// The largest slice's share of the rows, percent.
+    double top_share_pct() const {
+        double total = 0;
+        for (const auto& r : rows)
+            if (ok(r.value))
+                total += r.value;
+        return rows.isEmpty() || !(total > 0) ? kNaN : rows.first().value / total * 100.0;
+    }
+};
+
+/// A customer the filing says accounts for a disclosed share of revenue.
+struct Customer {
+    QString label; ///< as filed — usually anonymous ("Customer A")
+    double pct = kNaN;
+    QString scope; ///< the segment the share is of, when not the whole company
+    QString period;
+};
+
 struct Filings {
     Filing annual, quarterly;
     QString annual_error, quarterly_error;
+    QVector<Breakdown> breakdowns;
+    QVector<Customer> customers;
+    QString breakdown_source; ///< "10-K filed 2026-02-25"
     bool any() const { return annual.valid() || quarterly.valid(); }
+    const Breakdown* breakdown(const QString& axis) const {
+        for (const auto& b : breakdowns)
+            if (b.axis == axis)
+                return &b;
+        return nullptr;
+    }
 };
 
 inline Filings parse_filings(const QJsonObject& o) {
@@ -235,6 +283,7 @@ inline Filings parse_filings(const QJsonObject& o) {
         out.filing_date = f.value(QLatin1String("filing_date")).toString();
         out.period = f.value(QLatin1String("period")).toString();
         out.accession = f.value(QLatin1String("accession")).toString();
+        out.url = f.value(QLatin1String("url")).toString();
         const QJsonObject secs = f.value(QLatin1String("sections")).toObject();
         auto sec = [&secs](const char* k) {
             const QJsonObject s = secs.value(QLatin1String(k)).toObject();
@@ -253,6 +302,31 @@ inline Filings parse_filings(const QJsonObject& o) {
         out.quarterly = read(o.value(QLatin1String("quarterly")).toObject());
     out.annual_error = o.value(QLatin1String("annual_error")).toString();
     out.quarterly_error = o.value(QLatin1String("quarterly_error")).toString();
+    out.breakdown_source = o.value(QLatin1String("breakdown_source")).toString();
+    for (const auto& v : o.value(QLatin1String("revenue_breakdown")).toArray()) {
+        const QJsonObject b = v.toObject();
+        Breakdown bd;
+        bd.axis = b.value(QLatin1String("axis")).toString();
+        bd.period = b.value(QLatin1String("period")).toString();
+        bd.prior_period = b.value(QLatin1String("prior_period")).toString();
+        bd.coverage_pct = jnum(b, QStringLiteral("coverage_pct"));
+        for (const auto& rv : b.value(QLatin1String("rows")).toArray()) {
+            const QJsonObject r = rv.toObject();
+            BreakdownRow row{r.value(QLatin1String("label")).toString(), jnum(r, QStringLiteral("value")),
+                             jnum(r, QStringLiteral("prior"))};
+            if (!row.label.isEmpty() && ok(row.value) && row.value > 0)
+                bd.rows.append(row);
+        }
+        if (bd.rows.size() >= 2)
+            out.breakdowns.append(bd);
+    }
+    for (const auto& v : o.value(QLatin1String("customers")).toArray()) {
+        const QJsonObject c = v.toObject();
+        Customer cu{c.value(QLatin1String("label")).toString(), jnum(c, QStringLiteral("pct")),
+                    c.value(QLatin1String("scope")).toString(), c.value(QLatin1String("period")).toString()};
+        if (!cu.label.isEmpty() && ok(cu.pct) && cu.pct > 0)
+            out.customers.append(cu);
+    }
     return out;
 }
 
@@ -404,6 +478,86 @@ inline double estimate_drift_pct(const services::equity::EarningsAnalysis& a, co
     return kNaN;
 }
 
+// ── How the stock has behaved ───────────────────────────────────────────────
+
+struct RiskProfile {
+    int sessions = 0;             ///< daily returns the figures are taken over
+    double return_pct = kNaN;     ///< first close to last
+    double volatility_pct = kNaN; ///< standard deviation of daily returns, annualised
+    double max_drawdown_pct = kNaN; ///< deepest fall from a prior high, negative
+    double beta = kNaN;           ///< sensitivity of its daily returns to the benchmark's
+    double correlation = kNaN;    ///< of its daily returns with the benchmark's
+    int paired_sessions = 0;      ///< sessions both traded
+};
+
+/// Realised over the candles given (a year of daily bars). History, not a
+/// forecast of risk. Needs sixty returns; beta and correlation need sixty
+/// sessions on which both the stock and the benchmark traded.
+inline RiskProfile risk_profile(const QVector<services::equity::Candle>& stock,
+                                const QVector<services::equity::Candle>& bench) {
+    RiskProfile r;
+    QVector<QPair<QDate, double>> px;
+    for (const auto& c : stock)
+        if (c.close > 0)
+            px.append({c.date(), c.close});
+    if (px.size() < 61)
+        return r;
+    QVector<double> rets;
+    double peak = px.first().second, worst = 0.0;
+    for (int i = 1; i < px.size(); ++i) {
+        rets.append(px[i].second / px[i - 1].second - 1.0);
+        peak = std::max(peak, px[i].second);
+        worst = std::min(worst, px[i].second / peak - 1.0);
+    }
+    r.sessions = rets.size();
+    r.return_pct = (px.last().second / px.first().second - 1.0) * 100.0;
+    r.max_drawdown_pct = worst * 100.0;
+    double mean = 0;
+    for (double x : rets)
+        mean += x;
+    mean /= rets.size();
+    double var = 0;
+    for (double x : rets)
+        var += (x - mean) * (x - mean);
+    var /= rets.size() - 1;
+    r.volatility_pct = std::sqrt(var) * std::sqrt(252.0) * 100.0;
+
+    // Returns paired by session date: a day only one of them traded is no pair.
+    QHash<QDate, double> bclose;
+    for (const auto& c : bench)
+        if (c.close > 0)
+            bclose.insert(c.date(), c.close);
+    QVector<double> a, b;
+    for (int i = 1; i < px.size(); ++i) {
+        const double b1 = bclose.value(px[i].first, kNaN), b0 = bclose.value(px[i - 1].first, kNaN);
+        if (ok(b1) && ok(b0)) {
+            a.append(px[i].second / px[i - 1].second - 1.0);
+            b.append(b1 / b0 - 1.0);
+        }
+    }
+    r.paired_sessions = a.size();
+    if (a.size() >= 60) {
+        double ma = 0, mb = 0;
+        for (int i = 0; i < a.size(); ++i) {
+            ma += a[i];
+            mb += b[i];
+        }
+        ma /= a.size();
+        mb /= b.size();
+        double cov = 0, va = 0, vb = 0;
+        for (int i = 0; i < a.size(); ++i) {
+            cov += (a[i] - ma) * (b[i] - mb);
+            va += (a[i] - ma) * (a[i] - ma);
+            vb += (b[i] - mb) * (b[i] - mb);
+        }
+        if (vb > 0 && va > 0) {
+            r.beta = cov / vb;
+            r.correlation = cov / std::sqrt(va * vb);
+        }
+    }
+    return r;
+}
+
 // ── What the price implies ──────────────────────────────────────────────────
 
 struct ImpliedPrice {
@@ -460,6 +614,8 @@ struct Inputs {
     PeerStat peer_op_margin;
     PeerStat peer_growth;
     InsiderFlow insiders;
+    Filings filings; ///< for the concentration findings
+    RiskProfile risk;
     bool has_technicals = false;
     bool technicals_rated = false;
     services::equity::TechSignal technical_signal = services::equity::TechSignal::Neutral;
@@ -625,6 +781,29 @@ inline QVector<Finding> derive_findings(const Inputs& in) {
         else if (up >= 15.0)
             add(Tone::Note, "VALUATION", QStringLiteral("Analysts' targets sit well above the price"), d);
     }
+
+    // Concentration, as the annual report discloses it.
+    for (const auto& c : in.filings.customers)
+        if (c.pct >= 10.0) {
+            add(Tone::Risk, "CONCENTRATION", QStringLiteral("Depends on a few customers"),
+                QStringLiteral("The annual report names a customer at %1 of %2 revenue (10% or more is disclosed as a concentration).")
+                    .arg(p1(c.pct), c.scope.isEmpty() ? QStringLiteral("total") : c.scope));
+            break; // the largest says it; the table lists the rest
+        }
+    for (const char* axis : {"segment", "product"})
+        if (const Breakdown* b = in.filings.breakdown(QLatin1String(axis))) {
+            const double share = b->top_share_pct();
+            if (ok(share) && share >= 60.0)
+                add(Tone::Note, "CONCENTRATION", QStringLiteral("One line of business dominates"),
+                    QStringLiteral("%1 is %2 of revenue in the year to %3.").arg(b->rows.first().label, p1(share), b->period));
+            break; // one cut is enough; segment is preferred over product
+        }
+
+    // How it has traded.
+    if (in.risk.sessions >= 60 && ok(in.risk.max_drawdown_pct) && in.risk.max_drawdown_pct <= -30.0)
+        add(Tone::Risk, "MARKET RISK", QStringLiteral("Deep drawdown within the year"),
+            QStringLiteral("The shares fell %1 from a high at their worst over the last %2 sessions (30% or more counts as deep).")
+                .arg(p1(std::abs(in.risk.max_drawdown_pct))).arg(in.risk.sessions));
 
     // Sentiment: short interest, insiders, the technical picture.
     if (ok(in.info.short_pct_of_float)) {

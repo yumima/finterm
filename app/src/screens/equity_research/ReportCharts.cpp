@@ -352,10 +352,12 @@ QImage render_hbars(const HBarSpec& spec, const Palette& pal, QSize logical, qre
     }
     p.setFont(font(pal, -1));
     const QFontMetrics fm(p.font());
+    // Measured in bold: the highlighted row is drawn bold and must still fit.
+    const QFontMetrics bold_fm(font(pal, -1, true));
     int label_w = 0;
     for (const auto& l : spec.labels)
-        label_w = std::max(label_w, fm.horizontalAdvance(l));
-    label_w += 8;
+        label_w = std::max(label_w, bold_fm.horizontalAdvance(l));
+    label_w += 10;
     const int value_w = 58;
     const double x0 = body.left() + label_w, x1 = body.right() - value_w;
     auto x_at = [&](double v) { return x0 + (v - rg.lo) / (rg.hi - rg.lo) * (x1 - x0); };

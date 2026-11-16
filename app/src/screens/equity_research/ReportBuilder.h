@@ -53,6 +53,7 @@ struct ReportDoc {
     BusinessNarrative business;
     SummaryNarrative summary;
     QString narrative_note; ///< why the prose is absent, or which model wrote it
+    QString peers_basis;    ///< where the peer group comes from, in words
     QVector<Source> sources;
 };
 

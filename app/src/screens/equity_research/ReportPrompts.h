@@ -22,9 +22,87 @@
 
 namespace finterm::screens::report {
 
+/// "Flat" in the three-month reading: within this percent of the price at the
+/// call. Must equal ai_forecast::kReportFlatBandPct, which grades it (pinned
+/// by test_report_model).
+inline constexpr double kOutlookFlatBandPct = 5.0;
+
 struct Headline {
     QString title, publisher, date;
 };
+
+/// Whether a headline is about this company. The vendor's per-symbol feed
+/// mixes in market-wide stories; a report on Walmart is not the place for
+/// them. A headline counts when it names the ticker or the company's own
+/// name. A company better known by another name than either (Alphabet's
+/// "Google" is caught; others may not be) can lose a story — the price of
+/// not listing other companies' news as its own.
+inline bool headline_mentions(const QString& title, const QString& symbol, const QString& company) {
+    auto word_at = [&title](qsizetype at, qsizetype len) {
+        const bool left = at == 0 || !title[at - 1].isLetterOrNumber();
+        const qsizetype end = at + len;
+        return left && (end >= title.size() || !title[end].isLetterOrNumber());
+    };
+    // The ticker, as tickers are written: upper case, a word of its own. A
+    // short one, or one that is also an English word (NOW, ALL, ON), counts
+    // only where it is marked as a ticker — "(NOW)", "$NOW", "NYSE: NOW".
+    static const QStringList words = {"NOW", "ALL", "ON", "IT", "ARE", "FOR", "ONE", "OUT", "BIG", "CAN", "HAS",
+                                      "SO",  "GO",  "BE", "AI", "DAY", "KEY", "LOW", "NEW", "OLD", "RUN", "SEE",
+                                      "TWO", "WELL", "REAL", "FAST", "CASH", "GOLD", "LIFE", "LOVE", "OPEN", "PLAY",
+                                      "SAVE", "TRUE", "COST", "EVER", "NICE", "RARE", "SAFE", "EAT",  "FUN",  "HE"};
+    if (!symbol.isEmpty()) {
+        const bool needs_marking = symbol.size() <= 2 || words.contains(symbol.toUpper());
+        for (qsizetype at = 0; (at = title.indexOf(symbol.toUpper(), at, Qt::CaseSensitive)) >= 0; at += symbol.size()) {
+            if (!word_at(at, symbol.size()))
+                continue;
+            const QChar before = at > 0 ? title[at - 1] : QChar();
+            const bool marked = before == QLatin1Char('(') || before == QLatin1Char('$') ||
+                                (at >= 2 && title[at - 1] == QLatin1Char(' ') && title[at - 2] == QLatin1Char(':'));
+            if (!needs_marking || marked)
+                return true;
+        }
+    }
+    // The company's own name: its first word (the second after "The"), as a
+    // capitalised word of its own — "Target" the retailer, not a "price target".
+    QString name = company.section(QLatin1Char(' '), 0, 0);
+    if (name.compare(QLatin1String("the"), Qt::CaseInsensitive) == 0)
+        name = company.section(QLatin1Char(' '), 1, 1);
+    name.remove(QLatin1Char(',')).remove(QLatin1Char('.'));
+    // A short or generic first word ("First", "General", "American") would match anything.
+    static const QStringList generic = {"first", "general", "american", "national", "united", "international",
+                                        "global", "new", "bank", "group", "home"};
+    if (name.size() >= 4 && !generic.contains(name.toLower())) {
+        const QString written = name.left(1).toUpper() + name.mid(1);
+        for (qsizetype at = 0; (at = title.indexOf(written, at, Qt::CaseSensitive)) >= 0; at += written.size()) {
+            const bool left = at == 0 || !title[at - 1].isLetterOrNumber();
+            const qsizetype end = at + written.size();
+            // "Walmart's" and "Walmart" both count; "Targeted" does not.
+            const bool right = end >= title.size() || !title[end].isLetter() ||
+                               (title[end] == QLatin1Char('s') && (end + 1 >= title.size() || !title[end + 1].isLetter()));
+            if (left && right)
+                return true;
+        }
+    }
+    // A name the ticker abbreviates ("Google" for GOOGL): a capitalised word
+    // that begins with a long ticker. Five letters, so META does not claim "Metals".
+    if (symbol.size() >= 5) {
+        const QString stem = symbol.left(1).toUpper() + symbol.mid(1).toLower();
+        for (qsizetype at = 0; (at = title.indexOf(stem, at, Qt::CaseSensitive)) >= 0; at += stem.size())
+            if (at == 0 || !title[at - 1].isLetterOrNumber())
+                return true;
+    }
+    return false;
+}
+
+/// The headlines that are about the company; all of them when none can be
+/// told apart (a name too generic to match on).
+inline QVector<Headline> relevant_headlines(const QVector<Headline>& all, const QString& symbol, const QString& company) {
+    QVector<Headline> out;
+    for (const auto& h : all)
+        if (headline_mentions(h.title, symbol, company))
+            out.append(h);
+    return out.isEmpty() ? all : out;
+}
 
 /// The DATA wrapper both prompts use; the model is told nothing outside it exists.
 inline QString data_fence(const QString& body) {
@@ -59,11 +137,31 @@ inline constexpr int kPromptQuarterChars = 4500;
 inline constexpr int kPromptAnnualMdnaChars = 3000;
 inline constexpr int kPromptRiskChars = 3500;
 
+/// Revenue by segment / product / geography and the disclosed customers, as
+/// lines the model may quote from.
+inline QString breakdown_block(const Filings& f) {
+    QStringList lines;
+    for (const auto& b : f.breakdowns) {
+        QStringList rows;
+        for (const auto& r : b.rows)
+            rows << QStringLiteral("%1 %2%3").arg(r.label, compact(r.value),
+                                                 ok(r.growth_pct()) ? QStringLiteral(" (%1 on the year before)").arg(sp1(r.growth_pct()))
+                                                                    : QString());
+        lines << QStringLiteral("%1, year ended %2: %3").arg(b.title(), b.period, rows.join(QStringLiteral("; ")));
+    }
+    for (const auto& c : f.customers)
+        lines << QStringLiteral("%1 accounted for %2 of %3 revenue").arg(c.label, p1(c.pct), c.scope.isEmpty() ? QStringLiteral("total") : c.scope);
+    return lines.join(QLatin1Char('\n'));
+}
+
 inline QString business_prompt(const QString& symbol, const QString& company, const QString& profile,
                                const Filings& filings, const QVector<Headline>& news) {
     QStringList parts;
     if (!profile.trimmed().isEmpty())
         parts << QStringLiteral("## Company profile\n") + profile.trimmed();
+    const QString cuts = breakdown_block(filings);
+    if (!cuts.isEmpty())
+        parts << QStringLiteral("## Revenue as the annual report breaks it down (%1)\n%2").arg(filings.breakdown_source, cuts);
     auto add = [&parts](const QString& heading, const Filing& f, const FilingSection& s, int limit) {
         if (!s.text.isEmpty())
             parts << QStringLiteral("## %1 — %2\n%3").arg(heading, f.cite(), excerpt(s.text, limit));
@@ -133,11 +231,13 @@ inline QString summary_prompt(const QString& symbol, const QString& company, con
                "  \"bull_case\": [\"3 short sentences: the strongest reasons to own it, each tied to a figure above\"],\n"
                "  \"bear_case\": [\"3 short sentences: the strongest reasons for caution, each tied to a figure above\"],\n"
                "  \"watch\": [\"3 things to watch in the next report, each one sentence\"],\n"
-               "  \"direction\": \"up\" or \"flat\" or \"down\" — your reading of the next three months,\n"
+               "  \"direction\": \"up\" or \"flat\" or \"down\" — your reading of the share price three months from "
+               "now against today's; \"flat\" means within %4 either way,\n"
                "  \"rationale\": \"one sentence saying which of the figures above decides the direction\"\n"
                "}\n"
                "Plain words, no markdown.")
-        .arg(company.isEmpty() ? symbol : company, symbol, data_fence(parts.join(QStringLiteral("\n\n"))));
+        .arg(company.isEmpty() ? symbol : company, symbol, data_fence(parts.join(QStringLiteral("\n\n"))),
+             QStringLiteral("%1 percent").arg(kOutlookFlatBandPct, 0, 'f', 0));
 }
 
 // ── replies ─────────────────────────────────────────────────────────────────

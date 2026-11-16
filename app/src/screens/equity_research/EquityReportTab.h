@@ -80,6 +80,7 @@ class EquityReportTab : public QWidget {
     void maybe_write_narrative(bool force = false);
     void write_sections(QVector<Section> todo, std::shared_ptr<QStringList> problems, quint64 epoch);
     void run_model(const QString& prompt, int max_tokens, std::function<void(bool ok, QString reply, QString model)> done);
+    void record_direction(const QString& model);
     QString export_path(const QString& extension, const QString& filter);
     void export_pdf();
     void export_html();
@@ -93,6 +94,7 @@ class EquityReportTab : public QWidget {
     int narrative_pending_ = 0;
     QString narrative_model_;
     QDateTime narrative_written_at_;
+    int figures_removed_ = 0; ///< by number grounding, across this report's sections
     QString narrative_problem_;
 
     ReportView* view_ = nullptr;

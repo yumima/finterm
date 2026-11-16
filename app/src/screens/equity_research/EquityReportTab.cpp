@@ -3,6 +3,8 @@
 
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
+#include "core/util/BarTime.h"
+#include "storage/repositories/AiPredictionRepository.h"
 #include "screens/equity_research/EquityPeersTab.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/equity/ReportService.h"
@@ -38,6 +40,8 @@ using QState = services::query::QueryStore::State;
 namespace {
 
 const QString kBenchmark = QStringLiteral("SPY");
+// "The next three months", in calendar days — what the summary prompt asks about.
+constexpr int kOutlookDays = 90;
 const QString kImageScheme = QStringLiteral("report");
 
 // Content width: wide enough for two charts side by side, never so wide a
@@ -266,14 +270,26 @@ void EquityReportTab::set_symbol(const QString& symbol) {
 
     // A basket of index funds is the "no basket" answer, not a peer group.
     const QStringList peers = EquityPeersTab::default_peers(sym);
+    auto take_peers = [this](const QVariant& v) {
+        doc_.peers = v.value<QVector<eq::PeerData>>();
+        return !doc_.peers.isEmpty();
+    };
     if (peers == QStringList{QStringLiteral("SPY"), QStringLiteral("QQQ"), QStringLiteral("DIA")}) {
-        parts_[Peers].state = Source::State::None;
-        parts_[Peers].detail = QStringLiteral("no peer basket is kept for this ticker");
+        // Nobody picked peers for this ticker: its neighbours by size in its
+        // own industry stand in, and the report says that is what they are.
+        eq::fetch_industry_peers(sym, this, [this, epoch, sym, bind, take_peers](bool ok, QStringList found, QString text) {
+            if (epoch != epoch_)
+                return;
+            if (!ok) {
+                mark(Peers, Source::State::None, text.isEmpty() ? QStringLiteral("no industry peers found") : text);
+                return;
+            }
+            doc_.peers_basis =
+                QStringLiteral("Peers are the companies nearest it in size in its Yahoo industry (%1), not a hand-picked group.").arg(text);
+            eq::EquityResearchService::instance().subscribe_peers(this, sym, found, bind(Peers, take_peers));
+        });
     } else {
-        svc.subscribe_peers(this, sym, peers, bind(Peers, [this](const QVariant& v) {
-            doc_.peers = v.value<QVector<eq::PeerData>>();
-            return !doc_.peers.isEmpty();
-        }));
+        svc.subscribe_peers(this, sym, peers, bind(Peers, take_peers));
     }
 
     eq::fetch_report_extras(sym, this, [this, epoch](bool ok, QJsonObject o, QString err) {
@@ -348,8 +364,35 @@ void EquityReportTab::run_model(const QString& prompt, int max_tokens,
                 done(false, resp.error.isEmpty() ? QStringLiteral("the model returned nothing") : resp.error, QString());
                 return;
             }
+            self->figures_removed_ += resp.figures_removed.size();
             done(true, resp.content, resp.model_used);
         });
+}
+
+void EquityReportTab::record_direction(const QString& model) {
+    // The reading goes on the same record as the terminal's other direction
+    // calls, to be graded against the real close when its three months are
+    // up — an outlook nobody ever checks is not worth printing. One a day.
+    const QString dir = doc_.summary.direction;
+    if (dir.isEmpty() || !(doc_.info.current_price > 0))
+        return;
+    // created_at is UTC and exists_on_day() compares its date part, so "today"
+    // is the UTC day — a local date would miss every evening in the Americas.
+    const QString today = QDateTime::currentDateTimeUtc().date().toString(Qt::ISODate);
+    auto& repo = AiPredictionRepository::instance();
+    if (repo.exists_on_day(symbol_, today, QStringLiteral("report")))
+        return;
+    AiPrediction p;
+    p.ticker = symbol_;
+    p.created_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate); // UTC: the store sorts on the raw string
+    p.model = model.isEmpty() ? finterm::ai_chat::LlmService::instance().active_model() : model;
+    p.source = QStringLiteral("report");
+    p.horizon_days = kOutlookDays;
+    p.resolve_date = core::bartime::market_today_et().addDays(kOutlookDays).toString(Qt::ISODate);
+    p.price_at_pred = doc_.info.current_price;
+    p.direction = dir;
+    p.rationale = doc_.summary.rationale;
+    repo.insert(p);
 }
 
 void EquityReportTab::maybe_write_narrative(bool force) {
@@ -380,6 +423,7 @@ void EquityReportTab::maybe_write_narrative(bool force) {
     }
     narrative_model_.clear();
     narrative_written_at_ = {};
+    figures_removed_ = 0;
     // One after the other, the short one first: a local model answers one
     // request at a time, and the second of two sent together spends its two
     // minutes waiting in the queue. The budgets leave room for a model that
@@ -437,6 +481,8 @@ void EquityReportTab::write_sections(QVector<Section> todo, std::shared_ptr<QStr
             return;
         if (ok && step.apply(reply)) {
             eq::keep_narrative(step.key, symbol_, reply, model);
+            if (step.key == QLatin1String("summary"))
+                record_direction(model);
             done(model, QDateTime::currentDateTime());
             return;
         }
@@ -496,7 +542,13 @@ void EquityReportTab::render() {
                 .arg(narrative_model_.isEmpty() ? QStringLiteral("the configured language model") : narrative_model_,
                      narrative_written_at_.isValid()
                          ? QStringLiteral(" at %1").arg(narrative_written_at_.toString(QStringLiteral("HH:mm 'on' d MMM")))
-                         : QString());
+                         : QString()) +
+            (figures_removed_ > 0 ? QStringLiteral(" %1 figure%2 the model wrote could not be found in that material and "
+                                                   "%3 removed.")
+                                        .arg(figures_removed_)
+                                        .arg(figures_removed_ == 1 ? QString() : QStringLiteral("s"),
+                                             figures_removed_ == 1 ? QStringLiteral("was") : QStringLiteral("were"))
+                                  : QString());
     else
         doc_.narrative_note = QStringLiteral("The written sections appear once the figures have loaded.");
     update_status();

@@ -1318,6 +1318,51 @@ def get_financials(symbol):
         return {"error": str(e), "symbol": symbol}
 
 
+def get_industry_peers(symbol, count=5):
+    """The companies nearest `symbol` in size within its Yahoo industry — a
+    peer group for a ticker nobody has hand-picked one for.
+
+    Yahoo ranks an industry's companies by market weight; the neighbours on
+    either side of the symbol are taken, so a mid-cap is compared with
+    mid-caps rather than with the industry's giant. Returns {symbol, industry,
+    peers: [...]}, or {error} when Yahoo names no industry (a fund, an index).
+    """
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        return {"error": "no symbol given"}
+    try:
+        info = yf.Ticker(symbol).get_info() or {}
+        key = info.get("industryKey")
+        if not key:
+            return {"error": "Yahoo lists no industry for this symbol", "symbol": symbol}
+        top = yf.Industry(key).top_companies
+    except Exception as e:
+        return {"error": f"Yahoo refused or did not answer ({str(e)[:120]})",
+                "transient": _is_refusal_text(str(e)), "symbol": symbol}
+    names = [str(s).upper() for s in (list(top.index) if top is not None else [])]
+    peers = nearest_in_ranking(names, symbol, int(count))
+    if not peers:
+        return {"error": "Yahoo lists no other companies in this industry", "symbol": symbol}
+    return {"symbol": symbol, "industry": str(info.get("industry") or key), "peers": peers}
+
+
+def nearest_in_ranking(names, symbol, count):
+    """`count` neighbours of `symbol` in a ranked list, taken alternately from
+    just above and just below it; the top of the list when it is not ranked."""
+    others = [n for n in names if n != symbol]
+    if symbol not in names:
+        return others[:count]
+    i = names.index(symbol)
+    above, below = names[:i][::-1], names[i + 1:]
+    out = []
+    while len(out) < count and (above or below):
+        if above:
+            out.append(above.pop(0))
+        if below and len(out) < count:
+            out.append(below.pop(0))
+    return out
+
+
 # ── Report extras (ER "Report" tab) ────────────────────────────────────────
 _REPORT_QUARTER_LINES = {
     # out key: (statement, aliases)
@@ -4986,6 +5031,8 @@ _CACHE_TTL = {
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     # quarterly statements and rating changes — move a few times a quarter
     "report_extras": 600,
+    # an industry's membership and ranking move over months
+    "industry_peers": 3600,
     "multiple_ratios": 600, "ipo_extras": 600,
     # earnings_dates carries the reported figure for the quarter that just
     # printed, which Yahoo fills in within hours of the call — the tile is
@@ -5397,6 +5444,9 @@ def _daemon_dispatch_inner(action, payload):
         return get_extended_hours_quotes(symbols)
     if action == "index_futures":
         return get_index_futures((payload or {}).get("pairs") or [])
+    if action == "industry_peers":
+        p = payload or {}
+        return get_industry_peers(p.get("symbol"), p.get("count", 5))
     if action == "report_extras":
         return get_report_extras((payload or {}).get("symbol"))
     if action == "futures_curve":

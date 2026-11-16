@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
@@ -24,6 +25,11 @@ void fetch_report_extras(const QString& symbol, QObject* ctx, ReportJsonCallback
 /// Slow the first time (a large filing takes half a minute to split); a copy
 /// is kept for a day — filings change a few times a year.
 void fetch_report_filings(const QString& symbol, QObject* ctx, ReportJsonCallback cb);
+
+/// The companies nearest `symbol` in size within its Yahoo industry — a peer
+/// group for a ticker nobody has hand-picked one for.
+void fetch_industry_peers(const QString& symbol, QObject* ctx,
+                          std::function<void(bool ok, QStringList peers, QString industry_or_error)> cb);
 
 /// A section the model wrote for this company earlier today.
 ///

@@ -1,9 +1,12 @@
 // ER Report: the figures it derives, the findings it reads off them, and the
 // prompts/parsers around the model's prose.
+#include "screens/equity_research/AiForecastMath.h"
 #include "screens/equity_research/ReportModel.h"
 #include "screens/equity_research/ReportPrompts.h"
 
+#include <QDateTime>
 #include <QJsonDocument>
+#include <QTimeZone>
 #include <QtTest>
 
 using namespace finterm::screens::report;
@@ -261,6 +264,44 @@ class TestReportModel : public QObject {
         QVERIFY(s.contains("\"direction\""));
     }
 
+    void headlines_about_the_company() {
+        QVERIFY(headline_mentions("Walmart vs. Target: what to watch", "WMT", "Walmart Inc."));
+        QVERIFY(headline_mentions("A Town Near Walmart's Hometown", "WMT", "Walmart Inc."));
+        QVERIFY(headline_mentions("Is PLTR Stock a Buy?", "PLTR", "Palantir Technologies Inc."));
+        QVERIFY(headline_mentions("Retailer (WMT) raises guidance", "WMT", ""));
+        QVERIFY(!headline_mentions("Eli Lilly is trouncing Nvidia", "WMT", "Walmart Inc."));
+        QVERIFY(headline_mentions("Ford recalls trucks", "F", "Ford Motor Company"));
+        QVERIFY(!headline_mentions("Fed keeps rates steady", "F", "Ford Motor Company"));
+        // A name that is also a word: the retailer, not a price target.
+        QVERIFY(headline_mentions("Target's AI Commerce Partnerships", "TGT", "Target Corporation"));
+        QVERIFY(!headline_mentions("Analyst raises price target on Nvidia", "TGT", "Target Corporation"));
+        QVERIFY(!headline_mentions("Targeted ads are back", "TGT", "Target Corporation"));
+        // A ticker that is also a word counts only where it is marked as one.
+        QVERIFY(!headline_mentions("Why NOW Is the Time to Buy Bonds", "NOW", "ServiceNow, Inc."));
+        QVERIFY(headline_mentions("ServiceNow (NOW) beats estimates", "NOW", "ServiceNow, Inc."));
+        QVERIFY(headline_mentions("Shares of $ON jump", "ON", "ON Semiconductor"));
+        QVERIFY(!headline_mentions("American consumers keep spending", "AAL", "American Airlines Group")); // too generic
+        QVERIFY(headline_mentions("The Trade Desk falls", "TTD", "The Trade Desk, Inc."));
+        // A name the ticker abbreviates.
+        QVERIFY(headline_mentions("Google unveils a new model", "GOOGL", "Alphabet Inc."));
+        QVERIFY(!headline_mentions("Metals rally on China demand", "META", "Meta Platforms, Inc."));
+
+        const QVector<Headline> all = {{"Eli Lilly is trouncing Nvidia", "", ""}, {"Walmart lifts outlook", "", ""}};
+        QCOMPARE(relevant_headlines(all, "WMT", "Walmart Inc.").size(), 1);
+        QCOMPARE(relevant_headlines(all, "ZZZ", "Zeta").size(), 2); // none can be told apart: all kept
+    }
+
+    void outlook_band_is_stated_and_graded_alike() {
+        // The word the model is asked for and the word it is graded against mean one thing.
+        QCOMPARE(kOutlookFlatBandPct, finterm::screens::ai_forecast::kReportFlatBandPct);
+        QCOMPARE(finterm::screens::ai_forecast::flat_band_for("report"), 5.0);
+        QCOMPARE(finterm::screens::ai_forecast::flat_band_for("quant"), finterm::screens::ai_forecast::kFlatBandPct);
+        QCOMPARE(finterm::screens::ai_forecast::bucket_direction(2.0, finterm::screens::ai_forecast::flat_band_for("report")),
+                 QStringLiteral("flat")); // a +2% quarter is a flat quarter
+        const QString s = summary_prompt("X", "X Corp", "Share price: $1.00", {}, {});
+        QVERIFY(s.contains("\"flat\" means within 5 percent either way"));
+    }
+
     void replies_are_parsed_tolerantly() {
         const QString reply = QStringLiteral("Here you go:\n```json\n{\"business_model\": \"Sells  chips {to} clouds.\", "
                                              "\"segments\": [\"Data Center: AI demand\", \"\", 7], \"customers\": [\"Cloud providers\", \"OEMs\"], "
@@ -286,6 +327,76 @@ class TestReportModel : public QObject {
         QVERIFY(parse_summary(R"({"summary":"x","direction":"up 12%"})").direction.isEmpty());
         QVERIFY(parse_summary(R"({"summary":"x","direction":"bullish"})").direction.isEmpty());
         QVERIFY(!parse_summary(R"({"direction":"up"})").valid);
+    }
+
+    void breakdowns_and_customers_parse() {
+        const auto doc = QJsonDocument::fromJson(R"({"symbol":"NVDA","breakdown_source":"10-K filed 2026-02-25",
+            "annual":{"form":"10-K","filing_date":"2026-02-25","url":"https:\/\/www.sec.gov\/x","sections":{}},
+            "revenue_breakdown":[
+              {"axis":"product","period":"2026-01-25","prior_period":"2025-01-26","coverage_pct":100.0,
+               "rows":[{"label":"Compute","value":160,"prior":100},{"label":"Gaming","value":40,"prior":null},
+                       {"label":"","value":5},{"label":"Bad","value":null}]},
+              {"axis":"geography","period":"2026-01-25","rows":[{"label":"Only one","value":1}]}],
+            "customers":[{"label":"Customer one","pct":22.0,"scope":"Compute","period":"2026-01-25"},
+                         {"label":"Nobody","pct":null}]})");
+        const Filings f = parse_filings(doc.object());
+        QCOMPARE(f.annual.url, QStringLiteral("https://www.sec.gov/x"));
+        QCOMPARE(f.breakdowns.size(), 1); // a one-row cut is not a breakdown
+        const Breakdown* b = f.breakdown("product");
+        QVERIFY(b && !f.breakdown("geography"));
+        QCOMPARE(b->rows.size(), 2);
+        QCOMPARE(b->rows[0].growth_pct(), 60.0);
+        QVERIFY(std::isnan(b->rows[1].growth_pct())); // not reported the year before: no growth rate
+        QCOMPARE(b->top_share_pct(), 80.0);
+        QCOMPARE(b->title(), QStringLiteral("Revenue by product"));
+        QCOMPARE(f.customers.size(), 1);
+
+        const QString block = breakdown_block(f);
+        QVERIFY(block.contains("Revenue by product, year ended 2026-01-25: Compute 160 (+60.0% on the year before); Gaming 40.0"));
+        QVERIFY(block.contains("Customer one accounted for 22.0% of Compute revenue"));
+
+        Inputs in;
+        in.filings = f;
+        const auto found = derive_findings(in);
+        QVERIFY(has(found, Tone::Risk, "few customers"));
+        QVERIFY(has(found, Tone::Note, "dominates"));
+    }
+
+    void risk_profile_is_realised_history() {
+        namespace eq = finterm::services::equity;
+        QVector<eq::Candle> stock, bench;
+        const qint64 day0 = QDateTime(QDate(2026, 1, 5), QTime(5, 0), QTimeZone::UTC).toSecsSinceEpoch();
+        double s = 100.0, b = 400.0;
+        for (int i = 0; i < 121; ++i) {
+            eq::Candle cs, cb;
+            cs.timestamp = cb.timestamp = day0 + qint64(i) * 86400;
+            // The benchmark alternates +1% / −0.5%; the stock moves exactly twice as far.
+            const double rb = i == 0 ? 0.0 : (i % 2 ? 0.01 : -0.005);
+            b *= 1.0 + rb;
+            s *= 1.0 + 2.0 * rb;
+            cs.close = s;
+            cb.close = b;
+            stock.append(cs);
+            bench.append(cb);
+        }
+        const RiskProfile r = risk_profile(stock, bench);
+        QCOMPARE(r.sessions, 120);
+        QCOMPARE(r.paired_sessions, 120);
+        QVERIFY(std::abs(r.beta - 2.0) < 1e-9);
+        QVERIFY(std::abs(r.correlation - 1.0) < 1e-9);
+        QVERIFY(std::abs(r.return_pct - (s / 100.0 - 1.0) * 100.0) < 1e-9);
+        QVERIFY(std::abs(r.max_drawdown_pct - (-1.0)) < 1e-9); // each down day is 1% off the high before it
+        QVERIFY(std::abs(r.volatility_pct - 0.015 * std::sqrt(120.0 / 119.0) * std::sqrt(252.0) * 100.0) < 1e-6);
+
+        // Too short a history says nothing; no benchmark leaves beta absent, not zero.
+        QCOMPARE(risk_profile(stock.mid(0, 40), bench).sessions, 0);
+        const RiskProfile alone = risk_profile(stock, {});
+        QVERIFY(alone.sessions == 120 && std::isnan(alone.beta) && std::isnan(alone.correlation));
+
+        Inputs in;
+        in.risk = r;
+        in.risk.max_drawdown_pct = -42.0;
+        QVERIFY(has(derive_findings(in), Tone::Risk, "drawdown"));
     }
 
     void filings_parse() {

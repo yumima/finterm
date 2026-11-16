@@ -26,6 +26,15 @@ namespace finterm::screens::ai_forecast {
 /// +0.4% that bucketed to "flat", and marked wrong for landing where it said.
 inline constexpr double kFlatBandPct = 1.0;
 
+/// The Report tab's reading is over three months, where a 1% band would call
+/// almost every quarter a move: "flat" there means within this of the price
+/// at the call. The summary prompt states the same figure, so the word the
+/// model chose and the word it is graded against mean one thing.
+inline constexpr double kReportFlatBandPct = 5.0;
+inline double flat_band_for(const QString& source) {
+    return source == QLatin1String("report") ? kReportFlatBandPct : kFlatBandPct;
+}
+
 /// Beyond this ratio to the current price, a "forecast" is a slip rather than
 /// a call: a doubling on the upside, or its mirror, a halving on the downside.
 ///

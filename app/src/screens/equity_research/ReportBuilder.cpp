@@ -232,6 +232,8 @@ Inputs make_inputs(const ReportDoc& d) {
         in.peer_growth = stat_of(d, QStringLiteral("Revenue growth"), &eq::PeerData::revenue_growth, 100.0);
     }
     in.insiders = d.insiders;
+    in.filings = d.filings;
+    in.risk = risk_profile(d.candles, d.bench);
     in.has_technicals = d.has_technicals;
     in.technicals_rated = d.has_technicals && d.technicals.rated;
     in.technical_signal = d.technicals.overall_signal;
@@ -243,7 +245,7 @@ QVector<Headline> headlines(const ReportDoc& d) {
     for (const auto& n : d.news)
         if (!n.title.trimmed().isEmpty())
             out.append({n.title, n.publisher, n.published_date});
-    return out;
+    return relevant_headlines(out, d.symbol, d.info.company_name);
 }
 
 QString figures_block(const ReportDoc& d) {
@@ -343,6 +345,17 @@ QString figures_block(const ReportDoc& d) {
     }
     if (ok(d.info.short_pct_of_float))
         add(QStringLiteral("Short interest"), pct(as_pct(d.info.short_pct_of_float)) + QStringLiteral(" of float"));
+    const QString cuts = breakdown_block(d.filings);
+    if (!cuts.isEmpty())
+        L << cuts;
+    const RiskProfile risk = risk_profile(d.candles, d.bench);
+    if (risk.sessions >= 60) {
+        L << QStringLiteral("Share price over the last %1 sessions: %2, annualised volatility %3, deepest fall from a high %4")
+                 .arg(risk.sessions)
+                 .arg(spct(risk.return_pct), pct(risk.volatility_pct), pct(std::abs(risk.max_drawdown_pct)));
+        if (ok(risk.beta))
+            L << QStringLiteral("Beta to %1 over the same period: %2").arg(d.bench_symbol, num(risk.beta, 2));
+    }
     return L.join(QLatin1Char('\n'));
 }
 
@@ -444,6 +457,10 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
                       .arg(t.value.toHtmlEscaped(), h.c(t.sub_color), t.sub.isEmpty() ? QStringLiteral("&nbsp;") : t.sub.toHtmlEscaped()));
         h.raw(QStringLiteral("</tr></table>"));
     }
+    if (!d.info.quote_type.isEmpty() && d.info.quote_type.compare(QLatin1String("EQUITY"), Qt::CaseInsensitive) != 0)
+        h.note(QStringLiteral("%1 is listed as %2, not an operating company: it files no annual report and has no earnings or "
+                              "statements of its own, so most of this report's sections have nothing to show.")
+                   .arg(d.symbol, d.info.quote_type.toLower()));
     if (mixed_currency(d))
         h.note(QStringLiteral("The shares are quoted in %1; the company reports in %2. Statement figures below are in %2 and are "
                               "not converted.")
@@ -547,6 +564,44 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
         h.note(d.narrative_note);
     }
 
+    if (!d.filings.breakdowns.isEmpty()) {
+        // Segment before product (one of them), then geography: two charts.
+        QVector<const Breakdown*> show;
+        if (const auto* b = d.filings.breakdown(QStringLiteral("segment")))
+            show.append(b);
+        else if (const auto* b2 = d.filings.breakdown(QStringLiteral("product")))
+            show.append(b2);
+        if (show.size() == 1 && show.first()->axis == QLatin1String("segment") && show.first()->rows.size() <= 3)
+            if (const auto* b3 = d.filings.breakdown(QStringLiteral("product")))
+                show.append(b3); // three segments say little; the product lines say more
+        if (const auto* g = d.filings.breakdown(QStringLiteral("geography")); g && show.size() < 2)
+            show.append(g);
+        QStringList cells;
+        for (const Breakdown* b : show) {
+            HBarSpec hb;
+            hb.title = b->title();
+            hb.note = QStringLiteral("Year ended %1 · change on the year before in brackets").arg(b->period);
+            hb.fmt = money;
+            hb.highlight = 0;
+            for (const auto& r : b->rows) {
+                hb.labels << (ok(r.growth_pct()) ? QStringLiteral("%1 (%2)").arg(r.label, spct(r.growth_pct(), 0)) : r.label);
+                hb.values.append(r.value);
+            }
+            cells << h.img(QStringLiteral("cut_") + b->axis,
+                           render_hbars(hb, pal, QSize(show.size() == 1 ? width : h.half(), 62 + 26 * b->rows.size()), dpr));
+        }
+        h.row(cells);
+        h.note(QStringLiteral("As tagged in the %1; each cut adds up to the year's revenue.").arg(d.filings.breakdown_source));
+    }
+    if (!d.filings.customers.isEmpty()) {
+        h.sub(QStringLiteral("CUSTOMERS THE ANNUAL REPORT SINGLES OUT"));
+        QVector<QStringList> rows;
+        for (const auto& c : d.filings.customers)
+            rows.append({c.label, pct(c.pct, 0), c.scope.isEmpty() ? QStringLiteral("total revenue") : c.scope + QStringLiteral(" revenue")});
+        h.table({QStringLiteral("CUSTOMER, AS FILED"), QStringLiteral("SHARE"), QStringLiteral("OF")}, rows);
+        h.note(QStringLiteral("A company must disclose any customer at 10% or more of revenue; it need not name it."));
+    }
+
     // ── 3. What is new ─────────────────────────────────────────────────────
     h.section(QStringLiteral("3"), QStringLiteral("WHAT IS NEW"),
               d.filings.quarterly.valid() ? QStringLiteral("from the %1 and recent headlines").arg(d.filings.quarterly.cite())
@@ -565,11 +620,18 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             h.bullets(d.business.new_business, pal.accent);
         }
     }
-    if (!d.news.isEmpty()) {
+    if (!headlines(d).isEmpty()) {
         h.sub(QStringLiteral("HEADLINES"));
         QString list = QStringLiteral("<table cellspacing='0' cellpadding='3'>");
-        for (int i = 0; i < d.news.size() && i < 8; ++i) {
-            const auto& a = d.news[i];
+        // The same stories the model was given: those about this company,
+        // when they can be told apart (relevant_headlines).
+        const QVector<Headline> kept = headlines(d);
+        QVector<eq::NewsArticle> listed;
+        for (const auto& a : d.news)
+            if (std::any_of(kept.begin(), kept.end(), [&a](const Headline& k) { return k.title == a.title; }))
+                listed.append(a);
+        for (int i = 0; i < listed.size() && i < 8; ++i) {
+            const auto& a = listed[i];
             list += QStringLiteral("<tr><td valign='top' style='color:%1;font-size:%2px;' width='78'>%3</td>"
                                    "<td style='font-size:%4px;'><a href='%5' style='color:%6;text-decoration:none;'>%7</a> "
                                    "<span style='color:%1;font-size:%2px;'>%8</span></td></tr>")
@@ -925,9 +987,11 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             h.row(cells.mid(0, 2));
             h.row(cells.mid(2));
         }
-        h.note(QStringLiteral("Peers are a hand-kept basket for this ticker, not a classification. Ratios from Yahoo Finance."));
+        h.note((d.peers_basis.isEmpty() ? QStringLiteral("Peers are a hand-kept basket for this ticker, not a classification.")
+                                        : d.peers_basis) +
+               QStringLiteral(" Ratios from Yahoo Finance."));
     } else {
-        h.note(QStringLiteral("No peer basket is kept for this ticker, so nothing is compared."));
+        h.note(QStringLiteral("No peer group could be formed for this ticker, so nothing is compared."));
     }
 
     // ── 8. Analysts and ownership ──────────────────────────────────────────
@@ -1027,6 +1091,21 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
                                                 : QStringLiteral("No annual report could be read (%1).").arg(d.filings.annual_error));
     }
 
+    if (inputs.risk.sessions >= 60) {
+        const RiskProfile& rk = inputs.risk;
+        QVector<QStringList> rows;
+        rows.append({QStringLiteral("Return over the period"), spct(rk.return_pct)});
+        rows.append({QStringLiteral("Volatility, annualised"), pct(rk.volatility_pct)});
+        rows.append({QStringLiteral("Deepest fall from a high"), pct(rk.max_drawdown_pct)});
+        if (ok(rk.beta))
+            rows.append({QStringLiteral("Beta to %1").arg(d.bench_symbol), num(rk.beta, 2)});
+        if (ok(rk.correlation))
+            rows.append({QStringLiteral("Correlation with %1").arg(d.bench_symbol), num(rk.correlation, 2)});
+        h.sub(QStringLiteral("HOW THE SHARES HAVE TRADED"));
+        h.table({QStringLiteral("OVER THE LAST %1 SESSIONS").arg(rk.sessions), QStringLiteral("VALUE")}, rows);
+        h.note(QStringLiteral("Computed from daily closes. What the shares did, not what they will do."));
+    }
+
     // ── 10. Outlook ────────────────────────────────────────────────────────
     h.section(QStringLiteral("10"), QStringLiteral("OUTLOOK"));
     if (d.has_earnings) {
@@ -1095,6 +1174,15 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             colors.append({QColor(), pal.text_dim, s.state == Source::State::Failed ? pal.negative : pal.text_dim, pal.text_dim});
         }
         h.table({QStringLiteral("WHAT"), QStringLiteral("FROM"), QStringLiteral("STATE"), QStringLiteral("DETAIL")}, rows, colors, 4);
+        QStringList links;
+        for (const Filing* f : {&d.filings.annual, &d.filings.quarterly})
+            if (f->valid() && f->url.startsWith(QLatin1String("https://www.sec.gov/")))
+                links << QStringLiteral("<a href='%1' style='color:%2;'>%3</a>").arg(f->url.toHtmlEscaped(), h.c(pal.accent), f->cite().toHtmlEscaped());
+        if (!links.isEmpty())
+            h.raw(QStringLiteral("<p style='margin:6px 0;color:%1;font-size:%2px;'>The filings, on sec.gov: %3</p>")
+                      .arg(h.c(pal.text_dim))
+                      .arg(px - 1)
+                      .arg(links.join(QStringLiteral(" · "))));
         if (!d.narrative_note.isEmpty() && (d.summary.valid || d.business.valid))
             h.note(d.narrative_note);
         h.note(QStringLiteral("Every figure is the vendor's or is computed from the vendor's by the arithmetic named beside it. "
