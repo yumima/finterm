@@ -552,7 +552,9 @@ inline Result enforce(const QString& reply, const Evidence& ev, int current_year
 
 /// The line appended to a prose reply that lost figures.
 inline QString footnote(int removed) {
-    return QStringLiteral("\n\n_%1 %2 removed: not in the data this answer was given._")
+    // Plain text: the chat's Markdown view draws _emphasis_ as an underline,
+    // which reads as a link.
+    return QStringLiteral("\n\n(%1 %2 removed: not in the data this answer was given.)")
         .arg(removed)
         .arg(removed == 1 ? QStringLiteral("figure was") : QStringLiteral("figures were"));
 }

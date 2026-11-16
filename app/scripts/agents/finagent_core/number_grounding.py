@@ -364,7 +364,7 @@ def enforce(reply: str, ev: Evidence) -> Result:
 
 
 def footnote(removed: int) -> str:
-    return "\n\n_%d %s removed: not in the data this answer was given._" % (
+    return "\n\n(%d %s removed: not in the data this answer was given.)" % (
         removed, "figure was" if removed == 1 else "figures were")
 
 
