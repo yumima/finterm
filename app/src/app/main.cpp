@@ -23,6 +23,7 @@
 #include "datahub/TopicPolicy.h"
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
+#include "app/SelfTest.h"
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
 #include "screens/setup/SetupScreen.h"
@@ -595,6 +596,18 @@ int main(int argc, char* argv[]) {
                     s_last_inactive_ms = now;
             }
         });
+    }
+
+    // ── `--selftest [report.json]`: does this install get data? ─────────────
+    // Headless: Python setup, the data daemon, one real quote. Before any
+    // window, account or PIN. See SelfTest.h.
+    {
+        const QStringList args = app.arguments();
+        const qsizetype at = args.indexOf(QStringLiteral("--selftest"));
+        if (at >= 0) {
+            const QString report = at + 1 < args.size() && !args.at(at + 1).startsWith(u'-') ? args.at(at + 1) : QString();
+            return finterm::selftest::run(app, report);
+        }
     }
 
     // ── Python environment check ─────────────────────────────────────────────

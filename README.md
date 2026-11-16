@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`6705c6439`](https://github.com/yumima/finterm/commit/6705c6439) windows: the data daemon connects over loopback TCP — there was no data at all
 - [`2367213b7`](https://github.com/yumima/finterm/commit/2367213b7) data: statement overlay review fixes — bounded waits, one basis per table, discontinued years
 - [`68e97f9c9`](https://github.com/yumima/finterm/commit/68e97f9c9) **chore(release):** update README download links and updates.json for v4.0.5
 - [`a415a6cc0`](https://github.com/yumima/finterm/commit/a415a6cc0) release: 4.0.5

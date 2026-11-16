@@ -9,6 +9,11 @@ on:
   push:
     tags:
       - 'v*'
+    # A branch named ci/… builds all three installers and runs the Windows
+    # install + self-test WITHOUT publishing (the release jobs need a tag):
+    # the way to check a packaging change before tagging it.
+    branches:
+      - 'ci/**'
   workflow_dispatch:
 
 env:
@@ -216,6 +221,50 @@ jobs:
           command -v binarycreator || { echo "::error::binarycreator not found"; exit 1; }
           cpack -G IFW -C ${{ env.BUILD_TYPE }} --verbose
           ls -lh ${{ env.APP_NAME }}-*-setup* 2>/dev/null || ls -lh *.exe 2>/dev/null || true
+
+      # ── Install it and prove it gets data ─────────────────────────────────
+      # What a user does, on a clean Windows machine: run the installer, start
+      # the app. The app then has to download uv, install Python, build its two
+      # environments, start the data daemon and reach Yahoo — a chain no unit
+      # test covers, and one that was broken on Windows end to end (the daemon
+      # could not start at all) without anything here noticing. `--selftest`
+      # runs exactly that chain headlessly and exits non-zero if no quote comes
+      # back; a failure here stops the release.
+      - name: Install with the generated installer
+        shell: bash
+        working-directory: app/build
+        run: |
+          set -euo pipefail
+          INSTALLER="$(ls ${{ env.APP_NAME }}-*-windows-x64-setup.exe | head -1)"
+          ROOT="${RUNNER_TEMP}/finterm-install"
+          rm -rf "${ROOT}"
+          "./${INSTALLER}" install --root "$(cygpath -w "${ROOT}")" \
+              --accept-licenses --default-answer --confirm-command
+          EXE="$(find "${ROOT}" -maxdepth 2 -name '${{ env.APP_NAME }}.exe' | head -1)"
+          [ -n "${EXE}" ] || { echo "::error::installed tree has no ${{ env.APP_NAME }}.exe"; find "${ROOT}" -maxdepth 2 | head -50; exit 1; }
+          echo "Installed: ${EXE}"
+          [ -f "$(dirname "${EXE}")/scripts/yfinance_data.py" ] || { echo "::error::installed tree has no scripts/yfinance_data.py"; exit 1; }
+          echo "FINTERM_INSTALLED_EXE=${EXE}" >> "$GITHUB_ENV"
+
+      - name: Self-test the installed app (Python setup, data daemon, one quote)
+        shell: bash
+        timeout-minutes: 50
+        run: |
+          set -uo pipefail
+          REPORT="${RUNNER_TEMP}/selftest.json"
+          rm -f "${REPORT}"
+          "${FINTERM_INSTALLED_EXE}" --profile selftest --selftest "$(cygpath -w "${REPORT}")"
+          CODE=$?
+          echo "exit code: ${CODE}"
+          echo "=== report ==="
+          cat "${REPORT}" 2>/dev/null || echo "(no report written)"
+          if [ "${CODE}" -ne 0 ] || ! grep -q '"ok": true' "${REPORT}" 2>/dev/null; then
+            echo "=== app log (tail) ==="
+            find "${LOCALAPPDATA:-/c/Users/runneradmin/AppData/Local}" "${APPDATA:-}" -name 'finterm.log' 2>/dev/null \
+              | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
+            echo "::error::the installed app could not fetch market data (see the report and log above)"
+            exit 1
+          fi
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
