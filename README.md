@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`1b7ddd528`](https://github.com/yumima/finterm/commit/1b7ddd528) ai: a model may quote a figure, never originate one
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

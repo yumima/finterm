@@ -548,6 +548,18 @@ add_test(NAME query_store COMMAND test_query_store)
 # load is what pushes the account into 429 rate limiting, which a user
 # experiences as missing data rather than as slowness.
 
+# ── Yahoo statements vs the company's SEC filings ────────────────────────────
+# fundamentals_crosscheck.py decides "Yahoo agrees with what the company filed"
+# or not. A false mismatch accuses a correct figure; a false match certifies a
+# wrong one. Pure comparison over hand-built documents — no network.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME fundamentals_crosscheck
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_fundamentals_crosscheck.py
+    )
+    set_tests_properties(fundamentals_crosscheck PROPERTIES TIMEOUT 60)
+endif()
+
 # ── Number grounding, agent runtime ──────────────────────────────────────────
 # The Python twin of ai_chat/NumberGrounding.h (ctest number_grounding), for
 # replies that come from the agent runtime instead of LlmService. Same cases,
