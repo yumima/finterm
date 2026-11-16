@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`e27c95a5d`](https://github.com/yumima/finterm/commit/e27c95a5d) **ci:** check the published Windows installer on a real Windows desktop
 - [`3fe848f3c`](https://github.com/yumima/finterm/commit/3fe848f3c) **chore(release):** update README download links and updates.json for v4.0.6
 - [`16ea81c0d`](https://github.com/yumima/finterm/commit/16ea81c0d) **docs:** install and first start, step by step, per system
 - [`78c42ee97`](https://github.com/yumima/finterm/commit/78c42ee97) release: 4.0.6
@@ -63,7 +64,7 @@ Later starts skip setup and go straight to the PIN.
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Your data | `%LOCALAPPDATA%\finterm` | `~/Library/Application Support/finterm` | `~/.local/share/finterm` |
-| Uninstall | Settings → Apps → finterm | Drag the app to the Bin | Delete the `.run` file |
+| Uninstall | Settings → Apps → `io.github.yumima.finterm` | Drag the app to the Bin | Delete the `.run` file |
 
 Uninstalling leaves your data folder in place; delete it too for a clean removal.
 
