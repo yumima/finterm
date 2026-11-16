@@ -232,7 +232,9 @@ def scan(days=3, limit=None, max_new_days=None):
                 # No index for this date — a holiday, or today before EDGAR
                 # publishes. Record it only when it is in the past: today's
                 # index will appear later and must not be written off.
-                if d < date.today():
+                # A few days back: the newest index can be missing only
+                # because EDGAR has not published it yet.
+                if (date.today() - d).days >= 3:
                     con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)",
                                 (filed,))
                     con.commit()

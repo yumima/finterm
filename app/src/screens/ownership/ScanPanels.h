@@ -83,6 +83,28 @@ class MoversPanel : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
+/// The largest single stake changes — one manager, one stock — across every
+/// 13F filer. Ranked by estimated dollars, or by the share of the manager's
+/// own book, which is where conviction shows (a 4,000-name book's biggest
+/// trade is its inflows). Clicking the stock opens it.
+class BigMovesPanel : public QWidget {
+    Q_OBJECT
+  public:
+    explicit BigMovesPanel(QWidget* parent = nullptr);
+    void refresh();
+  signals:
+    void stock_activated(const QString& symbol);
+
+  private:
+    void render();
+    QLabel* title_note_ = nullptr;
+    QComboBox* side_ = nullptr;
+    QComboBox* sort_ = nullptr;
+    QCheckBox* active_only_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QLabel* foot_ = nullptr;
+};
+
 class FirmDetailPanel;
 
 /// The largest 13F filers — the world's biggest asset managers' US-listed

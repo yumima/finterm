@@ -452,6 +452,39 @@ struct Movers {
     bool loaded = false;
 };
 
+/// One manager's change in one stock between its two newest filings — the
+/// rows of BIG MOVES. Splits and CUSIP changes are undone first, newly listed
+/// stocks are not counted as purchases, and filers whose book changed shape
+/// (a new filing entity, a units error) are left out. `flow` is shares changed
+/// × the price the filing implies: an estimate from quarter-end snapshots.
+struct BigMove {
+    QString cik;
+    QString manager;
+    QDate quarter;
+    QDate prior_quarter;
+    QString issuer;
+    QString ticker;
+    QString kind; // new | added | trimmed | exited
+    double shares = 0.0;
+    double prior_shares = 0.0; // in today's shares
+    double flow = 0.0;         // signed dollars
+    double book_value = 0.0;
+    int position_count = 0;
+    std::optional<double> book_pct; // of the book the stake moved in or out of
+};
+
+struct BigMoves {
+    QVector<BigMove> rows;
+    QString side;
+    QString sort;
+    bool active_only = true;
+    double floor = 0.0;
+    int max_positions = 0;
+    QStringList partial_quarters;
+    QString error;
+    bool loaded = false;
+};
+
 /// The largest 13F filers and what each did since its previous filing.
 ///
 /// Ranked by each filer's newest indexed book, which can be a quarter ahead of

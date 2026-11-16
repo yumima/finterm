@@ -26,6 +26,7 @@
 #include "app/SelfTest.h"
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
+#include "services/ownership/OwnershipService.h"
 #include "core/util/AppLifecycle.h"
 #include "screens/setup/SetupScreen.h"
 #include "services/agents/AgentScheduler.h"
@@ -721,6 +722,9 @@ int main(int argc, char* argv[]) {
             // initial load — that delay is the daemon import, not the
             // upstream API).
             QTimer::singleShot(0, &app, []() { finterm::python::PythonWorker::instance().warm_up(); });
+    // The 13F index keeps itself current from launch, not from the first
+    // visit to Ownership (see OwnershipService::start_background_sync).
+    QTimer::singleShot(0, &app, []() { finterm::services::OwnershipService::instance().start_background_sync(); });
 
             LOG_INFO("App", "Application ready (after setup)");
         });
@@ -804,6 +808,9 @@ int main(int argc, char* argv[]) {
     // overlaps with the GUI coming up instead of stalling the first
     // dashboard refresh.
     QTimer::singleShot(0, &app, []() { finterm::python::PythonWorker::instance().warm_up(); });
+    // The 13F index keeps itself current from launch, not from the first
+    // visit to Ownership (see OwnershipService::start_background_sync).
+    QTimer::singleShot(0, &app, []() { finterm::services::OwnershipService::instance().start_background_sync(); });
 
     LOG_INFO("App", "Application ready");
     return app.exec();

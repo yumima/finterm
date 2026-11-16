@@ -225,6 +225,8 @@ void HoldersTable::render() {
             delta = QStringLiteral("new");
         else if (h.action == QLatin1String("first seen"))
             delta = QStringLiteral("first seen");
+        else if (h.action == QLatin1String("listed"))
+            delta = QStringLiteral("listed");
         else if (h.shares_delta && std::fabs(*h.shares_delta) >= 1.0)
             delta = (*h.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("−")) +
                     fmt::format_compact(std::fabs(*h.shares_delta));
@@ -234,6 +236,9 @@ void HoldersTable::render() {
         if (h.action == QLatin1String("first seen"))
             d->setToolTip(ui::tooltip_wrap(
                 QStringLiteral("No prior-quarter filing from this filer")));
+        else if (h.action == QLatin1String("listed"))
+            d->setToolTip(ui::tooltip_wrap(QStringLiteral(
+                "The stock was not listed at the last filing: a holding that became visible, not a purchase")));
         table_->setItem(i, 4, d);
         table_->setItem(i, 5, num_cell(h.pct_change ? pct_or_dash(h.pct_change, 1, true) : fmt::placeholder(), col));
         table_->setItem(

@@ -53,6 +53,15 @@ constexpr int kMoversTimeoutMs = 300'000;
 constexpr int kScanDays = 30;
 constexpr int kScanDaysPerPass = 4;
 constexpr int kScanTimeoutMs = 900'000;
+// The 13F sync. A pass reads at most kSyncFilingsPerPass filings (~10 minutes
+// at SEC's rate), so the first catch-up after a filing deadline runs as a few
+// passes a minute apart rather than one hour-long process.
+constexpr int kSyncFirstDelayMs = 3 * 60'000;
+constexpr int kSyncEveryMs = 6 * 3600'000;
+constexpr int kSyncMoreMs = 60'000;
+constexpr int kSyncRetryMs = 30 * 60'000;
+constexpr int kSyncFilingsPerPass = 3000;
+constexpr int kSyncTimeoutMs = 3600'000;
 constexpr int kScanRecheckMs = 6 * 60 * 60 * 1000;
 /// After a failed pass — a lock, a network fault — try again soon, not in
 /// six hours: the tab says "scan failed" until then.
@@ -1242,8 +1251,73 @@ void OwnershipService::load_top_firms(bool force) {
             self->top_firms_ = t;
             emit self->top_firms_updated();
         },
-        120'000);
+        // The first pass over a new index state also works out splits and
+        // CUSIP changes between the quarters (a few minutes, then cached).
+        kMoversTimeoutMs);
     emit top_firms_updated(); // so the panel can show "loading"
+}
+
+void OwnershipService::load_big_moves(const QString& side, const QString& sort, bool active_only) {
+    const QString want = side + QLatin1Char('|') + sort + QLatin1Char('|') + (active_only ? "1" : "0");
+    if (big_moves_loading_) {
+        big_moves_pending_ = want; // the controls moved meanwhile: asked for when this one lands
+        return;
+    }
+    big_moves_loading_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run_interactive(
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("big_moves"),
+         payload_of({{"limit", 300}, {"side", side}, {"sort", sort}, {"active_only", active_only}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->big_moves_loading_ = false;
+            BigMoves b;
+            b.loaded = true;
+            if (!result.success) {
+                b.error = result.error.isEmpty() ? QStringLiteral("big-moves query failed") : result.error.left(200);
+            } else {
+                const auto o = parse_object(result);
+                b.error = o.value(QStringLiteral("error")).toString();
+                b.side = o.value(QStringLiteral("side")).toString();
+                b.sort = o.value(QStringLiteral("sort")).toString();
+                b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
+                b.floor = o.value(QStringLiteral("floor")).toDouble();
+                b.max_positions = o.value(QStringLiteral("max_positions")).toInt();
+                for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
+                    b.partial_quarters << v.toString();
+                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                    const auto r = v.toObject();
+                    BigMove m;
+                    m.cik = r.value(QStringLiteral("cik")).toString();
+                    m.manager = r.value(QStringLiteral("manager")).toString();
+                    m.quarter = iso_date(r, "quarter");
+                    m.prior_quarter = iso_date(r, "prior_quarter");
+                    m.issuer = r.value(QStringLiteral("issuer")).toString();
+                    m.ticker = r.value(QStringLiteral("ticker")).toString();
+                    m.kind = r.value(QStringLiteral("kind")).toString();
+                    m.shares = r.value(QStringLiteral("shares")).toDouble();
+                    m.prior_shares = r.value(QStringLiteral("prior_shares")).toDouble();
+                    m.flow = r.value(QStringLiteral("flow")).toDouble();
+                    m.book_value = r.value(QStringLiteral("book_value")).toDouble();
+                    m.position_count = r.value(QStringLiteral("position_count")).toInt();
+                    if (r.value(QStringLiteral("book_pct")).isDouble())
+                        m.book_pct = r.value(QStringLiteral("book_pct")).toDouble();
+                    b.rows.push_back(m);
+                }
+            }
+            self->big_moves_ = b;
+            emit self->big_moves_updated();
+            if (!self->big_moves_pending_.isEmpty()) {
+                const QStringList p = self->big_moves_pending_.split(QLatin1Char('|'));
+                self->big_moves_pending_.clear();
+                if (p.size() == 3 && (p[0] != b.side || p[1] != b.sort || (p[2] == "1") != b.active_only))
+                    self->load_big_moves(p[0], p[1], p[2] == "1");
+            }
+        },
+        kMoversTimeoutMs);
+    emit big_moves_updated(); // so the panel can show "loading"
 }
 
 void OwnershipService::pull_latest_filings(int top) {
@@ -1489,7 +1563,77 @@ QString OwnershipService::index_status_text() const {
                                    : index_status_;
 }
 
+void OwnershipService::start_background_sync() {
+    if (sync_timer_)
+        return;
+    sync_timer_ = new QTimer(this);
+    sync_timer_->setSingleShot(true);
+    connect(sync_timer_, &QTimer::timeout, this, [this]() { run_13f_sync(); });
+    sync_timer_->start(kSyncFirstDelayMs);
+}
+
+void OwnershipService::run_13f_sync() {
+    // Only an index that exists is kept current; building one is the user's
+    // call (about 200 MB, once).
+    if (syncing_ || index_busy_ || !index_ready()) {
+        if (sync_timer_)
+            sync_timer_->start(kSyncRetryMs);
+        return;
+    }
+    syncing_ = true;
+    sync_status_ = QStringLiteral("13F: checking SEC for new filings…");
+    emit index_changed(index_status_ + QStringLiteral(" · ") + sync_status_);
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("sync"), payload_of({{"max_filings", kSyncFilingsPerPass}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->syncing_ = false;
+            const auto o = result.success ? parse_object(result) : QJsonObject{};
+            const bool failed = !result.success || o.contains(QStringLiteral("error"));
+            const bool more = o.value(QStringLiteral("more")).toBool();
+            const int filings = o.value(QStringLiteral("filings")).toInt();
+            const int sets = o.value(QStringLiteral("datasets")).toArray().size();
+            const QString through = o.value(QStringLiteral("through")).toString();
+            if (failed) {
+                self->sync_status_ = QStringLiteral("13F update failed — trying again in 30 minutes: ") +
+                                     (result.success ? o.value(QStringLiteral("error")).toString()
+                                                     : result.error)
+                                         .left(160);
+                LOG_WARN(TAG, self->sync_status_);
+            } else {
+                self->sync_status_ = through.isEmpty()
+                                         ? QStringLiteral("13F up to date")
+                                         : QStringLiteral("13F filings read through %1").arg(through);
+                if (filings || sets) {
+                    LOG_INFO(TAG, QStringLiteral("13F sync: %1 filings, %2 data sets, through %3")
+                                      .arg(filings)
+                                      .arg(sets)
+                                      .arg(through));
+                    // New holdings: every derived view is recomputed on next look.
+                    self->movers_ = {};
+                    self->top_firms_ = {};
+                    self->big_moves_ = {};
+                    self->cache_.clear();
+                    self->index_probed_ = false;
+                    self->probe_index();
+                    emit self->movers_updated();
+                    emit self->top_firms_updated();
+                    emit self->big_moves_updated();
+                }
+            }
+            emit self->index_changed(self->index_status_ + QStringLiteral(" · ") + self->sync_status_);
+            if (self->sync_timer_)
+                self->sync_timer_->start(failed ? kSyncRetryMs : more ? kSyncMoreMs : kSyncEveryMs);
+        },
+        /*on_line=*/{}, kSyncTimeoutMs);
+}
+
 void OwnershipService::check_for_newer_quarter() {
+    // The background sync keeps the index current now; this only makes sure
+    // it is running once the screen is opened.
+    start_background_sync();
     if (index_busy_ || !index_ready())
         return;
     QPointer<OwnershipService> self = this;
@@ -1512,7 +1656,8 @@ void OwnershipService::check_for_newer_quarter() {
 }
 
 void OwnershipService::build_index() {
-    if (index_busy_)
+    // Not while the background sync writes the same database.
+    if (index_busy_ || syncing_)
         return;
     index_busy_ = true;
     emit index_changed(QStringLiteral("Downloading SEC 13F data sets…"));
@@ -1556,7 +1701,8 @@ void OwnershipService::build_index() {
 }
 
 void OwnershipService::resolve_symbols(int /*limit*/) {
-    if (index_busy_)
+    // Not while the background sync writes the same database.
+    if (index_busy_ || syncing_)
         return;
     index_busy_ = true;
     emit index_changed(QStringLiteral("Mapping CUSIPs to tickers — usable within a few "

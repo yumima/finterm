@@ -106,6 +106,11 @@ class OwnershipService : public QObject {
     /// The largest filers by 13F book, with each one's quarter-over-quarter
     /// moves. Cached for the session once loaded; `force` reloads.
     void load_top_firms(bool force = false);
+    /// The largest single stake changes across every filer. The first call on
+    /// a new index state computes them (a few minutes), later ones are local.
+    void load_big_moves(const QString& side, const QString& sort, bool active_only);
+    const ownership::BigMoves& big_moves() const { return big_moves_; }
+    bool big_moves_loading() const { return big_moves_loading_; }
     const ownership::TopFirms& top_firms() const { return top_firms_; }
     bool top_firms_loading() const { return top_firms_loading_; }
     /// Pull the newest 13F filings straight from EDGAR for the `top` largest
@@ -134,6 +139,11 @@ class OwnershipService : public QObject {
     void resolve_symbols(int limit = 2000);
     bool index_busy() const { return index_busy_; }
     void check_for_newer_quarter();
+    /// Keep the 13F index current without being asked: new SEC data sets and
+    /// every 13F filed on EDGAR since, a few minutes after launch and every
+    /// six hours after (sooner while a capped pass has more to read).
+    void start_background_sync();
+    QString sync_status() const { return sync_status_; }
 
   signals:
     void snapshot_updated(QString symbol);
@@ -149,6 +159,7 @@ class OwnershipService : public QObject {
     void book_updated(QString cik);
     void firms_found();
     void top_firms_updated();
+    void big_moves_updated();
     /// Progress / result of pull_latest_filings, for a status line.
     void latest_pull_status(QString text);
     void index_changed(QString summary);
@@ -184,6 +195,9 @@ class OwnershipService : public QObject {
     bool short_rank_loading_ = false;
     ownership::Movers movers_;
     bool movers_loading_ = false;
+    ownership::BigMoves big_moves_;
+    bool big_moves_loading_ = false;
+    QString big_moves_pending_; ///< a request made while one ran: side|sort|active
     ownership::TopFirms top_firms_;
     bool top_firms_loading_ = false;
     bool pulling_latest_ = false;
@@ -198,6 +212,10 @@ class OwnershipService : public QObject {
     bool form4_scanning_ = false;
     QString form4_status_;
     QTimer* form4_timer_ = nullptr;
+    QTimer* sync_timer_ = nullptr;
+    bool syncing_ = false;
+    QString sync_status_;
+    void run_13f_sync();
     int form4_passes_ = 0;
 
     QVector<ownership::Manager> firm_results_;

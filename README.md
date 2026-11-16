@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`dbcaf1574`](https://github.com/yumima/finterm/commit/dbcaf1574) **chore(release):** update README download links and updates.json for v4.0.7
+- [`b98896477`](https://github.com/yumima/finterm/commit/b98896477) lifecycle: helpers start and stop with the app
 - [`39bdfd394`](https://github.com/yumima/finterm/commit/39bdfd394) futures: panels you can move and resize, kept between sessions; sources named; failed reads retried
 - [`27916ca78`](https://github.com/yumima/finterm/commit/27916ca78) **fix:** drop a counter the Report status never reads (clang -Werror on macOS)
 - [`b6af23c55`](https://github.com/yumima/finterm/commit/b6af23c55) **fix:** brace-initialise a QFont clang read as a function declaration

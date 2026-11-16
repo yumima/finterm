@@ -109,7 +109,7 @@ def yahoo_ticker(raw):
     tradable symbol, and opening it anywhere fails, so it maps to no ticker.
     No real ticker contains a space.
     """
-    t = (raw or "").upper().strip()
+    t = (raw or "").upper().strip().rstrip("*")  # "EA*": OpenFIGI's mark on a delisted line
     if not t or " " in t:
         return ""
     return t.replace("/", "-")
@@ -125,12 +125,13 @@ def _normalise_tickers(con):
         tables.append("ticker_totals")
     stale = [t for t in tables
              if con.execute(f"SELECT 1 FROM {t} WHERE ticker LIKE '%/%' OR ticker LIKE '% %' "
-                            "LIMIT 1").fetchone()]
+                            "OR ticker LIKE '%*' LIMIT 1").fetchone()]
     if not stale:
         return
     for t in stale:
         con.execute(f"UPDATE {t} SET ticker='' WHERE ticker LIKE '% %'")
         con.execute(f"UPDATE {t} SET ticker=REPLACE(ticker, '/', '-') WHERE ticker LIKE '%/%'")
+        con.execute(f"UPDATE {t} SET ticker=RTRIM(ticker, '*') WHERE ticker LIKE '%*'")
     con.commit()
 
 
@@ -248,6 +249,102 @@ def resolve_ticker(ticker, con=None):
             con.close()
 
 
+# Bloomberg exchange codes of US venues (NYSE UN, Nasdaq UQ/UW/UR, NYSE
+# American UA, NYSE Arca UP, Cboe UF/UD, IEX/others, OTC UV). Listed, not
+# "starts with U": UY is Uruguay and UG Uganda.
+US_VENUES = frozenset(("UA", "UB", "UC", "UD", "UF", "UJ", "UL", "UM", "UN", "UO", "UP", "UQ",
+                       "UR", "UT", "UU", "UV", "UW", "UX", "UZ"))
+
+
+def us_listing(recs):
+    """The US line among OpenFIGI's records for one CUSIP, or None.
+
+    The US composite ("US") first. A security whose composite line is gone —
+    Exxon Mobil's old CUSIP after its 2026 reorganisation lists only single
+    venues — still has its US venues, all exchange codes beginning with "U"
+    (UN NYSE, UQ Nasdaq, UA, UP, UZ ...); their most common ticker is the US
+    one. Never the first record regardless: that was a Colombian line, and
+    "EXMOC" stood in for Exxon on every screen (2026-11-16)."""
+    recs = recs or []
+    comp = next((r for r in recs if (r.get("exchCode") or "").upper() == "US" and r.get("ticker")), None)
+    if comp:
+        return comp
+    us = [r for r in recs if (r.get("exchCode") or "").upper() in US_VENUES and r.get("ticker")]
+    if not us:
+        return None
+    counts = {}
+    for r in us:
+        counts[r["ticker"]] = counts.get(r["ticker"], 0) + 1
+    best = max(counts, key=lambda t: (counts[t], -len(t)))
+    return next(r for r in us if r["ticker"] == best)
+
+
+def recheck_tickers(limit=3000, batch=10, progress=None):
+    """Re-resolve the most valuable CUSIPs once with us_listing(). Mappings
+    made before it could hold a foreign line's ticker (EXMOC for Exxon,
+    HONGBP for Honeywell). Marked done, so it runs once per index."""
+    con = connect()
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS map_fixes (name TEXT PRIMARY KEY, done_at TEXT)")
+        if con.execute("SELECT 1 FROM map_fixes WHERE name='us_listing'").fetchone():
+            return {"skipped": "already rechecked"}
+        todo = [c for (c,) in con.execute("""
+            SELECT ct.cusip FROM cusip_ticker ct JOIN holdings h ON h.cusip = ct.cusip
+             WHERE ct.source = 'openfigi' AND h.put_call = ''
+             GROUP BY ct.cusip ORDER BY SUM(h.value) DESC LIMIT ?""", (int(limit),))]
+        changed = []
+        failed_chunks = 0
+        for i in range(0, len(todo), batch):
+            chunk = todo[i:i + batch]
+            body = json.dumps([{"idType": "ID_CUSIP", "idValue": c} for c in chunk]).encode()
+            hdrs = {"Content-Type": "application/json"}
+            if OPENFIGI_KEY:
+                hdrs["X-OPENFIGI-APIKEY"] = OPENFIGI_KEY
+            try:
+                data = json.loads(urllib.request.urlopen(
+                    urllib.request.Request(OPENFIGI_URL, data=body, headers=hdrs), timeout=45).read())
+            except Exception:
+                failed_chunks += 1  # the run is not marked done: asked again next time
+                time.sleep(6)
+                continue
+            for cusip, res in zip(chunk, data):
+                recs = res.get("data") or []
+                if not recs:
+                    continue  # nothing better known: keep what is there
+                pick = us_listing(recs)
+                if not pick:
+                    # No US line any more (acquired, delisted: EA, WBD): the old
+                    # ticker still names the quarters it was held in — unless it
+                    # IS one of the foreign lines, the very pick being undone.
+                    old_t = con.execute("SELECT ticker FROM cusip_ticker WHERE cusip=?", (cusip,)).fetchone()[0]
+                    foreign = {yahoo_ticker(r.get("ticker")) for r in recs}
+                    if old_t and old_t in foreign:
+                        con.execute("UPDATE cusip_ticker SET ticker='', source='openfigi-nonus' WHERE cusip=?",
+                                    (cusip,))
+                        changed.append((cusip, old_t, ""))
+                    continue
+                new_t = yahoo_ticker(pick.get("ticker"))
+                old_t = con.execute("SELECT ticker FROM cusip_ticker WHERE cusip=?", (cusip,)).fetchone()[0]
+                if new_t and new_t != old_t:
+                    con.execute("UPDATE cusip_ticker SET ticker=?, source='openfigi' WHERE cusip=?",
+                                (new_t, cusip))
+                    changed.append((cusip, old_t, new_t))
+            con.commit()
+            if progress:
+                progress(i + len(chunk), len(todo))
+            time.sleep(0.25 if OPENFIGI_KEY else 2.5)
+        if changed and con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ticker_totals'").fetchone():
+            for cusip, _o, new_t in changed:
+                con.execute("UPDATE ticker_totals SET ticker=? WHERE cusip=?", (new_t, cusip))
+        if not failed_chunks:
+            con.execute("INSERT OR REPLACE INTO map_fixes VALUES ('us_listing', datetime('now'))")
+        con.commit()
+        return {"checked": len(todo), "changed": changed, "failed_chunks": failed_chunks}
+    finally:
+        con.close()
+
+
 def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
     """Build the CUSIP -> ticker map from the index, exactly, via OpenFIGI.
 
@@ -304,11 +401,11 @@ def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
                     # German exchange before "PM". A US-listed record is what a
                     # US ticker lookup has to find, so prefer one; falling back
                     # to the first record only when there is no US listing.
-                    pick = next((r for r in recs
-                                 if (r.get("exchCode") or "").upper() == "US"), recs[0])
+                    pick = us_listing(recs)
                     con.execute("INSERT OR REPLACE INTO cusip_ticker VALUES (?,?,?,?)",
-                                (cusip, yahoo_ticker(pick.get("ticker")),
-                                 pick.get("name") or "", "openfigi"))
+                                (cusip, yahoo_ticker(pick.get("ticker")) if pick else "",
+                                 (pick or recs[0]).get("name") or "",
+                                 "openfigi" if pick else "openfigi-nonus"))
                     resolved += 1
                 else:
                     con.execute("INSERT OR REPLACE INTO cusip_ticker VALUES (?,?,?,?)",
@@ -559,10 +656,24 @@ def newer_available():
             "partial": sorted((q["quarter"] for q in qs if q.get("partial")), reverse=True),
             "newest_dataset": urls[0].rsplit("/", 1)[-1] if urls else "",
             "datasets_available": len(urls),
-            # The data set is named by filing window, not by reported quarter,
-            # so this cannot be resolved to a quarter without downloading it.
-            # The honest signal is "there is a set you have not ingested".
-            "unseen_datasets": max(0, len(urls) - len(have))}
+            # Sets whose filing window ends after the newest one ingested —
+            # not every historical set the index never meant to hold (that
+            # count read "52 newer data sets" on an index one set behind).
+            "unseen_datasets": _unseen_datasets(urls)}
+
+
+def _unseen_datasets(urls):
+    con = connect()
+    try:
+        names = {(s or "").rsplit("/", 1)[-1] for (s,) in con.execute(
+            "SELECT source FROM quarters WHERE COALESCE(partial,0)=0")}
+        if con.execute("SELECT 1 FROM sqlite_master WHERE name='datasets_in'").fetchone():
+            names |= {n for (n,) in con.execute("SELECT name FROM datasets_in")}
+    finally:
+        con.close()
+    ends = [dataset_window(n)[1] for n in names if dataset_window(n)]
+    newest = max(ends, default="")
+    return sum(1 for u in urls if (dataset_window(u.rsplit("/", 1)[-1]) or ("", ""))[1] > newest)
 
 
 def status():
@@ -671,6 +782,18 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
             "SELECT quarter FROM quarters WHERE quarter < ? ORDER BY quarter DESC LIMIT 1",
             (quarter,)).fetchone()
         prior_q = prior[0] if prior else None
+        # The prior quarter in today's terms: the same holding before a split
+        # is fewer shares, and before a CUSIP change it sat under another CUSIP.
+        prior_cusip, prior_factor = cusip, 1.0
+        if prior_q:
+            splits, links = _adjustments(con, prior_q, quarter, compute=False)
+            if cusip in links:
+                prior_cusip, prior_factor = links[cusip]
+            else:
+                prior_factor = splits.get(cusip, 1.0)
+        # Not reportable last quarter at all: holders now are holders who
+        # became visible (an IPO), not buyers.
+        newly_listed = bool(prior_q) and prior_cusip not in prior_universe(con, prior_q)
 
         rows = con.execute("""
             SELECT b.manager, h.accession, h.issuer, h.class, h.put_call,
@@ -684,12 +807,12 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
             -- filer — which inflated 7,850 holders of AAPL to 74,973.
             LEFT JOIN books pb ON pb.cik = b.cik AND b.cik <> '' AND pb.quarter = ?
             LEFT JOIN holdings ph ON ph.accession = pb.accession
-                                 AND ph.cusip = h.cusip AND ph.put_call = ''
+                                 AND ph.cusip = ? AND ph.put_call = ''
             WHERE h.cusip = ? AND h.quarter = ?
               AND b.stock_value >= ? AND b.stock_count >= ?
               AND (? = 0 OR b.stock_count <= ?)
             ORDER BY h.value DESC
-        """, (prior_q or "", cusip, quarter,
+        """, (prior_q or "", prior_cusip, cusip, quarter,
               float(min_book), int(min_positions),
               int(max_positions or 0), int(max_positions or 0))).fetchall()
 
@@ -710,12 +833,13 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                     # position; we simply could not see them. Saying "new" there
                     # manufactures a decision out of a missing filing — which is
                     # exactly what Vanguard's entity reshuffle looks like.
-                    rec["action"] = "new" if filed_prior else "first seen"
+                    rec["action"] = ("listed" if newly_listed else "new") if filed_prior else "first seen"
                     rec["shares_delta"] = shares
                     if not filed_prior:
                         rec["note"] = ("no prior-quarter filing from this filer, so an opening "
                                        "position cannot be told apart from a first appearance")
                 else:
+                    prior_shares = prior_shares * prior_factor
                     delta = shares - prior_shares
                     rec["shares_delta"] = delta
                     rec["pct_change"] = (delta / prior_shares) if prior_shares else None
@@ -876,59 +1000,30 @@ def _book_moves(con, accession, prior_accession):
     """Position-level moves between two of one filer's filings: counts of new,
     added, trimmed and exited common-stock positions, the dollar flow those
     moves imply, and the largest buy and sell. Options are excluded — a put
-    is not a holding.
-
-    Flow is shares changed × the price implied by the filing that carries the
-    position (value ÷ shares): the current filing for new/added/trimmed, the
-    prior one for exits. It is an estimate — 13F shows quarter-end snapshots,
-    not trades — and is labelled as one wherever it is shown.
+    is not a holding. Splits and CUSIP changes between the two filings are
+    undone first (see compare_positions).
     """
     if not prior_accession:
         return None
-    rows = con.execute("""
-        SELECT h.cusip, h.issuer, h.value, h.shares, ph.shares, ct.ticker
-          FROM holdings h
-          LEFT JOIN holdings ph ON ph.accession = ? AND ph.cusip = h.cusip AND ph.put_call = ''
-          LEFT JOIN cusip_ticker ct ON ct.cusip = h.cusip
-         WHERE h.accession = ? AND h.put_call = ''
-    """, (prior_accession, accession)).fetchall()
-    m = {"new": 0, "added": 0, "trimmed": 0, "held": 0, "exited": 0,
+    splits, links = _adjustments(con, _accession_quarter(con, prior_accession),
+                                 _accession_quarter(con, accession))
+    prior_q = _accession_quarter(con, prior_accession)
+    books = dict(con.execute("SELECT accession, stock_value FROM books WHERE accession IN (?,?)",
+                             (accession, prior_accession)).fetchall())
+    if not comparable_books(books.get(accession), books.get(prior_accession)):
+        return None  # a change of filing entity or units: its "moves" are not trades
+    m = {"new": 0, "listed": 0, "added": 0, "trimmed": 0, "held": 0, "exited": 0,
          "bought_value": 0.0, "sold_value": 0.0, "top_buy": None, "top_sell": None}
-
-    def note(kind, issuer, ticker, flow):
-        key = "top_buy" if kind == "buy" else "top_sell"
-        cur = m[key]
-        if cur is None or abs(flow) > abs(cur["value"]):
+    for _cusip, issuer, ticker, kind, _s, _p, flow, _v in compare_positions(
+            _positions(con, accession), _positions(con, prior_accession), splits, links,
+            prior_universe(con, prior_q) if prior_q else None):
+        m[kind] += 1
+        if kind in ("held", "listed") or not plausible_move(flow, books.get(accession), books.get(prior_accession)):
+            continue
+        key = "top_buy" if flow >= 0 else "top_sell"
+        m["bought_value" if flow >= 0 else "sold_value"] += abs(flow)
+        if m[key] is None or abs(flow) > abs(m[key]["value"]):
             m[key] = {"issuer": issuer, "ticker": ticker or "", "value": flow}
-
-    for cusip, issuer, value, shares, prior_shares, ticker in rows:
-        px = (value / shares) if shares else 0.0
-        if prior_shares is None:
-            m["new"] += 1
-            flow = value
-        else:
-            delta = shares - prior_shares
-            if prior_shares > 0 and abs(delta) / prior_shares < 0.01:
-                m["held"] += 1
-                continue
-            m["added" if delta > 0 else "trimmed"] += 1
-            flow = delta * px
-        if flow >= 0:
-            m["bought_value"] += flow
-            note("buy", issuer, ticker, flow)
-        else:
-            m["sold_value"] += -flow
-            note("sell", issuer, ticker, flow)
-    for issuer, value, ticker in con.execute("""
-        SELECT ph.issuer, ph.value, ct.ticker
-          FROM holdings ph
-          LEFT JOIN cusip_ticker ct ON ct.cusip = ph.cusip
-         WHERE ph.accession = ? AND ph.put_call = ''
-           AND ph.cusip NOT IN (SELECT cusip FROM holdings WHERE accession = ? AND put_call = '')
-    """, (prior_accession, accession)).fetchall():
-        m["exited"] += 1
-        m["sold_value"] += value or 0.0
-        note("sell", issuer, ticker, -(value or 0.0))
     return m
 
 
@@ -1023,15 +1118,34 @@ def firm_book(cik=None, quarter=None, limit=250):
              ORDER BY h.value DESC LIMIT ?
         """, (cik, prior_q or "", accession, int(limit))).fetchall()
 
+        # Corporate actions between the two filings, undone (see compare_positions).
+        prior_acc_row = con.execute(
+            "SELECT accession FROM books WHERE cik=? AND quarter=? LIMIT 1",
+            (cik, prior_q)).fetchone() if prior_q else None
+        prior_pos = _positions(con, prior_acc_row[0]) if prior_acc_row else {}
+        splits, links = _adjustments(con, prior_q, cur_q, compute=False) if prior_q else ({}, {})
+        # Over the whole book, not the rows shown: a successor below the
+        # display limit still means its retired CUSIP is not an exit.
+        held_now = {c for (c,) in con.execute(
+            "SELECT cusip FROM holdings WHERE accession=? AND put_call=''", (accession,))}
+        linked_old = {links[c][0] for c in held_now if c in links and links[c][0] in prior_pos}
+        universe = prior_universe(con, prior_q) if prior_q else None
+
         positions = []
         for issuer, cls, cusip, pc, value, shares, ticker, prior_shares, filed_prior in rows:
+            if not pc:
+                if cusip in links and links[cusip][0] in prior_pos:
+                    prior_shares = prior_pos[links[cusip][0]][2] * links[cusip][1]
+                elif prior_shares is not None:
+                    prior_shares = prior_shares * splits.get(cusip, 1.0)
             rec = {"issuer": issuer, "class": cls, "cusip": cusip, "ticker": ticker or "",
                    "put_call": pc, "is_derivative": bool(pc),
                    "value": value, "shares": shares,
                    "weight": (value / book_total) if (book_total and not pc) else None}
             if prior_q and not pc:
                 if prior_shares is None:
-                    rec["action"] = "new" if filed_prior else "first seen"
+                    rec["action"] = (("listed" if universe is not None and cusip not in universe else "new")
+                                     if filed_prior else "first seen")
                     rec["shares_delta"] = shares
                 else:
                     delta = shares - prior_shares
@@ -1061,7 +1175,8 @@ def firm_book(cik=None, quarter=None, limit=250):
                                AND ph.cusip NOT IN (SELECT cusip FROM holdings
                                                      WHERE accession=? AND put_call='')
                              ORDER BY ph.value DESC LIMIT 40
-                         """, (prior_acc[0], accession)).fetchall()]
+                         """, (prior_acc[0], accession)).fetchall()
+                         if r[1] not in linked_old]  # moved to a new CUSIP: not an exit
 
         return {"cik": cik, "manager": manager, "quarter": cur_q, "prior_quarter": prior_q,
                 "accession": accession, "total_value": book_total,
@@ -1383,9 +1498,20 @@ def _ensure_breadth(con, cur_q, prior_q):
     # on every call.
     con.execute("""CREATE TABLE IF NOT EXISTS breadth_runs (
         quarter TEXT, prior_quarter TEXT, computed_at TEXT, PRIMARY KEY (quarter, prior_quarter))""")
+    # v2: prior holdings restated for splits and CUSIP changes. Results of the
+    # unadjusted version are dropped once.
+    con.execute("CREATE TABLE IF NOT EXISTS breadth_version (v INTEGER)")
+    if (con.execute("SELECT v FROM breadth_version").fetchone() or (0,))[0] < 2:
+        con.execute("DELETE FROM breadth")
+        con.execute("DELETE FROM breadth_runs")
+        con.execute("DELETE FROM breadth_version")
+        con.execute("INSERT INTO breadth_version VALUES (2)")
+        con.commit()
     if con.execute("SELECT 1 FROM breadth_runs WHERE quarter=? AND prior_quarter=?",
                    (cur_q, prior_q)).fetchone():
         return
+    adj_status = {"complete": True}
+    splits, links = _adjustments(con, prior_q, cur_q, status=adj_status)
     for tag, q in (("_c", cur_q), ("_p", prior_q)):
         con.execute(f"DROP TABLE IF EXISTS {tag}")
         con.execute(f"""CREATE TEMP TABLE {tag} AS
@@ -1396,6 +1522,12 @@ def _ensure_breadth(con, cur_q, prior_q):
                AND b.stock_value >= ? AND b.stock_count >= ?""",
             (MAX_DISCRETIONARY_POSITIONS, q, MIN_BOOK_VALUE, MIN_BOOK_POSITIONS))
         con.execute(f"CREATE INDEX {tag}_k ON {tag}(cusip, cik)")
+    # The prior quarter in today's terms: split shares multiplied out, a
+    # retired CUSIP's holdings moved onto the one that replaced it.
+    for cusip, f in splits.items():
+        con.execute("UPDATE _p SET shares = shares * ? WHERE cusip = ?", (f, cusip))
+    for new_c, (old_c, ratio) in links.items():
+        con.execute("UPDATE _p SET cusip = ?, shares = shares * ? WHERE cusip = ?", (new_c, ratio, old_c))
     con.execute("DROP TABLE IF EXISTS _both")
     con.execute("""CREATE TEMP TABLE _both AS
         SELECT cik FROM books WHERE quarter=? AND cik<>''
@@ -1423,7 +1555,10 @@ def _ensure_breadth(con, cur_q, prior_q):
          GROUP BY cusip""", (cur_q, prior_q))
     for tag in ("_c", "_p", "_both"):
         con.execute(f"DROP TABLE IF EXISTS {tag}")
-    con.execute("INSERT OR REPLACE INTO breadth_runs VALUES (?,?,datetime('now'))", (cur_q, prior_q))
+    if adj_status["complete"]:
+        # Not kept as final when a split lookup went unanswered: the next call
+        # recomputes rather than serving a split as a wave of buying for good.
+        con.execute("INSERT OR REPLACE INTO breadth_runs VALUES (?,?,datetime('now'))", (cur_q, prior_q))
     con.commit()
 
 
@@ -1490,6 +1625,747 @@ def movers(limit=100, sort="breadth_up", min_holders=20, quarter=None, include_f
         con.close()
 
 
+
+# ── Corporate actions between two filings ───────────────────────────────────
+#
+# 13F reports share counts, and two filings a quarter apart are compared on
+# them. Two corporate actions make that comparison lie (2026-11-16, LARGEST
+# FUNDS listed KLAC as nearly every big manager's biggest buy):
+#   * a split — KLA's 10-for-1 on 2026-06-12 multiplied every holder's shares
+#     by ten, and an unchanged stake read as a purchase of nine times itself;
+#   * a new CUSIP — Exxon Mobil's reorganisation into ExxonMobil Holdings
+#     retired one CUSIP and issued another, and every holder "sold" one line
+#     and "bought" the other.
+# A split is taken from the ANNOUNCED ratio, never inferred from the size of a
+# price gap; a CUSIP change from the same holders moving from a retiring
+# security to a new one under the same issuer name.
+
+SPLIT_GAP_LO, SPLIT_GAP_HI = 0.6, 1.67   # price-per-share ratios worth checking for a split
+
+
+def split_factor_between(splits, prior_q, cur_q):
+    """Product of the split ratios dated after `prior_q` and on or before
+    `cur_q` (ISO dates); 1.0 when none. `splits` is [(iso_date, ratio)], a
+    ratio of 10 meaning ten new shares for one, 0.1 a 1-for-10 reverse."""
+    f = 1.0
+    for d, ratio in splits or []:
+        try:
+            r = float(ratio)
+        except (TypeError, ValueError):
+            continue
+        if prior_q < str(d)[:10] <= cur_q and is_split_ratio(r):
+            f *= r
+    return f
+
+
+_NAME_SUFFIXES = {"INC", "CORP", "CORPORATION", "CO", "COMPANY", "HOLDINGS", "HOLDING", "HLDGS", "HLDG",
+                  "LTD", "PLC", "LLC", "LP", "NV", "SA", "AG", "SE", "GROUP", "GRP", "THE", "NEW", "COM",
+                  "CL", "CLASS", "A", "B", "C", "ORD", "SHS", "COMMON", "STOCK", "ADR", "SPONSORED"}
+
+
+def issuer_key(name):
+    """An issuer name with its legal and share-class words removed and the
+    rest run together: "EXXON MOBIL CORP" and "EXXONMOBIL HOLDINGS CORP" both
+    give EXXONMOBIL, while two banks that merely both start "FIRST" do not
+    meet. Only ever used together with the same holders moving across."""
+    words = "".join(ch if ch.isalnum() else " " for ch in (name or "").upper()).split()
+    return "".join(w for w in words if w not in _NAME_SUFFIXES)
+
+
+def is_split_ratio(r):
+    """A share split is a ratio of small whole numbers (2, 3:2, 1:10). Yahoo
+    also files spin-off price adjustments as "splits" (FedEx 1.241 for its
+    Freight spin-off): those change no share count and are not used."""
+    if not (r and r > 0):
+        return False
+    for x in (r, 1.0 / r):
+        for k in (1, 2, 3, 4):
+            v = x * k
+            if round(v) >= 1 and abs(v - round(v)) < 0.002:
+                return True
+    return False
+
+
+def _announced_splits(con, ticker):
+    """A ticker's split history, from Yahoo, kept for a day: several quarter
+    pairs ask about the same names."""
+    con.execute("CREATE TABLE IF NOT EXISTS split_cache (ticker TEXT PRIMARY KEY, day TEXT, splits TEXT)")
+    today = time.strftime("%Y-%m-%d")
+    row = con.execute("SELECT day, splits FROM split_cache WHERE ticker=?", (ticker,)).fetchone()
+    if row and row[0] == today:
+        return json.loads(row[1])
+    try:
+        import yfinance as yf
+        s = yf.Ticker(ticker).splits
+        out = [(ts.date().isoformat(), float(v)) for ts, v in s.items()] if s is not None else []
+    except Exception:
+        return None  # unknown — not "no splits"
+    con.execute("INSERT OR REPLACE INTO split_cache VALUES (?,?,?)", (ticker, today, json.dumps(out)))
+    con.commit()  # a one-row write: never hold the lock past it
+    return out
+
+
+def _ticker_stamp(con):
+    """A digest of the whole CUSIP->ticker map: any remap, even to a ticker of
+    the same length, changes it."""
+    import hashlib
+    h = hashlib.md5()
+    for c, t in con.execute("SELECT cusip, ticker FROM cusip_ticker ORDER BY cusip"):
+        h.update(f"{c}={t};".encode())
+    return h.hexdigest()
+
+
+def snap_ratio(r):
+    """A CUSIP-change exchange ratio as the whole ratio it almost certainly is
+    (1:1, 2:1, 1-for-10) when the holders' median is within 2.5% of one — the
+    median also carries the median holder's own trading, which must not be
+    absorbed into the conversion. A merger's odd ratio (0.343) is kept."""
+    if not (r and r > 0):
+        return r
+    for x, inv in ((r, False), (1.0 / r, True)):
+        v = round(x)
+        if v >= 1 and abs(x - v) / x < 0.025:
+            return 1.0 / v if inv else float(v)
+    return r
+
+
+def _quarter_stamp(con, *quarters):
+    rows = con.execute(
+        f"SELECT quarter, filers, ingested_at FROM quarters WHERE quarter IN ({','.join('?' * len(quarters))}) "
+        "ORDER BY quarter", quarters).fetchall()
+    return "|".join(f"{q}:{n}:{t}" for q, n, t in rows)
+
+
+def _adj_tables(con):
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS adj_runs (prior_quarter TEXT, quarter TEXT, stamp TEXT,
+            PRIMARY KEY (prior_quarter, quarter));
+        CREATE TABLE IF NOT EXISTS split_adj (prior_quarter TEXT, quarter TEXT, cusip TEXT,
+            factor REAL, PRIMARY KEY (prior_quarter, quarter, cusip));
+        CREATE TABLE IF NOT EXISTS cusip_link (prior_quarter TEXT, quarter TEXT, new_cusip TEXT,
+            old_cusip TEXT, ratio REAL, PRIMARY KEY (prior_quarter, quarter, new_cusip));
+    """)
+
+
+def _ensure_adjustments(con, prior_q, cur_q):
+    """Split factors and CUSIP links for one quarter pair, computed once per
+    state of the index (an ingest that changes either quarter recomputes).
+    Returns whether the result is complete — False when a split lookup could
+    not be answered, in which case nothing built on it should be kept.
+
+    Computed in memory and written in one short transaction at the end: the
+    computation makes network calls, and holding SQLite's write lock through
+    them would stall the background sync and every other writer."""
+    _adj_tables(con)
+    stamp = _quarter_stamp(con, prior_q, cur_q) + "|" + _ticker_stamp(con)
+    row = con.execute("SELECT stamp FROM adj_runs WHERE prior_quarter=? AND quarter=?",
+                      (prior_q, cur_q)).fetchone()
+    if row and row[0] == stamp:
+        return True
+    split_rows, link_rows = [], []
+    # Only filers present in both quarters: a partial quarter holds a few
+    # dozen, and set against ten thousand everything would look retired.
+    con.execute("DROP TABLE IF EXISTS _adj_both")
+    con.execute("""CREATE TEMP TABLE _adj_both AS
+        SELECT cik FROM books WHERE quarter=? AND cik<>''
+        INTERSECT SELECT cik FROM books WHERE quarter=? AND cik<>''""", (cur_q, prior_q))
+    per = {}
+    for tag, q in (("c", cur_q), ("p", prior_q)):
+        for cusip, issuer, holders, value, shares in con.execute("""
+                SELECT h.cusip, MAX(h.issuer), COUNT(DISTINCT b.cik), SUM(h.value), SUM(h.shares)
+                  FROM holdings h JOIN books b ON b.accession = h.accession
+                 WHERE h.quarter=? AND h.put_call='' AND b.cik IN (SELECT cik FROM _adj_both)
+                 GROUP BY h.cusip""", (q,)):
+            per.setdefault(cusip, {})[tag] = (issuer, holders, value, shares)
+    tick = dict(con.execute("SELECT cusip, ticker FROM cusip_ticker WHERE ticker<>''").fetchall())
+
+    # Splits: a held-through security whose price per share OR share count
+    # moved by a split-sized step (a 3:2 split, or a 2:1 in a stock that also
+    # rose, keeps the price inside the band — the share count still jumps),
+    # confirmed by an announced split in between.
+    incomplete = False
+    for cusip, d in per.items():
+        if "c" not in d or "p" not in d or not tick.get(cusip):
+            continue
+        (_, hc, vc, sc), (_, hp, vp, sp) = d["c"], d["p"]
+        if min(hc, hp) < 5 or not (sc and sp and vc and vp):
+            continue
+        price_ratio = (vc / sc) / (vp / sp)
+        share_ratio = sc / sp
+        if SPLIT_GAP_LO <= price_ratio <= SPLIT_GAP_HI and 0.74 <= share_ratio <= 1.35:
+            continue
+        splits = _announced_splits(con, tick[cusip])
+        if splits is None:
+            incomplete = True  # asked again next time: an unknown is not "no split"
+            continue
+        f = split_factor_between(splits, prior_q, cur_q)
+        if f != 1.0:
+            split_rows.append((prior_q, cur_q, cusip, f))
+
+    # CUSIP changes: a security its holders left wholesale and a new one they
+    # arrived in, under the same issuer name.
+    retiring = {c: d["p"] for c, d in per.items()
+                if "p" in d and d["p"][1] >= 5 and d.get("c", (None, 0))[1] <= 0.1 * d["p"][1]}
+    arriving = {c: d["c"] for c, d in per.items()
+                if "c" in d and d["c"][1] >= 5 and d.get("p", (None, 0))[1] <= 0.1 * d["c"][1]}
+    by_key = {}
+    for c, (issuer, *_rest) in retiring.items():
+        if not is_fund(issuer) and len(issuer_key(issuer)) >= 4:
+            by_key.setdefault(issuer_key(issuer), []).append(c)
+    candidates = []
+    for new_c, (issuer, n_new, *_r) in arriving.items():
+        if is_fund(issuer):
+            continue
+        best = None
+        for old_c in by_key.get(issuer_key(issuer), []):
+            pairs = con.execute("""
+                SELECT c.shares, p.shares
+                  FROM holdings c JOIN books bc ON bc.accession = c.accession
+                  JOIN books bp ON bp.cik = bc.cik AND bp.quarter = ?
+                  JOIN holdings p ON p.accession = bp.accession AND p.cusip = ? AND p.put_call=''
+                 WHERE c.cusip = ? AND c.quarter = ? AND c.put_call='' AND bc.cik <> ''
+                   AND p.shares > 0""", (prior_q, old_c, new_c, cur_q)).fetchall()
+            if len(pairs) < 0.5 * n_new:
+                continue
+            ratios = sorted(cs / ps for cs, ps in pairs)
+            if not best or len(pairs) > best[1]:
+                best = (old_c, len(pairs), snap_ratio(ratios[len(ratios) // 2]))
+        if best:
+            candidates.append((best[1], new_c, best[0], best[2]))
+    # One-to-one: a retired CUSIP feeds one successor — the one most of its
+    # holders moved into — or a class A and class B arriving together would
+    # both be measured against the same old position.
+    taken = set()
+    for _n, new_c, old_c, ratio in sorted(candidates, reverse=True):
+        if old_c in taken:
+            continue
+        taken.add(old_c)
+        link_rows.append((prior_q, cur_q, new_c, old_c, ratio))
+    con.execute("DROP TABLE IF EXISTS _adj_both")
+    con.execute("DELETE FROM split_adj WHERE prior_quarter=? AND quarter=?", (prior_q, cur_q))
+    con.execute("DELETE FROM cusip_link WHERE prior_quarter=? AND quarter=?", (prior_q, cur_q))
+    con.executemany("INSERT OR REPLACE INTO split_adj VALUES (?,?,?,?)", split_rows)
+    con.executemany("INSERT OR REPLACE INTO cusip_link VALUES (?,?,?,?,?)", link_rows)
+    if not incomplete:
+        con.execute("INSERT OR REPLACE INTO adj_runs VALUES (?,?,?)", (prior_q, cur_q, stamp))
+    con.commit()
+    return not incomplete
+
+
+_universe_cache = {}
+
+
+def prior_universe(con, prior_q):
+    """Every security any filer reported in `prior_q` (a complete quarter).
+    One absent from it was not reportable then — a new listing — so a
+    position in it now is a holding that became visible, not a purchase:
+    Fidelity's pre-IPO SpaceX stake read as a $36B buy (2026-11-16)."""
+    if prior_q not in _universe_cache:
+        _universe_cache[prior_q] = {c for (c,) in con.execute(
+            "SELECT DISTINCT cusip FROM holdings WHERE quarter=? AND put_call=''", (prior_q,))}
+    return _universe_cache[prior_q]
+
+
+def _adjustments(con, prior_q, cur_q, compute=True, status=None):
+    """({cusip: split factor}, {new_cusip: (old_cusip, ratio)}) for a pair.
+
+    `compute=False` reads what is stored, even if a newer filing has since
+    made it due for recomputation: the per-stock and per-fund lookups wait on
+    a 60-second limit and must not start minutes of work. The sync and the
+    market-wide scans keep the stored corrections current. `status`, a dict,
+    gets "complete": False when a split lookup went unanswered."""
+    if not prior_q or not cur_q:
+        return {}, {}
+    if not compute:
+        _adj_tables(con)  # a fresh index has none yet: then there is nothing to undo
+    if compute:
+        ok = _ensure_adjustments(con, prior_q, cur_q)
+        if status is not None and not ok:
+            status["complete"] = False
+    splits = dict(con.execute("SELECT cusip, factor FROM split_adj WHERE prior_quarter=? AND quarter=?",
+                              (prior_q, cur_q)).fetchall())
+    links = {n: (o, r) for n, o, r in con.execute(
+        "SELECT new_cusip, old_cusip, ratio FROM cusip_link WHERE prior_quarter=? AND quarter=?",
+        (prior_q, cur_q)).fetchall()}
+    return splits, links
+
+
+def compare_positions(cur, prior, splits, links, universe=None):
+    """One filer's positions now against its previous filing, corporate
+    actions undone. `cur` and `prior` are {cusip: (issuer, value, shares,
+    ticker)}. Yields (cusip, issuer, ticker, kind, shares, prior_shares, flow,
+    value) with kind new/listed/added/trimmed/held/exited — "listed" a
+    position in a security that was not reportable last quarter at all
+    (`universe`, see prior_universe). Prior shares are restated
+    in today's shares; flow is the shares changed at the price the filing
+    carrying the position implies — an estimate, as 13F holds quarter-end
+    snapshots, not trades."""
+    used_prior = set()
+    for cusip, (issuer, value, shares, ticker) in cur.items():
+        px = value / shares if shares else 0.0
+        if cusip in prior:
+            p_shares = prior[cusip][2] * splits.get(cusip, 1.0)
+            used_prior.add(cusip)
+        elif cusip in links and links[cusip][0] in prior:
+            old, ratio = links[cusip]
+            p_shares = prior[old][2] * ratio
+            used_prior.add(old)
+        else:
+            listed = universe is not None and cusip not in universe
+            yield cusip, issuer, ticker, ("listed" if listed else "new"), shares, 0.0, \
+                (0.0 if listed else value), value
+            continue
+        delta = shares - p_shares
+        if p_shares > 0 and abs(delta) / p_shares < 0.01:
+            yield cusip, issuer, ticker, "held", shares, p_shares, 0.0, value
+            continue
+        yield cusip, issuer, ticker, ("added" if delta > 0 else "trimmed"), shares, p_shares, delta * px, value
+    for cusip, (issuer, value, shares, ticker) in prior.items():
+        if cusip not in used_prior:
+            yield cusip, issuer, ticker, "exited", 0.0, shares, -(value or 0.0), 0.0
+
+
+def _positions(con, accession):
+    return {c: (i, v or 0.0, s or 0.0, t or "") for c, i, v, s, t in con.execute("""
+        SELECT h.cusip, h.issuer, h.value, h.shares, ct.ticker
+          FROM holdings h LEFT JOIN cusip_ticker ct ON ct.cusip = h.cusip
+         WHERE h.accession = ? AND h.put_call = ''""", (accession,))}
+
+
+def _accession_quarter(con, accession):
+    r = con.execute("SELECT quarter FROM books WHERE accession=?", (accession,)).fetchone()
+    return r[0] if r else None
+
+
+BIG_MOVE_FLOOR = 25_000_000.0   # a stake change smaller than this is not a "big move"
+REPORTING_CHANGE = 3.0          # a book this many times bigger or smaller changed how it is filed
+
+
+def comparable_books(book, prior_book):
+    """Two filings of one filer can be compared position by position only if
+    they describe the same book. One three times larger or smaller is a
+    change of filing entity or units, not trading: JPMorgan's CIK "exited"
+    $85B of NVDA when its holdings moved to another filer (2026-11-16)."""
+    if not (book and prior_book and book > 0 and prior_book > 0):
+        return False
+    r = book / prior_book
+    return 1.0 / REPORTING_CHANGE <= r <= REPORTING_CHANGE
+
+
+def plausible_move(flow, book, prior_book):
+    """No single position can move more than the whole book it sits in; one
+    that does is a filing error (a value in the wrong units, a share class
+    mislabelled — $265B of BRK-A from a $57B book)."""
+    return abs(flow) <= max(book or 0.0, prior_book or 0.0)
+
+
+def _ensure_big_moves(con, progress=None):
+    """Every filer's stake changes of BIG_MOVE_FLOOR or more, newest filing
+    against the one before it, corporate actions undone. Kept per state of the
+    index; recomputed when a quarter is (re)ingested or tickers are resolved."""
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS big_moves_run (stamp TEXT);
+    """)
+    # v2 adds the prior book (the base of an exit's weight); an older table is rebuilt.
+    cols = [r[1] for r in con.execute("PRAGMA table_info(big_moves)")]
+    if cols and "prior_book_value" not in cols:
+        con.execute("DROP TABLE big_moves")
+        con.execute("DELETE FROM big_moves_run")
+    con.execute("""CREATE TABLE IF NOT EXISTS big_moves (
+            cik TEXT, manager TEXT, quarter TEXT, prior_quarter TEXT, cusip TEXT, issuer TEXT,
+            ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
+            book_value REAL, position_count INTEGER, prior_book_value REAL)""")
+    stamp = "|".join(f"{q}:{n}:{t}" for q, n, t in con.execute(
+        "SELECT quarter, filers, ingested_at FROM quarters ORDER BY quarter"))
+    stamp += "|" + _ticker_stamp(con)
+    row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
+    if row and row[0] == stamp:
+        return
+    con.execute("DELETE FROM big_moves")
+    qs = quarter_pair(con)
+    floor = qs[0] if qs else ""
+    newest = con.execute("""
+        SELECT b.cik, b.manager, b.quarter, b.accession, b.stock_value, b.stock_count
+          FROM books b
+          JOIN (SELECT cik, MAX(quarter) AS q FROM books WHERE cik <> '' GROUP BY cik) n
+            ON n.cik = b.cik AND n.q = b.quarter
+         WHERE b.quarter >= ? AND b.stock_value >= ? AND b.stock_count >= ?""",
+        (floor, MIN_BOOK_VALUE, MIN_BOOK_POSITIONS)).fetchall()
+    adj = {}
+    adj_status = {"complete": True}
+    for n, (cik, manager, quarter, accession, book_value, count) in enumerate(newest):
+        prior = con.execute("SELECT quarter, accession, stock_value FROM books WHERE cik=? AND quarter<? "
+                            "ORDER BY quarter DESC LIMIT 1", (cik, quarter)).fetchone()
+        if progress and n % 500 == 0:
+            progress(n, len(newest))
+        if not prior:
+            continue  # a first filing: nothing it did can be seen
+        if not comparable_books(book_value, prior[2]):
+            continue
+        key = (prior[0], quarter)
+        if key not in adj:
+            adj[key] = _adjustments(con, *key, status=adj_status)
+        splits, links = adj[key]
+        out = []
+        for cusip, issuer, ticker, kind, shares, p_shares, flow, value in compare_positions(
+                _positions(con, accession), _positions(con, prior[1]), splits, links,
+                prior_universe(con, prior[0])):
+            if (kind not in ("held", "listed") and abs(flow) >= BIG_MOVE_FLOOR
+                    and plausible_move(flow, book_value, prior[2])):
+                out.append((cik, manager, quarter, prior[0], cusip, issuer, ticker, kind, shares,
+                            p_shares, flow, value, book_value, count, prior[2]))
+        con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", out)
+    con.execute("DELETE FROM big_moves_run")
+    if adj_status["complete"]:
+        con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
+    con.commit()
+
+
+def big_moves(limit=200, side="both", sort="value", active_only=True, include_funds=False):
+    """The largest single stake changes — one manager, one stock — across
+    every 13F filer, newest filing against the one before it.
+
+    `sort`: "value" (estimated dollars) or "weight" (the move as a share of the
+    manager's own book: conviction, which a dollar ranking hides under the
+    index giants). `active_only` drops books of more than
+    MAX_DISCRETIONARY_POSITIONS names: a 4,000-stock book moves with its
+    inflows, not its views. Funds and ETFs as holdings are dropped by name
+    unless asked for."""
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM books LIMIT 1").fetchone():
+            return {"error": "no 13F data ingested yet"}
+        _ensure_big_moves(con)
+        where = ["1=1"]
+        if side == "buys":
+            where.append("flow > 0")
+        elif side == "sells":
+            where.append("flow < 0")
+        if active_only:
+            where.append(f"position_count <= {int(MAX_DISCRETIONARY_POSITIONS)}")
+        # A buy is weighed against the book it went into, a sale against the
+        # book it came out of.
+        base = "(CASE WHEN flow < 0 THEN prior_book_value ELSE book_value END)"
+        order = f"ABS(flow) / {base} DESC" if sort == "weight" else "ABS(flow) DESC"
+        rows = con.execute(f"""
+            SELECT cik, manager, quarter, prior_quarter, cusip, issuer, ticker, kind, shares,
+                   prior_shares, flow, value, book_value, position_count, prior_book_value
+              FROM big_moves WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ?""",
+            (int(limit) * (1 if include_funds else 3),)).fetchall()
+        out = []
+        for r in rows:
+            if not include_funds and is_fund(r[5]):
+                continue
+            out.append({"cik": r[0], "manager": r[1], "quarter": r[2], "prior_quarter": r[3],
+                        "cusip": r[4], "issuer": r[5], "ticker": r[6] or "", "kind": r[7],
+                        "shares": r[8], "prior_shares": r[9], "flow": r[10], "value": r[11],
+                        "book_value": r[12], "position_count": r[13], "prior_book_value": r[14],
+                        "book_pct": (abs(r[10]) / (r[14] if r[10] < 0 else r[12]) * 100.0)
+                                    if (r[14] if r[10] < 0 else r[12]) else None})
+            if len(out) >= int(limit):
+                break
+        partial = [q for (q,) in con.execute("SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1")]
+        return {"rows": out, "side": side, "sort": sort, "active_only": bool(active_only),
+                "floor": BIG_MOVE_FLOOR, "max_positions": MAX_DISCRETIONARY_POSITIONS,
+                "partial_quarters": sorted(partial)}
+    finally:
+        con.close()
+
+
+
+# ── Keeping the index current ───────────────────────────────────────────────
+#
+# Two SEC sources, used together so the index is as new as the filings are:
+#   * the bulk data sets — every 13F in a three-month FILING window, published
+#     some weeks after the window closes; complete, and the authority;
+#   * EDGAR's daily index — every 13F-HR filed each day, from the day after the
+#     newest data set's window up to yesterday. Each filing is read from its
+#     full submission file: one request carries the period, the manager and
+#     the holdings table.
+# sync() runs both, resumably: a data set is recorded when it is in, a day
+# when every filing on it is, a filing when it is stored. A quarter whose
+# filings pass ~90% of the previous quarter's filers after the deadline is
+# treated as complete, so the screens move to it without waiting for the data
+# set; the data set then replaces it wholesale.
+
+import re as _re
+from datetime import date as _date, timedelta as _td
+
+EDGAR_GAP = 0.12            # ~8 requests a second: inside SEC's 10/s fair-access limit
+COMPLETE_SHARE = 0.9        # of the previous quarter's filers, after the deadline
+FILING_DEADLINE_DAYS = 45
+
+
+def dataset_window(name):
+    """'01jun2026-31aug2026_form13f.zip' -> ('2026-06-01', '2026-08-31')."""
+    m = _re.search(r"(\d{2})([a-z]{3})(\d{4})-(\d{2})([a-z]{3})(\d{4})", (name or "").lower())
+    if not m:
+        return None
+    mon = {k: i for i, k in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug",
+                                       "sep", "oct", "nov", "dec"), 1)}
+    try:
+        a = _date(int(m.group(3)), mon[m.group(2)], int(m.group(1)))
+        b = _date(int(m.group(6)), mon[m.group(5)], int(m.group(4)))
+    except (KeyError, ValueError):
+        return None
+    return a.isoformat(), b.isoformat()
+
+
+def quarter_deadline(period):
+    """The day a quarter's 13F is due: 45 days after the quarter end."""
+    return (_date.fromisoformat(period) + _td(days=FILING_DEADLINE_DAYS)).isoformat()
+
+
+def quarter_is_complete(period, filers, prior_filers, today):
+    return (today > quarter_deadline(period) and bool(prior_filers)
+            and filers >= COMPLETE_SHARE * prior_filers)
+
+
+def parse_submission(text):
+    """(period ISO, manager, information-table XML bytes) from a full 13F
+    submission file, or None. The header says CONFORMED PERIOD OF REPORT and
+    the filer's conformed name; the table is the embedded XML document."""
+    per = _re.search(r"CONFORMED PERIOD OF REPORT:\s*(\d{8})", text)
+    name = _re.search(r"COMPANY CONFORMED NAME:\s*(.+)", text)
+    tab = _re.search(r"<(?:\w+:)?informationTable[\s>].*?</(?:\w+:)?informationTable>", text, _re.S)
+    if not per or not tab:
+        return None
+    p = per.group(1)
+    return f"{p[:4]}-{p[4:6]}-{p[6:]}", (name.group(1).strip() if name else ""), tab.group(0).encode()
+
+
+def missing_archive_object(body):
+    """EDGAR's archive answers a file that does not exist (the daily index of a
+    day SEC was closed) with a 403 S3 AccessDenied document; a refusal for
+    going too fast is an HTML page. Same rule as sec_ownership_data's."""
+    b = body or ""
+    return "<Code>AccessDenied</Code>" in b and "<Error>" in b
+
+
+def _day_13f(d):
+    """13F-HR originals filed on one day: [(cik, path)]; [] on a day with no
+    index (404: weekend, holiday, not yet published); None when the index could
+    not be read — the day is then not recorded and is asked again."""
+    q = (d.month - 1) // 3 + 1
+    url = f"https://www.sec.gov/Archives/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx"
+    try:
+        r = requests.get(url, timeout=60, headers=UA)
+    except Exception:
+        return None
+    if r.status_code == 404 or (r.status_code == 403 and missing_archive_object(r.text)):
+        # No index for the day: a day SEC was closed — or one not published
+        # yet, which only a day a few days back can rule out.
+        return [] if (_date.today() - d).days >= 3 else None
+    if r.status_code != 200:
+        return None
+    out = []
+    for line in r.text.splitlines():
+        if not line.startswith("13F-HR ") or line.startswith("13F-HR/A"):
+            continue
+        m = _re.search(r"edgar/data/(\d+)/(\d{10}-\d{2}-\d{6})\.txt", line)
+        if m:
+            out.append((m.group(1), m.group(0), m.group(2)))
+    return out
+
+
+def _store_filing(con, accession, period, cik, manager, positions):
+    """One filer's quarter, replaced by this filing (as ingest_current does:
+    deleting by accession alone would leave a second original in place)."""
+    cik = _pad_cik(cik)
+    con.execute("DELETE FROM holdings WHERE accession IN "
+                "(SELECT accession FROM filings WHERE cik=? AND quarter=?)", (cik, period))
+    con.execute("DELETE FROM books WHERE cik=? AND quarter=?", (cik, period))
+    con.execute("DELETE FROM filings WHERE cik=? AND quarter=?", (cik, period))
+    con.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)", (accession, period, cik, manager, 0))
+    con.executemany("INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
+                    [(accession, period, p["cusip"], p["issuer"], p["class"], p["put_call"],
+                      p["value"], p["shares"]) for p in positions])
+    stock = [p for p in positions if not p["put_call"]]
+    con.execute("INSERT OR REPLACE INTO books VALUES (?,?,?,?,?,?)",
+                (accession, period, cik, manager, sum(p["value"] for p in stock), len(stock)))
+
+
+def _register_quarter(con, period, source):
+    """The quarters row for an EDGAR-filled quarter: its filer count, and
+    whether it is complete enough to be served as the default."""
+    filers = con.execute("SELECT COUNT(DISTINCT cik) FROM books WHERE quarter=? AND cik<>''",
+                         (period,)).fetchone()[0]
+    prior = con.execute("SELECT filers FROM quarters WHERE quarter<? AND COALESCE(partial,0)=0 "
+                        "ORDER BY quarter DESC LIMIT 1", (period,)).fetchone()
+    complete = quarter_is_complete(period, filers, prior[0] if prior else 0, _date.today().isoformat())
+    rows = con.execute("SELECT COUNT(*) FROM holdings WHERE quarter=?", (period,)).fetchone()[0]
+    con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'),?)",
+                (period, source, filers, rows, 0 if complete else 1))
+    return filers, complete
+
+
+def sync(progress=None, max_filings=None):
+    """Bring the index up to the newest filing SEC has. Safe to run often:
+    everything already in is skipped."""
+    if requests is None:
+        return {"error": "requests not available"}
+    out = {"datasets": [], "days": 0, "filings": 0, "failed": 0, "quarters": {}}
+    con = connect()
+    try:
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS datasets_in (name TEXT PRIMARY KEY, quarter TEXT, at TEXT);
+            CREATE TABLE IF NOT EXISTS edgar_days (day TEXT PRIMARY KEY, filings INTEGER, at TEXT);
+        """)
+        # Data sets already in, including those ingested before this table.
+        for (src,) in con.execute("SELECT source FROM quarters WHERE COALESCE(partial,0)=0"):
+            if src and src.endswith(".zip"):
+                con.execute("INSERT OR IGNORE INTO datasets_in VALUES (?,?,datetime('now'))",
+                            (src.rsplit("/", 1)[-1], ""))
+        con.commit()
+    finally:
+        con.close()
+
+    # 1. Data sets newer than the newest one in.
+    urls = available_datasets()
+    if not urls:
+        out["warning"] = "could not list the SEC data sets; EDGAR only this time"
+    con = connect()
+    try:
+        have = {n for (n,) in con.execute("SELECT name FROM datasets_in")}
+        newest_in = max((dataset_window(n)[1] for n in have if dataset_window(n)), default="")
+    finally:
+        con.close()
+    for url in reversed(urls):  # oldest first, so a quarter is never overwritten by an older set
+        name = url.rsplit("/", 1)[-1]
+        w = dataset_window(name)
+        if name in have or not w or w[1] <= newest_in:
+            continue
+        r = ingest(url)
+        if r.get("error"):
+            out["datasets"].append({"name": name, "error": r["error"]})
+            break
+        con = connect()
+        con.execute("INSERT OR REPLACE INTO datasets_in VALUES (?,?,datetime('now'))", (name, r["quarter"]))
+        # Ingesting a data set replaces its quarter wholesale, late EDGAR
+        # filings for it included: the days after its window are read again.
+        con.execute("DELETE FROM edgar_days WHERE day > ?", (w[1],))
+        con.commit()
+        con.close()
+        newest_in = w[1]
+        out["datasets"].append({"name": name, "quarter": r["quarter"], "filers": r["filers"]})
+
+    # 2. EDGAR, day by day, from the day after that window to yesterday.
+    global _MIN_REQ_GAP
+    saved_gap, _MIN_REQ_GAP = _MIN_REQ_GAP, EDGAR_GAP
+    con = connect()
+    try:
+        start = (_date.fromisoformat(newest_in) + _td(days=1)) if newest_in else _date.today() - _td(days=90)
+        done = {d for (d,) in con.execute("SELECT day FROM edgar_days")}
+        floor_q = (quarter_pair(con) or [""])[-1]  # nothing older than the comparison base
+        known = {a for (a,) in con.execute("SELECT accession FROM filings")}
+        touched = set()
+        d = start
+        today = _date.today()
+        while d < today:
+            if d.isoformat() in done or d.weekday() >= 5:
+                d += _td(days=1)
+                continue
+            day = _day_13f(d)
+            _LAST_REQ_SET()
+            if day is None:
+                out["warning"] = f"EDGAR's index for {d} could not be read; it is asked again next time"
+                break
+            stored_all = True
+            for cik, path, acc in day:
+                if acc in known:
+                    continue
+                if max_filings and out["filings"] >= int(max_filings):
+                    stored_all = False
+                    out["more"] = True  # a pass is capped; the next one carries on
+                    break
+                r, code = _get_status(f"https://www.sec.gov/Archives/{path}")
+                if r is None and not (code in (404, 410) or code == "missing"):
+                    stored_all = False  # refused or offline: this day is not finished
+                    out["failed"] += 1
+                    break
+                parsed = parse_submission(r.text) if r is not None else None
+                if not parsed:
+                    out["failed"] += 1  # withdrawn, or not a 13F we can read: skipped, not retried forever
+                    continue
+                period, manager, xml = parsed
+                if period < floor_q:
+                    continue  # a late filing for a quarter this index no longer compares
+                positions = parse_information_table(xml)
+                if not positions:
+                    out["failed"] += 1
+                    continue
+                _store_filing(con, acc, period, cik, manager, positions)
+                known.add(acc)
+                touched.add(period)
+                out["filings"] += 1
+                con.commit()  # one filing per transaction: readers never wait long
+                if progress and out["filings"] % 50 == 0:
+                    progress(out["filings"], d.isoformat())
+            if not stored_all:
+                break
+            con.execute("INSERT OR REPLACE INTO edgar_days VALUES (?,?,datetime('now'))", (d.isoformat(), len(day)))
+            con.commit()
+            out["days"] += 1
+            d += _td(days=1)
+        # The last day read in full — not one a capped pass stopped inside.
+        last = con.execute("SELECT MAX(day) FROM edgar_days").fetchone()[0]
+        out["through"] = last or (start - _td(days=1)).isoformat()
+        for period in sorted(touched):
+            # Only a quarter the bulk sets have not covered: their rows are the authority.
+            row = con.execute("SELECT source FROM quarters WHERE quarter=?", (period,)).fetchone()
+            if row and row[0] and str(row[0]).endswith(".zip"):
+                continue
+            filers, complete = _register_quarter(con, period, f"EDGAR daily index through {out['through']}")
+            out["quarters"][period] = {"filers": filers, "complete": complete}
+        con.commit()
+    finally:
+        _MIN_REQ_GAP = saved_gap
+        con.close()
+
+    # Warm the corrections the screens read, so a per-stock lookup (which
+    # only reads them) finds them current.
+    if out["filings"] or out["datasets"]:
+        con = connect()
+        try:
+            qs = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
+            for a, b in zip(qs[1:], qs[:-1]):
+                _ensure_adjustments(con, a, b)
+        finally:
+            con.close()
+
+    # 3. Name the new holdings, and correct tickers picked before us_listing().
+    if out["filings"] or out["datasets"]:
+        newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
+        if newest:
+            r = resolve_cusips(limit=1500, quarter=newest)
+            out["resolved"] = r.get("resolved", 0)
+    out["recheck"] = recheck_tickers()
+    return out
+
+
+def _get_status(url, timeout=60):
+    """A paced GET that says why it failed: (response, 200), (None, status),
+    (None, "missing") for an archive object that does not exist, or
+    (None, None) when nothing came back."""
+    global _LAST_REQ
+    elapsed = time.time() - _LAST_REQ
+    if elapsed < _MIN_REQ_GAP:
+        time.sleep(_MIN_REQ_GAP - elapsed)
+    try:
+        r = requests.get(url, timeout=timeout, headers=UA)
+    except Exception:
+        _LAST_REQ = time.time()
+        return None, None
+    _LAST_REQ = time.time()
+    if r.status_code == 403 and missing_archive_object(r.text):
+        return None, "missing"
+    return (r, 200) if r.ok else (None, r.status_code)
+
+
+def _LAST_REQ_SET():
+    global _LAST_REQ
+    _LAST_REQ = time.time()
+
 def handle_action(action, payload):
     if action == "status":
         return status()
@@ -1539,6 +2415,16 @@ def handle_action(action, payload):
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))
+    if action == "sync":
+        def prog(n, day):
+            print(f"PROGRESS {n} {day}", file=sys.stderr, flush=True)
+        return sync(prog, payload.get("max_filings"))
+    if action == "recheck_tickers":
+        return recheck_tickers(int(payload.get("limit") or 3000))
+    if action == "big_moves":
+        return big_moves(int(payload.get("limit") or 200), payload.get("side") or "both",
+                         payload.get("sort") or "value", bool(payload.get("active_only", True)),
+                         bool(payload.get("include_funds", False)))
     if action == "top_firms":
         return top_firms(int(payload.get("limit") or 50))
     if action == "book":

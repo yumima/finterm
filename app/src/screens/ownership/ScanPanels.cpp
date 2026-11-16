@@ -450,6 +450,151 @@ void MoversPanel::render() {
                        .arg(m.rows.size()));
 }
 
+// ── BIG MOVES ────────────────────────────────────────────────────────────────
+
+BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
+    setStyleSheet(control_style());
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(6);
+
+    auto title = section_title(QStringLiteral("BIG MOVES"));
+    title_note_ = title.right;
+    auto* bar = new QHBoxLayout;
+    bar->addWidget(title.widget, 1);
+    side_ = new QComboBox;
+    side_->addItem(QStringLiteral("buys and sells"), QStringLiteral("both"));
+    side_->addItem(QStringLiteral("buys"), QStringLiteral("buys"));
+    side_->addItem(QStringLiteral("sells"), QStringLiteral("sells"));
+    bar->addWidget(side_);
+    bar->addWidget(control_label(QStringLiteral("Rank by")));
+    sort_ = new QComboBox;
+    sort_->addItem(QStringLiteral("est. $ size"), QStringLiteral("value"));
+    sort_->addItem(QStringLiteral("share of the manager's book"), QStringLiteral("weight"));
+    bar->addWidget(sort_);
+    active_only_ = new QCheckBox(QStringLiteral("active books only"));
+    active_only_->setChecked(true);
+    bar->addWidget(active_only_);
+    for (auto* c : {side_, sort_})
+        connect(c, &QComboBox::activated, this, [this](int) { refresh(); });
+    connect(active_only_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
+    root->addLayout(bar);
+
+    table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Manager"),
+                         QStringLiteral("Move"), QStringLiteral("Est. $"), QStringLiteral("% of book"),
+                         QStringLiteral("Shares now"), QStringLiteral("Shares before"), QStringLiteral("Filed for")});
+    table_->horizontalHeaderItem(4)->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "Shares changed × the price the filing implies. 13F shows quarter-end holdings, not trades, so this "
+        "is an estimate of the dollars that moved.")));
+    table_->horizontalHeaderItem(5)->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "The move as a share of the manager's own 13F book — the book it went into for a buy, the one it came "
+        "out of for a sale.")));
+    connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
+    root->addWidget(table_, 1);
+    foot_ = note_label();
+    root->addWidget(foot_);
+
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::big_moves_updated, this,
+            [this]() { render(); });
+    render();
+}
+
+void BigMovesPanel::refresh() {
+    services::OwnershipService::instance().load_big_moves(side_->currentData().toString(),
+                                                          sort_->currentData().toString(),
+                                                          active_only_->isChecked());
+    render();
+}
+
+void BigMovesPanel::render() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& b = svc.big_moves();
+    if (!b.loaded || svc.big_moves_loading()) {
+        if (!b.loaded)
+            table_->setRowCount(0);
+        title_note_->setText(svc.big_moves_loading()
+                                 ? QStringLiteral("comparing every filer's newest filing with its last — the first "
+                                                  "pass after new data takes a few minutes, then it is cached")
+                                 : QString());
+        if (!b.loaded)
+            foot_->clear();
+        return;
+    }
+    if (!b.error.isEmpty()) {
+        table_->setRowCount(0);
+        title_note_->clear();
+        foot_->setText(b.error);
+        return;
+    }
+    QDate newest;
+    for (const auto& r : b.rows)
+        newest = std::max(newest, r.quarter);
+    title_note_->setText(newest.isValid()
+                             ? QStringLiteral("each manager's newest filing vs its previous one · newest Q%1 %2 · "
+                                              "positions up to 135 days old")
+                                   .arg((newest.month() - 1) / 3 + 1)
+                                   .arg(newest.year())
+                             : QString());
+
+    table_->setUpdatesEnabled(false);
+    table_->setRowCount(b.rows.size());
+    for (int i = 0; i < b.rows.size(); ++i) {
+        const auto& r = b.rows[i];
+        table_->setItem(i, 0, ticker_cell(r.ticker, r.issuer));
+        table_->setItem(i, 1, cell(r.issuer));
+        auto* mgr = cell(r.manager);
+        mgr->setToolTip(ui::tooltip_wrap(QStringLiteral("%1 · 13F book %2 across %3 names")
+                                             .arg(r.manager, fmt::format_compact(r.book_value))
+                                             .arg(r.position_count)));
+        table_->setItem(i, 2, mgr);
+        const bool buy = r.flow >= 0;
+        const QString move = r.kind == QLatin1String("new")      ? QStringLiteral("NEW")
+                             : r.kind == QLatin1String("exited") ? QStringLiteral("EXITED")
+                             : r.kind == QLatin1String("added")  ? QStringLiteral("ADDED")
+                                                                 : QStringLiteral("TRIMMED");
+        table_->setItem(i, 3, cell(move, buy ? ui::colors::GREEN() : ui::colors::RED()));
+        table_->setItem(i, 4, num_cell((buy ? QStringLiteral("+$") : QStringLiteral("−$")) +
+                                           fmt::format_compact(std::fabs(r.flow)),
+                                       buy ? ui::colors::GREEN() : ui::colors::RED()));
+        table_->setItem(i, 5, num_cell(r.book_pct ? QStringLiteral("%1%").arg(*r.book_pct, 0, 'f', 1)
+                                                  : fmt::placeholder(),
+                                       r.book_pct && *r.book_pct >= 10.0 ? ui::colors::AMBER() : QString()));
+        table_->setItem(i, 6, num_cell(r.shares > 0 ? fmt::format_compact(r.shares) : fmt::placeholder()));
+        auto* before = num_cell(r.prior_shares > 0 ? fmt::format_compact(r.prior_shares) : fmt::placeholder(),
+                                ui::colors::TEXT_SECONDARY());
+        before->setToolTip(ui::tooltip_wrap(QStringLiteral(
+            "Held at the previous filing (%1), restated in today's shares when a split or CUSIP change came between")
+                                                .arg(r.prior_quarter.toString(QStringLiteral("d MMM yyyy")))));
+        table_->setItem(i, 7, before);
+        // A quarter still being filed is a sample of its filers, not all of them.
+        const bool partial = b.partial_quarters.contains(r.quarter.toString(Qt::ISODate));
+        auto* q = num_cell(QStringLiteral("Q%1 %2%3")
+                               .arg((r.quarter.month() - 1) / 3 + 1)
+                               .arg(r.quarter.year())
+                               .arg(partial ? QStringLiteral(" · filing") : QString()),
+                           partial ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY());
+        if (partial)
+            q->setToolTip(ui::tooltip_wrap(QStringLiteral(
+                "This quarter's 13Fs are still coming in: the move is real, but other managers' moves in the "
+                "same quarter may not be filed yet")));
+        table_->setItem(i, 8, q);
+    }
+    table_->setUpdatesEnabled(true);
+    table_->resizeColumnsToContents();
+    table_->setColumnWidth(1, qMin(qMax(table_->columnWidth(1), 160), 240));
+    table_->setColumnWidth(2, qMin(qMax(table_->columnWidth(2), 160), 260));
+    fill_width(table_, {1, 2});
+
+    foot_->setText(
+        QStringLiteral("%1 moves of %2 or more · %3 · splits and CUSIP changes undone; a newly listed stock is "
+                       "not counted as bought; filers whose book changed shape (new filing entity, units error) "
+                       "left out · funds and ETFs dropped by name · 13F is filed up to 45 days after quarter end")
+            .arg(b.rows.size())
+            .arg(fmt::format_compact(b.floor))
+            .arg(b.active_only ? QStringLiteral("books of %1 names or fewer").arg(b.max_positions)
+                               : QStringLiteral("all books, index giants included")));
+}
+
 // ── LARGEST FUNDS ────────────────────────────────────────────────────────────
 
 namespace {
@@ -513,7 +658,13 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
         make_table({QStringLiteral("#"), QStringLiteral("Manager"), QStringLiteral("Filed for"),
                     QStringLiteral("13F book"), QStringLiteral("Δ book"), QStringLiteral("Names"),
                     QStringLiteral("New"), QStringLiteral("Added"), QStringLiteral("Trimmed"), QStringLiteral("Exited"),
-                    QStringLiteral("Est. net flow"), QStringLiteral("Biggest buy"), QStringLiteral("Biggest sell")});
+                    QStringLiteral("Est. net flow"), QStringLiteral("Biggest buy (est. $)"),
+                    QStringLiteral("Biggest sell (est. $)")});
+    for (int c : {static_cast<int>(kTopBuy), static_cast<int>(kTopSell)})
+        table_->horizontalHeaderItem(c)->setToolTip(ui::tooltip_wrap(QStringLiteral(
+            "The single largest position change by estimated dollars: shares changed × the price the filing "
+            "implies. Splits and CUSIP changes between the filings are undone first, and a stock that listed "
+            "since the last filing is not counted as bought.")));
     // A ticker in the buy/sell columns opens that stock; anywhere else on the
     // row opens the filer's book.
     connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {

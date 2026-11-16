@@ -287,6 +287,8 @@ void FirmDetailPanel::render() {
         positions_->setItem(r, 3, cell(p.shares ? fmt::format_compact(*p.shares) : fmt::placeholder()));
         positions_->setItem(r, 4, cell(p.value ? fmt::format_compact(*p.value) : fmt::placeholder()));
         QString move = action.isEmpty() ? fmt::placeholder() : action;
+        if (action == QLatin1String("listed"))
+            move = QStringLiteral("listed (not a buy)");
         if (p.shares_delta && *p.shares_delta != 0.0) {
             move += QStringLiteral("  %1%2").arg(*p.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("-"),
                                                  fmt::format_compact(std::abs(*p.shares_delta)));

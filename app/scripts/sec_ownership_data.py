@@ -95,7 +95,18 @@ def _get_status(url, headers=None, timeout=20):
         _LAST_REQ = time.time()
         return None, None
     _LAST_REQ = time.time()
+    if r.status_code == 403 and missing_archive_object(r.text):
+        return None, 404  # EDGAR's archive answers a file that does not exist this way
     return (r, r.status_code) if r.ok else (None, r.status_code)
+
+
+def missing_archive_object(body):
+    """EDGAR's archive is served from object storage, and a file that does not
+    exist — the daily index of a day SEC was closed (Labor Day 2026) — comes
+    back 403 with an S3 AccessDenied document, not 404. A refusal for going too
+    fast is an HTML page instead, and must stay a refusal."""
+    b = body or ""
+    return "<Code>AccessDenied</Code>" in b and "<Error>" in b
 
 
 def _get(url, headers=None, timeout=20):

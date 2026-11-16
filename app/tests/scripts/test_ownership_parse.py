@@ -110,6 +110,17 @@ FORM4 = b"""<?xml version="1.0"?>
 """
 
 
+def test_a_missing_edgar_file_is_not_a_refusal():
+    # Labor Day 2026: EDGAR answered the missing daily index 403 with an S3
+    # AccessDenied document. Read as a refusal, the scan stopped there for good.
+    s3 = ('<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>AccessDenied</Code>'
+          '<Message>Access Denied</Message></Error>')
+    check("S3 AccessDenied = no such file", so.missing_archive_object(s3))
+    check("SEC's rate-limit page stays a refusal",
+          not so.missing_archive_object("<html><h1>Request Rate Threshold Exceeded</h1></html>"))
+    check("empty body stays a refusal", not so.missing_archive_object(""))
+
+
 def test_parse_reads_the_filed_values():
     rows = so.parse_form4(FORM4, "http://x/form4.xml")
     check("parse: three transactions", len(rows) == 3, f"got {len(rows)}")
