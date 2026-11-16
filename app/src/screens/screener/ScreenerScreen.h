@@ -2,6 +2,7 @@
 #include "screens/IStatefulScreen.h"
 #include "screens/screener/ScreenerModel.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QWidget>
 
@@ -185,6 +186,8 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QString current_id_ = QStringLiteral("__overview__");
     bool running_ = false;
     bool shown_once_ = false;
+    QDateTime last_scan_; ///< when the screens last ran (UTC)
+    static bool close_since(const QDateTime& when);
     bool panes_set_ = false;
     int scan_gen_ = 0; // a reply for a universe no longer selected is dropped
     // Newest scan generation saved per cache file: a superseded scan that

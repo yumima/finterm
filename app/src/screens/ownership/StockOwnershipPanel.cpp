@@ -1,3 +1,4 @@
+#include "ui/VisibleRefresh.h"
 #include "screens/ownership/StockOwnershipPanel.h"
 
 #include "screens/ownership/FirmDetailPanel.h"
@@ -48,6 +49,10 @@ StockOwnershipPanel::StockOwnershipPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void StockOwnershipPanel::build_ui() {
+    // A reload empties the panel while EDGAR is re-read, so it runs when
+    // someone comes back to the panel, never under a reader. Just over the
+    // service's own one-hour copy, so it really fetches.
+    ui::refresh_on_return(this, 65 * 60, [this]() { reload(); });
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(10, 8, 10, 8);
     root->setSpacing(6);
@@ -197,8 +202,17 @@ void StockOwnershipPanel::set_symbol(const QString& symbol) {
     holders_->clear();
     insiders_->clear();
     shorts_->clear();
+    ui::mark_refreshed(this);
     services::OwnershipService::instance().load(sym);
     render();
+}
+
+void StockOwnershipPanel::reload() {
+    // set_symbol() ignores the symbol it already shows, so an open panel never
+    // asked again.
+    ui::mark_refreshed(this);
+    if (!symbol_.isEmpty())
+        services::OwnershipService::instance().load(symbol_);
 }
 
 void StockOwnershipPanel::show_filer(const QString& cik, const QString& name) {

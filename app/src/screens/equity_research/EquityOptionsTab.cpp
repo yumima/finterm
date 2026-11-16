@@ -1,4 +1,5 @@
 // src/screens/equity_research/EquityOptionsTab.cpp
+#include "ui/VisibleRefresh.h"
 #include "screens/equity_research/EquityOptionsTab.h"
 
 #include "core/logging/Logger.h"
@@ -89,6 +90,13 @@ void EquityOptionsTab::build_ui() {
     refresh_btn_->setStyleSheet(btn_css);
     refresh_btn_->setToolTip(QStringLiteral("Re-fetch the chain (quotes are delayed)"));
     connect(refresh_btn_, &QPushButton::clicked, this, [this]() { fetch(); });
+    // The chain was fetched once on tab activation and never again. A little
+    // over five minutes, so each run is past the daemon's own five-minute copy
+    // of a chain and gets a new one. In the background: the chart stays up.
+    ui::refresh_while_visible(this, 5 * 60 + 30, [this]() {
+        if (!symbol_.isEmpty() && !in_flight_ && loaded_symbol_ == symbol_)
+            fetch(/*background=*/true);
+    });
     bar->addWidget(refresh_btn_);
     vl->addLayout(bar);
 
@@ -146,23 +154,29 @@ void EquityOptionsTab::set_symbol(const QString& symbol, bool force) {
     fetch();
 }
 
-void EquityOptionsTab::fetch() {
+void EquityOptionsTab::fetch(bool background) {
     if (symbol_.isEmpty())
         return;
+    ui::mark_refreshed(this);
     // A new fetch supersedes any older one still running: its result is
     // ignored by generation, so a slow chain for the previous ticker can
     // never paint under this one's header.
     const quint64 gen = ++generation_;
     in_flight_ = true;
-    points_.clear();
-    atm_.clear();
-    spot_ = 0;
-    data_as_of_ = QDateTime();
-    loaded_symbol_.clear();
+    background_ = background;
     refresh_btn_->setEnabled(false);
-    source_label_->clear();
-    status_label_->setText(QStringLiteral("Loading %1 option chain…").arg(symbol_));
-    show_message(QStringLiteral("Loading %1 option chain from Yahoo — one request per expiry…").arg(symbol_));
+    if (!background) {
+        // A background refresh leaves the chain that is on screen exactly as
+        // it is until the new one arrives — or stays, if it does not.
+        points_.clear();
+        atm_.clear();
+        spot_ = 0;
+        data_as_of_ = QDateTime();
+        loaded_symbol_.clear();
+        source_label_->clear();
+        status_label_->setText(QStringLiteral("Loading %1 option chain…").arg(symbol_));
+        show_message(QStringLiteral("Loading %1 option chain from Yahoo — one request per expiry…").arg(symbol_));
+    }
 
     QJsonObject payload;
     payload["symbol"] = symbol_;
@@ -184,6 +198,11 @@ void EquityOptionsTab::on_result(const QString& symbol, bool ok, const QJsonObje
     // The action's own {"error": ...} (no spot, every chain failed) arrives as
     // ok=false with its text in err; the body check stays as a backstop.
     const QString failure = !ok ? err : obj.value("error").toString();
+    if ((!ok || !failure.isEmpty()) && background_) {
+        // The chain already shown is still the newest one there is.
+        LOG_WARN("EquityOptions", "background options_surface " + symbol + " failed, keeping the chain: " + failure);
+        return;
+    }
     if (!ok || !failure.isEmpty()) {
         status_label_->setText(QStringLiteral("Option chain unavailable"));
         show_message(QStringLiteral("%1 option chain unavailable:\n%2").arg(symbol, failure));

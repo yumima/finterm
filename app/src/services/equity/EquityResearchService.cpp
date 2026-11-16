@@ -148,6 +148,31 @@ QString symbol_filename(const QString& symbol) {
     return s + QStringLiteral(".json");
 }
 
+// When each section of the per-symbol file was fetched, kept inside the file
+// under "_at" (epoch seconds per section; "candles/<period>" for the nested
+// ones). The file's modification time cannot say: the quote rewrites the file
+// about every minute, and with one mtime for everything a week-old company
+// profile — analyst targets included — was restored on the next launch as if
+// it had just been fetched, and served as fresh for a full TTL.
+void stamp_section(QJsonObject& root, const QString& tag) {
+    QJsonObject at = root.value("_at").toObject();
+    at.insert(tag, double(QDateTime::currentSecsSinceEpoch()));
+    root.insert("_at", at);
+}
+
+/// Age of a section in seconds, or -1 when the file does not say (written
+/// before sections were stamped): unknown age is never restored as fresh.
+qint64 section_age(const QJsonObject& root, const QString& tag) {
+    const QJsonValue v = root.value("_at").toObject().value(tag);
+    if (!v.isDouble())
+        return -1;
+    // A stamp in the future (clock corrected, VM resumed) is an unknown age,
+    // not "just fetched": clamping it to 1 s restored old data as fresh on
+    // every launch until real time caught up.
+    const qint64 age = QDateTime::currentSecsSinceEpoch() - qint64(v.toDouble());
+    return age < 0 ? -1 : std::max<qint64>(1, age);
+}
+
 // Load the per-symbol blob (or empty obj) and update one category key,
 // then save back. We do this rather than keep a process-wide in-memory
 // mirror because each fetch path can complete independently and we want
@@ -158,6 +183,8 @@ void update_symbol_cache(const QString& symbol, const QString& key, const QJsonV
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
     root.insert(key, value);
+    if (key != QLatin1String("symbol") && key != QLatin1String("peers_key"))
+        stamp_section(root, key);
     // A versioned sub-key leaves its predecessors behind: nothing reads them
     // once the hydrator moves to "<base>_vN", but every save would keep
     // re-serialising payloads that can never be used again. Drop the whole
@@ -168,9 +195,14 @@ void update_symbol_cache(const QString& symbol, const QString& key, const QJsonV
     if (const auto m = kVersioned.match(key); m.hasMatch()) {
         const QString base = m.captured(1);
         const int ver = m.captured(2).toInt();
+        QJsonObject at = root.value("_at").toObject();
         root.remove(base);
-        for (int v = 2; v < ver; ++v)
+        at.remove(base);
+        for (int v = 2; v < ver; ++v) {
             root.remove(base + QStringLiteral("_v") + QString::number(v));
+            at.remove(base + QStringLiteral("_v") + QString::number(v));
+        }
+        root.insert("_at", at);
     }
     disk_cache().save(fname, QJsonDocument(root));
 }
@@ -198,6 +230,7 @@ bool cache_history_series(const QJsonObject& result, const QJsonArray& arr, cons
     QJsonObject by_period = root.value("candles").toObject();
     by_period.insert(disk_sub, arr);
     root.insert("candles", by_period);
+    stamp_section(root, QStringLiteral("candles/") + disk_sub);
     disk_cache().save(fname, QJsonDocument(root));
     return true;
 }
@@ -236,18 +269,16 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         const QString symbol = root.value("symbol").toString();
         if (symbol.isEmpty())
             continue;
-        const QFileInfo fi(disk_cache().path(fname));
-        const int age_sec = fi.exists() ? std::max(1, int(fi.lastModified().secsTo(QDateTime::currentDateTime()))) : 1;
-
         auto repopulate = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
             if (!root.contains(sub))
                 return;
-            // Refuse to repopulate CacheManager entries that would already
-            // be expired against their normal TTL. The disk copy survives
-            // for the parser hydration path, but we don't want a stale
-            // quote masquerading as fresh.
-            if (age_sec >= ttl_sec)
+            // Each section by ITS OWN fetch time (section_age), never the
+            // file's: refuse to repopulate entries that would already be
+            // expired against their normal TTL, or whose age is unknown.
+            const qint64 age = section_age(root, sub);
+            if (age < 0 || age >= ttl_sec)
                 return;
+            const int age_sec = int(age);
             const QJsonValue v = root.value(sub);
             const QJsonDocument doc_for_blob = v.isArray() ? QJsonDocument(v.toArray()) : QJsonDocument(v.toObject());
             const QString blob = QString::fromUtf8(doc_for_blob.toJson(QJsonDocument::Compact));
@@ -277,7 +308,9 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         // we just take the network miss.
         if (root.contains("peers") && root.contains("peers_key")) {
             const QJsonValue v = root.value("peers");
-            if (v.isArray() && age_sec < kPeersTtlSec) {
+            const qint64 peers_age = section_age(root, QStringLiteral("peers"));
+            const int age_sec = int(peers_age);
+            if (v.isArray() && peers_age >= 0 && peers_age < kPeersTtlSec) {
                 const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
                 finterm::CacheManager::instance().put(root.value("peers_key").toString(), QVariant(blob), kPeersTtlSec,
                                                       "equity", age_sec);
@@ -287,8 +320,10 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         const auto repopulate_periodic = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
             const QJsonObject by_period = root.value(sub).toObject();
             for (auto it = by_period.constBegin(); it != by_period.constEnd(); ++it) {
-                if (age_sec >= ttl_sec)
+                const qint64 age = section_age(root, sub + QStringLiteral("/") + it.key());
+                if (age < 0 || age >= ttl_sec)
                     continue;
+                const int age_sec = int(age);
                 const QJsonValue v = it.value();
                 if (!v.isArray())
                     continue;
@@ -1149,6 +1184,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                     QJsonObject by_period = root.value("technicals").toObject();
                     by_period.insert(interval + ":" + period, data);
                     root.insert("technicals", by_period);
+                    stamp_section(root, QStringLiteral("technicals/") + interval + ":" + period);
                     disk_cache().save(fname, QJsonDocument(root));
                 }
                 emit self->technicals_loaded(self->parse_technicals(symbol, period, interval, data));

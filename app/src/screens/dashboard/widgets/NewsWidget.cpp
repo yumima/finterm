@@ -1,3 +1,4 @@
+#include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/NewsWidget.h"
 
 #include "core/logging/Logger.h"
@@ -55,6 +56,7 @@ NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::
     });
 
     connect(this, &BaseWidget::refresh_requested, this, &NewsWidget::refresh_data);
+    ui::refresh_while_visible(this, 5 * 60, [this] { refresh_data(); }); // was: constructor only
 
     apply_styles();
     set_loading(true);
@@ -79,6 +81,7 @@ void NewsWidget::on_theme_changed() {
 }
 
 void NewsWidget::refresh_data() {
+    ui::mark_refreshed(this);
     set_loading(true);
     status_label_->setText(QStringLiteral("Refreshing…"));
     clear_error(); // a retry is not an error: show the status line ("Refreshing…") again

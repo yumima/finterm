@@ -1,3 +1,4 @@
+#include "ui/VisibleRefresh.h"
 #include "screens/screener/ScreenerScreen.h"
 
 #include "core/logging/Logger.h"
@@ -10,6 +11,7 @@
 #include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
+#include <QTimeZone>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -184,6 +186,15 @@ constexpr int kSymbolCol = 1;
 ScreenerScreen::ScreenerScreen(QWidget* parent) : QWidget(parent) {
     result_.meta_only = true; // nothing scanned yet
     build_ui();
+    // The screens ran once, the first time this was shown: an app left open
+    // overnight ranked on the day before's closes. Ranks only change with a
+    // new daily close, so a re-run happens when someone comes back to the
+    // screen and a US close has printed since the last scan — not hourly, and
+    // not under a reader (a scan rebuilds the lists).
+    ui::refresh_on_return(this, 30 * 60, [this]() {
+        if (shown_once_ && !running_ && close_since(last_scan_))
+            run_scan();
+    });
 }
 
 void ScreenerScreen::build_ui() {
@@ -756,7 +767,26 @@ void ScreenerScreen::set_progress(int done, int total, const QString& text) {
                               // scrolled the rules the reader was reading back to the top
 }
 
+// Has a US regular session closed (16:15 New York, a weekday) since `when`?
+// The screener's own price cache uses the same line to decide a re-download.
+bool ScreenerScreen::close_since(const QDateTime& when) {
+    if (!when.isValid())
+        return true;
+    const QTimeZone ny("America/New_York");
+    QDateTime close = QDateTime::currentDateTimeUtc().toTimeZone(ny);
+    close.setTime(QTime(16, 15));
+    for (int i = 0; i < 8; ++i) {
+        const int dow = close.date().dayOfWeek();
+        if (dow <= 5 && close <= QDateTime::currentDateTimeUtc())
+            return when < close;
+        close = close.addDays(-1);
+    }
+    return false;
+}
+
 void ScreenerScreen::run_scan() {
+    ui::mark_refreshed(this);
+    last_scan_ = QDateTime::currentDateTimeUtc();
     const int gen = ++scan_gen_;
     running_ = true;
     refresh_btn_->setEnabled(false);

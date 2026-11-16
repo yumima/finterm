@@ -1,3 +1,4 @@
+#include "ui/VisibleRefresh.h"
 #include "screens/pre_ipo/IpoWatchView.h"
 
 #include "core/events/EventBus.h"
@@ -197,6 +198,10 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     build_ui();
     apply_styles();
     refresh();
+    // The calendar was read once, when the view was built. Just over the
+    // store's own 30-minute copy of a month, so each run really re-reads it.
+    // refresh() keeps the rows on screen while it loads.
+    ui::refresh_while_visible(this, 32 * 60, [this]() { refresh(); });
 
     // Deep link from News › WHAT'S ON: open one deal's dossier. Published on
     // the GUI thread after nav.switch_screen, so this view exists by then; the
@@ -1016,6 +1021,7 @@ QDate IpoWatchView::Entry::when() const {
 void IpoWatchView::refresh() {
     if (calendar_inflight_)
         return;
+    ui::mark_refreshed(this);
     if (status_lbl_)
         status_lbl_->setText("Loading…");
     ++calendar_gen_;

@@ -63,7 +63,7 @@ class EquityOptionsTab : public QWidget {
     };
 
     void build_ui();
-    void fetch();
+    void fetch(bool background = false);
     void on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& err);
     void show_message(const QString& text);
     void render();
@@ -77,6 +77,7 @@ class EquityOptionsTab : public QWidget {
     QString loaded_symbol_;
     quint64 generation_ = 0;
     bool in_flight_ = false;
+    bool background_ = false; ///< the fetch in flight must not disturb the chain on screen
 
     double spot_ = 0;
     QDateTime data_as_of_;

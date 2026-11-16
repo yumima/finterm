@@ -421,17 +421,29 @@ def _install_auth_probe():
         store = collections.OrderedDict()
         store_lock = threading.Lock()
 
+        # An entry lives 60 seconds. yfinance's own lru had no clock at all,
+        # and neither did this: the earnings calendar is fetched through a URL
+        # that never changes, so a reported EPS or a moved report date stayed
+        # frozen for as long as the daemon ran, and statements (a URL that
+        # changes once a UTC day) hid a new quarter until midnight. The TTLs
+        # in _CACHE_TTL are the freshness contract; this layer only spares
+        # yfinance repeating one request inside a single call.
+        YF_GET_TTL_S = 60.0
+
         def cache_get(self, url, params=None, timeout=30):
             key = (url, json.dumps(params, sort_keys=True, default=str))
+            now = time.monotonic()
             with store_lock:
-                r = store.get(key)
-                if r is not None:
-                    store.move_to_end(key)
-                    return r
+                hit = store.get(key)
+                if hit is not None:
+                    if now - hit[0] < YF_GET_TTL_S:
+                        store.move_to_end(key)
+                        return hit[1]
+                    del store[key]
             r = self.get(url, params=params, timeout=timeout)
             if getattr(r, "status_code", 200) not in _TRANSIENT_HTTP:
                 with store_lock:
-                    store[key] = r
+                    store[key] = (now, r)
                     while len(store) > 64:  # yfinance's own lru maxsize
                         store.popitem(last=False)
             return r
@@ -4845,9 +4857,11 @@ _CACHE_TTL = {
     # printed, which Yahoo fills in within hours of the call — the tile is
     # read on exactly those days, so it is not a 10-minute-stale field.
     "earnings_dates": 300,
-    # earnings_analysis pulls estimates + 3y of daily bars — expensive, and
-    # consensus/revisions move on a daily cadence at best.
-    "earnings_analysis": 900,
+    # earnings_analysis pulls estimates + 3y of daily bars — expensive, but it
+    # must stay UNDER the app's own 180 s limit for it (EquityResearchService
+    # kEarningsAnalysisTtlSec): at 900 here, four of every five of the app's
+    # refreshes were handed the same copy back and the tab ran 15+ minutes old.
+    "earnings_analysis": 150,
     # historical / news / search — medium
     "historical_period": 120, "news": 120, "search": 300,
     # a full chain is one request per expiry; quotes are delayed anyway
@@ -4859,9 +4873,10 @@ _CACHE_TTL = {
     # per-symbol raw closes for portfolio NAV backfill — same rationale.
     "portfolio_closes_history": 3600,
     # static SEC filing — very long
-    # institutional holders move quarterly and short interest twice monthly —
-    # the slowest-changing data on any screen, so a long TTL is free accuracy.
-    "ownership_extras": 3600,
+    # institutional holders move quarterly and short interest twice monthly.
+    # Ten minutes, not an hour: the app keeps its own one-hour copy above this
+    # (OwnershipService), and two stacked hours showed data two hours old.
+    "ownership_extras": 600,
     "parse_s1": 3600,
 }
 _CACHE_MAX = 512  # hard cap on entries; evict soonest-to-expire beyond this

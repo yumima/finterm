@@ -1,4 +1,5 @@
 // src/screens/dashboard/widgets/IpoCalendarWidget.cpp
+#include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 
 #include "network/http/HttpClient.h"
@@ -61,6 +62,9 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR
     vl->addWidget(scroll_area_, 1);
 
     connect(this, &BaseWidget::refresh_requested, this, &IpoCalendarWidget::refresh_data);
+    // Was: constructor only. refresh_data() empties the list while it loads,
+    // so it runs when someone comes back to the tile, never under a reader.
+    ui::refresh_on_return(this, 30 * 60, [this] { refresh_data(); });
 
     apply_styles();
     set_loading(true);
@@ -94,6 +98,7 @@ void IpoCalendarWidget::on_theme_changed() {
 void IpoCalendarWidget::refresh_data() {
     if (pending_fetches_ > 0)
         return; // prior fetch still in flight — callbacks will populate
+    ui::mark_refreshed(this);
     set_loading(true);
     entries_.clear();
     pending_fetches_ = 2;

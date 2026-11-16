@@ -33,6 +33,8 @@ class StockOwnershipPanel : public QWidget {
 
     /// Point the panel at a security. Idempotent for the same symbol.
     void set_symbol(const QString& symbol);
+    /// Ask for the current symbol again (hourly while visible).
+    void reload();
     QString symbol() const { return symbol_; }
 
   signals:

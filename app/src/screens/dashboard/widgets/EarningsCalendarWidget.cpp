@@ -1,4 +1,5 @@
 // src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
+#include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 
 #include "core/logging/Logger.h"
@@ -84,6 +85,11 @@ EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* 
     });
 
     connect(this, &BaseWidget::refresh_requested, this, [this] { refresh_data(); });
+    // Report dates and estimates move through the day; a tile left open kept
+    // the list it loaded when first shown. refresh_data() empties the list
+    // while it loads, so it runs when someone comes back to the tile, never
+    // under a reader.
+    ui::refresh_on_return(this, 30 * 60, [this] { refresh_data(); });
 
     apply_config(cfg);
     apply_styles();
@@ -358,6 +364,7 @@ void EarningsCalendarWidget::set_mode(Mode m) {
 }
 
 void EarningsCalendarWidget::refresh_data() {
+    ui::mark_refreshed(this);
     loaded_once_ = true;
     ++epoch_;
     pending_days_ = 0;

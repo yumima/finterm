@@ -174,6 +174,10 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent, bool hosted) : QWidg
                 services::query::QueryStore::instance().revalidate_owner(visible);
                 quote_covered = (visible == overview_tab_);
             }
+            // The screen's own subscriptions (the analyst-recommendation chip
+            // in the header) belong to no tab, so nothing re-asked for them
+            // while a symbol stayed open. Revalidated against their own TTL.
+            services::query::QueryStore::instance().revalidate_owner(this);
         }
         if (!quote_covered)
             services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);

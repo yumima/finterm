@@ -1,3 +1,4 @@
+#include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 
 #include "services/calendar/MacroCalendar.h"
@@ -64,6 +65,10 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
 
     // The refresh button means "now": skip the 30-minute fresh cache.
     connect(this, &BaseWidget::refresh_requested, this, [this]() { refresh_data(true); });
+    // A release's ACTUAL figure appears in the feed after the event; a tile
+    // that loaded once in its constructor never showed it. Not forced: the
+    // feed keeps its own 30-minute copy, so this asks upstream at most that often.
+    ui::refresh_while_visible(this, 15 * 60, [this] { refresh_data(false); });
 
     apply_styles();
     set_loading(true);
@@ -93,6 +98,7 @@ void EconomicCalendarWidget::on_theme_changed() {
 }
 
 void EconomicCalendarWidget::refresh_data(bool force) {
+    ui::mark_refreshed(this);
     set_loading(true);
     // Shared with News › WHAT'S ON; cached, coalesced, last-good on refusal.
     finterm::macro_calendar::fetch_week(this, [this](const finterm::macro_calendar::FeedResult& r) {
@@ -100,6 +106,10 @@ void EconomicCalendarWidget::refresh_data(bool force) {
             // A failed fetch is not an empty calendar: say so, keep last_events_
             // so a theme change still re-renders previously loaded rows.
             set_loading(false);
+            // Rows already on screen stay: a failed background refresh must
+            // not take a loaded calendar away.
+            if (!last_events_.isEmpty())
+                return;
             scroll_area_->setVisible(false);
             status_label_->setText("Couldn't load economic calendar");
             status_label_->setVisible(true);
