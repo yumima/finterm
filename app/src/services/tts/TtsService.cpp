@@ -438,6 +438,7 @@ void TtsService::engine_fetch_next() {
     if (!nam_)
         nam_ = new QNetworkAccessManager(this);
     reply_ = post_speech(nam_, eng_url_, eng_headers_, eng_body_, eng_chunks_.at(eng_next_));
+    eng_fetch_timer_.start();
     connect(reply_, &QNetworkReply::finished, this, [this]() {
         QNetworkReply* r = reply_;
         if (!r)
@@ -472,6 +473,20 @@ void TtsService::engine_fetch_next() {
         }
         eng_ready_ << path;
         ++eng_next_;
+        // A reading only flows while the engine speaks faster than the voice
+        // plays. When it does not (a busy machine), the speaker runs out of
+        // audio at the join between two clips and the listener hears a long
+        // silence there. Nothing here can make the engine faster; the log
+        // says it happened and how long the wait was.
+        if (!player_ && eng_starved_.isValid()) {
+            LOG_WARN(kTtsTag, QStringLiteral("ran out of audio for %1 ms before clip %2 of %3 (it took %4 ms to "
+                                             "synthesise) — the speech engine is slower than real time")
+                                  .arg(eng_starved_.elapsed())
+                                  .arg(eng_next_)
+                                  .arg(eng_chunks_.size())
+                                  .arg(eng_fetch_timer_.elapsed()));
+            eng_starved_.invalidate();
+        }
         if (!player_)
             engine_play_next();
         engine_fetch_next();
@@ -487,6 +502,8 @@ void TtsService::engine_play_next() {
         if (!reply_ && eng_next_ >= eng_chunks_.size()) {
             end_engine_session();
             set_speaking(false);
+        } else if (eng_next_ > 0 && !eng_starved_.isValid()) {
+            eng_starved_.start(); // mid-reading with nothing to play: the wait is timed
         }
         return;
     }
@@ -506,6 +523,7 @@ void TtsService::end_engine_session() {
         r->deleteLater();
     }
     eng_session_ = false;
+    eng_starved_.invalidate();
     eng_waiting_warm_ = false; // a warm request still finishing just stores its clip
     eng_chunks_.clear();
     eng_text_.clear();

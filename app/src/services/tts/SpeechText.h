@@ -128,14 +128,55 @@ inline QString from_paragraphs(const QString& headline, const QString& summary, 
     return lines.join(QLatin1Char('\n'));
 }
 
+/// Dotted abbreviations as the voice should say them: "A.I." → "AI",
+/// "U.S." → "US", "J.P. Morgan" → "JP Morgan".
+///
+/// Every splitter on the way to the voice — the one below and the engine's own
+/// — ends a sentence at a full stop followed by a space, so "an A.I. chip" was
+/// read as "an A." (pause) "I." (pause) "chip": two sentence breaks inside a
+/// word. Written without the dots it is one token, which the phonemizer spells
+/// out as letters, as it does any short all-caps word.
+///
+/// A run of single letters each followed by a dot is taken; "Inc." and "Ph.D."
+/// are not (more than one letter between dots). Lower-case runs are raised
+/// ("a.m." → "AM": as "am" it would be read as the word), except the two that
+/// are words in disguise: "e.g." and "i.e.". An abbreviation that ends its
+/// line keeps a stop, so the line still ends.
+inline QString join_initialisms(const QString& text) {
+    static const QRegularExpression kDotted(QStringLiteral("(?<![A-Za-z0-9.])((?:[A-Za-z]\\.){2,})(?![A-Za-z0-9])"));
+    QString out;
+    qsizetype last = 0;
+    for (auto it = kDotted.globalMatch(text); it.hasNext();) {
+        const auto m = it.next();
+        QString letters = m.captured(1);
+        letters.remove(QLatin1Char('.'));
+        const QString lower = letters.toLower();
+        QString said = lower == QLatin1String("eg")   ? QStringLiteral("for example")
+                       : lower == QLatin1String("ie") ? QStringLiteral("that is")
+                                                      : letters.toUpper();
+        // At the end of its line (or of the text) the last dot was also the stop.
+        qsizetype end = m.capturedEnd();
+        qsizetype peek = end;
+        while (peek < text.size() && (text[peek] == QLatin1Char(' ') || text[peek] == QLatin1Char('\t')))
+            ++peek;
+        if (peek >= text.size() || text[peek] == QLatin1Char('\n'))
+            said += QLatin1Char('.');
+        out += text.mid(last, m.capturedStart() - last) + said;
+        last = end;
+    }
+    return out + text.mid(last);
+}
+
 /// Split text for chunked synthesis on sentence ends. The FIRST chunk is kept
 /// short so audio starts within a couple of seconds; later chunks are larger
 /// (fewer seams) and are synthesised while the previous one plays. No chunk
 /// exceeds `cap`, the engine's input limit — so a long brief is read in full
 /// rather than truncated (OpenAI rejects input past 4096 chars). Line breaks
 /// survive into the chunks: '\n' a paragraph, '\n\n' a section.
-inline QStringList split_for_speech(const QString& text, int first_chunk, int second_chunk, int rest_chunk,
+inline QStringList split_for_speech(const QString& raw_text, int first_chunk, int second_chunk, int rest_chunk,
                                     int max_input) {
+    // Before any splitting: a dot inside "A.I." must not be taken for a stop.
+    const QString text = join_initialisms(raw_text);
     // Sizes ramp up: a short first chunk starts the audio fast, a medium second
     // one is synthesised while the first plays (so no gap after it), and the
     // rest are long to keep the seams few. The engine sets the ramp: a slower,

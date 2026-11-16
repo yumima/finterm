@@ -235,6 +235,8 @@ class TtsService : public QObject {
     /// its result briefly because it's called once per chat-message bubble.
     bool compute_available() const;
     mutable bool avail_cache_ = false;      ///< last compute_available() result
+    QElapsedTimer eng_fetch_timer_; ///< how long the clip being synthesised has taken
+    QElapsedTimer eng_starved_;     ///< valid while a reading waits, silent, for its next clip
     mutable QElapsedTimer avail_cache_age_; ///< invalid until first probe; TTL'd below
     static constexpr int kAvailCacheTtlMs = 2000;
 };

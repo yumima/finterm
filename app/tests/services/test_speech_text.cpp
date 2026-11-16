@@ -57,6 +57,27 @@ class TestSpeechText : public QObject {
         QCOMPARE(heading_words(QStringLiteral("EARNINGS")), QStringLiteral("Earnings"));
     }
 
+    void dotted_initialisms_are_one_word() {
+        QCOMPARE(join_initialisms("moves to close an A.I. chip loophole"), QStringLiteral("moves to close an AI chip loophole"));
+        QCOMPARE(join_initialisms("U.S. chip stocks slide"), QStringLiteral("US chip stocks slide"));
+        QCOMPARE(join_initialisms("J.P. Morgan and the U.S.-China deal"), QStringLiteral("JP Morgan and the US-China deal"));
+        QCOMPARE(join_initialisms("opens at 9 a.m. in D.C. today"), QStringLiteral("opens at 9 AM in DC today"));
+        QCOMPARE(join_initialisms("metals, e.g. copper, i.e. the red one"), QStringLiteral("metals, for example copper, that is the red one"));
+        // Ending its line, the last dot was also the stop: the line still ends.
+        QCOMPARE(join_initialisms("Tariffs hit the U.S.\nNext line"), QStringLiteral("Tariffs hit the US.\nNext line"));
+        QCOMPARE(join_initialisms("Made in the U.S."), QStringLiteral("Made in the US."));
+        // Not initialisms: more than one letter between dots, numbers, a lone initial.
+        QCOMPARE(join_initialisms("Apple Inc. said"), QStringLiteral("Apple Inc. said"));
+        QCOMPARE(join_initialisms("a Ph.D. in physics"), QStringLiteral("a Ph.D. in physics"));
+        QCOMPARE(join_initialisms("up 2.5% to 3.1"), QStringLiteral("up 2.5% to 3.1"));
+        QCOMPARE(join_initialisms("J. Powell spoke"), QStringLiteral("J. Powell spoke"));
+        QCOMPARE(join_initialisms("see www.a.b.com"), QStringLiteral("see www.a.b.com"));
+
+        // The reported line is one piece for the voice — no stop inside "A.I.".
+        const QStringList chunks = split_for_speech("Trump administration moves to close an A.I. chip loophole ahead of a China trip.", 4000, 4000, 4000, 4096);
+        QCOMPARE(chunks, QStringList{QStringLiteral("Trump administration moves to close an AI chip loophole ahead of a China trip.")});
+    }
+
     void breaks_survive_chunking() {
         const QString text = QStringLiteral("Overall read: markets slipped as oil spiked on supply fears.\n"
                                             "Fed holds rates.\n\nDefense.\nFrance ordered jets.");

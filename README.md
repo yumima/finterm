@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`0ae2eae41`](https://github.com/yumima/finterm/commit/0ae2eae41) er: a Report tab — one investor report from everything held on a company
 - [`2b21dcabf`](https://github.com/yumima/finterm/commit/2b21dcabf) futures: the Futures screen is back, built around the forward curve
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
@@ -71,8 +72,8 @@ The report says `"ok": true`, or names the stage that failed (setup or data) and
 
 - **Markets, Watchlist, Dashboard** — live global quotes, charts, sector heatmap, extended-hours and futures moves.
 - **News** — a deduplicated feed with region and portfolio filters, reader-mode articles, an AI TL;DR, and read-aloud.
-- **Futures** — index, rates, energy, metals, grains, softs, livestock, FX and crypto futures: the forward curve of every listed month against a week and a month ago, calendar spreads and roll yield, CFTC positioning, contract terms, and a paper ticket sized in dollars.
-- **Equity Research** — financials, earnings, analyst targets, technicals, peers, ownership and sentiment per ticker, and a **Report** tab that assembles them into a quarterly investor report (charts, the company's own 10-K/10-Q, an AI-written summary) exportable as PDF or HTML.
+- **Futures** — index, rates, energy, metals, grains, softs, livestock, FX and crypto futures: the forward curve of every listed month against a week and a month ago, calendar-spread history and roll yield, CFTC positioning, contract terms, and a paper ticket sized in dollars ([guide](docs/how-to/futures.md)).
+- **Equity Research** — financials, earnings, analyst targets, technicals, peers, ownership and sentiment per ticker, and a **Report** tab that assembles them into a quarterly investor report (charts, segment and geography revenue and the company's own words from its SEC filings, an AI-written summary) exportable as PDF or HTML ([guide](docs/how-to/company-report.md)).
 - **Portfolio** — multi-account holdings, performance, heatmap, blotter, CSV/JSON import and export.
 - **Screener, Ownership, IPO Watch, Pre-IPO** — screens and insider, institutional and IPO-pipeline views built on public SEC EDGAR filings.
 - **AI chat** — text or live voice conversation with the provider you choose, cloud or local.
