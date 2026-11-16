@@ -24,7 +24,7 @@ constexpr int kTop = 26;
 constexpr int kBottom = 22;
 
 QFont data_font(int offset = -2) {
-    QFont f(QString(ui::fonts::DATA_FAMILY));
+    QFont f{QString(ui::fonts::DATA_FAMILY)};
     f.setPixelSize(ui::fonts::font_px(offset));
     return f;
 }
