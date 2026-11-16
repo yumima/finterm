@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`cb190f4a7`](https://github.com/yumima/finterm/commit/cb190f4a7) **fix:** silent video after a scroll, a stray copy blocking launch, Windows build
 - [`544870ce0`](https://github.com/yumima/finterm/commit/544870ce0) release: 4.0.7
 - [`1d6251e68`](https://github.com/yumima/finterm/commit/1d6251e68) er overview: the analyst targets say how old they are
 - [`05792c590`](https://github.com/yumima/finterm/commit/05792c590) futures: stops and targets that work, and what a rate curve prices

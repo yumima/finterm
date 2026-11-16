@@ -95,7 +95,8 @@ int main(int argc, char* argv[]) {
 #ifdef Q_OS_WIN
         // A GUI-subsystem program has no stdout; borrow the console it was run from.
         if (AttachConsole(ATTACH_PARENT_PROCESS)) {
-            std::freopen("CONOUT$", "w", stdout);
+            FILE* console = nullptr;
+            freopen_s(&console, "CONOUT$", "w", stdout);
         }
 #endif
         if (qstrcmp(argv[1], "--version") == 0 || qstrcmp(argv[1], "-V") == 0)
