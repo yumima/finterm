@@ -3,6 +3,7 @@
 #include "screens/equity_research/ReportBuilder.h"
 #include "services/query/QueryStore.h"
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QImage>
 #include <QTextBrowser>
@@ -87,6 +88,7 @@ class EquityReportTab : public QWidget {
 
     QString symbol_;
     quint64 epoch_ = 0;
+    QElapsedTimer loaded_at_; ///< since this symbol's report was last (re)built
     report::ReportDoc doc_;
     QVector<report::Source> parts_;
 

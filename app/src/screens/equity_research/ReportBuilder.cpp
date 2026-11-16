@@ -1061,11 +1061,14 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             own.append({QStringLiteral("Days of volume to cover the short"), num(d.info.short_ratio, 1)});
         if (d.insiders.known)
             own.append({QStringLiteral("Insider open-market trades, %1 months").arg(d.insiders.window_months),
-                        QStringLiteral("bought %1× ($%2) · sold %3× ($%4)")
-                            .arg(d.insiders.buys)
-                            .arg(compact(d.insiders.buy_value))
-                            .arg(d.insiders.sells)
-                            .arg(compact(d.insiders.sell_value))});
+                        d.insiders.values_complete
+                            ? QStringLiteral("bought %1× ($%2) · sold %3× ($%4)")
+                                  .arg(d.insiders.buys)
+                                  .arg(compact(d.insiders.buy_value))
+                                  .arg(d.insiders.sells)
+                                  .arg(compact(d.insiders.sell_value))
+                            // Some were filed without a value: the counts stand, a dollar total would not.
+                            : QStringLiteral("bought %1× · sold %2× (values not filed for all)").arg(d.insiders.buys).arg(d.insiders.sells)});
         if (!own.isEmpty()) {
             h.sub(QStringLiteral("WHO OWNS IT"));
             h.table({QStringLiteral("MEASURE"), QStringLiteral("VALUE")}, own);

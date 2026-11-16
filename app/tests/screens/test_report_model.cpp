@@ -222,6 +222,13 @@ class TestReportModel : public QObject {
         split.years[1].shares = 0.24e9;
         QVERIFY(!has(derive_findings(split), Tone::Strength, "Share count"));
 
+        // Insider trades filed without a value: the dollar comparison is unknown, so nothing is concluded from it.
+        Inputs ins;
+        ins.insiders = {true, 12, 2, 1, 20000.0, 0.0, false};
+        QVERIFY(!has(derive_findings(ins), Tone::Strength, "Insiders are buying"));
+        ins.insiders.values_complete = true;
+        QVERIFY(has(derive_findings(ins), Tone::Strength, "Insiders are buying"));
+
         // Too few peers to call a median, and a rating that was not produced.
         Inputs thin;
         thin.peer_forward_pe = peer_stat("Forward P/E", 40, {20});
@@ -293,7 +300,6 @@ class TestReportModel : public QObject {
 
     void outlook_band_is_stated_and_graded_alike() {
         // The word the model is asked for and the word it is graded against mean one thing.
-        QCOMPARE(kOutlookFlatBandPct, finterm::screens::ai_forecast::kReportFlatBandPct);
         QCOMPARE(finterm::screens::ai_forecast::flat_band_for("report"), 5.0);
         QCOMPARE(finterm::screens::ai_forecast::flat_band_for("quant"), finterm::screens::ai_forecast::kFlatBandPct);
         QCOMPARE(finterm::screens::ai_forecast::bucket_direction(2.0, finterm::screens::ai_forecast::flat_band_for("report")),

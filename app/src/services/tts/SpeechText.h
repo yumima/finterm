@@ -159,8 +159,29 @@ inline QString join_initialisms(const QString& text) {
         qsizetype peek = end;
         while (peek < text.size() && (text[peek] == QLatin1Char(' ') || text[peek] == QLatin1Char('\t')))
             ++peek;
-        if (peek >= text.size() || text[peek] == QLatin1Char('\n'))
+        if (peek >= text.size() || text[peek] == QLatin1Char('\n')) {
             said += QLatin1Char('.');
+        } else if (peek > end) {
+            // Mid-paragraph, "…in the U.S. The company said" ends a sentence
+            // and "U.S. Treasury yields" does not; the text cannot say which.
+            // The next word decides when it is one that opens sentences and
+            // is not a name.
+            static const QSet<QString> kOpeners = {
+                QStringLiteral("The"),   QStringLiteral("A"),     QStringLiteral("An"),    QStringLiteral("It"),
+                QStringLiteral("Its"),   QStringLiteral("He"),    QStringLiteral("She"),   QStringLiteral("They"),
+                QStringLiteral("We"),    QStringLiteral("But"),   QStringLiteral("And"),   QStringLiteral("In"),
+                QStringLiteral("On"),    QStringLiteral("This"),  QStringLiteral("That"),  QStringLiteral("These"),
+                QStringLiteral("Those"), QStringLiteral("There"), QStringLiteral("However"), QStringLiteral("Meanwhile"),
+                QStringLiteral("Still"), QStringLiteral("Yet"),   QStringLiteral("If"),    QStringLiteral("When"),
+                QStringLiteral("While"), QStringLiteral("After"), QStringLiteral("Before"), QStringLiteral("As"),
+                QStringLiteral("For"),   QStringLiteral("So"),    QStringLiteral("Analysts"), QStringLiteral("Investors"),
+                QStringLiteral("Shares"), QStringLiteral("Stocks")};
+            qsizetype word_end = peek;
+            while (word_end < text.size() && text[word_end].isLetter())
+                ++word_end;
+            if (kOpeners.contains(text.mid(peek, word_end - peek)))
+                said += QLatin1Char('.');
+        }
         out += text.mid(last, m.capturedStart() - last) + said;
         last = end;
     }

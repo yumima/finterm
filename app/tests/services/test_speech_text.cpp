@@ -66,6 +66,11 @@ class TestSpeechText : public QObject {
         // Ending its line, the last dot was also the stop: the line still ends.
         QCOMPARE(join_initialisms("Tariffs hit the U.S.\nNext line"), QStringLiteral("Tariffs hit the US.\nNext line"));
         QCOMPARE(join_initialisms("Made in the U.S."), QStringLiteral("Made in the US."));
+        // Ending its SENTENCE mid-paragraph: the stop stays where the next word
+        // opens a sentence, and not where it continues a name.
+        QCOMPARE(join_initialisms("Chips are made in the U.S. The company said so."),
+                 QStringLiteral("Chips are made in the US. The company said so."));
+        QCOMPARE(join_initialisms("U.S. Treasury yields rose"), QStringLiteral("US Treasury yields rose"));
         // Not initialisms: more than one letter between dots, numbers, a lone initial.
         QCOMPARE(join_initialisms("Apple Inc. said"), QStringLiteral("Apple Inc. said"));
         QCOMPARE(join_initialisms("a Ph.D. in physics"), QStringLiteral("a Ph.D. in physics"));

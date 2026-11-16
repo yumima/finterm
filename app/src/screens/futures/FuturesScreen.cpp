@@ -188,11 +188,12 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
                         on_front_tick(t);
                     if (marks_.contains(t.symbol) && marks_.value(t.symbol) != t.price) {
                         marks_.insert(t.symbol, t.price);
+                        mark_ts_.insert(t.symbol, t.time_ms / 1000);
                         moved = true;
                     }
                 }
                 if (moved)
-                    render_positions();
+                    positions_render_.request(); // one repaint per burst, from the cached book
             });
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
@@ -494,7 +495,13 @@ QWidget* FuturesScreen::build_side_tabs() {
     auto make_price = [&](const QString& hint) {
         auto* e = new QLineEdit(tk);
         e->setPlaceholderText(hint);
-        e->setValidator(new QDoubleValidator(0.0, 1e9, 7, e));
+        auto* validator = new QDoubleValidator(0.0, 1e9, 7, e);
+        // Parsed with the C locale below, so validated with it: under a
+        // comma-decimal system locale "71,50" was accepted here and then read
+        // as no stop at all.
+        validator->setLocale(QLocale::c());
+        validator->setNotation(QDoubleValidator::StandardNotation);
+        e->setValidator(validator);
         e->setMinimumWidth(130);
         connect(e, &QLineEdit::textChanged, this, [this](const QString&) { render_ticket(); });
         return e;
@@ -658,6 +665,7 @@ void FuturesScreen::showEvent(QShowEvent* e) {
         spread_for_.clear();
     }
     fetch_spread();
+    reload_positions();
     render_positions();
     sync_stream();
 }
@@ -824,8 +832,16 @@ void FuturesScreen::fetch_curve() {
             c.ts = front_live_.ts;
             c.stale = false;
         }
-        for (const auto& c : curve_.contracts)
+        // A mark is the newest print known for a contract. The snapshot gives
+        // one only for a month that has printed lately (a stale month's
+        // "last" is days old: no P&L is struck and nothing is closed at it),
+        // and never replaces a stream print that is newer than itself.
+        for (const auto& c : curve_.contracts) {
+            if (c.stale || c.ts < mark_ts_.value(c.symbol, 0))
+                continue;
             marks_.insert(c.symbol, c.price);
+            mark_ts_.insert(c.symbol, c.ts);
+        }
         // EVENT-STAMP: when the curve was read — an instant, shown in local time.
         status_->set_idle(QStringLiteral("Yahoo · ~10 min delayed · %1")
                               .arg(QDateTime::fromSecsSinceEpoch(curve_.as_of).toString(QStringLiteral("HH:mm:ss"))));
@@ -1307,6 +1323,7 @@ void FuturesScreen::place_order() {
     } catch (const std::exception& e) {
         ticket_status_->setText(QStringLiteral("Order refused: %1").arg(QString::fromUtf8(e.what())));
     }
+    reload_positions();
     render_positions();
     sync_stream();
 }
@@ -1335,29 +1352,55 @@ void FuturesScreen::close_position(const QString& symbol) {
     } catch (const std::exception& e) {
         ticket_status_->setText(QStringLiteral("Close refused: %1").arg(QString::fromUtf8(e.what())));
     }
+    reload_positions();
     render_positions();
     sync_stream();
+}
+
+void FuturesScreen::reload_positions() {
+    // The book changes only when an order fills. It is read from the paper
+    // store here — on show and after each fill — and painted from memory on
+    // every tick, rather than three database reads per price print.
+    book_ok_ = false;
+    book_error_.clear();
+    open_.clear();
+    account_stats_.clear();
+    const QString pid = paper_portfolio_id();
+    if (pid.isEmpty())
+        return;
+    try {
+        balance_ = trading::pt_get_portfolio(pid).balance;
+        for (const auto& p : trading::pt_get_positions(pid))
+            if (p.quantity > 0)
+                open_.append(p);
+        book_ok_ = true;
+    } catch (const std::exception& e) {
+        book_error_ = QString::fromUtf8(e.what());
+        return;
+    }
+    try {
+        const auto stats = trading::pt_get_stats(pid);
+        const qint64 closed = stats.winning_trades + stats.losing_trades;
+        if (closed > 0)
+            account_stats_ = QStringLiteral(" · realised P&L %1 over %2 closed trade%3")
+                                 .arg(dollars(stats.total_pnl))
+                                 .arg(closed)
+                                 .arg(closed == 1 ? QString() : QStringLiteral("s"));
+    } catch (const std::exception&) {
+        // the account line stands without it
+    }
 }
 
 void FuturesScreen::render_positions() {
     if (!positions_ || !shown_)
         return;
-    const QString pid = paper_portfolio_id();
-    if (pid.isEmpty()) {
-        account_->setText(QStringLiteral("Paper account unavailable."));
+    if (!book_ok_) {
+        account_->setText(book_error_.isEmpty() ? QStringLiteral("Paper account unavailable.")
+                                                : QStringLiteral("Paper account unavailable: %1").arg(book_error_));
         return;
     }
-    QVector<trading::PtPosition> open;
-    double balance = kNaN;
-    try {
-        balance = trading::pt_get_portfolio(pid).balance;
-        for (const auto& p : trading::pt_get_positions(pid))
-            if (p.quantity > 0)
-                open.append(p);
-    } catch (const std::exception& e) {
-        account_->setText(QStringLiteral("Paper account unavailable: %1").arg(QString::fromUtf8(e.what())));
-        return;
-    }
+    const QVector<trading::PtPosition>& open = open_;
+    const double balance = balance_;
     const QColor primary(ui::colors::TEXT_PRIMARY()), secondary(ui::colors::TEXT_SECONDARY());
     double open_pnl = 0;
     bool all_marked = true;
@@ -1396,18 +1439,7 @@ void FuturesScreen::render_positions() {
         }
         btn->setEnabled(last > 0);
     }
-    QString text = QStringLiteral("Paper account · cash %1").arg(dollars(balance));
-    try {
-        const auto stats = trading::pt_get_stats(pid);
-        const qint64 closed = stats.winning_trades + stats.losing_trades;
-        if (closed > 0)
-            text += QStringLiteral(" · realised P&L %1 over %2 closed trade%3")
-                        .arg(dollars(stats.total_pnl))
-                        .arg(closed)
-                        .arg(closed == 1 ? QString() : QStringLiteral("s"));
-    } catch (const std::exception&) {
-        // the account line stands without it
-    }
+    QString text = QStringLiteral("Paper account · cash %1").arg(dollars(balance)) + account_stats_;
     if (!open.isEmpty())
         text += QStringLiteral(" · open P&L %1%2").arg(dollars(open_pnl),
                                                          all_marked ? QString() : QStringLiteral(" (priced positions only)"));
@@ -1420,14 +1452,10 @@ void FuturesScreen::sync_stream() {
     // The front month, so the strip moves with the tape between curve reads.
     if (shown_ && !curve_.front.isEmpty())
         symbols << curve_.front;
-    if (shown_ && !portfolio_id_.isEmpty()) {
-        try {
-            for (const auto& p : trading::pt_get_positions(portfolio_id_))
-                if (p.quantity > 0 && !symbols.contains(p.symbol))
-                    symbols << p.symbol;
-        } catch (const std::exception&) {
-        }
-    }
+    if (shown_)
+        for (const auto& p : std::as_const(open_))
+            if (!symbols.contains(p.symbol))
+                symbols << p.symbol;
     services::MarketDataService::instance().set_stream_extras(this, symbols);
 }
 

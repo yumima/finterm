@@ -4,6 +4,7 @@
 #include "services/equity/EquityResearchModels.h"
 #include "services/futures/FuturesMath.h"
 #include "services/markets/MarketDataService.h"
+#include "trading/TradingTypes.h"
 #include "ui/RenderCoalescer.h"
 
 #include <QHash>
@@ -100,6 +101,7 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     void render_ticket();
     void place_order();
     void close_position(const QString& symbol);
+    void reload_positions();
     void render_positions();
     void sync_stream();
     QString paper_portfolio_id();
@@ -181,7 +183,15 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     QTableWidget* positions_ = nullptr;
     QString ticket_symbol_; ///< empty = the front month
     QString portfolio_id_;
-    QHash<QString, double> marks_; ///< last print seen this session, by contract symbol
+    QHash<QString, double> marks_; ///< newest print known this session, by contract symbol
+    QHash<QString, qint64> mark_ts_; ///< when that print was, unix seconds
+    // The paper book as last read from its store (reload_positions).
+    QVector<trading::PtPosition> open_;
+    double balance_ = 0.0;
+    QString account_stats_;
+    QString book_error_;
+    bool book_ok_ = false;
+    ui::RenderCoalescer positions_render_{this, [this]() { render_positions(); }};
 };
 
 } // namespace finterm::screens

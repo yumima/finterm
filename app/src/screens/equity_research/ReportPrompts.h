@@ -14,6 +14,7 @@
 // in the prompt, and LlmService removes any that is not (NumberGrounding.h).
 // Neither request asks for a price target, a probability or a percentage.
 
+#include "screens/equity_research/AiForecastMath.h"
 #include "screens/equity_research/ReportModel.h"
 
 #include <QJsonDocument>
@@ -21,11 +22,6 @@
 #include <QStringList>
 
 namespace finterm::screens::report {
-
-/// "Flat" in the three-month reading: within this percent of the price at the
-/// call. Must equal ai_forecast::kReportFlatBandPct, which grades it (pinned
-/// by test_report_model).
-inline constexpr double kOutlookFlatBandPct = 5.0;
 
 struct Headline {
     QString title, publisher, date;
@@ -237,7 +233,8 @@ inline QString summary_prompt(const QString& symbol, const QString& company, con
                "}\n"
                "Plain words, no markdown.")
         .arg(company.isEmpty() ? symbol : company, symbol, data_fence(parts.join(QStringLiteral("\n\n"))),
-             QStringLiteral("%1 percent").arg(kOutlookFlatBandPct, 0, 'f', 0));
+             // The grader's own constant: the word asked for and the word graded are one.
+             QStringLiteral("%1 percent").arg(ai_forecast::kReportFlatBandPct, 0, 'f', 0));
 }
 
 // ── replies ─────────────────────────────────────────────────────────────────

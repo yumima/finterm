@@ -588,6 +588,9 @@ struct InsiderFlow {
     int window_months = 0;
     int buys = 0, sells = 0; ///< open-market transactions that were decisions (no 10b5-1 plan, no 10% holders)
     double buy_value = 0.0, sell_value = 0.0;
+    /// False when any counted transaction was filed without a value: the
+    /// totals above then understate, and nothing is concluded from them.
+    bool values_complete = true;
 };
 
 // ── Findings ────────────────────────────────────────────────────────────────
@@ -815,7 +818,7 @@ inline QVector<Finding> derive_findings(const Inputs& in) {
     if (in.insiders.known && (in.insiders.buys > 0 || in.insiders.sells > 0)) {
         const QString d = QStringLiteral("%1 open-market purchases and %2 sales by insiders over %3 months, plan trades excluded.")
                               .arg(in.insiders.buys).arg(in.insiders.sells).arg(in.insiders.window_months);
-        if (in.insiders.buys >= 2 && in.insiders.buy_value > in.insiders.sell_value)
+        if (in.insiders.buys >= 2 && in.insiders.values_complete && in.insiders.buy_value > in.insiders.sell_value)
             add(Tone::Strength, "SENTIMENT", QStringLiteral("Insiders are buying"), d);
         else if (in.insiders.buys == 0 && in.insiders.sells >= 5)
             add(Tone::Note, "SENTIMENT", QStringLiteral("Insiders are selling, none buying"), d);

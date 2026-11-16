@@ -179,7 +179,7 @@ ReportDoc sample(bool rich) {
     d.peers_basis = "Peers are the companies nearest it in size in its Yahoo industry (Semiconductors), not a hand-picked group.";
     d.filings.quarterly.form = "10-Q";
     d.filings.quarterly.filing_date = "2026-08-26";
-    d.insiders = {true, 12, 1, 9, 2.1e6, 310e6};
+    d.insiders = {true, 12, 1, 9, 2.1e6, 310e6, true};
     d.has_technicals = true;
     d.technicals.rated = true;
     d.technicals.overall_signal = eq::TechSignal::Buy;

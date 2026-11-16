@@ -13,6 +13,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -42,6 +43,7 @@ namespace {
 const QString kBenchmark = QStringLiteral("SPY");
 // "The next three months", in calendar days — what the summary prompt asks about.
 constexpr int kOutlookDays = 90;
+constexpr qint64 kRetryAfterMs = 2 * 60 * 1000;
 const QString kImageScheme = QStringLiteral("report");
 
 // Content width: wide enough for two charts side by side, never so wide a
@@ -200,12 +202,18 @@ void EquityReportTab::set_symbol(const QString& symbol) {
     // failed, in which case returning to the tab is the retry.
     const bool failed = std::any_of(parts_.begin(), parts_.end(),
                                     [](const Source& p) { return p.state == Source::State::Failed; });
-    if (sym == symbol_ && !failed)
+    // …and not on every activation: a rebuild clears the page and re-runs a
+    // dozen fetches, so a failure is given two minutes before it is tried
+    // again. (A source that will never exist — a fund has no SEC filings — is
+    // settled as "none", not failed, and is never retried.)
+    const bool retry_due = failed && loaded_at_.isValid() && loaded_at_.elapsed() >= kRetryAfterMs;
+    if (sym == symbol_ && !retry_due)
         return;
     // Not from inside a delivery: QueryStore calls its functor without
     // copying it, so the old symbol's subscriptions are dropped here.
     services::query::QueryStore::instance().unsubscribe_all(this);
     reset(sym);
+    loaded_at_.start();
     const quint64 epoch = epoch_;
     auto& svc = eq::EquityResearchService::instance();
     const QString as_of_fmt = QStringLiteral("d MMM HH:mm");
@@ -308,7 +316,10 @@ void EquityReportTab::set_symbol(const QString& symbol) {
             return;
         if (!ok) {
             doc_.filings.annual_error = err;
-            mark(Filings, Source::State::Failed, err);
+            // "No annual report on file" is an answer (a fund, an index, a
+            // company too new to have filed), not a failure to try again.
+            const bool none = err.contains(QLatin1String("on file"));
+            mark(Filings, none ? Source::State::None : Source::State::Failed, err);
             return;
         }
         doc_.filings = parse_filings(o);
@@ -337,7 +348,10 @@ void EquityReportTab::read_insiders() {
             if (!t.open_market || t.derivative || t.ten_percent_owner || t.plan_10b5_1.value_or(false))
                 continue;
             (t.acquired ? flow.buys : flow.sells) += 1;
-            (t.acquired ? flow.buy_value : flow.sell_value) += t.value.value_or(0.0);
+            if (t.value)
+                (t.acquired ? flow.buy_value : flow.sell_value) += *t.value;
+            else
+                flow.values_complete = false; // absent is unknown, not zero
         }
     }
     doc_.insiders = flow;
@@ -380,8 +394,24 @@ void EquityReportTab::record_direction(const QString& model) {
     // is the UTC day — a local date would miss every evening in the Americas.
     const QString today = QDateTime::currentDateTimeUtc().date().toString(Qt::ISODate);
     auto& repo = AiPredictionRepository::instance();
-    if (repo.exists_on_day(symbol_, today, QStringLiteral("report")))
+    if (repo.exists_on_day(symbol_, today, QStringLiteral("report"))) {
+        // One call a day goes on the record, and the record cannot be
+        // rewritten. A later rewrite that reads differently would put a
+        // direction on the page that nothing ever grades — so the page shows
+        // the recorded call, and says what the rewrite read.
+        for (const AiPrediction& kept : repo.for_ticker(symbol_)) {
+            if (kept.source != QLatin1String("report") || !kept.created_at.startsWith(today))
+                continue;
+            if (kept.direction != dir) {
+                doc_.summary.rationale = QStringLiteral("Today's first reading (%1) is the one on record and stands; a rewrite "
+                                                        "read %2: %3")
+                                             .arg(kept.direction, dir, doc_.summary.rationale);
+                doc_.summary.direction = kept.direction;
+            }
+            break;
+        }
         return;
+    }
     AiPrediction p;
     p.ticker = symbol_;
     p.created_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate); // UTC: the store sorts on the raw string
@@ -400,8 +430,8 @@ void EquityReportTab::maybe_write_narrative(bool force) {
         return;
     // The prose is written once, from the whole picture: wait for every input
     // it reads to arrive or fail.
-    for (Part p : {Info, Financials, Extras, Earnings, News, Filings, Peers})
-        if (!settled(p))
+    for (int p = 0; p < PartCount; ++p)
+        if (!settled(static_cast<Part>(p)))
             return;
     if (!doc_.has_info)
         return;
@@ -415,9 +445,7 @@ void EquityReportTab::maybe_write_narrative(bool force) {
     }
     const QVector<Headline> heads = headlines(doc_);
     const QString name = doc_.info.company_name;
-    if (force) { // a rewrite must not be answered from the kept copy
-        eq::forget_narrative(QStringLiteral("summary"), symbol_);
-        eq::forget_narrative(QStringLiteral("business"), symbol_);
+    if (force) { // a rewrite must not be answered from the kept copy (dropped below, once the key is known)
         doc_.summary = {};
         doc_.business = {};
     }
@@ -428,8 +456,24 @@ void EquityReportTab::maybe_write_narrative(bool force) {
     // request at a time, and the second of two sent together spends its two
     // minutes waiting in the queue. The budgets leave room for a model that
     // thinks aloud before it answers.
+    // A kept section is reused only for the same inputs: prose written while
+    // the 10-K was unreachable must not be served under "from the 10-K" once
+    // it has loaded. The key names what the section read, by identity (which
+    // filing, which quarter, which parts arrived) — not the prompt, whose
+    // live price changes by the minute.
+    QString loaded;
+    for (const auto& p : parts_)
+        loaded += p.state == Source::State::Ready ? QLatin1Char('1') : QLatin1Char('0');
+    const QString inputs = QStringLiteral("%1|%2|%3|%4|%5")
+                               .arg(doc_.filings.annual.accession, doc_.filings.quarterly.accession,
+                                    doc_.extras.quarters.isEmpty() ? QString() : doc_.extras.quarters.first().period,
+                                    doc_.has_financials && !doc_.financials.income_statement.isEmpty()
+                                        ? doc_.financials.income_statement.first().first
+                                        : QString(),
+                                    loaded);
+    const QString sig = QString::fromLatin1(QCryptographicHash::hash(inputs.toUtf8(), QCryptographicHash::Sha1).toHex().left(12));
     QVector<Section> sections;
-    sections.append({QStringLiteral("summary"), QStringLiteral("the summary"),
+    sections.append({QStringLiteral("summary@") + sig, QStringLiteral("the summary"),
                      summary_prompt(symbol_, name, figures_block(doc_), derive_findings(make_inputs(doc_)), heads), 3200,
                      [this](const QString& reply) {
                          const SummaryNarrative n = parse_summary(reply);
@@ -437,7 +481,7 @@ void EquityReportTab::maybe_write_narrative(bool force) {
                              doc_.summary = n;
                          return n.valid;
                      }});
-    sections.append({QStringLiteral("business"), QStringLiteral("the business section"),
+    sections.append({QStringLiteral("business@") + sig, QStringLiteral("the business section"),
                      business_prompt(symbol_, name, doc_.info.description, doc_.filings, heads), 4096,
                      [this](const QString& reply) {
                          const BusinessNarrative n = parse_business(reply);
@@ -445,6 +489,9 @@ void EquityReportTab::maybe_write_narrative(bool force) {
                              doc_.business = n;
                          return n.valid;
                      }});
+    if (force)
+        for (const auto& s : std::as_const(sections))
+            eq::forget_narrative(s.key, symbol_);
     narrative_pending_ = sections.size();
     write_sections(sections, std::make_shared<QStringList>(), epoch_);
     schedule_render();
@@ -473,6 +520,10 @@ void EquityReportTab::write_sections(QVector<Section> todo, std::shared_ptr<QStr
     };
     const eq::KeptNarrative kept = eq::kept_narrative(step.key, symbol_);
     if (kept.valid() && step.apply(kept.reply)) {
+        // A kept summary may be a rewrite: the direction shown is still the
+        // one on record for the day.
+        if (step.key.startsWith(QLatin1String("summary")))
+            record_direction(kept.model);
         done(kept.model, kept.written_at);
         return;
     }
@@ -481,7 +532,7 @@ void EquityReportTab::write_sections(QVector<Section> todo, std::shared_ptr<QStr
             return;
         if (ok && step.apply(reply)) {
             eq::keep_narrative(step.key, symbol_, reply, model);
-            if (step.key == QLatin1String("summary"))
+            if (step.key.startsWith(QLatin1String("summary")))
                 record_direction(model);
             done(model, QDateTime::currentDateTime());
             return;
