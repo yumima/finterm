@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`3fe848f3c`](https://github.com/yumima/finterm/commit/3fe848f3c) **chore(release):** update README download links and updates.json for v4.0.6
+- [`16ea81c0d`](https://github.com/yumima/finterm/commit/16ea81c0d) **docs:** install and first start, step by step, per system
 - [`78c42ee97`](https://github.com/yumima/finterm/commit/78c42ee97) release: 4.0.6
 - [`5efa629dc`](https://github.com/yumima/finterm/commit/5efa629dc) **ci:** unused lambda captures in the daemon socket error handlers (Clang -Werror)
 - [`10f278adc`](https://github.com/yumima/finterm/commit/10f278adc) selftest: the Linux AppImage and the macOS disk image are run and must fetch data too

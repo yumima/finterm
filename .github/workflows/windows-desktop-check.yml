@@ -1,0 +1,148 @@
+# Installs the PUBLISHED Windows installer on a real Windows machine, the way a
+# user gets it, and checks what the build's own self-test cannot: the default
+# install location, the Start Menu and Desktop shortcuts, the uninstall entry,
+# the app started from its shortcut as a normal window (with a screenshot), its
+# data process running beside it, and a clean uninstall.
+#
+# It downloads the released file rather than building one, so it takes minutes
+# and tests exactly what is on the download page. Nothing is published.
+name: Windows desktop check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/windows-desktop-check.yml"]
+  # After every release, once the installers are public.
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Install, start, uninstall (published installer)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the published installer
+        shell: pwsh
+        run: |
+          gh release download --repo "${{ github.repository }}" --pattern "finterm-*-windows-x64-setup.exe" --dir "$env:RUNNER_TEMP\dl"
+          $exe = Get-ChildItem "$env:RUNNER_TEMP\dl\finterm-*-windows-x64-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "no Windows installer on the latest release" }
+          "Installer: $($exe.Name) ($([math]::Round($exe.Length/1MB)) MB)"
+          "INSTALLER=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install with the installer's defaults
+        shell: pwsh
+        run: |
+          # The same operations the wizard performs when a user clicks Next
+          # throughout: default folder, default components, shortcuts.
+          $p = Start-Process -FilePath $env:INSTALLER -ArgumentList "install","--accept-licenses","--default-answer","--confirm-command" -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "the installer failed" }
+
+      - name: Check what the installer left on the machine
+        shell: pwsh
+        run: |
+          $fail = @()
+          $dir = Join-Path $env:ProgramFiles "finterm"
+          $exe = Join-Path $dir "finterm.exe"
+          if (Test-Path $exe) { "OK   app            $exe" } else { $fail += "no finterm.exe in $dir"; Get-ChildItem $env:ProgramFiles | Select-Object -Expand Name }
+          if (Test-Path (Join-Path $dir "scripts\yfinance_data.py")) { "OK   data scripts   $dir\scripts" } else { $fail += "no scripts\yfinance_data.py" }
+          $tool = Get-ChildItem $dir -Filter "FintermMaintenanceTool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($tool) { "OK   uninstaller    $($tool.FullName)" } else { $fail += "no FintermMaintenanceTool.exe" }
+
+          $starts = @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs")
+          $start = Get-ChildItem $starts -Recurse -Filter "finterm.lnk" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($start) { "OK   Start Menu     $($start.FullName)" } else { $fail += "no Start Menu shortcut" }
+          $desks = @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("CommonDesktopDirectory"))
+          $desk = Get-ChildItem $desks -Filter "finterm.lnk" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($desk) { "OK   Desktop        $($desk.FullName)" } else { $fail += "no Desktop shortcut" }
+          if ($start) {
+            $target = (New-Object -ComObject WScript.Shell).CreateShortcut($start.FullName).TargetPath
+            if ($target -ieq $exe) { "OK   shortcut target $target" } else { $fail += "Start Menu shortcut points at '$target', not $exe" }
+          }
+
+          $keys = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          $entry = Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*finterm*" } | Select-Object -First 1
+          if ($entry) { "OK   Apps entry     $($entry.DisplayName) $($entry.DisplayVersion)" } else { $fail += "no entry under Settings > Apps" }
+
+          "FINTERM_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          if ($start) { "FINTERM_LNK=$($start.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append }
+          if ($tool)  { "FINTERM_TOOL=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append }
+          if ($fail.Count) { $fail | ForEach-Object { "::error::$_" }; exit 1 }
+
+      - name: First-launch setup and one quote (self-test from the installed folder)
+        shell: pwsh
+        timeout-minutes: 40
+        run: |
+          $report = "$env:RUNNER_TEMP\selftest.json"
+          $p = Start-Process -FilePath $env:FINTERM_EXE -ArgumentList "--selftest", $report -Wait -PassThru
+          "exit code: $($p.ExitCode)"
+          if (Test-Path $report) { Get-Content $report } else { "(no report written)" }
+          if ($p.ExitCode -ne 0) {
+            Get-ChildItem "$env:LOCALAPPDATA\finterm" -Recurse -Filter "finterm.log" -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 120 }
+            throw "the installed app could not fetch market data"
+          }
+
+      - name: Start it from the Start Menu shortcut, as a user does
+        shell: pwsh
+        run: |
+          Start-Process -FilePath $env:FINTERM_LNK
+          $deadline = (Get-Date).AddSeconds(90)
+          do { Start-Sleep 3; $app = Get-Process finterm -ErrorAction SilentlyContinue } until ($app -or (Get-Date) -gt $deadline)
+          if (-not $app) { throw "finterm did not start from its shortcut" }
+          "OK   running        finterm.exe pid $($app.Id)"
+          Start-Sleep 30   # let the window paint and the data process come up
+
+          $app = Get-Process finterm -ErrorAction SilentlyContinue
+          if (-not $app) { throw "finterm started and then exited" }
+          $title = ($app | Where-Object { $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle
+          if ($title) { "OK   window         '$title'" } else { "::warning::no window title reported (the runner's desktop may not expose it)" }
+
+          # The data process: a Python child of finterm, on the TCP transport.
+          $kids = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -in $app.Id }
+          $daemon = $kids | Where-Object { $_.CommandLine -like "*yfinance_data.py*--daemon*" } | Select-Object -First 1
+          if ($daemon) { "OK   data process   pid $($daemon.ProcessId): $($daemon.CommandLine -replace '^.*(yfinance_data\.py.*)$','$1')" }
+          else { $kids | ForEach-Object { "child: $($_.Name) $($_.CommandLine)" }; throw "finterm is running but its data process is not" }
+          if ($daemon.CommandLine -notlike "*--tcp*") { throw "the data process is not on the TCP transport" }
+          $listen = Get-NetTCPConnection -State Listen -OwningProcess $daemon.ProcessId -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($listen) { "OK   listening      $($listen.LocalAddress):$($listen.LocalPort)" ; if ($listen.LocalAddress -ne "127.0.0.1") { throw "the data process listens beyond loopback" } }
+
+          # What is on the screen.
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          try { $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size); $bmp.Save("$env:RUNNER_TEMP\finterm-windows.png"); "OK   screenshot     $($b.Width)x$($b.Height)" }
+          catch { "::warning::no screenshot: $($_.Exception.Message)" }
+
+          Stop-Process -Name finterm -Force -ErrorAction SilentlyContinue
+          Start-Sleep 3
+          $left = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*yfinance_data.py*--daemon*" }
+          if ($left) { "::warning::the data process outlived the app (pid $($left.ProcessId))"; $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
+          else { "OK   data process   stopped with the app" }
+
+      - name: Upload the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finterm-windows-screenshot
+          path: ${{ runner.temp }}/finterm-windows.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath $env:FINTERM_TOOL -ArgumentList "purge","--confirm-command","--default-answer" -Wait -PassThru
+          "uninstaller exit code: $($p.ExitCode)"
+          Start-Sleep 5
+          if (Test-Path $env:FINTERM_EXE) { throw "finterm.exe is still there after uninstalling" } else { "OK   app removed" }
+          if (Test-Path $env:FINTERM_LNK) { throw "the Start Menu shortcut is still there after uninstalling" } else { "OK   shortcut removed" }
+          if (Test-Path "$env:LOCALAPPDATA\finterm") { "OK   user data kept in $env:LOCALAPPDATA\finterm (as the README says)" }
