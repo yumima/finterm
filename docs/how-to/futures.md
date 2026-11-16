@@ -17,6 +17,13 @@ behind the exchange; nothing here needs an API key.
 | **Ticket** | Size a trade in dollars, then fill it in the paper account. |
 | **Contract** | Size, quote unit, tick and its dollar value. |
 
+## Arranging the screen
+
+Drag any panel by its title bar onto another and the two swap places; drag
+the dividers between them to resize. The arrangement is kept between
+sessions. **RESET LAYOUT** in the header puts everything back. Each panel's
+title says where its numbers come from — hover it for the detail.
+
 ## Things worth knowing
 
 - **Hollow points and dimmed rows** are months that have not traded since the

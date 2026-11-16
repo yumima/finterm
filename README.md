@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`27916ca78`](https://github.com/yumima/finterm/commit/27916ca78) **fix:** drop a counter the Report status never reads (clang -Werror on macOS)
 - [`b6af23c55`](https://github.com/yumima/finterm/commit/b6af23c55) **fix:** brace-initialise a QFont clang read as a function declaration
 - [`4c9539a39`](https://github.com/yumima/finterm/commit/4c9539a39) **fix:** freopen_s on Windows (MSVC treats freopen's deprecation as an error)
 - [`cb190f4a7`](https://github.com/yumima/finterm/commit/cb190f4a7) **fix:** silent video after a scroll, a stray copy blocking launch, Windows build

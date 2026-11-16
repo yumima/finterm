@@ -4,6 +4,7 @@
 //
 // Set FINTERM_RENDER_DIR to a directory to keep the pictures.
 #include "screens/futures/FuturesCharts.h"
+#include "screens/futures/FuturesPanels.h"
 
 #include <QDir>
 #include <QtTest>
@@ -34,6 +35,17 @@ int inked(const QImage& img) {
 class TestFuturesCharts : public QObject {
     Q_OBJECT
   private slots:
+    void a_saved_arrangement_is_used_only_when_whole() {
+        using finterm::screens::futures::valid_order;
+        const QStringList def = {"board", "chart", "curve", "months", "detail"};
+        const QStringList moved = {"board", "curve", "chart", "detail", "months"};
+        QCOMPARE(valid_order(moved, def), moved);
+        QCOMPARE(valid_order({}, def), def);                                              // nothing saved
+        QCOMPARE(valid_order({"board", "chart", "curve", "months"}, def), def);            // a pane missing
+        QCOMPARE(valid_order({"board", "chart", "chart", "months", "detail"}, def), def);  // one twice
+        QCOMPARE(valid_order({"board", "chart", "curve", "months", "ladder"}, def), def);  // one this build lacks
+    }
+
     void charts_render() {
         fut::Curve curve;
         curve.root = "CL";

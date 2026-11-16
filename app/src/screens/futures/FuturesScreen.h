@@ -1,5 +1,6 @@
 // src/screens/futures/FuturesScreen.h
 #pragma once
+#include <functional>
 #include "screens/IStatefulScreen.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/futures/FuturesMath.h"
@@ -30,6 +31,7 @@ namespace finterm::screens {
 class ResearchCandleCanvas;
 
 namespace futures {
+class PanelFrame;
 class CurveChart;
 class CotChart;
 class SpreadChart;
@@ -72,11 +74,11 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
 
   private:
     void build_ui();
-    QWidget* build_board();
-    QWidget* build_chart_panel();
-    QWidget* build_curve_panel();
-    QWidget* build_months_panel();
-    QWidget* build_side_tabs();
+    futures::PanelFrame* build_board();
+    futures::PanelFrame* build_chart_panel();
+    futures::PanelFrame* build_curve_panel();
+    futures::PanelFrame* build_months_panel();
+    futures::PanelFrame* build_side_tabs();
     void apply_theme();
 
     void set_group(const QString& group);
@@ -95,7 +97,7 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     void render_cot(const services::futures::CotReport& report);
 
     void set_chart_symbol(const QString& symbol);
-    void load_chart();
+    void load_chart(bool retry = false);
 
     void render_contract_terms();
     void render_ticket();
@@ -158,6 +160,21 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     QString chart_symbol_; ///< empty = the continuous series
     QString period_ = QStringLiteral("6M");
     int chart_seq_ = 0;
+    /// Automatic retries of one pane's read. `gen` cancels a pending retry:
+    /// a reset or a newer schedule makes an older timer a no-op.
+    struct Retry {
+        int attempt = 0;
+        int gen = 0;
+        void reset() {
+            attempt = 0;
+            ++gen;
+        }
+    };
+    Retry chart_retry_, spread_retry_, cot_retry_;
+    QString spread_retry_key_; ///< the pair spread_retry_ counts for
+    /// Schedules `again` after the next back-off delay; returns the delay in
+    /// seconds, or 0 when the retries are used up.
+    int schedule_retry(Retry& r, std::function<void()> again);
 
     // Curve + months
     futures::CurveChart* curve_chart_ = nullptr;
@@ -166,6 +183,27 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
 
     // Side tabs
     QTabWidget* tabs_ = nullptr;
+
+    // ── arrangement ──
+    // Five panes in five places: the board's column, the two halves of the
+    // upper row and of the lower row. Any two swap by dragging one title bar
+    // onto another; places and sizes are kept between sessions.
+    QHash<QString, futures::PanelFrame*> panels_;
+    QSplitter* body_split_ = nullptr;   ///< board | everything else
+    QSplitter* right_split_ = nullptr;  ///< upper row / lower row
+    QSplitter* top_split_ = nullptr;    ///< price chart | forward curve
+    QSplitter* bottom_split_ = nullptr; ///< contract months | detail tabs
+    QTimer* layout_save_ = nullptr;
+    bool layout_ready_ = false;
+    static QStringList default_order();
+    QStringList current_order() const;
+    void swap_panels(const QString& a, const QString& b);
+    void apply_default_sizes();
+    void apply_stretch();
+    void restore_layout();
+    void save_layout();
+    void reset_layout();
+    void update_detail_source();
     futures::CotChart* cot_chart_ = nullptr;
     QLabel* cot_summary_ = nullptr;
     QString cot_for_;

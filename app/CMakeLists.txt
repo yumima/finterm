@@ -1320,6 +1320,7 @@ set(SCREEN_SOURCES
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
     src/screens/futures/FuturesCharts.cpp
+    src/screens/futures/FuturesPanels.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp
@@ -1464,6 +1465,7 @@ set_source_files_properties(
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
     src/screens/futures/FuturesCharts.cpp
+    src/screens/futures/FuturesPanels.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp

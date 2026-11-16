@@ -6,6 +6,7 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/futures/FuturesCharts.h"
+#include "screens/futures/FuturesPanels.h"
 #include "services/futures/FuturesService.h"
 #include "services/markets/LastKnownQuote.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -21,7 +22,9 @@
 #include <QDoubleValidator>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
@@ -77,6 +80,9 @@ enum PosCol { PContract, PPosition, PEntry, PLast, PPnl, PLevels, PClose, PCount
 
 // Stops and targets of the paper positions, kept across sessions.
 const QString kBracketsKey = QStringLiteral("futures.paper_brackets");
+// Where the panes sit and how big they are.
+const QString kLayoutKey = QStringLiteral("futures.layout");
+constexpr int kLayoutVersion = 2; // 2: sizes as pixel lists
 
 QString num(double v, int dp) {
     return std::isfinite(v) ? QLocale(QLocale::English).toString(v, 'f', dp) : fmt::placeholder();
@@ -148,22 +154,6 @@ QLabel* panel_title(const QString& text, QWidget* parent) {
     return l;
 }
 
-QWidget* panel(QLayout* title_row, QWidget* body, QWidget* parent) {
-    auto* w = new QWidget(parent);
-    w->setObjectName(QStringLiteral("futPanel"));
-    auto* v = new QVBoxLayout(w);
-    v->setContentsMargins(0, 0, 0, 0);
-    v->setSpacing(0);
-    auto* bar = new QWidget(w);
-    bar->setObjectName(QStringLiteral("futPanelBar"));
-    bar->setFixedHeight(26);
-    bar->setLayout(title_row);
-    title_row->setContentsMargins(8, 0, 6, 0);
-    title_row->setSpacing(6);
-    v->addWidget(bar);
-    v->addWidget(body, 1);
-    return w;
-}
 
 /// "CLZ26.NYM" -> "CL".
 QString root_of(const QString& contract_symbol) {
@@ -278,6 +268,13 @@ void FuturesScreen::build_ui() {
         connect(b, &QPushButton::clicked, this, [this, g]() { set_group(g); });
     }
     hl->addStretch(1);
+    auto* reset = new QPushButton(QStringLiteral("RESET LAYOUT"), header);
+    reset->setObjectName(QStringLiteral("futSeg"));
+    reset->setCursor(Qt::PointingHandCursor);
+    reset->setToolTip(QStringLiteral("Put the panels back in their original places and sizes"));
+    connect(reset, &QPushButton::clicked, this, &FuturesScreen::reset_layout);
+    hl->addWidget(reset);
+    hl->addSpacing(8);
     status_ = new ui::StatusPill(header);
     hl->addWidget(status_);
     root->addWidget(header);
@@ -305,42 +302,200 @@ void FuturesScreen::build_ui() {
     sl->addWidget(strip_facts_, 1);
     root->addWidget(strip);
 
-    auto* top = new QSplitter(Qt::Horizontal, this);
-    top->addWidget(build_chart_panel());
-    top->addWidget(build_curve_panel());
-    top->setStretchFactor(0, 1);
-    top->setStretchFactor(1, 1);
+    top_split_ = new QSplitter(Qt::Horizontal, this);
+    top_split_->addWidget(build_chart_panel());
+    top_split_->addWidget(build_curve_panel());
 
-    auto* bottom = new QSplitter(Qt::Horizontal, this);
-    bottom->addWidget(build_months_panel());
-    bottom->addWidget(build_side_tabs());
-    bottom->setStretchFactor(0, 3);
-    bottom->setStretchFactor(1, 2);
+    bottom_split_ = new QSplitter(Qt::Horizontal, this);
+    bottom_split_->addWidget(build_months_panel());
+    bottom_split_->addWidget(build_side_tabs());
 
-    auto* right = new QSplitter(Qt::Vertical, this);
-    right->addWidget(top);
-    right->addWidget(bottom);
-    right->setStretchFactor(0, 5);
-    right->setStretchFactor(1, 4);
+    right_split_ = new QSplitter(Qt::Vertical, this);
+    right_split_->addWidget(top_split_);
+    right_split_->addWidget(bottom_split_);
 
-    auto* body = new QSplitter(Qt::Horizontal, this);
-    body->addWidget(build_board());
-    body->addWidget(right);
-    body->setStretchFactor(0, 0);
-    body->setStretchFactor(1, 1);
-    // The curve gets as much room as the price chart; the contract table needs
-    // its eleven columns, the board only its six.
-    top->setSizes({640, 640});
-    bottom->setSizes({850, 430});
-    body->setSizes({450, 1280});
-    for (auto* s : {top, bottom, right, body}) {
-        s->setHandleWidth(1);
-        s->setChildrenCollapsible(false);
+    body_split_ = new QSplitter(Qt::Horizontal, this);
+    body_split_->addWidget(build_board());
+    body_split_->addWidget(right_split_);
+    for (auto* sp : {top_split_, bottom_split_, right_split_, body_split_}) {
+        sp->setHandleWidth(3); // wide enough to find and drag
+        sp->setChildrenCollapsible(false);
+        connect(sp, &QSplitter::splitterMoved, this, [this]() { layout_save_->start(); });
     }
-    root->addWidget(body, 1);
+    root->addWidget(body_split_, 1);
+
+    for (auto* p : std::as_const(panels_))
+        connect(p, &futures::PanelFrame::swap_requested, this, &FuturesScreen::swap_panels);
+
+    // Where each pane's numbers come from.
+    panels_.value(QStringLiteral("board"))
+        ->set_source(QStringLiteral("Yahoo"),
+                     QStringLiteral("Yahoo Finance quotes for each root's continuous front month (ROOT=F), "
+                                    "about ten minutes behind the exchange."));
+    panels_.value(QStringLiteral("chart"))
+        ->set_source(QStringLiteral("Yahoo bars"),
+                     QStringLiteral("Daily and intraday bars from Yahoo Finance. The continuous series is Yahoo's "
+                                    "own front-month stitch; a single month is that contract alone."));
+    panels_.value(QStringLiteral("curve"))
+        ->set_source(QStringLiteral("Yahoo · a quote per month"),
+                     QStringLiteral("One Yahoo Finance quote per listed delivery month. Past curves are each "
+                                    "month's daily close on that date."));
+    panels_.value(QStringLiteral("months"))
+        ->set_source(QStringLiteral("Yahoo"),
+                     QStringLiteral("Price, volume and open interest as Yahoo Finance reports them; last trading "
+                                    "day as Yahoo lists it. Carry is computed here from those prices."));
+    update_detail_source();
+
+    layout_save_ = new QTimer(this);
+    layout_save_->setSingleShot(true);
+    layout_save_->setInterval(400);
+    connect(layout_save_, &QTimer::timeout, this, &FuturesScreen::save_layout);
+    apply_stretch();
+    apply_default_sizes();
+    restore_layout();
 }
 
-QWidget* FuturesScreen::build_board() {
+QStringList FuturesScreen::default_order() {
+    return {QStringLiteral("board"), QStringLiteral("chart"), QStringLiteral("curve"), QStringLiteral("months"),
+            QStringLiteral("detail")};
+}
+
+QStringList FuturesScreen::current_order() const {
+    // The places, in a fixed sequence: the left column, the upper row's two
+    // halves, the lower row's two halves.
+    QStringList out;
+    auto id_at = [](QSplitter* sp, int i) {
+        auto* f = qobject_cast<futures::PanelFrame*>(sp->widget(i));
+        return f ? f->id() : QString();
+    };
+    out << id_at(body_split_, 0) << id_at(top_split_, 0) << id_at(top_split_, 1) << id_at(bottom_split_, 0)
+        << id_at(bottom_split_, 1);
+    return out;
+}
+
+void FuturesScreen::apply_stretch() {
+    // How extra room is shared when the window grows. A splitter keeps this
+    // on the pane, not the place, so it is set again after every swap.
+    const QList<QPair<QSplitter*, QList<int>>> k = {
+        {body_split_, {0, 1}}, {right_split_, {5, 4}}, {top_split_, {1, 1}}, {bottom_split_, {2, 3}}};
+    for (const auto& [sp, f] : k)
+        for (int i = 0; i < f.size(); ++i)
+            sp->setStretchFactor(i, f[i]);
+}
+
+void FuturesScreen::apply_default_sizes() {
+    // The board needs its six columns; the forward curve as much room as the
+    // price chart; and the detail pane — spread and positioning charts, the
+    // ticket — more than the contract table, which scrolls sideways if it must.
+    body_split_->setSizes({460, 1260});
+    right_split_->setSizes({520, 420});
+    top_split_->setSizes({650, 650});
+    bottom_split_->setSizes({560, 740});
+}
+
+void FuturesScreen::swap_panels(const QString& a, const QString& b) {
+    auto* fa = panels_.value(a);
+    auto* fb = panels_.value(b);
+    if (!fa || !fb || fa == fb)
+        return;
+    auto* sa = qobject_cast<QSplitter*>(fa->parentWidget());
+    auto* sb = qobject_cast<QSplitter*>(fb->parentWidget());
+    if (!sa || !sb)
+        return;
+    const int ia = sa->indexOf(fa), ib = sb->indexOf(fb);
+    const QList<int> sizes_a = sa->sizes(), sizes_b = sb->sizes();
+    // Through a stand-in: a widget cannot take a place while it holds another.
+    auto* stand_in = new QWidget;
+    sa->replaceWidget(ia, stand_in);
+    sb->replaceWidget(ib, fa);
+    sa->replaceWidget(ia, fb);
+    delete stand_in;
+    fa->show();
+    fb->show();
+    sa->setSizes(sizes_a); // the places keep their sizes; the panes trade them
+    if (sb != sa)
+        sb->setSizes(sizes_b);
+    apply_stretch();
+    save_layout();
+}
+
+void FuturesScreen::restore_layout() {
+    const auto r = SettingsRepository::instance().get(kLayoutKey);
+    QJsonObject o;
+    if (!r.is_err())
+        o = QJsonDocument::fromJson(r.value().toUtf8()).object();
+    if (o.value(QLatin1String("v")).toInt() == kLayoutVersion) {
+        QStringList saved;
+        for (const auto& v : o.value(QLatin1String("order")).toArray())
+            saved << v.toString();
+        const QStringList order = futures::valid_order(saved, default_order());
+        // Swap into place one slot at a time.
+        for (int slot = 0; slot < order.size(); ++slot) {
+            const QString here = current_order().value(slot);
+            if (here != order[slot])
+                swap_panels(order[slot], here);
+        }
+        const QJsonObject sizes = o.value(QLatin1String("sizes")).toObject();
+        const QList<QPair<QString, QSplitter*>> named = {{QStringLiteral("body"), body_split_},
+                                                        {QStringLiteral("rows"), right_split_},
+                                                        {QStringLiteral("top"), top_split_},
+                                                        {QStringLiteral("bottom"), bottom_split_}};
+        // Sizes only — not the splitter's whole saved state, which would also
+        // bring back an old build's handle width or collapsibility.
+        for (const auto& [name, sp] : named) {
+            QList<int> px;
+            for (const auto& v : sizes.value(name).toArray())
+                px << v.toInt();
+            if (px.size() == sp->count() && std::all_of(px.begin(), px.end(), [](int v) { return v > 0; }))
+                sp->setSizes(px);
+        }
+    }
+    layout_ready_ = true; // from here on, changes are the user's and are saved
+}
+
+void FuturesScreen::save_layout() {
+    if (!layout_ready_)
+        return;
+    QJsonArray order;
+    for (const QString& id : current_order())
+        order.append(id);
+    auto px = [](QSplitter* sp) {
+        QJsonArray a;
+        for (int v : sp->sizes())
+            a.append(v);
+        return a;
+    };
+    QJsonObject sizes{{"body", px(body_split_)}, {"rows", px(right_split_)}, {"top", px(top_split_)},
+                      {"bottom", px(bottom_split_)}};
+    const QJsonObject o{{"v", kLayoutVersion}, {"order", order}, {"sizes", sizes}};
+    SettingsRepository::instance().set(kLayoutKey, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)),
+                                       QStringLiteral("futures"));
+}
+
+void FuturesScreen::reset_layout() {
+    layout_ready_ = false; // the swaps below are not the user's arrangement
+    const QStringList order = default_order();
+    for (int slot = 0; slot < order.size(); ++slot) {
+        const QString here = current_order().value(slot);
+        if (here != order[slot])
+            swap_panels(order[slot], here);
+    }
+    apply_default_sizes();
+    layout_ready_ = true;
+    save_layout();
+}
+
+void FuturesScreen::update_detail_source() {
+    auto* frame = panels_.value(QStringLiteral("detail"));
+    if (!frame || !tabs_)
+        return;
+    // Each tab's source travels with its page, whatever order the tabs are in.
+    const QVariant v = tabs_->currentWidget() ? tabs_->currentWidget()->property("futSource") : QVariant();
+    const QStringList src = v.toStringList();
+    frame->set_source(src.value(0), src.value(1));
+}
+
+futures::PanelFrame* FuturesScreen::build_board() {
     board_ = make_table({QStringLiteral("ROOT"), QStringLiteral("MARKET"), QStringLiteral("LAST"),
                          QStringLiteral("CHG"), QStringLiteral("%"), QStringLiteral("VOLUME")},
                         this);
@@ -356,10 +511,12 @@ QWidget* FuturesScreen::build_board() {
     auto* row = new QHBoxLayout;
     row->addWidget(panel_title(QStringLiteral("BOARD · continuous front month"), this));
     row->addStretch(1);
-    return panel(row, board_, this);
+    auto* frame = new futures::PanelFrame(QStringLiteral("board"), row, board_, this);
+    panels_.insert(frame->id(), frame);
+    return frame;
 }
 
-QWidget* FuturesScreen::build_chart_panel() {
+futures::PanelFrame* FuturesScreen::build_chart_panel() {
     auto* host = new QWidget(this);
     auto* v = new QVBoxLayout(host);
     v->setContentsMargins(0, 0, 0, 0);
@@ -394,20 +551,24 @@ QWidget* FuturesScreen::build_chart_panel() {
             load_chart();
         });
     }
-    return panel(row, host, this);
+    auto* frame = new futures::PanelFrame(QStringLiteral("chart"), row, host, this);
+    panels_.insert(frame->id(), frame);
+    return frame;
 }
 
-QWidget* FuturesScreen::build_curve_panel() {
+futures::PanelFrame* FuturesScreen::build_curve_panel() {
     curve_chart_ = new futures::CurveChart(this);
     connect(curve_chart_, &futures::CurveChart::contract_clicked, this, &FuturesScreen::set_chart_symbol);
     auto* row = new QHBoxLayout;
     curve_title_ = panel_title(QStringLiteral("FORWARD CURVE"), this);
     row->addWidget(curve_title_);
     row->addStretch(1);
-    return panel(row, curve_chart_, this);
+    auto* frame = new futures::PanelFrame(QStringLiteral("curve"), row, curve_chart_, this);
+    panels_.insert(frame->id(), frame);
+    return frame;
 }
 
-QWidget* FuturesScreen::build_months_panel() {
+futures::PanelFrame* FuturesScreen::build_months_panel() {
     months_ = make_table({QStringLiteral("MONTH"), QStringLiteral("CONTRACT"), QStringLiteral("LAST"),
                           QStringLiteral("CHG"), QStringLiteral("%"), QStringLiteral("VS FRONT"),
                           QStringLiteral("CARRY/YR"), QStringLiteral("VOLUME"), QStringLiteral("OPEN INT"),
@@ -428,10 +589,12 @@ QWidget* FuturesScreen::build_months_panel() {
     auto* row = new QHBoxLayout;
     row->addWidget(panel_title(QStringLiteral("CONTRACT MONTHS · click one to chart and trade it"), this));
     row->addStretch(1);
-    return panel(row, months_, this);
+    auto* frame = new futures::PanelFrame(QStringLiteral("months"), row, months_, this);
+    panels_.insert(frame->id(), frame);
+    return frame;
 }
 
-QWidget* FuturesScreen::build_side_tabs() {
+futures::PanelFrame* FuturesScreen::build_side_tabs() {
     tabs_ = new QTabWidget(this);
     tabs_->setDocumentMode(true);
 
@@ -567,7 +730,30 @@ QWidget* FuturesScreen::build_side_tabs() {
     terms_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     terms_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     tabs_->addTab(terms_, QStringLiteral("CONTRACT"));
-    return tabs_;
+    sp->setProperty("futSource",
+                    QStringList{QStringLiteral("Yahoo daily closes"),
+                                QStringLiteral("Each month's daily close from Yahoo Finance; the spread is computed "
+                                               "here, on the sessions both months traded.")});
+    pos->setProperty("futSource",
+                     QStringList{QStringLiteral("CFTC Commitments of Traders · weekly"),
+                                 QStringLiteral("The CFTC's Commitments of Traders report: positions as of each "
+                                                "Tuesday, published the following Friday.")});
+    tk->setProperty("futSource",
+                    QStringList{QStringLiteral("paper account · fills at the last Yahoo print"),
+                                QStringLiteral("A simulated account kept on this computer. Nothing is sent to a broker.")});
+    terms_->setProperty("futSource",
+                        QStringList{QStringLiteral("CME Group / ICE specifications"),
+                                    QStringLiteral("Contract terms from the exchanges' published specifications, "
+                                                   "checked against live prints on 2026-11-16. Margin is not shown: "
+                                                   "exchanges change it often and there is no feed for it.")});
+    connect(tabs_, &QTabWidget::currentChanged, this, [this](int) { update_detail_source(); });
+
+    auto* row = new QHBoxLayout;
+    row->addWidget(panel_title(QStringLiteral("DETAIL"), this));
+    row->addStretch(1);
+    auto* frame = new futures::PanelFrame(QStringLiteral("detail"), row, tabs_, this);
+    panels_.insert(frame->id(), frame);
+    return frame;
 }
 
 void FuturesScreen::apply_theme() {
@@ -594,7 +780,10 @@ void FuturesScreen::apply_theme() {
             "font-size:%5px;font-weight:700;}"
             "QPushButton#futSeg:hover{color:%9;}"
             "QPushButton#futSeg:checked{color:%7;border-bottom:2px solid %7;}"
-            "QSplitter::handle{background:%3;}")
+            "QSplitter::handle{background:%3;}"
+            "QSplitter::handle:hover{background:%7;}"
+            "QLabel#futSource{color:%8;font-weight:400;}"
+            "QWidget#futDropMark{background:transparent;border:2px solid %7;}")
             .arg(BG_BASE(), BG_RAISED(), BORDER_DIM(), family)
             .arg(px)
             .arg(TEXT_SECONDARY(), AMBER(), TEXT_TERTIARY(), TEXT_PRIMARY())
@@ -669,11 +858,14 @@ void FuturesScreen::showEvent(QShowEvent* e) {
     fetch_curve();
     if (canvas_->candles().isEmpty())
         load_chart();
-    if (cot_for_ != root_)
+    if (cot_for_ != root_) {
+        cot_retry_.reset(); // coming back gives a failed read fresh retries
         fetch_cot();
-    if (spread_failed_) { // a failed spread is tried again on return
+    }
+    if (spread_failed_) { // a failed spread is tried again on return, with fresh retries
         spread_failed_ = false;
         spread_for_.clear();
+        spread_retry_.reset();
     }
     fetch_spread();
     load_brackets();
@@ -684,6 +876,10 @@ void FuturesScreen::showEvent(QShowEvent* e) {
 
 void FuturesScreen::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
+    if (layout_save_ && layout_save_->isActive()) { // a divider moved just before leaving
+        layout_save_->stop();
+        save_layout();
+    }
     // Paused while hidden: no quote subscriptions, no curve polling, no stream.
     shown_ = false;
     unsubscribe_board();
@@ -797,6 +993,8 @@ void FuturesScreen::set_root(const QString& root) {
     stop_->clear();
     target_->clear();
     cot_for_.clear();
+    spread_retry_.reset(); // a new market gets its own retries
+    cot_retry_.reset();
     spread_for_.clear();
     spread_failed_ = false;
     spread_summary_->clear();
@@ -1047,6 +1245,28 @@ void FuturesScreen::render_curve() {
 
 // ── calendar spread ────────────────────────────────────────────────────────
 
+
+namespace {
+// A failed read is asked again on its own, further apart each time: a
+// network stall at launch (2026-11-16, 30 s of timeouts) otherwise left the
+// chart, spread and positioning panes on their error for good.
+constexpr int kRetryDelaysMs[] = {5000, 15000, 45000, 120000};
+constexpr int kRetries = int(sizeof(kRetryDelaysMs) / sizeof(kRetryDelaysMs[0]));
+} // namespace
+
+int FuturesScreen::schedule_retry(Retry& r, std::function<void()> again) {
+    if (r.attempt >= kRetries)
+        return 0;
+    const int delay = kRetryDelaysMs[r.attempt++];
+    const int gen = ++r.gen;
+    Retry* rp = &r; // a member: lives exactly as long as this screen
+    QTimer::singleShot(delay, this, [this, rp, gen, again = std::move(again)]() {
+        if (gen == rp->gen && shown_)
+            again();
+    });
+    return delay / 1000;
+}
+
 void FuturesScreen::fetch_spread() {
     if (curve_.contracts.isEmpty())
         return; // nothing is known yet: the pane keeps saying it is loading
@@ -1060,6 +1280,10 @@ void FuturesScreen::fetch_spread() {
     const QString key = pair.first + QLatin1Char('|') + pair.second;
     if (key == spread_for_ || !shown_)
         return;
+    if (key != spread_retry_key_) {
+        spread_retry_.reset(); // another pair is another read with its own retries
+        spread_retry_key_ = key;
+    }
     spread_for_ = key;
     const int ia = curve_.index_of(pair.first), ib = curve_.index_of(pair.second);
     const QString title = QStringLiteral("<b>%1 − %2</b> · %3 less %4")
@@ -1075,10 +1299,19 @@ void FuturesScreen::fetch_spread() {
             // spread_for_ stays: the same pair is not asked for again on every
             // curve refresh. Another pick, or coming back to the screen, asks.
             spread_failed_ = true;
-            spread_chart_->set_message(QStringLiteral("The spread did not load: %1").arg(err));
+            const int in_s = schedule_retry(spread_retry_, [this, key]() {
+                if (key == spread_for_ && spread_failed_) {
+                    spread_for_.clear();
+                    fetch_spread();
+                }
+            });
+            spread_chart_->set_message(
+                in_s > 0 ? QStringLiteral("The spread did not load: %1 — trying again in %2 s").arg(err, QString::number(in_s))
+                         : QStringLiteral("The spread did not load: %1").arg(err));
             return;
         }
         spread_failed_ = false;
+        spread_retry_.reset();
         const auto* s = spec();
         const int dp = s ? price_decimals(s->tick) : 2;
         spread_chart_->set_history(history, dp);
@@ -1112,11 +1345,18 @@ void FuturesScreen::fetch_cot() {
         if (root != root_)
             return;
         if (!ok) {
-            cot_for_.clear(); // retried when the screen is next shown
+            cot_for_.clear(); // also retried when the screen is next shown
             cot_summary_->clear();
-            cot_chart_->set_message(QStringLiteral("Positioning did not load: %1").arg(err));
+            const int in_s = schedule_retry(cot_retry_, [this, root]() {
+                if (root == root_ && cot_for_.isEmpty())
+                    fetch_cot();
+            });
+            cot_chart_->set_message(
+                in_s > 0 ? QStringLiteral("Positioning did not load: %1 — trying again in %2 s").arg(err, QString::number(in_s))
+                         : QStringLiteral("Positioning did not load: %1").arg(err));
             return;
         }
+        cot_retry_.reset();
         render_cot(report);
     });
 }
@@ -1164,7 +1404,9 @@ void FuturesScreen::set_chart_symbol(const QString& symbol) {
     fetch_spread();
 }
 
-void FuturesScreen::load_chart() {
+void FuturesScreen::load_chart(bool retry) {
+    if (!retry)
+        chart_retry_.reset();
     const auto& def = period_def(period_);
     const QString sym = chart_symbol_.isEmpty() ? continuous_symbol(root_) : chart_symbol_;
     const int idx = curve_.index_of(chart_symbol_);
@@ -1196,8 +1438,17 @@ void FuturesScreen::load_chart() {
                     self->canvas_->clear();
                     self->canvas_->set_placeholder_state(ok ? ResearchCandleCanvas::PlaceholderState::NoData
                                                             : ResearchCandleCanvas::PlaceholderState::Error);
+                    // An empty answer is an answer; a failure is asked again
+                    // (unless another chart is picked meanwhile), and says so.
+                    const int in_s = ok ? 0 : self->schedule_retry(self->chart_retry_, [self, seq]() {
+                        if (self && seq == self->chart_seq_)
+                            self->load_chart(/*retry=*/true);
+                    });
+                    if (in_s > 0)
+                        self->chart_overlay_->show_loading(QStringLiteral("NO ANSWER — TRYING AGAIN IN %1 S").arg(in_s));
                     return;
                 }
+                self->chart_retry_.reset();
                 QVector<services::equity::Candle> candles;
                 candles.reserve(pts.size());
                 for (const auto& p : pts) {
