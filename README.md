@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`78c42ee97`](https://github.com/yumima/finterm/commit/78c42ee97) release: 4.0.6
 - [`5efa629dc`](https://github.com/yumima/finterm/commit/5efa629dc) **ci:** unused lambda captures in the daemon socket error handlers (Clang -Werror)
 - [`10f278adc`](https://github.com/yumima/finterm/commit/10f278adc) selftest: the Linux AppImage and the macOS disk image are run and must fetch data too
 - [`a0b52e98d`](https://github.com/yumima/finterm/commit/a0b52e98d) selftest: `finterm --selftest` proves an install gets data; the Windows release installs itself and runs it
@@ -32,9 +33,49 @@ Latest first.
 Current release: [v4.0.5](https://github.com/yumima/finterm/releases/tag/v4.0.5) · [all releases](https://github.com/yumima/finterm/releases)
 <!-- DOWNLOAD-TABLE-END -->
 
-- **Linux** — the file is an AppImage: nothing is installed and no root is needed. Ubuntu 22.04+ needs FUSE 2 once (`sudo apt install libfuse2`), or run it with `--appimage-extract-and-run`.
+### What happens, step by step
+
+**Windows 10/11 (x64)**
+
+1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, accept the Windows prompt, and click through the installer. It installs to `C:\Program Files\finterm` and adds Start Menu and Desktop shortcuts.
+2. Start **finterm** from the Start Menu.
+
+**macOS 13+ (Apple Silicon)**
+
+1. Open the `.dmg` and drag **finterm** to Applications.
+2. The first time, **right-click the app → Open → Open** (or System Settings → Privacy & Security → **Open Anyway**). After that, start it like any app.
+
+**Linux (x86-64)**
+
+1. `chmod +x finterm-*.run`
+2. `./finterm-*.run` — it is an AppImage: nothing is installed and no root is needed. On Ubuntu 22.04+ run `sudo apt install libfuse2` once, or start it with `--appimage-extract-and-run`.
+
+**Then, on every system**
+
+1. **First start only: setup.** finterm downloads its own Python and builds its data environment. A progress screen shows it; it takes about 5–15 minutes and needs internet. Nothing else has to be installed, before or after.
+2. **Create a local account:** a username and a 4–6 digit PIN, then a 6-digit security PIN that unlocks the terminal on each start. Both stay on your machine and cannot be recovered if forgotten.
+3. **The dashboard opens with live data.** finterm starts its own data process in the background and restarts it if it stops; there is nothing else to launch.
+
+Later starts skip setup and go straight to the PIN.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Your data | `%LOCALAPPDATA%\finterm` | `~/Library/Application Support/finterm` | `~/.local/share/finterm` |
+| Uninstall | Settings → Apps → finterm | Drag the app to the Bin | Delete the `.run` file |
+
+Uninstalling leaves your data folder in place; delete it too for a clean removal.
+
+**If no data appears,** run the built-in check. Close finterm first. It runs the same setup, starts the data process and fetches one quote, then writes what it found:
+
+```
+Windows   "C:\Program Files\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
+macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finterm-selftest.json
+Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
+```
+
+The report says `"ok": true`, or names the stage that failed (setup or data) and why. Every release is installed and put through this check on all three systems before it is published.
+
 - **Unsigned** — the installers are free, so they carry no paid certificate; that is the one extra click on Windows and macOS. They are built from this source by the public CI.
-- **First start** — finterm sets up its Python environment, once, in about 5–15 minutes.
 - **Updates** — **Help › Check for Updates**. finterm never checks on its own.
 
 ## What's inside
