@@ -19,7 +19,7 @@ inline const QMap<QString, QStringList>& perspective_layouts() {
         {"perspective_ma", {"ma_analytics", "news"}},
         {"perspective_portfolio", {"portfolio", "markets", "watchlist", "news"}},
         {"perspective_news", {"news", "markets"}},
-        {"perspective_markets", {"markets", "watchlist"}},
+        {"perspective_markets", {"markets", "futures", "watchlist"}},
         {"perspective_economics", {"economics", "dbnomics", "gov_data", "asia_markets"}},
         {"perspective_data", {"data_sources", "data_mapping"}},
         {"perspective_geopolitics", {"geopolitics", "maritime", "relationship_map", "news"}},

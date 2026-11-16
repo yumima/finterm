@@ -1317,6 +1317,7 @@ def get_financials(symbol):
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
+
 def get_ipo_extras(symbol):
     """Single round-trip aggregator powering the IPO Watch detail rail's
     NEWS / FINANCIALS / HOLDERS tabs. Each sub-fetch is wrapped in its own
@@ -4850,6 +4851,9 @@ _CACHE_TTL = {
     # just under the consumers' 60 s poll makes every tile and chart dialog
     # share one download a minute instead of one each.
     "index_futures": 55, "batch_sparklines": 30, "top_movers": 30,
+    # one batch-quote request per curve; the back months print rarely, and the
+    # past sessions' settles behind the comparison curves do not change at all.
+    "futures_curve": 20, "futures_curve_history": 1800,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     "multiple_ratios": 600, "ipo_extras": 600,
@@ -5263,6 +5267,11 @@ def _daemon_dispatch_inner(action, payload):
         return get_extended_hours_quotes(symbols)
     if action == "index_futures":
         return get_index_futures((payload or {}).get("pairs") or [])
+    if action == "futures_curve":
+        p = payload or {}
+        return get_futures_curve(p.get("root"), p.get("exchange"), p.get("months", 30))
+    if action == "futures_curve_history":
+        return get_futures_curve_history((payload or {}).get("symbols") or [])
     if action == "financial_ratios":
         return get_financial_ratios((payload or {}).get("symbol"))
     if action == "compute_technicals":
@@ -5974,6 +5983,79 @@ def get_index_futures(pairs):
             row["reason"] = str(e)[:120]
         rows.append(row)
     return rows
+
+
+# ── Futures forward curve ─────────────────────────────────────────────────
+# Which exchange suffix a root's contract months live under (CL -> NYM), as
+# learned from the continuous row's underlyingSymbol. It never changes.
+_FUTURES_EXCHANGE = {}
+
+
+def get_futures_curve(root, exchange=None, months=30):
+    """Every listed delivery month of one futures root: last, previous close,
+    volume, open interest, expiry. See futures_curve.py for what is and is not
+    trusted. `exchange` is a hint; Yahoo's own answer wins."""
+    import time as _time
+    from datetime import date as _date
+    import futures_curve as fc
+    root = str(root or "").strip().upper()
+    if not root:
+        return {"error": "no futures root given"}
+    try:
+        front = ""
+        head = _v7_quotes([root + "=F"], "underlyingSymbol")
+        parts = fc.split_contract((head[0] if head else {}).get("underlyingSymbol"))
+        if parts and parts[0] == root:
+            front = head[0]["underlyingSymbol"]
+            _FUTURES_EXCHANGE[root] = parts[3]
+        exch = _FUTURES_EXCHANGE.get(root) or str(exchange or "").strip().upper()
+        if not exch:
+            return {"error": f"Yahoo lists no contract months for {root}", "root": root}
+        quotes = _v7_quotes(fc.candidate_symbols(root, exch, _date.today(), months), fc.V7_FIELDS)
+    except Exception as e:
+        return {"error": f"Yahoo refused or did not answer ({str(e)[:120]})", "transient": True, "root": root}
+    out = fc.shape_curve(root, quotes, front, _time.time())
+    if not out["contracts"]:
+        return {"error": f"no contract months quoted for {root}", "root": root}
+    return out
+
+
+def get_futures_curve_history(symbols):
+    """Where the same contract months settled 5 and 21 sessions ago — the
+    curve's shape then, to lay under the curve now. The reference sessions
+    are picked off the first symbol's bars (the front month, which trades
+    every session); a month with no bar on that exact session is left out."""
+    import futures_curve as fc
+    symbols = [s for s in (symbols or []) if fc.split_contract(s)][:40]
+    if not symbols:
+        return {"error": "no contract symbols given"}
+    import io, contextlib
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            data = yf.download(symbols, period="3mo", interval="1d", group_by="ticker",
+                               progress=False, threads=True, auto_adjust=False)
+        except Exception as e:
+            return {"error": f"Yahoo refused or did not answer ({str(e)[:120]})", "transient": True}
+    if data is None or getattr(data, "empty", True):
+        return {"error": "Yahoo returned no bars for the curve", "transient": True}
+    closes = {}
+    for sym in symbols:
+        try:
+            col = data[sym]["Close"].dropna()
+        except Exception:
+            continue
+        # A daily futures bar is stamped with its session's date.
+        # Yahoo's bars are float32 widened to float64 (273.6000061…): seven
+        # significant figures is all they ever held.
+        closes[sym] = {ts.date().isoformat(): float(f"{float(v):.7g}") for ts, v in col.items() if v > 0}
+    dates = sorted(closes.get(symbols[0], {}))
+    out = {"reference": symbols[0], "curves": []}
+    for label, back in (("1W", 5), ("1M", 21)):
+        if len(dates) > back:
+            ref = dates[-1 - back]
+            out["curves"].append({"label": label, "sessions_back": back, "date": ref,
+                                  "closes": fc.curve_on_date(closes, ref)})
+    return out
 
 
 def _empty_ext_row(sym, session):

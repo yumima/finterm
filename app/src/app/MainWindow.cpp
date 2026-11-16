@@ -67,6 +67,7 @@
 #include "screens/quantlib/QuantLibScreen.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "screens/report_builder/ReportBuilderScreen.h"
+#include "screens/futures/FuturesScreen.h"
 #include "screens/screener/ScreenerScreen.h"
 #include "screens/settings/SettingsScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"
@@ -1077,11 +1078,7 @@ void MainWindow::setup_dock_screens() {
     // the floating bubble, and the FinGPT engines moved into Equity Research's
     // AI tab. A saved layout naming either resolves to the nearest live home
     // rather than a dead slot.
-    //
-    // "futures" (the Futures board, removed) deliberately gets no alias: its
-    // nearest home is Markets, and aliasing would restore a layout holding
-    // both as two Markets screens. ADS drops the unknown dock instead, and a
-    // layout left with no open areas resets to the default.
+    dock_router_->register_factory("futures", []() { return new screens::FuturesScreen; });
     dock_router_->register_factory("ai_chat", []() { return new screens::AgentConfigScreen; });
     dock_router_->register_factory("fingpt", []() { return new screens::EquityResearchScreen; });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });

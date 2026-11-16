@@ -20,6 +20,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     QVector<TabDef> tabs = {
         {"dashboard", "DASHBOARD"},
         {"markets", "MARKETS"},
+        {"futures", "FUTURES"},
         {"crypto_trading", "CRYPTO"},
         {"portfolio", "PORTFOLIO"},
         {"ownership", "OWNERSHIP"},

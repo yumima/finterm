@@ -29,8 +29,6 @@ static QString live_screen_id(const QString& raw) {
         id = QStringLiteral("crypto_trading");
     else if (id == QLatin1String("fx"))
         id = QStringLiteral("markets"); // the Markets FOREX panel
-    else if (id == QLatin1String("futures"))
-        return {}; // the Futures board was removed
     return id;
 }
 

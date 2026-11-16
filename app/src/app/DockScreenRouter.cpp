@@ -65,6 +65,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"pre_ipo", "IPO WATCH"},
         {"ownership", "Ownership"},
         {"screener", "Screener"},
+        {"futures", "Futures"},
         {"ma_analytics", "M&A Analytics"},
         {"surface_analytics", "Surface Analytics"},
         {"quantlib", "QuantLib"},

@@ -870,6 +870,7 @@ set(SERVICE_SOURCES
     src/services/markets/LiveQuoteFollower.cpp
     src/services/markets/MarketDataService.cpp
     src/services/markets/IndexFutures.cpp
+    src/services/futures/FuturesService.cpp
     src/services/data_normalization/DataNormalizationService.cpp
     src/services/news/NewsService.cpp
     src/services/news/NewsClusterService.cpp
@@ -1315,6 +1316,8 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
+    src/screens/futures/FuturesScreen.cpp
+    src/screens/futures/FuturesCharts.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp
@@ -1454,6 +1457,8 @@ set_source_files_properties(
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
+    src/screens/futures/FuturesScreen.cpp
+    src/screens/futures/FuturesCharts.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp

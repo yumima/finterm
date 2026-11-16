@@ -1144,6 +1144,36 @@ target_link_libraries(test_world_markets PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_world_markets PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME world_markets COMMAND test_world_markets)
 
+# ── Futures: curve shape and carry, COT summary, the trade ticket ────────────
+# Every number the Futures screen derives. The contract terms are checked
+# against the exchanges' published dollars-per-tick; a vendor null stays NaN.
+add_executable(test_futures_math services/test_futures_math.cpp)
+target_include_directories(test_futures_math PRIVATE ../src)
+target_link_libraries(test_futures_math PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_futures_math PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME futures_math COMMAND test_futures_math)
+
+# The curve and positioning charts painted on synthetic data (gaps, stale
+# months, the implied-rate view).
+add_executable(test_futures_charts
+    screens/test_futures_charts.cpp
+    ../src/screens/futures/FuturesCharts.cpp
+    ../src/ui/theme/Theme.cpp ../src/ui/theme/ThemeManager.cpp ../src/core/logging/Logger.cpp)
+target_include_directories(test_futures_charts PRIVATE ../src)
+target_link_libraries(test_futures_charts PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+set_target_properties(test_futures_charts PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME futures_charts COMMAND test_futures_charts)
+set_tests_properties(futures_charts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+if(Python3_Interpreter_FOUND)
+    # Futures curve + COT shaping: absent stays None, expired/foreign rows drop.
+    add_test(
+        NAME futures_curve
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_futures_curve.py
+    )
+    set_tests_properties(futures_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 if(Python3_Interpreter_FOUND)
     # Treasury par curve decode: blank tenor = None, refusal = error, newest first.
     add_test(

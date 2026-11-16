@@ -298,6 +298,7 @@ QMenu* ToolBar::build_navigate_menu() {
 
     // Markets & Data
     auto* mkt = add_sub("Markets & Data");
+    nav(mkt, "Futures", "futures");
     nav(mkt, "Economics", "economics");
     nav(mkt, "GOVT Data", "gov_data");
     nav(mkt, "DBnomics", "dbnomics");
