@@ -258,7 +258,7 @@ class TestReportRender : public QObject {
             QVERIFY(html.contains("nearest it in size in its Yahoo industry"));
             QVERIFY(html.contains("SINCE THE REPORT OF 20 AUGUST 2026") && html.contains("A new quarter has been reported"));
             QVERIFY(html.contains("THE LATEST QUARTER IN NUMBERS"));
-            QVERIFY(html.contains("against its own past") && html.contains("MULTIPLE COMPARES"));
+            QVERIFY(html.contains("MULTIPLE COMPARES") && html.contains("fiscal year ends the multiple ranged from"));
             QVERIFY(html.contains("WHAT THE SHARES HAVE MOVED WITH") && html.contains("Crude oil (WTI)") && !html.contains(">Gold<"));
             QVERIFY(html.contains("2 of 3 past readings turned out right"));
             // The brief comes first: the cases and the reading are above the business section.
