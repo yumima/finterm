@@ -1318,6 +1318,118 @@ def get_financials(symbol):
         return {"error": str(e), "symbol": symbol}
 
 
+def analyst_action_when(ts):
+    """(New York date, published after the close?) of an analyst action.
+
+    Yahoo stamps these as instants, which pandas hands back as naive UTC. The
+    day an investor means is the exchange's: a note stamped 00:30 UTC was
+    published the evening before in New York. The ONE decode of these stamps —
+    the Report's rating changes and the Overview's target ages both use it.
+    """
+    t = pd.Timestamp(ts)
+    t = (t.tz_localize("UTC") if t.tzinfo is None else t).tz_convert("America/New_York")
+    return t.date(), (t.hour, t.minute) >= (16, 0)
+
+
+def latest_firm_targets(rows, today, max_age_days=400):
+    """Each firm's most recent price target, newest first.
+
+    `rows` are (date, firm, target, prior, target_action, grade[, after_close]),
+    any order. The consensus "mean target" is an average of these, and each
+    has its own date: a target set before a stock halved is still in the mean.
+    A row with no positive target is not a target; a firm silent for over a
+    year has dropped out of what anyone would call current coverage.
+
+    `set_against` is the last session whose close the analyst had seen: the
+    day itself for a note after the close, the session before otherwise — a
+    pre-market cut is published BEFORE that day's fall, not after it.
+    """
+    newest = {}
+    for row in rows:
+        d, firm, target, prior, action, grade = row[:6]
+        after_close = bool(row[6]) if len(row) > 6 else False
+        try:
+            target = float(target)
+        except (TypeError, ValueError):
+            continue
+        if not firm or not (target > 0) or d is None or d > today or (today - d) > timedelta(days=max_age_days):
+            continue
+        if firm not in newest or d > newest[firm]["_d"]:
+            try:
+                prior_v = float(prior)
+            except (TypeError, ValueError):
+                prior_v = None
+            newest[firm] = {"_d": d, "firm": str(firm), "date": d.isoformat(), "target": target,
+                            "prior": prior_v if prior_v and prior_v > 0 else None,
+                            "action": str(action or ""), "grade": str(grade or ""),
+                            "set_against": (d if after_close else d - timedelta(days=1)).isoformat()}
+    out = sorted(newest.values(), key=lambda r: r["_d"], reverse=True)
+    for r in out:
+        del r["_d"]
+    return out
+
+
+def close_on_or_before(closes_by_date, iso_date):
+    """(date, close) of the last session on or before `iso_date`, or None."""
+    days = [d for d, v in (closes_by_date or {}).items() if d <= iso_date and isinstance(v, float) and v == v and v > 0]
+    if not days:
+        return None
+    d = max(days)
+    return d, closes_by_date[d]
+
+
+def get_analyst_targets(symbol):
+    """Every covering firm's latest price target with the day it was set —
+    what the consensus mean hides. {symbol, firms: [...], as_of} or {error}."""
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        return {"error": "no symbol given"}
+    _trace_reset()
+    ticker = yf.Ticker(symbol)
+    ud = None
+    try:
+        ud = ticker.upgrades_downgrades
+    except Exception as e:
+        # yfinance raises when Yahoo lists no history at all — a fund, an
+        # uncovered stock. That is an answer; anything else is a failure.
+        if "No upgrade/downgrade history" not in str(e):
+            return {"error": f"Yahoo refused or did not answer ({str(e)[:120]})",
+                    "transient": _is_refusal_text(str(e)) or _trace_transient(), "symbol": symbol}
+    # yfinance swallows a refused request and hands back an empty frame:
+    # the trace is what tells a refusal from "nobody covers this".
+    if _trace_transient():
+        return {"error": "Yahoo refused or did not answer the analyst lookup", "transient": True, "symbol": symbol}
+    rows = []
+    if ud is not None and not ud.empty and "currentPriceTarget" in ud.columns:
+        for ts, r in ud.iterrows():
+            d, after_close = analyst_action_when(ts)
+            rows.append((d, r.get("Firm"), r.get("currentPriceTarget"), r.get("priorPriceTarget"),
+                         r.get("priceTargetAction"), r.get("ToGrade"), after_close))
+    today = pd.Timestamp.now(tz="America/New_York").date()
+    firms = latest_firm_targets(rows, today)
+    # `listed` tells "nobody publishes targets" (a cacheable answer) from a
+    # payload with nothing in it.
+    out = {"symbol": symbol, "firms": firms, "listed": len(firms), "as_of": int(datetime.now().timestamp())}
+    # The close the newest target was published against: unadjusted, like the
+    # targets themselves. Left out when it cannot be read — never guessed —
+    # and the miss is named, so the answer is asked for again, not kept.
+    if firms:
+        try:
+            against = firms[0]["set_against"]
+            start = (date.fromisoformat(against) - timedelta(days=10)).isoformat()
+            closes = ticker.history(start=start, auto_adjust=False)["Close"].dropna()
+            # Only sessions that have closed: today's bar is still forming.
+            by_day = {ts.date().isoformat(): float(v) for ts, v in closes.items() if ts.date() < today}
+            ref = close_on_or_before(by_day, against)
+            if ref:
+                out["ref_date"], out["ref_close"] = ref
+            elif _trace_transient():
+                out["ref_error"] = "Yahoo refused or did not answer the price lookup"
+        except Exception as e:
+            out["ref_error"] = str(e)[:120]
+    return out
+
+
 def get_industry_peers(symbol, count=5):
     """The companies nearest `symbol` in size within its Yahoo industry — a
     peer group for a ticker nobody has hand-picked one for.
@@ -1451,6 +1563,7 @@ def get_report_extras(symbol):
                 when = pd.Timestamp(ts).tz_localize(None) if pd.Timestamp(ts).tzinfo else pd.Timestamp(ts)
                 if when < cutoff:
                     break
+                action_day = analyst_action_when(ts)[0]
                 # A reiterated rating (a target change) is not a rating
                 # change. Dropped HERE, before the list is cut: a heavily
                 # covered stock has dozens a month, and they would crowd the
@@ -1458,7 +1571,7 @@ def get_report_extras(symbol):
                 if str(r.get("Action") or "") in ("main", "reit"):
                     continue
                 actions.append({
-                    "date": when.date().isoformat(),
+                    "date": action_day.isoformat(),
                     "firm": str(r.get("Firm") or ""),
                     "to_grade": str(r.get("ToGrade") or ""),
                     "from_grade": str(r.get("FromGrade") or ""),
@@ -5033,6 +5146,8 @@ _CACHE_TTL = {
     "report_extras": 600,
     # an industry's membership and ranking move over months
     "industry_peers": 3600,
+    # a target changes when an analyst publishes — minutes matter on those days
+    "analyst_targets": 600,
     "multiple_ratios": 600, "ipo_extras": 600,
     # earnings_dates carries the reported figure for the quarter that just
     # printed, which Yahoo fills in within hours of the call — the tile is
@@ -5444,6 +5559,8 @@ def _daemon_dispatch_inner(action, payload):
         return get_extended_hours_quotes(symbols)
     if action == "index_futures":
         return get_index_futures((payload or {}).get("pairs") or [])
+    if action == "analyst_targets":
+        return get_analyst_targets((payload or {}).get("symbol"))
     if action == "industry_peers":
         p = payload or {}
         return get_industry_peers(p.get("symbol"), p.get("count", 5))

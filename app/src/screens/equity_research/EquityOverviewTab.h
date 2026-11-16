@@ -1,5 +1,6 @@
 // src/screens/equity_research/EquityOverviewTab.h
 #pragma once
+#include "services/equity/AnalystTargets.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
@@ -392,6 +393,15 @@ class EquityOverviewTab : public QWidget {
     /// not get the data" are different facts and a trader must not read one
     /// as the other.
     QLabel* targets_note_ = nullptr;
+    QLabel* targets_age_ = nullptr; ///< how old the targets behind the consensus are
+    QVector<services::equity::FirmTarget> firm_targets_;
+    double targets_ref_close_ = std::numeric_limits<double>::quiet_NaN();
+    QString targets_age_text_;
+    int targets_age_amber_ = -1; ///< -1 = style not yet set
+    QTimer* targets_timer_ = nullptr;
+    void fetch_target_age();
+    void render_target_age_detail(); ///< when the targets change
+    void render_target_age();        ///< when the price moves
 
     // 52 Week Range
     QLabel* w52h_val_ = nullptr;

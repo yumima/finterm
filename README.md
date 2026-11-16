@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`05792c590`](https://github.com/yumima/finterm/commit/05792c590) futures: stops and targets that work, and what a rate curve prices
 - [`04691a105`](https://github.com/yumima/finterm/commit/04691a105) tests: the report render test checks the page's text, not a chart's painted title
 - [`5b6b0f0bc`](https://github.com/yumima/finterm/commit/5b6b0f0bc) er report: what changed, the multiple against its own past, sector-aware rules, a brief that comes first
 - [`caa06cb6c`](https://github.com/yumima/finterm/commit/caa06cb6c) ipo watch: a company that has listed leaves the pre-IPO list

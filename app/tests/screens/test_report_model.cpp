@@ -3,6 +3,7 @@
 #include "screens/equity_research/AiForecastMath.h"
 #include "screens/equity_research/ReportModel.h"
 #include "screens/equity_research/ReportPrompts.h"
+#include "services/equity/AnalystTargets.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -35,6 +36,49 @@ bool has(const QVector<Finding>& f, Tone tone, const QString& title_part) {
 class TestReportModel : public QObject {
     Q_OBJECT
   private slots:
+    void analyst_targets_carry_their_age() {
+        using namespace finterm::services::equity;
+        // IONQ, 2026-11-16: a $54 mean target beside a $26.6 price.
+        const auto o = QJsonDocument::fromJson(R"({"firms":[
+            {"firm":"Jefferies","date":"2026-11-07","target":65,"prior":80,"action":"Lowers"},
+            {"firm":"B. Riley","date":"2026-11-06","target":70,"prior":75},
+            {"firm":"Cantor","date":"2026-11-06","target":60,"prior":70},
+            {"firm":"Needham","date":"2026-11-06","target":48,"prior":65},
+            {"firm":"B of A","date":"2026-09-28","target":60,"prior":null},
+            {"firm":"JP Morgan","date":"2026-05-07","target":50,"prior":42},
+            {"firm":"","date":"2026-11-01","target":10},
+            {"firm":"No Date","date":"","target":10},
+            {"firm":"No Target","date":"2026-11-01"}]})").object();
+        const auto t = parse_firm_targets(o);
+        QCOMPARE(t.size(), 6); // rows without a firm, a date or a target are not targets
+        QVERIFY(std::isnan(t[4].prior) && !t[4].raised() && !t[4].lowered()); // a first target moved nothing
+
+        const auto f = target_freshness(t, QDate(2026, 11, 16), 26.6, 35.0);
+        QCOMPARE(f.firms, 6);
+        QCOMPARE(f.newest_days, 9);
+        QCOMPARE(f.fresh_30d, 4);
+        QCOMPARE(f.lowered_90d, 4);
+        QCOMPARE(f.raised_90d, 0); // JP Morgan's raise is older than ninety days
+        QVERIFY(std::abs(f.fresh_mean - 60.75) < 1e-9);
+        QVERIFY(std::abs(f.price_since_newest_pct - (-24.0)) < 1e-9);
+        QVERIFY(targets_overtaken(f));
+        const QStringList lines = target_age_lines(f);
+        QCOMPARE(lines.size(), 3);
+        QVERIFY(lines[0].contains("7 Nov") && lines[0].contains("9 days ago") && lines[0].contains("4 of 6"));
+        QVERIFY(lines[1].contains("4 cut, 0 raised"));
+        QVERIFY(lines[2].contains("-24.0%") && lines[2].contains("predate"));
+
+        // Without the close the targets were set against, no move is claimed.
+        const auto g = target_freshness(t, QDate(2026, 11, 16), 26.6, std::numeric_limits<double>::quiet_NaN());
+        QVERIFY(std::isnan(g.price_since_newest_pct) && !targets_overtaken(g));
+        QCOMPARE(target_age_lines(g).size(), 2);
+        // Two fresh targets are not a consensus.
+        const auto two = target_freshness(t.mid(0, 2), QDate(2026, 11, 16), 26.6, 35.0);
+        QVERIFY(std::isnan(two.fresh_mean));
+        // Nothing listed: nothing said.
+        QVERIFY(target_age_lines(target_freshness({}, QDate(2026, 11, 16), 26.6, 35.0)).isEmpty());
+    }
+
     void arithmetic_needs_its_inputs() {
         QCOMPARE(pct_of(25, 100), 25.0);
         QVERIFY(std::isnan(pct_of(kNaN, 100)));

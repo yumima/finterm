@@ -154,6 +154,33 @@ check("no frames", y._report_quarters(None, None), [])
 fallback = pd.DataFrame({cols[0]: {"Diluted EPS": float("nan"), "Basic EPS": 1.4}})
 check("a NaN alias falls through to the next", y._report_quarters(fallback, None)[0]["eps"], 1.4)
 
+from datetime import date as _date  # noqa: E402
+T = _date(2026, 11, 16)
+ft = y.latest_firm_targets([
+    (_date(2026, 11, 2), "B. Riley", 75.0, 100.0, "Lowers", "Buy"),
+    (_date(2026, 11, 6), "B. Riley", 70.0, 75.0, "Lowers", "Buy"),      # the same firm, later: this one counts
+    (_date(2026, 5, 7), "JP Morgan", 50.0, 42.0, "Raises", "Neutral"),
+    (_date(2024, 8, 12), "Benchmark", 12.0, 16.0, "Lowers", "Buy"),     # over a year old: no longer coverage
+    (_date(2026, 9, 28), "B of A", 60.0, 0.0, "Announces", "Buy"),      # a first target has no prior
+    (_date(2026, 10, 1), "No Target Co", float("nan"), None, "", "Buy"),
+    (_date(2026, 12, 1), "Future Co", 10.0, None, "", ""),               # dated after today: not believed
+], T)
+check("latest per firm, newest first", [(r["firm"], r["date"], r["target"]) for r in ft],
+      [("B. Riley", "2026-11-06", 70.0), ("B of A", "2026-09-28", 60.0), ("JP Morgan", "2026-05-07", 50.0)])
+check("no prior on a first target", ft[1]["prior"], None)
+# A note stamped 00:30 UTC was published the evening before in New York, after the close.
+check("an evening note is dated in New York", y.analyst_action_when("2026-11-17 00:30:00"), (_date(2026, 11, 16), True))
+check("a pre-market note", y.analyst_action_when("2026-11-06 12:27:41"), (_date(2026, 11, 6), False))
+# A pre-market cut was published before that day's fall: it is set against the session before.
+check("pre-market: the close before", ft[0]["set_against"], "2026-11-05")
+ev = y.latest_firm_targets([(_date(2026, 11, 6), "Evening Co", 50.0, 60.0, "Lowers", "Buy", True)], T)
+check("after the close: that day's close", ev[0]["set_against"], "2026-11-06")
+check("no rows", y.latest_firm_targets([], T), [])
+cl = {"2026-11-05": 30.0, "2026-11-06": 35.0, "2026-11-09": 33.0, "2026-11-10": float("nan")}
+check("a weekend target is set against Friday's close", y.close_on_or_before(cl, "2026-11-07"), ("2026-11-06", 35.0))
+check("no session that early", y.close_on_or_before(cl, "2026-11-01"), None)
+check("an unusable close is not a close", y.close_on_or_before(cl, "2026-11-10"), ("2026-11-09", 33.0))
+
 ranked = ["A", "B", "C", "D", "E", "F", "G"]
 check("neighbours either side", y.nearest_in_ranking(ranked, "D", 4), ["C", "E", "B", "F"])
 check("at the top", y.nearest_in_ranking(ranked, "A", 3), ["B", "C", "D"])

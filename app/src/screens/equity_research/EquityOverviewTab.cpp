@@ -3,7 +3,9 @@
 
 #include "screens/equity_research/PriceRangeStrip.h"
 #include "screens/knowledge/HelpHint.h"
+#include "services/equity/AnalystTargets.h"
 #include "services/equity/EquityResearchService.h"
+#include "services/equity/ReportService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -30,6 +32,10 @@
 #include <functional>
 
 namespace finterm::screens {
+
+namespace {
+constexpr double kNoPrice = std::numeric_limits<double>::quiet_NaN();
+} // namespace
 
 // ── Accent colors without a theme token ──────────────────────────────────────
 static constexpr const char* CYAN = "#22d3ee";
@@ -804,6 +810,25 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
+
+    // How old the targets behind the consensus are. Asked for apart from the
+    // info payload: it has its own, shorter life, and the card stands without it.
+    firm_targets_.clear();
+    targets_ref_close_ = std::numeric_limits<double>::quiet_NaN();
+    render_target_age_detail();
+    fetch_target_age();
+    // Asked again every ten minutes while the symbol stays up: a target
+    // published this morning must not leave "9 days ago" on the card all day,
+    // and a lookup that failed gets another try.
+    if (!targets_timer_) {
+        targets_timer_ = new QTimer(this);
+        targets_timer_->setInterval(10 * 60 * 1000);
+        connect(targets_timer_, &QTimer::timeout, this, [this]() {
+            if (isVisible() && !current_symbol_.isEmpty())
+                fetch_target_age();
+        });
+    }
+    targets_timer_->start();
 
     // Drop every prior subscription before rebinding. Without this, a late
     // resolve for the previous symbol (quote/info/historical) would still
@@ -1920,6 +1945,11 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
         QString("color:%1;font-size:10px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
     static_cast<QVBoxLayout*>(p->layout())->addWidget(horizon_note_);
 
+    targets_age_ = new QLabel;
+    targets_age_->setWordWrap(true);
+    targets_age_->hide();
+    static_cast<QVBoxLayout*>(p->layout())->addWidget(targets_age_);
+
     targets_note_ = new QLabel;
     targets_note_->setWordWrap(true);
     targets_note_->setStyleSheet(
@@ -2093,7 +2123,75 @@ void EquityOverviewTab::set_info_loading(bool on) {
     }
 }
 
+void EquityOverviewTab::fetch_target_age() {
+    const QString symbol = current_symbol_;
+    services::equity::fetch_analyst_targets(symbol, this, [this, symbol](bool ok, QJsonObject r, QString) {
+        if (!ok || symbol != current_symbol_)
+            return; // the card keeps what it has; the next round asks again
+        firm_targets_ = services::equity::parse_firm_targets(r);
+        targets_ref_close_ = r.value(QLatin1String("ref_close")).isDouble()
+                                 ? r.value(QLatin1String("ref_close")).toDouble()
+                                 : std::numeric_limits<double>::quiet_NaN();
+        render_target_age_detail();
+    });
+}
+
+void EquityOverviewTab::render_target_age_detail() {
+    // The per-firm table changes only when the targets do — built here, not
+    // on every price tick.
+    if (!targets_age_)
+        return;
+    using namespace services::equity;
+    QString tip;
+    if (!firm_targets_.isEmpty()) {
+        tip = QStringLiteral("<table cellspacing='4'><tr><th align='left'>SET</th><th align='left'>FIRM</th>"
+                             "<th align='right'>TARGET</th><th align='right'>WAS</th></tr>");
+        for (const auto& t : std::as_const(firm_targets_))
+            tip += QStringLiteral("<tr><td>%1</td><td>%2</td><td align='right'>%3</td><td align='right'>%4</td></tr>")
+                       .arg(QLocale::c().toString(t.date, QStringLiteral("d MMM yy")), t.firm.toHtmlEscaped(),
+                            fmt_price(t.target),
+                            std::isfinite(t.prior) ? fmt_price(t.prior) : ui::formatting::placeholder());
+        tip += QStringLiteral("</table>");
+        const TargetFreshness f = target_freshness(firm_targets_, QDate::currentDate(), kNoPrice, kNoPrice);
+        if (std::isfinite(f.fresh_mean))
+            tip += QStringLiteral("<p>Targets from the last 30 days average %1 (%2 firms).</p>")
+                       .arg(fmt_price(f.fresh_mean))
+                       .arg(f.fresh_30d);
+        tip += QStringLiteral("<p>Each firm's latest target, as Yahoo lists them, dated in New York. The consensus "
+                              "above is the vendor's own and can count firms not listed here. The move is measured "
+                              "from the last close before the newest target was published.</p>");
+    }
+    targets_age_->setToolTip(tip);
+    targets_age_text_.clear(); // force the label to repaint from the new targets
+    targets_age_amber_ = -1;
+    render_target_age();
+}
+
+void EquityOverviewTab::render_target_age() {
+    if (!targets_age_)
+        return;
+    using namespace services::equity;
+    const double px = std::isfinite(cached_quote_.price) ? cached_quote_.price : cached_info_.current_price;
+    const TargetFreshness f = target_freshness(firm_targets_, QDate::currentDate(), px, targets_ref_close_);
+    const QString text = target_age_lines(f).join(QLatin1Char('\n'));
+    // Called on every price tick: nothing is touched unless what is shown changes.
+    const int amber = targets_overtaken(f) ? 1 : 0;
+    if (amber != targets_age_amber_) {
+        targets_age_amber_ = amber;
+        // Amber when the price has left the targets behind: the upside above
+        // is then mostly the fall, not a fresh opinion.
+        targets_age_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;border:0;")
+                                        .arg(amber ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
+    }
+    if (text == targets_age_text_ && targets_age_->isVisible() == !text.isEmpty())
+        return;
+    targets_age_text_ = text;
+    targets_age_->setText(text);
+    targets_age_->setVisible(!text.isEmpty());
+}
+
 void EquityOverviewTab::refresh_target_rows() {
+    render_target_age(); // the move since the newest target follows the live price
     const auto& info = cached_info_;
     // ── Analyst Targets ──────────────────────────────────────────────────────
     // Each target is shown with its distance from the CURRENT price, which is

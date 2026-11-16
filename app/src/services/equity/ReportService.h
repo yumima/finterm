@@ -32,6 +32,11 @@ void fetch_report_filings(const QString& symbol, QObject* ctx, ReportJsonCallbac
 void fetch_industry_peers(const QString& symbol, QObject* ctx,
                           std::function<void(bool ok, QStringList peers, QString industry_or_error)> cb);
 
+/// Every covering firm's latest price target with the day it was set, plus
+/// the close the newest one was published against (`ref_close`). An empty
+/// `firms` list is an answer — nobody publishes targets for this symbol.
+void fetch_analyst_targets(const QString& symbol, QObject* ctx, ReportJsonCallback cb);
+
 /// A section the model wrote for this company earlier today.
 ///
 /// Kept by (section, symbol, day) rather than by prompt: the prompt carries
