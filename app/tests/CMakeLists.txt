@@ -560,6 +560,20 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(fundamentals_crosscheck PROPERTIES TIMEOUT 60)
 endif()
 
+# ── Data daemon over loopback TCP (the Windows transport) ───────────────────
+# CPython on Windows has no AF_UNIX: the Unix-socket daemon died at start-up
+# there and the app showed no data. `--tcp` is that platform's only path to
+# market data and the Linux CI cannot reach it through the app, so the real
+# daemon process is driven here: token accepted, strangers served nothing,
+# loopback only. 77 = the app's Python environment is not present (skipped).
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME daemon_tcp_transport
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_daemon_tcp_transport.py
+    )
+    set_tests_properties(daemon_tcp_transport PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77)
+endif()
+
 # ── Statement lines replaced by the filed figure ─────────────────────────────
 # sec_statement_overlay.py changes numbers the user reads (operating income to
 # the filed one; a zero equity to the filed one). Mostly pinned: what it must

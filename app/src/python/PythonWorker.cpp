@@ -5,6 +5,9 @@
 #include "python/PythonRunner.h"
 #include "python/PythonSetupManager.h"
 
+#include <QHostAddress>
+#include <QTcpSocket>
+#include <QUuid>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -193,7 +196,7 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     if (timeout_ms > 0)
         p.deadline = make_deadline(id, action, timeout_ms);
 
-    bool socket_live = socket_ && socket_->state() == QLocalSocket::ConnectedState;
+    bool socket_live = socket_connected();
 
     if (!socket_live) {
         // Queue while socket is connecting. Interactive requests jump in front
@@ -259,14 +262,14 @@ void PythonWorker::send_to_daemon(int id, Pending p) {
 
 void PythonWorker::stop() {
     shutting_down_ = true;
-    if (socket_ && socket_->state() == QLocalSocket::ConnectedState) {
+    if (socket_connected()) {
         QJsonObject req;
         req["id"] = 0;
         req["action"] = QStringLiteral("shutdown");
         req["payload"] = QJsonObject{};
         socket_->write(encode_frame(req));
         socket_->waitForBytesWritten(1'000);
-        socket_->disconnectFromServer();
+        socket_close();
     }
     if (proc_ && proc_->state() == QProcess::Running) {
         proc_->closeWriteChannel();
@@ -368,10 +371,29 @@ void PythonWorker::launch_process() {
     });
 
     ready_ = false;
-    LOG_INFO(
-        "PythonWorker",
-        QString("Launching daemon: %1 %2 --daemon --socket %3").arg(python_exe).arg(script_path).arg(socket_path_));
-    proc_->start(python_exe, {script_path, "--daemon", "--socket", socket_path_});
+#ifdef Q_OS_WIN
+    use_tcp_ = true; // no AF_UNIX in Python on Windows; QLocalSocket there is a named pipe
+#else
+    use_tcp_ = qEnvironmentVariableIntValue("FINTERM_DAEMON_TCP") == 1;
+#endif
+    if (use_tcp_) {
+        // A fresh token per launch, handed to the daemon in its environment
+        // and sent back as our first frame: loopback is open to every local
+        // process, and the daemon must serve only this one.
+        tcp_token_ = QUuid::createUuid().toString(QUuid::WithoutBraces) +
+                     QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QProcessEnvironment env = proc_->processEnvironment();
+        env.insert(QStringLiteral("FINTERM_DAEMON_TOKEN"), tcp_token_);
+        proc_->setProcessEnvironment(env);
+        LOG_INFO("PythonWorker", QString("Launching daemon: %1 %2 --daemon --tcp").arg(python_exe).arg(script_path));
+        proc_->start(python_exe, {script_path, "--daemon", "--tcp"});
+    } else {
+        LOG_INFO("PythonWorker", QString("Launching daemon: %1 %2 --daemon --socket %3")
+                                     .arg(python_exe)
+                                     .arg(script_path)
+                                     .arg(socket_path_));
+        proc_->start(python_exe, {script_path, "--daemon", "--socket", socket_path_});
+    }
     ready_watchdog_.start();
 }
 
@@ -459,26 +481,66 @@ void PythonWorker::on_ready_read() {
             ready_ = true;
             ready_watchdog_.stop();
             restart_count_ = 0;
-            LOG_INFO("PythonWorker", QString("Daemon ready (pid=%1) — connecting socket %2")
-                                         .arg(obj.value("pid").toInt())
-                                         .arg(socket_path_));
-
-            // Connect to the Unix domain socket the daemon bound.
-            socket_ = new QLocalSocket(this);
-            connect(socket_, &QLocalSocket::readyRead, this, &PythonWorker::on_socket_data);
-            connect(socket_, &QLocalSocket::connected, this, [this]() {
+            auto on_connected = [this]() {
                 LOG_INFO("PythonWorker", "Socket connected — dispatching queued requests");
+                if (use_tcp_) {
+                    // First frame: prove we are the host that launched it.
+                    QJsonObject auth;
+                    auth["id"] = 0;
+                    auth["action"] = QStringLiteral("auth");
+                    auth["payload"] = QJsonObject{{"token", tcp_token_}};
+                    socket_->write(encode_frame(auth));
+                }
                 dispatch_queued();
                 emit daemon_connected(); // a fresh daemon holds no stream subscriptions
-            });
-            connect(socket_, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError err) {
-                LOG_WARN("PythonWorker",
-                         QString("Socket error %1: %2").arg(err).arg(socket_ ? socket_->errorString() : QString()));
-            });
-            socket_->connectToServer(socket_path_);
+            };
+            if (use_tcp_) {
+                const int port = obj.value("port").toInt();
+                LOG_INFO("PythonWorker", QString("Daemon ready (pid=%1) — connecting 127.0.0.1:%2")
+                                             .arg(obj.value("pid").toInt())
+                                             .arg(port));
+                auto* tcp = new QTcpSocket(this);
+                socket_ = tcp;
+                connect(tcp, &QTcpSocket::readyRead, this, &PythonWorker::on_socket_data);
+                connect(tcp, &QTcpSocket::connected, this, on_connected);
+                connect(tcp, &QTcpSocket::errorOccurred, this, [this, tcp](QAbstractSocket::SocketError err) {
+                    LOG_WARN("PythonWorker", QString("Socket error %1: %2").arg(err).arg(tcp->errorString()));
+                });
+                tcp->connectToHost(QHostAddress(QHostAddress::LocalHost), quint16(port));
+            } else {
+                LOG_INFO("PythonWorker", QString("Daemon ready (pid=%1) — connecting socket %2")
+                                             .arg(obj.value("pid").toInt())
+                                             .arg(socket_path_));
+                // Connect to the Unix domain socket the daemon bound.
+                auto* local = new QLocalSocket(this);
+                socket_ = local;
+                connect(local, &QLocalSocket::readyRead, this, &PythonWorker::on_socket_data);
+                connect(local, &QLocalSocket::connected, this, on_connected);
+                connect(local, &QLocalSocket::errorOccurred, this, [this, local](QLocalSocket::LocalSocketError err) {
+                    LOG_WARN("PythonWorker", QString("Socket error %1: %2").arg(err).arg(local->errorString()));
+                });
+                local->connectToServer(socket_path_);
+            }
             return; // ready frame processed — nothing more expected on stdout
         }
     }
+}
+
+// ── Socket (either transport) ─────────────────────────────────────────────────
+
+bool PythonWorker::socket_connected() const {
+    if (auto* local = qobject_cast<QLocalSocket*>(socket_))
+        return local->state() == QLocalSocket::ConnectedState;
+    if (auto* tcp = qobject_cast<QTcpSocket*>(socket_))
+        return tcp->state() == QAbstractSocket::ConnectedState;
+    return false;
+}
+
+void PythonWorker::socket_close() {
+    if (auto* local = qobject_cast<QLocalSocket*>(socket_))
+        local->disconnectFromServer();
+    else if (auto* tcp = qobject_cast<QTcpSocket*>(socket_))
+        tcp->disconnectFromHost();
 }
 
 // ── Socket data ───────────────────────────────────────────────────────────────
@@ -501,8 +563,7 @@ void PythonWorker::try_drain_frames() {
         if (n > 64u * 1024u * 1024u) {
             LOG_ERROR("PythonWorker", QString("Frame size %1 exceeds 64 MB — resetting socket stream").arg(n));
             socket_buf_.clear();
-            if (socket_)
-                socket_->disconnectFromServer();
+            socket_close();
             return;
         }
         if (static_cast<quint32>(socket_buf_.size()) < 4 + n)
@@ -566,7 +627,7 @@ void PythonWorker::try_drain_frames() {
 // ── dispatch_queued / on_background_complete ──────────────────────────────────
 
 void PythonWorker::dispatch_queued() {
-    if (!socket_ || socket_->state() != QLocalSocket::ConnectedState)
+    if (!socket_connected())
         return;
 
     // Send ALL interactive requests immediately (daemon handles concurrently).
@@ -602,7 +663,7 @@ void PythonWorker::on_background_complete(bool failed) {
                            [this]() { on_background_complete(false); });
         return;
     }
-    if (!socket_ || socket_->state() != QLocalSocket::ConnectedState)
+    if (!socket_connected())
         return;
     for (const auto& existing : in_flight_)
         if (is_background_action(existing.action))

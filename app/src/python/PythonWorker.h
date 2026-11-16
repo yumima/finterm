@@ -3,6 +3,7 @@
 #include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonObject>
+#include <QIODevice>
 #include <QLocalSocket>
 #include <QObject>
 #include <QPointer>
@@ -104,8 +105,17 @@ class PythonWorker : public QObject {
     QTimer* make_deadline(int id, const QString& action, int timeout_ms);
 
     QProcess* proc_ = nullptr;
-    QLocalSocket* socket_ = nullptr;
+    /// The connection to the daemon: a QLocalSocket (Unix domain socket) or,
+    /// on Windows, a QTcpSocket to loopback — see use_tcp_.
+    QIODevice* socket_ = nullptr;
     QString socket_path_;
+    /// Loopback TCP instead of a Unix domain socket. Always on Windows, where
+    /// Python has no AF_UNIX; FINTERM_DAEMON_TCP=1 forces it elsewhere so the
+    /// Windows path can be exercised on Linux.
+    bool use_tcp_ = false;
+    QString tcp_token_; ///< sent as the first frame; the daemon serves no one else
+    bool socket_connected() const;
+    void socket_close();
     bool ready_ = false;
     bool shutting_down_ = false;
     int restart_count_ = 0;

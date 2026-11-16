@@ -6281,8 +6281,17 @@ class _QuoteStreamer:
                     return  # host gone; the daemon is exiting
 
 
-def run_daemon_socket(socket_path):
-    """Multi-threaded daemon over a Unix domain socket.
+def run_daemon_socket(socket_path=None, tcp=False):
+    """Multi-threaded daemon over a Unix domain socket — or, with `tcp`, over a
+    loopback TCP connection.
+
+    TCP is the Windows transport: CPython on Windows has no AF_UNIX, and Qt's
+    QLocalSocket there is a named pipe, so the Unix-socket daemon died at
+    start-up on every Windows machine and the app showed no data at all. The
+    daemon binds 127.0.0.1 on a port the OS picks, reports it in the ready
+    frame (a private pipe to the host), and serves only a client that opens
+    with the token the host passed in FINTERM_DAEMON_TOKEN — loopback is
+    reachable by every local process, a socket file is not.
 
     Main thread reads request frames from the socket and submits each to a
     thread pool. Worker threads call _daemon_dispatch and write the response
@@ -6297,21 +6306,30 @@ def run_daemon_socket(socket_path):
 
     _COMPUTE_ACTIONS = {"compute_technicals"}
 
-    # Remove stale socket file left by a previous crash
-    try:
-        os.unlink(socket_path)
-    except OSError:
-        pass
-
-    srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
-    # SO_REUSEADDR has no effect on AF_UNIX sockets; stale-file removal above
-    # is the correct mechanism for Unix domain socket reuse.
-    srv.bind(socket_path)
+    ready = {"ready": True, "pid": os.getpid()}
+    token = os.environ.get("FINTERM_DAEMON_TOKEN", "") if tcp else ""
+    authed = not tcp
+    if tcp:
+        if not token:
+            return  # no token, no service: never an open port anyone can drive
+        srv = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        ready["port"] = srv.getsockname()[1]
+    else:
+        # Remove stale socket file left by a previous crash
+        try:
+            os.unlink(socket_path)
+        except OSError:
+            pass
+        srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
+        # SO_REUSEADDR has no effect on AF_UNIX sockets; stale-file removal above
+        # is the correct mechanism for Unix domain socket reuse.
+        srv.bind(socket_path)
     srv.listen(1)
 
     # Signal ready to the C++ host via stdout (same framing as run_daemon)
     try:
-        ready_bytes = json.dumps({"ready": True, "pid": os.getpid()}).encode("utf-8")
+        ready_bytes = json.dumps(ready).encode("utf-8")
         n = len(ready_bytes)
         sys.stdout.buffer.write(n.to_bytes(4, "big") + ready_bytes)
         sys.stdout.buffer.flush()
@@ -6394,6 +6412,16 @@ def run_daemon_socket(socket_path):
                 action = req.get("action", "")
                 payload = req.get("payload")
 
+                if not authed:
+                    # TCP only: the first frame must carry the host's token.
+                    # Anything else is not our host — serve it nothing.
+                    import hmac
+                    given = str((payload or {}).get("token", "")) if action == "auth" else ""
+                    if not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
+                        return
+                    authed = True
+                    continue
+
                 if action == "shutdown":
                     _send_response({"id": req_id, "ok": True,
                                     "result": {"shutdown": True}})
@@ -6419,7 +6447,8 @@ def run_daemon_socket(socket_path):
         try:
             conn.close()
             srv.close()
-            os.unlink(socket_path)
+            if socket_path:
+                os.unlink(socket_path)
         except OSError:
             pass
 
@@ -6481,14 +6510,16 @@ def run_daemon():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
-        # Parse optional --socket <path> argument
+        # Parse optional --socket <path> / --tcp argument
         socket_path = None
         args = sys.argv[2:]
         for i, arg in enumerate(args):
             if arg == "--socket" and i + 1 < len(args):
                 socket_path = args[i + 1]
                 break
-        if socket_path:
+        if "--tcp" in args:
+            run_daemon_socket(tcp=True)
+        elif socket_path:
             run_daemon_socket(socket_path)
         else:
             run_daemon()   # fallback: stdin/stdout (backward compat)

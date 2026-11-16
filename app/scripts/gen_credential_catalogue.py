@@ -45,6 +45,10 @@ NOT_CREDENTIALS = {
     "LOGURU_AUTOINIT", "LOGURU_LEVEL",
     # Which vendor answers prices (Settings › Data Sources); a choice, not a key.
     "FINTERM_PRICE_SOURCE",
+    # The per-launch token the host sets directly on its data daemon's process
+    # for the loopback-TCP transport (PythonWorker). Not a user credential, and
+    # not passed through the allow-list: it must never appear in Settings.
+    "FINTERM_DAEMON_TOKEN",
 }
 
 # Human labels for the providers users are most likely to configure. Anything
