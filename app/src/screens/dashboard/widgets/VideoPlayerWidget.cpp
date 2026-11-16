@@ -478,7 +478,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         tts_muted_label_->setFixedHeight(20);
         tts_muted_label_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         tts_muted_label_->setToolTip(
-            QStringLiteral("Muted while read-aloud plays — stream audio returns when the reading ends"));
+            QStringLiteral("Muted while read-aloud plays"));
         tts_muted_label_->hide();
         cl->addWidget(tts_muted_label_);
         cl->addStretch(1);
@@ -2917,8 +2917,8 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     auto* engine_h = new QHBoxLayout(engine_group);
     auto* gl_radio = new QRadioButton("GL — yt-dlp + QPainter (HLS)", engine_group);
     auto* web_radio = new QRadioButton("WEB — YouTube iframe (Chromium)", engine_group);
-    gl_radio->setToolTip("Works for any public stream. Default — works for CNBC, Yahoo, etc.");
-    web_radio->setToolTip("Smoother for plain YouTube videos. Some news channels block embedding.");
+    gl_radio->setToolTip("Works for any public stream (default)");
+    web_radio->setToolTip("Smoother for plain YouTube videos");
     (use_web_engine_ ? web_radio : gl_radio)->setChecked(true);
     engine_h->addWidget(gl_radio);
     engine_h->addWidget(web_radio);

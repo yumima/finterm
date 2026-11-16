@@ -434,8 +434,7 @@ QWidget* MarketPulsePanel::build_fear_greed_section() {
     // disagree with no explanation.
     fg_header_label_ = new QLabel(QString("MOOD (%1-STOCK BASKET + VIX)").arg(breadth_basket_size()));
     fg_header_label_->setToolTip(
-        QString("finterm's own gauge: advancing vs declining share of a fixed %1-stock basket, adjusted "
-                "by VIX. Not CNN's Fear & Greed Index.")
+        QString("finterm's own gauge: a %1-stock basket and VIX")
             .arg(breadth_basket_size()));
     hrl->addWidget(fg_header_label_);
     hrl->addStretch();
@@ -536,8 +535,7 @@ QWidget* MarketPulsePanel::build_breadth_section() {
     // NYSE/NASDAQ/S&P labels.
     make_row(QString("WATCH BASKET (%1 STOCKS)").arg(breadth_basket_size()), basket_row_);
     if (basket_row_.name)
-        basket_row_.name->setToolTip("Advancing (>+0.3%) / declining (<-0.3%) count within a fixed basket of large "
-                                     "US stocks. Not exchange-wide breadth.");
+        basket_row_.name->setToolTip("Advancers / decliners in a fixed large-cap basket");
 
     vl->addWidget(bars);
     return w;

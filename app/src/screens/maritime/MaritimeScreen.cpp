@@ -647,8 +647,7 @@ QWidget* MaritimeScreen::build_status_bar() {
     // Say so rather than name a feed that does not exist.
     auto* val1 = new QLabel("NONE — vessel data unavailable", bar);
     val1->setStyleSheet(sv);
-    val1->setToolTip("No vessel-position API is configured, so positions and routes can't load. "
-                     "The upstream maritime API this screen used has been retired.");
+    val1->setToolTip("No vessel-position API is configured");
     hl->addWidget(lbl1);
     hl->addWidget(val1);
 

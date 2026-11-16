@@ -405,8 +405,6 @@ QWidget* MarketsScreen::build_header_bar() {
         b->setCursor(Qt::PointingHandCursor);
         h->addWidget(b);
     }
-    world_btn_->setToolTip("World overview: sessions, indices by region, futures, rates, FX, commodities, crypto, "
-                           "volatility.");
     panels_btn_->setToolTip("Your configurable quote panels.");
     connect(world_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::World, true); });
     connect(panels_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::Panels, true); });

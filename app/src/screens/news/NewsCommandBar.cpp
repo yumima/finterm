@@ -141,7 +141,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     // when active the label includes an inline count badge ("PTF 7").
     view_ptf_ = make_pill("PTF", "PTF", hl);
     view_ptf_->setCheckable(true);
-    view_ptf_->setToolTip(QStringLiteral("Filter the feed to articles tagged with tickers in your portfolio."));
+    view_ptf_->setToolTip(QStringLiteral("Only articles on your portfolio's tickers"));
     connect(view_ptf_, &QPushButton::clicked, this, [this]() {
         portfolio_active_ = view_ptf_->isChecked();
         refresh_portfolio_pill();
@@ -171,8 +171,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     unseen_label_->setObjectName("newsCommandBarUnseen");
     unseen_label_->setFlat(true);
     unseen_label_->setCursor(Qt::PointingHandCursor);
-    unseen_label_->setToolTip(QStringLiteral("Unseen articles since you last opened News. "
-                                             "Click to return to the default view (clears the BREAKING filter)."));
+    unseen_label_->setToolTip(QStringLiteral("Unseen articles · click for the default view"));
     unseen_label_->hide();
     // Click → reset the WIRE/CLUSTERS pill back to WIRE so the local
     // command-bar state matches what NewsScreen will do, then signal up.
@@ -192,8 +191,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     alert_label_->setObjectName("newsCommandBarAlert");
     alert_label_->setFlat(true);
     alert_label_->setCursor(Qt::PointingHandCursor);
-    alert_label_->setToolTip(QStringLiteral("Breaking-news clusters — stories getting high-velocity coverage "
-                                            "across multiple sources right now. Click to show only these."));
+    alert_label_->setToolTip(QStringLiteral("Stories with fast multi-source coverage"));
     alert_label_->hide();
     connect(alert_label_, &QPushButton::clicked, this, &NewsCommandBar::breaking_filter_requested);
     hl->addWidget(alert_label_);
@@ -244,8 +242,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     summarize_btn_ = new QPushButton("TL;DR", row);
     summarize_btn_->setObjectName("newsDetailAnalyzeBtn");
     summarize_btn_->setFixedHeight(20);
-    summarize_btn_->setToolTip("TL;DR — a quick brief of your current filtered view "
-                               "(vs DIGEST in the INTEL strip, a broader read of the whole feed)");
+    summarize_btn_->setToolTip("Brief of the current filtered view");
     hl->addWidget(summarize_btn_);
     connect(summarize_btn_, &QPushButton::clicked, this, &NewsCommandBar::summarize_clicked);
 
@@ -278,8 +275,7 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     tldr_btn_->setObjectName("newsIntelTldr");
     tldr_btn_->setFlat(true);
     tldr_btn_->setCursor(Qt::PointingHandCursor);
-    tldr_btn_->setToolTip(QStringLiteral("AI digest of the whole feed, grouped by theme, shown in the article "
-                                         "pane. TL;DR briefs only your current view."));
+    tldr_btn_->setToolTip(QStringLiteral("AI digest of the whole feed, by theme"));
     connect(tldr_btn_, &QPushButton::clicked, this, &NewsCommandBar::tldr_clicked);
     hl->addWidget(tldr_btn_);
 
@@ -530,7 +526,7 @@ void NewsCommandBar::update_deviations(const QVector<QPair<QString, double>>& de
                      .arg(deviations[i].second, 0, 'f', 1);
     intel_deviations_->setText(parts.join("  "));
     intel_deviations_->setToolTip(
-        QStringLiteral("Volume z-scores: standard deviations from each category's hourly baseline"));
+        QStringLiteral("Standard deviations from each category's hourly volume"));
     intel_deviations_->show();
 }
 

@@ -143,9 +143,7 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     mine_btn_->setCheckable(true);
     mine_btn_->setChecked(mine_only_);
     mine_btn_->setCursor(Qt::PointingHandCursor);
-    mine_btn_->setToolTip(QStringLiteral("Only events on the symbols in your watchlists and portfolios: earnings, "
-                                         "ex-dividend dates, insider cluster buys.\nThe impact selector still "
-                                         "applies — pick ALL to see every one.\n◆ marks them in the full list."));
+    mine_btn_->setToolTip(QStringLiteral("Only events on your watchlists and portfolios"));
     connect(mine_btn_, &QPushButton::toggled, this, [this](bool on) {
         mine_only_ = on;
         QSettings().setValue(kMineOnlyKey, on);
@@ -813,8 +811,7 @@ QWidget* WhatsOnPanel::make_row(const wo::Row& r) {
         title->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
         connect(title, &QLabel::linkActivated, this, [this](const QString& sym) { open_symbol(sym); });
         v->addWidget(title);
-        row->setToolTip(QStringLiteral("Click a company for Equity Research; click the row for every company "
-                                       "reporting, with estimates"));
+        row->setToolTip(QStringLiteral("Click a company for Equity Research"));
     } else {
         QStringList titles, figs;
         for (const auto& it : r.items) {
@@ -843,9 +840,7 @@ QWidget* WhatsOnPanel::make_row(const wo::Row& r) {
             v->addWidget(fig);
         }
         row->setToolTip(item.source == wo::Item::Source::Ipo
-                            ? QStringLiteral("Open in IPO Watch\n\n%1\n\nIPOs raising $1B+ are tagged MED and $10B+ "
-                                             "HIGH (shares offered x top of the price range); smaller deals show only "
-                                             "under ALL.")
+                            ? QStringLiteral("Open in IPO Watch\n%1")
                                   .arg(item.detail)
                         : !item.symbol.isEmpty()            ? QStringLiteral("Open %1 in Equity Research\n\n%2")
                                                                   .arg(item.symbol, item.detail)
@@ -903,8 +898,7 @@ QWidget* WhatsOnPanel::make_brief_row() {
     auto* title = new QLabel(QStringLiteral("Weekly brief — insider buying →"));
     title->setWordWrap(true);
     h->addWidget(title, 1);
-    row->setToolTip(QStringLiteral("Published each Saturday. Opens SOCIAL with the latest published issue and "
-                                   "what has been posted."));
+    row->setToolTip(QStringLiteral("Opens SOCIAL with the latest published issue"));
     row->setProperty("whatsOnSource", kBriefSource);
     row->installEventFilter(this);
     return row;
@@ -1010,7 +1004,7 @@ void WhatsOnPanel::render() {
         next_up_ = wo::next_up(items, now, false);
     }
     next_label_->setVisible(next_up_.has_value());
-    next_label_->setToolTip(mine_only_ ? QStringLiteral("The next event on the stocks in your portfolios and watchlists")
+    next_label_->setToolTip(mine_only_ ? QStringLiteral("Next event on your portfolios and watchlists")
                                        : QStringLiteral("The next HIGH-impact event\n\n") + wo::impact_rules());
     QMap<wo::Section, int> hidden;
     const auto sections = wo::sectionize(items, today, wo::Filter{mine_only_, min_impact_}, &hidden);
@@ -1061,8 +1055,7 @@ void WhatsOnPanel::render() {
                                                                           : QStringLiteral("ALL")));
             l->setObjectName("whatsOnWhen");
             l->setWordWrap(true);
-            l->setToolTip(QStringLiteral("Events below the impact you picked. Pick a lower tier above to list them."
-                                         "\n\n") +
+            l->setToolTip(QStringLiteral("Events below the impact you picked\n") +
                           wo::impact_rules());
             body_->addWidget(l);
         }

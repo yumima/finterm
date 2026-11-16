@@ -488,19 +488,17 @@ void WatchlistScreen::refresh_ownership_headers() {
     // clocks, stated on the column that runs on each.
     if (auto* hh = table_->horizontalHeaderItem(8))
         hh->setToolTip(
-            QStringLiteral("13F filers holding the name, and the change against the prior quarter — as of %1")
+            QStringLiteral("13F holders and change vs the prior quarter — as of %1")
                 .arg(w.quarter.isValid() ? w.quarter.toString(QStringLiteral("d MMM yyyy"))
                                          : QStringLiteral("no index")));
     if (auto* hh = table_->horizontalHeaderItem(10))
         hh->setToolTip(
-            QStringLiteral("Short interest ÷ 13F shares (the borrow-fee proxy) and days to cover — FINRA settlement "
-                           "%1, published ~%2")
+            QStringLiteral("Short interest ÷ 13F shares, days to cover — FINRA %1, published ~%2")
                 .arg(w.settlement.isValid() ? w.settlement.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("—"),
                      w.published_after.isValid() ? w.published_after.toString(QStringLiteral("d MMM"))
                                                  : QStringLiteral("—")));
     if (auto* hh = table_->horizontalHeaderItem(12))
-        hh->setToolTip(QStringLiteral("Open-market insider purchases in the last %1 days — 10%% owners and 10b5-1 plan "
-                                      "trades excluded; Form 4 store read to %2")
+        hh->setToolTip(QStringLiteral("Open-market insider buys, last %1 days — read to %2")
                            .arg(w.days)
                            .arg(w.form4_scanned_to.isValid() ? w.form4_scanned_to.toString(QStringLiteral("d MMM"))
                                                              : QStringLiteral("—")));

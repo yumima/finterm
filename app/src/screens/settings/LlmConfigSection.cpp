@@ -436,8 +436,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     lbl_style(eng_lbl);
     engine_status_lbl_ = new QLabel("checking…");
     engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
-    engine_status_lbl_->setToolTip("Local AI engine (hearth), default 127.0.0.1:11435.\n"
-                                   "Set Base URL above to override.");
+    engine_status_lbl_->setToolTip("Local AI engine (hearth), default 127.0.0.1:11435");
     form->addRow(eng_lbl, engine_status_lbl_);
     connect(&HearthService::instance(), &HearthService::detected, this, &LlmConfigSection::refresh_engine_status);
     HearthService::instance().detect();
@@ -455,8 +454,7 @@ QWidget* LlmConfigSection::build_form_panel() {
                                 "QCheckBox::indicator:checked{background:" +
                                 QString(ui::colors::AMBER()) + ";border-color:" + QString(ui::colors::AMBER()) + ";}";
     manage_engine_check_->setStyleSheet(check_style);
-    manage_engine_check_->setToolTip("Starts hearth on launch and keeps it running.\n"
-                                     "Requires the `hearth` binary on PATH.");
+    manage_engine_check_->setToolTip("Start hearth on launch and keep it running");
     {
         auto r = SettingsRepository::instance().get("hearth.manage", "false");
         manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");
@@ -495,8 +493,7 @@ QWidget* LlmConfigSection::build_form_panel() {
                                 ";}"
                                 "QCheckBox::indicator:checked{background:" +
                                 QString(ui::colors::AMBER()) + ";border-color:" + QString(ui::colors::AMBER()) + ";}");
-    tools_check_->setToolTip("When enabled, the AI can interact with the terminal: navigate screens, fetch market "
-                             "data, manage watchlists, etc.");
+    tools_check_->setToolTip("Lets the AI navigate screens and fetch data");
     form->addRow(new QLabel(""), tools_check_);
 
     vl->addLayout(form);

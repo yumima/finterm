@@ -143,8 +143,7 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
         hl->addWidget(l, col.stretch);
     }
     header_labels_.at(kColPnl)->setToolTip(
-        QStringLiteral("Return on cost for the position: (price − average cost) ÷ average cost. "
-                       "The cash figure is in TOTAL P&L above."));
+        QStringLiteral("Return on cost: price vs average cost"));
     aft_header_ = header_labels_.at(kColAft);
     set_aft_header_state(AftState::Idle);
     vl->addWidget(header_row_);
@@ -454,8 +453,7 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
             break;
         case AftState::Failed:
             aft_header_->setText(QStringLiteral("AFT% !"));
-            aft_header_->setToolTip(QString("%1\n\nThe last extended-hours fetch failed: %2\nRetrying on the next "
-                                            "refresh.")
+            aft_header_->setToolTip(QString("%1\nExtended-hours fetch failed: %2")
                                         .arg(kBase, aft_error_));
             break;
     }

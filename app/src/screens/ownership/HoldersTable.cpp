@@ -89,8 +89,7 @@ HoldersTable::HoldersTable(QWidget* parent) : QWidget(parent) {
     sort_->addItem(QStringLiteral("by position size"), false);
     sort_->addItem(QStringLiteral("by % of their book (books ≥ $1B)"), true);
     sort_->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Position size: who owns the most of this company. Weight: how much of the filer's own "
-                       "book this is, among books of $1B or more.")));
+        QStringLiteral("Position size, or weight in the filer's own book")));
     connect(sort_, &QComboBox::activated, this, [this](int i) { emit sort_requested(sort_->itemData(i).toBool()); });
     bar->addWidget(sort_);
     root->addLayout(bar);
@@ -208,10 +207,9 @@ void HoldersTable::render() {
         auto* tier = cell(tier_label(h), h.is_focused() ? QString() : ui::colors::TEXT_SECONDARY());
         tier->setToolTip(ui::tooltip_wrap(
             h.tier == QLatin1String("index")
-                ? QStringLiteral("A named passive complex. Its quarterly change is an index rebalance, not a view.")
+                ? QStringLiteral("Passive index complex")
             : h.tier == QLatin1String("broad")
-                ? QStringLiteral("A book of a thousand or more names — tracking a benchmark, not a view on "
-                                 "this company.")
+                ? QStringLiteral("Broad book: a thousand or more names")
                 : QStringLiteral("A book narrow enough that a position in it is a decision.")));
         table_->setItem(i, 1, tier);
 
@@ -235,8 +233,7 @@ void HoldersTable::render() {
         auto* d = num_cell(delta, col);
         if (h.action == QLatin1String("first seen"))
             d->setToolTip(ui::tooltip_wrap(
-                QStringLiteral("No prior-quarter filing from this filer, so an opening position cannot be told "
-                               "apart from a first appearance.")));
+                QStringLiteral("No prior-quarter filing from this filer")));
         table_->setItem(i, 4, d);
         table_->setItem(i, 5, num_cell(h.pct_change ? pct_or_dash(h.pct_change, 1, true) : fmt::placeholder(), col));
         table_->setItem(
@@ -245,8 +242,7 @@ void HoldersTable::render() {
         auto* asof = cell(QStringLiteral("Q%1 %2").arg((sum.quarter.month() - 1) / 3 + 1).arg(sum.quarter.year()),
                           ui::colors::TEXT_SECONDARY());
         asof->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Quarter end the position was reported for. 13F is due 45 days later; the SEC data "
-                           "sets carry no per-filing date.")));
+            QStringLiteral("Quarter end the position was reported for")));
         table_->setItem(i, 8, asof);
     }
     table_->setUpdatesEnabled(true);

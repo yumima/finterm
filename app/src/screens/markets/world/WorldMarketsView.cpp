@@ -82,8 +82,7 @@ QColor phase_color(Phase p) {
 }
 
 QString holidays_note() {
-    return QStringLiteral("Exchange holidays and half-days are not checked: on a holiday the state shown is the "
-                          "normal weekday one.");
+    return QStringLiteral("Holidays and half-days are not checked");
 }
 
 /// What one row prints, decided once for the painter and the tooltip.
@@ -514,8 +513,8 @@ QString WorldSectionWidget::row_tooltip(int row, const QPoint& pos) const {
         break;
     case RowStatus::Stale:
         lines << (view_->error_of(in.symbol).isEmpty()
-                      ? QStringLiteral("STALE: a cached quote from an earlier session; waiting for a fresh one.")
-                      : QStringLiteral("STALE: the last refresh failed (%1); showing the previous quote.")
+                      ? QStringLiteral("Stale — waiting for a fresh quote")
+                      : QStringLiteral("Stale — refresh failed (%1)")
                             .arg(view_->error_of(in.symbol).left(160)));
         break;
     case RowStatus::Live:
@@ -642,12 +641,7 @@ void WorldMarketsView::build_ui() {
     overnight_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     overnight_label_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     overnight_label_->setToolTip(
-        QStringLiteral("Generated from the numbers below by fixed rules — no model, no opinion.\n"
-                       "A region is higher / lower when every index moved >= 0.10% that way, flat when none "
-                       "did,\nmostly higher / lower when the rest were flat, and mixed otherwise.\n"
-                       "Each index's move is its latest session's change vs the prior close; stale or missing "
-                       "quotes are left out.\nUS futures: the S&P 500 future (pinned contract). 10y: Cboe ^TNX. "
-                       "Dollar: ICE dollar index."));
+        QStringLiteral("Generated from the numbers below by fixed rules"));
     tl->addWidget(overnight_label_, 1);
     asof_label_ = new QLabel(top_bar_);
     asof_label_->setObjectName(QStringLiteral("worldAsof"));

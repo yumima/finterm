@@ -130,16 +130,12 @@ void EarningsCalendarWidget::build_body() {
     // header while the number sat somewhere else in the cell is what made the
     // column look out of line.
     auto* eps_hdr = make_hdr("EPS EST", 3, Qt::AlignHCenter);
-    eps_hdr->setToolTip(QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
-                                       "▲ / ▼ compares it with the same quarter a year ago (expected growth, "
-                                       "not a beat or miss)."));
+    eps_hdr->setToolTip(QStringLiteral("Consensus EPS · ▲▼ vs the same quarter a year ago"));
     // Sequential: the estimate in the column to the left, measured against what
     // the last quarter actually printed. Numerator is the current figure,
     // denominator the previous one.
     surprise_header_ = make_hdr("vs PREV Q", 3, Qt::AlignHCenter);
-    surprise_header_->setToolTip(QStringLiteral("The coming quarter's consensus against what the last quarter "
-                                                "actually printed. Sequential, so it reflects seasonality; the ▲▼ "
-                                                "on the estimate is the year-on-year read."));
+    surprise_header_->setToolTip(QStringLiteral("Consensus vs the last quarter's reported EPS"));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 

@@ -384,8 +384,7 @@ void QuoteTableWidget::render_from_cache() {
             price->setForeground(QColor(stale ? ui::colors::TEXT_SECONDARY() : ui::colors::WHITE()));
             price->setToolTip(!row_quotes[row]
                                   ? QStringLiteral("No quote yet.")
-                                  : stale ? QStringLiteral("STALE: the last known quote (an earlier session's, or "
-                                                           "its refresh failed); waiting for a fresh one.")
+                                  : stale ? QStringLiteral("Stale — waiting for a fresh quote")
                                           : QString());
         }
         if (!row_quotes[row])

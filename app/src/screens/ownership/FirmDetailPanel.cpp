@@ -303,18 +303,13 @@ void FirmDetailPanel::render() {
                 // Four different reasons produce an empty cell; saying the
                 // wrong one is worse than saying nothing.
                 if (exited)
-                    it->setToolTip(QStringLiteral("Exited positions are not priced — there is no "
-                                                  "position left to value."));
+                    it->setToolTip(QStringLiteral("Exited — nothing left to value"));
                 else if (p.ticker.isEmpty())
-                    it->setToolTip(QStringLiteral("This CUSIP is not mapped to a ticker yet, so "
-                                                  "it cannot be priced."));
+                    it->setToolTip(QStringLiteral("CUSIP not mapped to a ticker yet"));
                 else if (!p.priced)
-                    it->setToolTip(QStringLiteral("Outside the priced set — the largest positions "
-                                                  "by value are priced, this one is further down "
-                                                  "the book."));
+                    it->setToolTip(QStringLiteral("Outside the priced set (largest positions only)"));
                 else
-                    it->setToolTip(QStringLiteral("Priced, but the daily history does not reach "
-                                                  "back over this window."));
+                    it->setToolTip(QStringLiteral("Price history does not cover this window"));
             }
             return it;
         };

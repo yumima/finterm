@@ -87,8 +87,7 @@ void EquityOptionsTab::build_ui() {
 
     refresh_btn_ = new QPushButton(QStringLiteral("↻ REFRESH"));
     refresh_btn_->setStyleSheet(btn_css);
-    refresh_btn_->setToolTip(QStringLiteral("Re-fetch the chain (Yahoo quotes are delayed; "
-                                            "results are cached for 5 minutes)"));
+    refresh_btn_->setToolTip(QStringLiteral("Re-fetch the chain (quotes are delayed)"));
     connect(refresh_btn_, &QPushButton::clicked, this, [this]() { fetch(); });
     bar->addWidget(refresh_btn_);
     vl->addLayout(bar);

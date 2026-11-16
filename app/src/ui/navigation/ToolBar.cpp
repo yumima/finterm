@@ -110,7 +110,6 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     settings_btn_ = new QPushButton("SETTINGS");
     settings_btn_->setFixedHeight(20);
     settings_btn_->setCursor(Qt::PointingHandCursor);
-    settings_btn_->setToolTip("Settings & profile");
     settings_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     connect(settings_btn_, &QPushButton::clicked, this, [this]() { emit navigate_to(QStringLiteral("settings")); });
     hl->addWidget(settings_btn_);

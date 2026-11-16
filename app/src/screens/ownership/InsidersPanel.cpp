@@ -191,8 +191,7 @@ void InsidersPanel::render() {
         auto* act = cell(action, colour);
         if (t.acquired && t.ten_percent_owner && t.open_market)
             act->setToolTip(ui::tooltip_wrap(
-                QStringLiteral("Bought by a 10% beneficial owner — a large holder, not a company insider. "
-                               "Shown, not scored.")));
+                QStringLiteral("10% owner, not a company insider — not scored")));
         table_->setItem(i, 4, act);
 
         table_->setItem(i, 5, num_cell(compact_or_dash(t.shares), colour));
@@ -205,9 +204,9 @@ void InsidersPanel::render() {
                                            : QStringLiteral("no"),
                           ui::colors::TEXT_SECONDARY(), Qt::AlignCenter);
         plan->setToolTip(ui::tooltip_wrap(
-            !t.plan_10b5_1 ? QStringLiteral("The 10b5-1 checkbox exists on filings since 2023; this one predates it.")
+            !t.plan_10b5_1 ? QStringLiteral("Filed before the 10b5-1 checkbox existed")
             : *t.plan_10b5_1
-                ? QStringLiteral("Made under a written 10b5-1 plan — decided months before it printed, so not scored.")
+                ? QStringLiteral("10b5-1 plan trade — not scored")
                 : QStringLiteral("Not a plan trade.")));
         table_->setItem(i, 9, plan);
 

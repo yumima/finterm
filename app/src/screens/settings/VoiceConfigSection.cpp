@@ -398,7 +398,7 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     ev_hl->setContentsMargins(0, 0, 0, 0);
     tts_engine_voice_combo_ = new QComboBox;
     tts_engine_voice_combo_->setToolTip(
-        QStringLiteral("Voice for news read-aloud, from the configured LLM engine. Applies immediately."));
+        QStringLiteral("Voice for news read-aloud"));
     tts_engine_preview_btn_ = new QPushButton(QStringLiteral("Preview"));
     ev_hl->addWidget(tts_engine_voice_combo_, 1);
     ev_hl->addWidget(tts_engine_preview_btn_);

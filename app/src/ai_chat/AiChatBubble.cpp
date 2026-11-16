@@ -554,7 +554,7 @@ QWidget* AiChatBubble::build_input_row() {
     live_btn_->setFixedSize(38, 38);
     live_btn_->setCheckable(true);
     live_btn_->setCursor(Qt::PointingHandCursor);
-    live_btn_->setToolTip("Live voice conversation — talk, it answers aloud, then listens again");
+    live_btn_->setToolTip("Live voice conversation");
     connect(live_btn_, &QPushButton::clicked, this, [this]() { live_ ? exit_live() : enter_live(); });
     hl->addWidget(live_btn_, 0, Qt::AlignBottom);
 

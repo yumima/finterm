@@ -21,7 +21,7 @@ static const QStringList kScreenerSymbols = {
 ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", parent, ui::colors::INFO()) {
     // Disclose the universe: sorts a fixed watch basket, not the whole market.
     set_title(QString("SCREENER (%1-STOCK BASKET)").arg(kScreenerSymbols.size()));
-    drag_handle()->setToolTip(QString("Sorts a fixed %1-stock watch basket — not a market-wide screen.\nBasket: %2")
+    drag_handle()->setToolTip(QString("Sorts a %1-stock basket\nBasket: %2")
                                   .arg(kScreenerSymbols.size())
                                   .arg(kScreenerSymbols.join(", ")));
     build_body();

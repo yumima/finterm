@@ -90,8 +90,7 @@ void OwnershipScreen::build_ui() {
     filer_search_->setMinimumWidth(240);
     filer_search_->setMaximumWidth(300);
     filer_search_->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Open one 13F filer's whole disclosed equity book — what they hold, at what weight, and "
-                       "what moved last quarter.")));
+        QStringLiteral("Open one 13F filer's whole equity book")));
     bar->addWidget(filer_search_);
     root->addLayout(bar);
     // The index state gets its own line: on the title bar it ran off the
@@ -229,10 +228,8 @@ void OwnershipScreen::refresh_index_ui(const QString& msg) {
     stack_->setCurrentIndex(ready ? 0 : 1);
     index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS") : QStringLiteral("BUILD 13F INDEX"));
     index_btn_->setToolTip(ui::tooltip_wrap(
-        ready ? QStringLiteral("Resolve more CUSIPs to tickers via OpenFIGI so more securities are "
-                               "searchable and rankable by symbol.")
-              : QStringLiteral("Download two quarterly SEC 13F data sets — every filer, every position "
-                               "— and index them locally. About 200 MB, runs once.")));
+        ready ? QStringLiteral("Map more CUSIPs to tickers via OpenFIGI")
+              : QStringLiteral("Download two quarters of SEC 13F data (about 200 MB, once)")));
     index_btn_->setEnabled(!svc.index_busy());
     index_btn_->setVisible(ready);
     index_lbl_->setText(msg.isEmpty() ? (ready ? svc.index_status_text() : QString()) : msg);

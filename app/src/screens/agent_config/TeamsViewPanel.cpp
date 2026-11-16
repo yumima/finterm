@@ -197,7 +197,7 @@ QWidget* TeamsViewPanel::build_execution_panel() {
     vl->addWidget(llm_hdr);
 
     team_profile_combo_ = new QComboBox;
-    team_profile_combo_->setToolTip("LLM profile for the team coordinator. Members use their own assigned profiles.");
+    team_profile_combo_->setToolTip("LLM profile for the team coordinator");
     team_profile_combo_->setStyleSheet(
         QString("QComboBox{%1}QComboBox::drop-down{border:none;}"
                 "QComboBox QAbstractItemView{background:%2;color:%3;selection-background-color:%4;}")

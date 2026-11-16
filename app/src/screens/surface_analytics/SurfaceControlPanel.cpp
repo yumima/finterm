@@ -521,8 +521,7 @@ void SurfaceControlPanel::apply_tier_badge() {
                                            .arg(QString(cap.dataset).isEmpty() ? QStringLiteral("a market data source")
                                                                                : QString::fromUtf8(cap.dataset))
                             : empty ? (cap.tier == SurfaceTier::DEMO
-                                           ? QStringLiteral("Nothing loaded. This surface has no Databento source;\n"
-                                                            "nothing is drawn rather than a modelled shape.")
+                                           ? QStringLiteral("Nothing loaded — no Databento source for this surface")
                                            : QStringLiteral("Nothing loaded. Press FETCH to load real data from %1.")
                                                  .arg(QString::fromUtf8(cap.dataset)))
                                     : QString());
@@ -559,11 +558,9 @@ void SurfaceControlPanel::set_capability(ChartType type) {
     // fetch returns daily bars into the inspector table; nothing computes the
     // surface from them, so the picture does not change.
     fetch_btn_->setToolTip(!can_fetch
-                               ? QStringLiteral("No Databento source for this surface — there is nothing to fetch.")
+                               ? QStringLiteral("No Databento source for this surface")
                            : cap.tier == SurfaceTier::EQUITIES
-                               ? QStringLiteral("Fetches daily bars from %1. Correlation, PCA, VaR, drawdown and "
-                                                "beta\nare computed from them; the bars themselves stay in the "
-                                                "data table.")
+                               ? QStringLiteral("Fetch daily bars from %1")
                                      .arg(QString::fromUtf8(cap.dataset))
                                : QStringLiteral("Fetch this surface from %1 (%2).")
                                      .arg(QString::fromUtf8(cap.dataset), QString::fromUtf8(cap.schema)));

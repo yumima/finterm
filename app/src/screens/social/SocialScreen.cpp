@@ -216,8 +216,7 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
     tabs->setSpacing(6);
     auto* briefs_btn = small_button(QStringLiteral("BRIEFS"));
     auto* published_btn = small_button(QStringLiteral("PUBLISHED"));
-    briefs_btn->setToolTip(QStringLiteral("Your briefs: this week's (last week + next week) and theme briefs — "
-                                          "read, correct, schedule, publish"));
+    briefs_btn->setToolTip(QStringLiteral("Your weekly and theme briefs"));
     published_btn->setToolTip(QStringLiteral("The issue that is live on the site, and everything posted"));
     for (auto* b : {briefs_btn, published_btn}) {
         b->setCheckable(true);
@@ -314,7 +313,7 @@ QWidget* SocialScreen::build_channels_pane() {
     v->addWidget(ou::section_title(QStringLiteral("SOURCES")).widget);
     auto* sources = new QListWidget;
     sources->addItem(QStringLiteral("Weekly brief"));
-    sources->item(0)->setToolTip(QStringLiteral("The weekly insider-buying brief published at yumima.github.io/finterm"));
+    sources->item(0)->setToolTip(QStringLiteral("The weekly insider-buying brief"));
     sources->setCurrentRow(0);
     sources->setFixedHeight(sources->sizeHintForRow(0) + 2 * sources->frameWidth() + 4);
     v->addWidget(sources);
@@ -576,7 +575,7 @@ QWidget* SocialScreen::build_manual_page() {
     row1->addWidget(copy_comment_btn_);
     row1->addStretch(1);
     launch_reset_btn_ = small_button(QStringLiteral("Reset draft"));
-    launch_reset_btn_->setToolTip(QStringLiteral("Back to the draft from launch_posts.py (this week's table refilled)"));
+    launch_reset_btn_->setToolTip(QStringLiteral("Back to the generated draft"));
     connect(launch_reset_btn_, &QPushButton::clicked, this, [this]() {
         if (const auto* t = current_launch_target()) {
             launch_drafts_[t->id] = launch_templates_.value(t->id);
@@ -594,7 +593,7 @@ QWidget* SocialScreen::build_manual_page() {
     connect(open_submit_btn_, &QPushButton::clicked, this, [this]() { open_submit_page(); });
     row2->addWidget(open_submit_btn_, 1);
     mark_posted_btn_ = small_button(QStringLiteral("Mark as posted…"));
-    mark_posted_btn_->setToolTip(QStringLiteral("Record the post's link once it is up (one launch post per community)"));
+    mark_posted_btn_->setToolTip(QStringLiteral("Record the post's link once it is up"));
     connect(mark_posted_btn_, &QPushButton::clicked, this, [this]() { open_mark_posted(); });
     row2->addWidget(mark_posted_btn_);
     v->addLayout(row2);
@@ -846,8 +845,7 @@ void SocialScreen::render_channels() {
                 posted += launch_.posted.contains(t->id) ? 1 : 0;
             if (!targets.isEmpty())
                 sub->setText(QStringLiteral("%1 of %2 launch posts made").arg(posted).arg(targets.size()));
-            row->setToolTip(QStringLiteral("Posted by hand: the composer copies the text and opens the submit "
-                                           "page; nothing is submitted by finterm."));
+            row->setToolTip(QStringLiteral("Posted by hand — finterm submits nothing"));
         } else if (c.configured && c.error.isEmpty()) {
             sub->setText(c.account.isEmpty() ? QStringLiteral("connected") : so::account_label(c.account));
             auto* btn = small_button(QStringLiteral("disconnect"));
@@ -1201,8 +1199,7 @@ void SocialScreen::render_launch() {
 
     open_submit_btn_->setText(QStringLiteral("Open %1 submit page").arg(t->community));
     open_submit_btn_->setToolTip(t->is_link() ? QStringLiteral("Opens the submit form with the title and URL filled in")
-                                              : QStringLiteral("Copies the body, then opens the submit form with the "
-                                                               "title filled in — paste the body there"));
+                                              : QStringLiteral("Copies the body and opens the submit form"));
     const bool posted = launch_.posted.contains(t->id);
     mark_posted_btn_->setText(posted ? QStringLiteral("Replace record…") : QStringLiteral("Mark as posted…"));
     mark_posted_btn_->setEnabled(!mark_busy_);
@@ -1607,7 +1604,7 @@ void SocialScreen::open_x_connect() {
     v->addWidget(intro);
 
     auto* open_btn = new QPushButton(QStringLiteral("Open X sign-in"));
-    open_btn->setToolTip(QStringLiteral("Each sign-in replaces the previous one: use the PIN from the newest page"));
+    open_btn->setToolTip(QStringLiteral("Use the PIN from the newest sign-in page"));
     v->addWidget(open_btn, 0, Qt::AlignLeft);
 
     auto* pin_row = new QHBoxLayout;

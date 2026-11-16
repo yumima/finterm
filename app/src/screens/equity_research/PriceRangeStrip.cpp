@@ -210,11 +210,6 @@ bool PriceRangeStrip::event(QEvent* e) {
         if (stats_.has200)
             t << QStringLiteral("200-day %1 · %2σ away")
                      .arg(fmt::format_money(stats_.sma200, ccy_), QString::number(stats_.z200, 'f', 1));
-        t << QString();
-        // The honest reading, stated once, where someone is about to draw the
-        // wrong conclusion from the picture.
-        t << QStringLiteral("Position, not a recommendation: trading below an average is not evidence of a "
-                            "good entry.");
         QToolTip::showText(he->globalPos(), t.join(QStringLiteral("\n")), this);
         return true;
     }

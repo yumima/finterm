@@ -340,7 +340,7 @@ void IpoWatchView::build_title_bar(QVBoxLayout* root) {
     refresh_btn_ = new QPushButton(QStringLiteral("↻"));
     refresh_btn_->setFixedSize(28, 24);
     refresh_btn_->setCursor(Qt::PointingHandCursor);
-    refresh_btn_->setToolTip("Re-read the Nasdaq IPO calendar and the EDGAR registration stage");
+    refresh_btn_->setToolTip("Re-read the IPO calendar and EDGAR stage");
     connect(refresh_btn_, &QPushButton::clicked, this, &IpoWatchView::refresh);
     h->addWidget(refresh_btn_);
 
@@ -435,12 +435,10 @@ void IpoWatchView::build_filter_row(QVBoxLayout* root) {
     // date; PAST 30 DAYS reads the pricing date and implies PRICED.
     window_chip_ = make_chip("WHEN", {"ANY DATE", "NEXT 7 DAYS", "NEXT 30 DAYS", "NEXT 3 MONTHS", "NEXT 6 MONTHS",
                                       "NEXT 12 MONTHS", "PAST 30 DAYS"});
-    window_chip_->setToolTip(QStringLiteral("Forward windows use the projected pricing date (scheduled, imminent "
-                                            "or estimated); PAST 30 DAYS lists deals priced in the last 30 days"));
+    window_chip_->setToolTip(QStringLiteral("By projected pricing date · PAST 30 DAYS = priced deals"));
     exch_chip_ = make_chip("EXCH", {"ALL", "NASDAQ", "NYSE", "AMEX"});
     size_chip_ = make_chip("SIZE", {"ALL", "< $100M", "$100-500M", "$500M+"});
-    size_chip_->setToolTip(QStringLiteral("Deal size = range midpoint × shares; a deal with no range yet has no "
-                                          "size and is hidden by any size filter"));
+    size_chip_->setToolTip(QStringLiteral("Deal size = range midpoint × shares"));
     // SPACs are about half the pipeline; they price on a different clock,
     // sell $10 units and have no fixed lock-up — a separate population.
     type_chip_ = make_chip("TYPE", {"ALL", "OPERATING COS", "SPACS"});
@@ -448,8 +446,7 @@ void IpoWatchView::build_filter_row(QVBoxLayout* root) {
     reset_btn_ = new QPushButton(QStringLiteral("RESET"));
     reset_btn_->setFixedHeight(24);
     reset_btn_->setCursor(Qt::PointingHandCursor);
-    reset_btn_->setToolTip(QStringLiteral("Back to the default view: upcoming deals, any date, every exchange, size "
-                                          "and type, no search"));
+    reset_btn_->setToolTip(QStringLiteral("Back to the default view"));
     reset_btn_->setVisible(false);
     connect(reset_btn_, &QPushButton::clicked, this, &IpoWatchView::reset_filters);
     h->addWidget(reset_btn_);
@@ -762,7 +759,7 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     header_h->addWidget(header_lbl_, 1);
     er_btn_ = new QPushButton(QStringLiteral("EQUITY RESEARCH ↗"));
     er_btn_->setCursor(Qt::PointingHandCursor);
-    er_btn_->setToolTip("Open the full Equity Research screen alongside this list, loaded with this ticker.");
+    er_btn_->setToolTip("Open in Equity Research beside this list");
     er_btn_->setVisible(false);
     connect(er_btn_, &QPushButton::clicked, this, [this]() {
         if (detail_symbol_.isEmpty())
@@ -1322,7 +1319,7 @@ void IpoWatchView::on_fetch_done() {
     if (status_lbl_) {
         status_lbl_->setText(status_text());
         status_lbl_->setToolTip(calendar_errors_.isEmpty()
-                                    ? QStringLiteral("Nasdaq IPO calendar, merged per deal; EDGAR registration stage")
+                                    ? QStringLiteral("Nasdaq IPO calendar and EDGAR registration stage")
                                     : calendar_errors_.join("\n"));
     }
 
@@ -2092,11 +2089,11 @@ QTableWidgetItem* IpoWatchView::make_status_item(const Entry& e) const {
     st->setForeground(QBrush(QColor(status_color(e))));
     if (e.priced_from_edgar)
         st->setToolTip(
-            QStringLiteral("Final prospectus (424B) on EDGAR — Nasdaq's calendar has not moved it to priced yet"));
+            QStringLiteral("Final prospectus (424B) filed — not yet marked priced"));
     else if (e.withdrawn_from_edgar)
-        st->setToolTip(QStringLiteral("RW (withdrawal) on EDGAR — Nasdaq's calendar has not caught up"));
+        st->setToolTip(QStringLiteral("Withdrawal (RW) filed on EDGAR"));
     else if (e.status == "filed")
-        st->setToolTip(QStringLiteral("Registration statement on file with the SEC; not yet scheduled"));
+        st->setToolTip(QStringLiteral("Registration on file; not yet scheduled"));
     return st;
 }
 
@@ -2412,8 +2409,7 @@ void IpoWatchView::render_kpis() {
     };
     if (kpi_week_) {
         kpi_week_->setText(QString("<b>NEXT 7 DAYS</b><br>%1%2").arg(fmt(week_n, week_dollars), est(week_est)));
-        kpi_week_->setToolTip(QStringLiteral("Firm = Nasdaq-scheduled or imminent on EDGAR (8-A / CERT / EFFECT). "
-                                             "est. = comparables estimate; not in the $ total."));
+        kpi_week_->setToolTip(QStringLiteral("Firm = scheduled or imminent · est. = from comparables"));
     }
     if (kpi_month_) {
         kpi_month_->setText(QString("<b>NEXT 30 DAYS</b><br>%1%2").arg(fmt(month_n, month_dollars), est(month_est)));
@@ -2440,8 +2436,7 @@ void IpoWatchView::render_kpis() {
                                                   : QString());
         kpi_pop_->setText(
             QString("<b>30D AVG SINCE IPO</b><br><span style='color:%1;'>%2</span>%3").arg(color, s, n_txt));
-        kpi_pop_->setToolTip(QStringLiteral("Mean return from the IPO price to the last price, over deals priced in "
-                                            "the last 30 days that have a quote. Click to list them."));
+        kpi_pop_->setToolTip(QStringLiteral("Mean return from IPO price, deals priced in the last 30 days"));
     }
     if (kpi_above_)
         kpi_above_->setText(QString("<b>ABOVE IPO (&gt;+2%)</b><br><span style='color:%1;'>%2 (%3)</span>")
@@ -2495,11 +2490,9 @@ void IpoWatchView::render_calendar() {
     table_->setHorizontalHeaderLabels(headers);
     table_->horizontalHeaderItem(C_Expected)
         ->setToolTip(QStringLiteral(
-            "Projected pricing date. Bold = firm (scheduled or registered). ~date · N% = estimate from "
-            "comparable filers, N% of which priced. Hover a cell for the basis."));
+            "Projected pricing date · bold = firm · ~ = estimate"));
     table_->horizontalHeaderItem(C_Stage)->setToolTip(
-        QStringLiteral("Furthest step on EDGAR: S-1 / amendments → 8-A (exchange registration) → "
-                       "CERT (listing certified) → EFFECT (SEC effective) → 424B (priced)"));
+        QStringLiteral("Furthest EDGAR step: S-1 → 8-A → CERT → EFFECT → 424B"));
 
     const QVector<int> indices = filtered_indices();
     table_->setRowCount(indices.size());
@@ -2537,16 +2530,14 @@ void IpoWatchView::render_calendar() {
         {
             auto* pr = new QTableWidgetItem(e.price_range.isEmpty() ? "—" : e.price_range);
             if (e.range_from_overview)
-                pr->setToolTip(QStringLiteral("Range from the registration statement (Nasdaq deal page) — "
-                                              "a range filed this early is often revised before pricing"));
+                pr->setToolTip(QStringLiteral("Range from the registration statement; often revised"));
             table_->setItem(i, C_Range, pr);
         }
         table_->setItem(i, C_Shares, new NumSortItem(e.shares > 0 ? format_count(e.shares) : "—", e.shares));
         {
             auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
             if (e.deal_size.isEmpty() && e.status == "filed")
-                ds->setToolTip(QStringLiteral("No price range on file yet. The S-1 fee-table maximum offering price is "
-                                              "a registration-fee placeholder, not a deal size."));
+                ds->setToolTip(QStringLiteral("No price range on file yet"));
             else if (e.pending() && e.deal_size_dollars > 0)
                 ds->setToolTip(QStringLiteral("Range midpoint × shares offered, before any greenshoe"));
             table_->setItem(i, C_Size, ds);
@@ -2631,8 +2622,7 @@ void IpoWatchView::render_performance() {
         {
             auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
             if (e.deal_size.isEmpty() && e.status == "filed")
-                ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a "
-                                              "registration-fee placeholder, not a deal size."));
+                ds->setToolTip(QStringLiteral("S-1 filed — not priced"));
             table_->setItem(r, 7, ds);
         }
         const QString sector_disp = sector_display(e.sector, e.profile_fetched, e.ticker, e.status);
@@ -2746,8 +2736,7 @@ void IpoWatchView::render_watchlist() {
         {
             auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
             if (e.deal_size.isEmpty() && e.status == "filed")
-                ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a "
-                                              "registration-fee placeholder, not a deal size."));
+                ds->setToolTip(QStringLiteral("S-1 filed — not priced"));
             table_->setItem(r, 9, ds);
         }
         const QString sector_disp = sector_display(e.sector, e.profile_fetched, e.ticker, e.status);
@@ -2907,8 +2896,7 @@ void IpoWatchView::render_lockups() {
         // the header and tooltip say so rather than letting the column pass
         // for the overhang.
         auto* sh = new NumSortItem(l.shares_offered > 0 ? format_count(l.shares_offered) : "—", l.shares_offered);
-        sh->setToolTip(QStringLiteral("Shares sold in the IPO — for scale. The shares that unlock are the "
-                                      "pre-IPO holdings, typically several times this; see the prospectus."));
+        sh->setToolTip(QStringLiteral("Shares sold in the IPO"));
         table_->setItem(r, 6, sh);
         table_->setItem(
             r, 7,
@@ -2917,10 +2905,9 @@ void IpoWatchView::render_lockups() {
             new QTableWidgetItem(l.assumed ? QStringLiteral("assumed 180d") : QStringLiteral("prospectus term"));
         basis->setToolTip(
             l.assumed
-                ? QStringLiteral("Nasdaq has no lock-up term for this deal; 180 days is the convention, not a fact")
+                ? QStringLiteral("No lock-up term on file; 180 days is the convention")
                 : QStringLiteral(
-                      "Lock-up term from the deal's prospectus, as Nasdaq records it. Early releases and "
-                      "waivers are not modelled."));
+                      "Lock-up term from the prospectus"));
         if (l.assumed)
             basis->setForeground(QBrush(QColor(TEXT_SECONDARY())));
         table_->setItem(r, 8, basis);

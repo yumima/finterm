@@ -48,7 +48,7 @@ void PortfolioHeatmap::build_ui() {
     auto* title = new QPushButton(QStringLiteral("PORTFOLIO"));
     title->setCursor(Qt::PointingHandCursor);
     title->setFlat(true);
-    title->setToolTip(QStringLiteral("Click to view the full portfolio (clears any selected symbol)"));
+    title->setToolTip(QStringLiteral("Show the full portfolio"));
     title->setStyleSheet(QString("QPushButton { color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;"
                                  "  background:transparent; border:0; padding:0; text-align:left; }"
                                  "QPushButton:hover { color:%2; }")
@@ -87,8 +87,7 @@ void PortfolioHeatmap::build_ui() {
     weight_btn_ = make_mode_btn("WT");
     day_btn_ = make_mode_btn("DAY");
     aft_btn_ = make_mode_btn("AFT");
-    aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change for each symbol. "
-                                        "Click AFT again to re-fetch."));
+    aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change"));
     pnl_btn_->setChecked(true);
 
     auto set_mode = [this](portfolio::HeatmapMode m) {

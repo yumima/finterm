@@ -1017,8 +1017,7 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& round
         auto* pps_item = make_item(pps > 0 ? QString("~$%1").arg(pps, 0, 'f', 2) : "—",
                                    Qt::AlignRight | Qt::AlignVCenter, pps > 0 ? colors::TEXT_SECONDARY() : QString());
         if (pps > 0)
-            pps_item->setToolTip("Derived from a mutual-fund N-PORT mark within 90 days — "
-                                 "not a disclosed primary-round price");
+            pps_item->setToolTip("From a mutual-fund N-PORT mark, not a round price");
         rounds_table_->setItem(i, 3, pps_item);
 
         QStringList persons;

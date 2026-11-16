@@ -276,8 +276,7 @@ void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) 
     }
     figures_->setText(lines.join(QStringLiteral("<br>")));
     figures_->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Days to cover and short interest ÷ institutional shares are the stronger short-side "
-                       "measures; % of float is the weakest. Daily short volume is traded flow, not a position.")));
+        QStringLiteral("Days to cover and SI ÷ institutional shares are the stronger measures")));
     foot_->setText(QStringLiteral("Firms report two business days after settlement; FINRA publishes about eight "
                                   "business days after that, so a reading is two to four weeks old on screen."));
 }

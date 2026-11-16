@@ -393,10 +393,9 @@ class ReadAloudToggle : public QObject {
         if (st == State::Prep)
             btn_->setToolTip(QStringLiteral("Preparing the voice — click to pause, ■ to stop"));
         else if (st == State::Playing)
-            btn_->setToolTip(QStringLiteral("Pause — click again to resume from here\nRight-click to restart or "
-                                            "choose the voice"));
+            btn_->setToolTip(QStringLiteral("Pause · right-click for options"));
         else if (st == State::Paused)
-            btn_->setToolTip(QStringLiteral("Resume from where it paused\nRight-click to restart or choose the voice"));
+            btn_->setToolTip(QStringLiteral("Resume · right-click for options"));
         else if (state_tooltip_owned_)
             btn_->setToolTip(tooltip_);
         state_tooltip_owned_ = st != State::Idle;

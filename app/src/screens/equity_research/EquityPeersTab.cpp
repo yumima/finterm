@@ -388,7 +388,7 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
                                          "QCheckBox::indicator:checked{background:#d97706;border-color:#d97706;}"));
         if (is_primary) {
             cb->setEnabled(false);
-            cb->setToolTip(QStringLiteral("(current symbol — primary, not a comparison)"));
+            cb->setToolTip(QStringLiteral("(current symbol)"));
         } else {
             cb->setToolTip(QStringLiteral("Toggle on chart comparison overlay"));
             connect(cb, &QCheckBox::clicked, this, [this, wrap](bool checked) {

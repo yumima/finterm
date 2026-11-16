@@ -226,8 +226,7 @@ void ScreenerScreen::build_ui() {
     refresh_btn_ = new QPushButton(QStringLiteral("REFRESH"));
     refresh_btn_->setCursor(Qt::PointingHandCursor);
     refresh_btn_->setToolTip(
-        QStringLiteral("Re-run every screen (prices re-download once stale: after a new close, or after "
-                       "15 minutes in session)"));
+        QStringLiteral("Re-run every screen"));
     head->addWidget(refresh_btn_);
     market_ = new QLabel;
     market_->setTextFormat(Qt::RichText);
@@ -345,7 +344,7 @@ void ScreenerScreen::build_ui() {
     }
     passing_btn_->setToolTip(QStringLiteral("The names that pass every rule today"));
     setup_btn_->setToolTip(
-        QStringLiteral("Setting up: the names next in line, with the rule each misses and how far it is."));
+        QStringLiteral("Names one rule short of passing"));
     auto* views = new QButtonGroup(this);
     views->setExclusive(true);
     views->addButton(passing_btn_);
@@ -371,7 +370,7 @@ void ScreenerScreen::build_ui() {
     account_->setGroupSeparatorShown(true);
     account_->setValue(account_value_);
     account_->setToolTip(
-        QStringLiteral("Your account size: Shares and Position size the trade so the stop costs the risk below"));
+        QStringLiteral("Account size, used to size positions"));
     pl->addWidget(account_);
     auto* rlab = new QLabel(QStringLiteral("Risk / trade"));
     rlab->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
@@ -386,8 +385,7 @@ void ScreenerScreen::build_ui() {
     tools->addWidget(plan_box_);
     ml->addLayout(tools);
     table_ = ou::make_table(kBaseHeaders);
-    table_->setToolTip(QStringLiteral("Click a stock to open it in Equity Research beside the list; "
-                                      "right-click to add it to a portfolio"));
+    table_->setToolTip(QStringLiteral("Click to open in Equity Research · right-click to add"));
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     table_->setItemDelegateForColumn(2, new SparkDelegate(table_));
     ml->addWidget(table_, 1);
@@ -869,7 +867,7 @@ void ScreenerScreen::apply_result(const screener::ScanResult& r, bool provisiona
                      mark(r.above50, r.above50 ? QStringLiteral("above 50D") : QStringLiteral("below 50D")),
                      mark(r.above200, r.above200 ? QStringLiteral("above 200D") : QStringLiteral("below 200D"))));
         market_->setToolTip(
-            QStringLiteral("CAN SLIM's \"M\" market filter. Shown, not applied to the screens."));
+            QStringLiteral("CAN SLIM's \"M\" filter — shown, not applied"));
     } else {
         market_->clear();
     }
@@ -936,8 +934,8 @@ void ScreenerScreen::update_view_toggle() {
     setup_btn_->setText(QStringLiteral("Setting up · %1").arg(result_.setups.value(s->setups_from).size()));
     setup_btn_->setToolTip(
         s->setups_from == current_id_
-            ? QStringLiteral("Next in line: %1 — with the rule each misses and how far it is").arg(s->setup_desc)
-            : QStringLiteral("Names one rule from the Trend Template, with the rule and how far they are"));
+            ? QStringLiteral("Next in line: %1").arg(s->setup_desc)
+            : QStringLiteral("Names one rule short of the Trend Template"));
     const QSignalBlocker b1(passing_btn_), b2(setup_btn_);
     (setting_up_ ? setup_btn_ : passing_btn_)->setChecked(true); // the group unchecks the other
 }
@@ -1146,14 +1144,14 @@ void ScreenerScreen::fill_table() {
             else if (cols[c].def)
                 h->setToolTip(QString::fromUtf8(cols[c].def->tip));
             else if (cols[c].col == Col::Shares)
-                h->setToolTip(QStringLiteral("Shares so that a stop-out costs your chosen risk of the account"));
+                h->setToolTip(QStringLiteral("Shares so a stop-out costs your chosen risk"));
             else if (cols[c].col == Col::Position)
                 h->setToolTip(QStringLiteral("Position value at the entry price"));
             else if (cols[c].col == Col::Misses)
                 h->setToolTip(QStringLiteral("The one rule it fails today"));
             else if (cols[c].col == Col::Gap)
                 h->setToolTip(QStringLiteral(
-                    "How far that rule's measure must still move — compare within the same rule"));
+                    "How far that rule's measure must still move"));
         }
     }
     table_->setRowCount(symbols.size());

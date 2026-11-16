@@ -232,8 +232,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     });
     v->addWidget(x_edit_);
     post_x_ = new QCheckBox(QStringLiteral("Post this to X once the page is live"));
-    post_x_->setToolTip(QStringLiteral("After publishing (now or at the scheduled time) the post goes out as soon "
-                                       "as the page shows this version. Never twice."));
+    post_x_->setToolTip(QStringLiteral("Posts once the page shows this version"));
     connect(post_x_, &QCheckBox::toggled, this, [this](bool on) {
         if (!setting_)
             set_post_x(on);
@@ -246,7 +245,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     when_ = new QDateTimeEdit;
     when_->setCalendarPopup(true);
     when_->setDisplayFormat(QStringLiteral("ddd d MMM yyyy HH:mm"));
-    when_->setToolTip(QStringLiteral("Local time. The 10-minute tick timer publishes it (or this screen, if open)."));
+    when_->setToolTip(QStringLiteral("Local time"));
     pub->addWidget(when_);
     schedule_btn_ = button(QStringLiteral("Schedule"));
     connect(schedule_btn_, &QPushButton::clicked, this, [this]() { schedule(false); });
@@ -741,7 +740,7 @@ void BriefsPanel::new_theme() {
     ai->setChecked(llm);
     ai->setEnabled(llm);
     if (!llm)
-        ai->setToolTip(QStringLiteral("No AI model is configured (Settings › AI Config); write the overview yourself"));
+        ai->setToolTip(QStringLiteral("No AI model configured (Settings › AI Config)"));
     form->addRow(QStringLiteral("Title"), title);
     form->addRow(QStringLiteral("Tickers"), tickers);
     form->addRow(QStringLiteral("Angle"), angle);

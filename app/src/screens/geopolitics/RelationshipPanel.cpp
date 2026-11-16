@@ -93,8 +93,7 @@ void RelationshipPanel::build_ui() {
                                  .arg(conflicts)
                                  .arg(orgs),
                              header);
-    stats->setToolTip("Static reference taxonomy — no live severity or dataset counts. "
-                      "Use the HDX tab for live humanitarian datasets.");
+    stats->setToolTip("Static reference taxonomy");
     stats->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; padding:2px 8px;"
                                  "background:rgba(255,255,255,0.04); border:1px solid %4;")
                              .arg(ui::colors::TEXT_SECONDARY())

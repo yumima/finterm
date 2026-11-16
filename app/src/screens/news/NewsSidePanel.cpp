@@ -411,7 +411,7 @@ void NewsSidePanel::update_deviations(const QVector<QPair<QString, double>>& dev
             new QLabel(QStringLiteral("%1%2σ").arg(z_score >= 0 ? "+" : "").arg(z_score, 0, 'f', 1), this);
         score_label->setObjectName("newsDeviationScore");
         score_label->setToolTip(
-            QStringLiteral("Volume z-score: standard deviations from this category's hourly baseline"));
+            QStringLiteral("Standard deviations from this category's hourly volume"));
         hl->addWidget(score_label);
 
         deviations_layout_->addWidget(row);

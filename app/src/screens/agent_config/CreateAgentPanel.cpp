@@ -216,7 +216,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     vl->addWidget(section_label("MODEL"));
 
     llm_profile_combo_ = new QComboBox;
-    llm_profile_combo_->setToolTip("LLM profile for this agent. Configure profiles in Settings > LLM Config.");
+    llm_profile_combo_->setToolTip("LLM profile for this agent");
     llm_profile_combo_->setStyleSheet(combo_style());
     vl->addWidget(llm_profile_combo_);
 

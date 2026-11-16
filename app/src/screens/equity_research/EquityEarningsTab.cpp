@@ -235,8 +235,7 @@ QString expiry_text(const QString& iso) {
 /// populate() appends this print's actual decomposition to it, and the two
 /// halves must not drift.
 QString implied_tooltip() {
-    return QStringLiteral("What the option market prices for this print: the at-the-money straddle expiring just "
-                          "after the report, with ordinary volatility removed. Market pricing, not scored.");
+    return QStringLiteral("Move the option market prices for this print");
 }
 
 QString opt_count(const std::optional<double>& v) {
@@ -460,9 +459,7 @@ QWidget* EquityEarningsTab::build_answers_row() {
     QVBoxLayout* beat_body = nullptr;
     auto* beat_panel = make_panel("1 · WILL THEY BEAT?", ui::colors::POSITIVE(), &beat_body);
     beat_body->addWidget(big_value(beat_value_, ui::colors::TEXT_PRIMARY()));
-    beat_value_->setToolTip(
-        QStringLiteral("Chance that reported EPS comes in above consensus: this company's last eight quarters, "
-                       "blended with the pooled rate (82% of prints beat)."));
+    beat_value_->setToolTip(QStringLiteral("Chance reported EPS beats consensus"));
     beat_body->addWidget(body_text(beat_sub_, ui::colors::TEXT_SECONDARY()));
 
     beat_strip_ = new QWidget;
@@ -472,9 +469,7 @@ QWidget* EquityEarningsTab::build_answers_row() {
 
     beat_body->addWidget(make_caption("ESTIMATE MOMENTUM"));
     beat_body->addWidget(body_text(beat_drift_, ui::colors::TEXT_SECONDARY()));
-    beat_drift_->setToolTip(
-        QStringLiteral("Which way analysts have been moving this quarter's EPS estimate. Rising makes the bar "
-                       "harder to clear. Context only — not in the probability."));
+    beat_drift_->setToolTip(QStringLiteral("Direction of recent estimate revisions"));
     beat_body->addStretch();
     hl->addWidget(beat_panel, 1);
 
@@ -482,9 +477,7 @@ QWidget* EquityEarningsTab::build_answers_row() {
     QVBoxLayout* size_body = nullptr;
     auto* size_panel = make_panel("2 · HOW BIG A MOVE?", "#22d3ee", &size_body);
     size_body->addWidget(big_value(size_value_, ui::colors::TEXT_PRIMARY()));
-    size_value_->setToolTip(
-        QStringLiteral("Forecast size of the session after the print, either direction. Based on this name's "
-                       "past twelve earnings moves and its recent daily volatility."));
+    size_value_->setToolTip(QStringLiteral("Expected size of the move after the print"));
     size_body->addWidget(body_text(size_dollars_, ui::colors::TEXT_SECONDARY()));
     size_body->addWidget(body_text(size_ranges_, ui::colors::TEXT_PRIMARY()));
     size_body->addWidget(make_caption("OPTIONS"));
@@ -501,9 +494,6 @@ QWidget* EquityEarningsTab::build_answers_row() {
     no_call->setStyleSheet(QString("color:%1; font-size:20px; font-weight:700; letter-spacing:1px; "
                                    "background:transparent; border:0;")
                                .arg(ui::colors::TEXT_SECONDARY()));
-    no_call->setToolTip(
-        QStringLiteral("Nothing available before a print predicts which way the stock goes. The table shows "
-                       "what each outcome has meant instead."));
     dir_body->addWidget(no_call);
     auto* dir_sub = new QLabel(
         QStringLiteral("What each outcome has meant for the price — the reaction depends on HOW MUCH they beat, "
@@ -515,10 +505,7 @@ QWidget* EquityEarningsTab::build_answers_row() {
 
     scenario_table_ = new QTableWidget;
     style_table(scenario_table_, {"IF EPS IS…", "CHANCE", "TYPICAL MOVE", "ROSE ON"});
-    scenario_table_->setToolTip(
-        QStringLiteral("CHANCE: how likely each outcome is for this company. TYPICAL MOVE: pooled next-session "
-                       "move, scaled to this name. ROSE ON: share of such prints that closed higher.\n"
-                       "EPS only — revenue and guidance aren't included."));
+    scenario_table_->setToolTip(QStringLiteral("EPS only — revenue and guidance are not included"));
     dir_body->addWidget(scenario_table_);
     dir_body->addWidget(body_text(scenario_note_, ui::colors::TEXT_TERTIARY()));
     dir_body->addWidget(make_caption("ALREADY PRICED IN"));
@@ -634,11 +621,10 @@ void EquityEarningsTab::fill_correlations(const EarningsAnalysis& a) {
         btn->setText(c.label);
         btn->setToolTip(
             c.r.has_value()
-                ? QString("Correlation between %1 and the next-session move: r %2%3 over %4 quarters. "
-                          "Descriptive — only known after the print.")
-                      .arg(c.label.toLower(), *c.r >= 0 ? "+" : "", QString::number(*c.r, 'f', 2))
+                ? QString("r %1%2 with the next-session move, %3 quarters")
+                      .arg(*c.r >= 0 ? "+" : "", QString::number(*c.r, 'f', 2))
                       .arg(c.n)
-                : QString("Not enough quarters carry both %1 and a price reaction.").arg(c.label.toLower()));
+                : QStringLiteral("Not enough quarters"));
     }
 }
 
@@ -801,9 +787,7 @@ void EquityEarningsTab::fill_beat(const EarningsOutlook& o) {
         stops.isEmpty()
             ? QString("background:%1; border-radius:2px;").arg(ui::colors::BG_BASE())
             : QString("background:qlineargradient(x1:0, x2:1, %1); border-radius:2px;").arg(stops.join(", ")));
-    beat_strip_->setToolTip(
-        QStringLiteral("How the print is likely to land against consensus EPS: miss, beat by 0–3%, by 3–10%, "
-                       "or by more than 10%. The line that matters for the price is 3% — see WHICH WAY?"));
+    beat_strip_->setToolTip(QStringLiteral("How the print is likely to land against consensus EPS"));
     beat_strip_legend_->setText(legend.join(QStringLiteral(" &nbsp; ")));
 
     const QString drift_word = o.drift == EstimateDrift::Rising    ? QStringLiteral("Rising")
@@ -861,8 +845,7 @@ void EquityEarningsTab::fill_size(const EarningsAnalysis& a, const EarningsOutlo
         }
         const auto& imp = *a.next.implied;
         size_implied_->setToolTip(implied_tooltip() +
-                                  QString("\nThis print: straddle to %1 = %2% of spot; %3% after removing ordinary "
-                                          "sessions.")
+                                  QString("\nStraddle to %1: %2% of spot, %3% net of ordinary sessions")
                                       .arg(expiry_text(imp.expiry),
                                            QString::number(imp.total_move_pct.value_or(0.0), 'f', 1),
                                            QString::number(*o.implied_move_pct, 'f', 1)));
@@ -1142,8 +1125,7 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsOu
                                                  : p.surprise_suspect        ? QString(ui::colors::TEXT_SECONDARY())
                                                                              : color_for(*p.surprise_pct));
             if (p.surprise_suspect)
-                sur_cell->setToolTip("Likely a GAAP-vs-adjusted mismatch, not a real beat or miss. "
-                                     "Excluded from the beat rate and the scorecard.");
+                sur_cell->setToolTip(QStringLiteral("Likely GAAP vs adjusted — excluded from the beat rate"));
             history_table_->setItem(row, 3, sur_cell);
         }
         // OUTCOME: which of the four scenarios the print landed in — the same
@@ -1170,8 +1152,7 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsOu
             // "this is live, not a completed session" meaning between them,
             // and the tooltip says it in full.
             auto* it = cell(QString("→%1").arg(opt_pct(p.move_since_last_pct, 2)), color_for(*p.move_since_last_pct));
-            it->setToolTip(QStringLiteral("Where the price is now against the close after the last print — still "
-                                          "moving, and never counted in the averages."));
+            it->setToolTip(QStringLiteral("Price now against the close after the last print"));
             history_table_->setItem(row, 6, it);
         } else if (p.reaction_live_pct.has_value()) {
             // The reaction session is still trading. Same "→" marker the projected
@@ -1181,8 +1162,7 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsOu
             // what let the signal ledger settle a print, permanently, against
             // whatever the tape happened to say mid-morning.
             auto* it = cell(QString("→%1").arg(opt_pct(p.reaction_live_pct, 2)), color_for(*p.reaction_live_pct));
-            it->setToolTip(QStringLiteral("The session after this print is still open — where the stock trades now, "
-                                          "not a completed reaction. Not counted until the session closes."));
+            it->setToolTip(QStringLiteral("Session still open — not counted yet"));
             history_table_->setItem(row, 6, it);
         } else {
             history_table_->setItem(

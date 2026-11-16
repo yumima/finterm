@@ -20,8 +20,7 @@ MarketSentimentWidget::MarketSentimentWidget(QWidget* parent) : BaseWidget("MARK
     const int basket_n = static_cast<int>(std::count_if(kSentimentSymbols.cbegin(), kSentimentSymbols.cend(),
                                                         [](const QString& s) { return !s.startsWith('^'); }));
     set_title(QString("SENTIMENT (%1-STOCK BASKET)").arg(basket_n));
-    drag_handle()->setToolTip(QString("Sentiment computed from a fixed %1-stock watch basket plus VIX — "
-                                      "not market-wide breadth.\nBasket: %2")
+    drag_handle()->setToolTip(QString("From a %1-stock basket and VIX\nBasket: %2")
                                   .arg(basket_n)
                                   .arg(kSentimentSymbols.join(", ")));
     auto* vl = content_layout();

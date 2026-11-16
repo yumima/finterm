@@ -290,7 +290,7 @@ void PortfolioPerfChart::build_ui() {
     benchmark_btn_->setFixedSize(60, 22);
     benchmark_btn_->setCheckable(true);
     benchmark_btn_->setCursor(Qt::PointingHandCursor);
-    benchmark_btn_->setToolTip("Overlay benchmark index (auto-selected by portfolio currency)");
+    benchmark_btn_->setToolTip(QStringLiteral("Overlay a benchmark index"));
     benchmark_btn_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                 "  font-size:12px; font-weight:700; border-radius:2px; }"
@@ -312,8 +312,7 @@ void PortfolioPerfChart::build_ui() {
     indexed_btn_->setFixedSize(28, 22);
     indexed_btn_->setCheckable(true);
     indexed_btn_->setCursor(Qt::PointingHandCursor);
-    indexed_btn_->setToolTip("Indexed view: rebase portfolio and benchmark to 100 at the start of\n"
-                             "the selected period. Use when comparing different currencies.");
+    indexed_btn_->setToolTip(QStringLiteral("Rebase portfolio and benchmark to 100"));
     indexed_btn_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                 "  font-size:12px; font-weight:700; border-radius:2px; }"
@@ -362,7 +361,7 @@ void PortfolioPerfChart::build_ui() {
 
     cost_basis_label_ = new QLabel;
     cost_basis_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    cost_basis_label_->setToolTip("Total cost basis — the dashed horizontal line on the chart.");
+    cost_basis_label_->setToolTip("Cost basis (dashed line)");
     info_bar->addWidget(cost_basis_label_);
 
     // Spacer + live-quote group on the SAME row, only shown in symbol-focus
@@ -384,13 +383,12 @@ void PortfolioPerfChart::build_ui() {
 
     live_last_label_ = new QLabel;
     live_last_label_->setStyleSheet(live_prim);
-    live_last_label_->setToolTip(QStringLiteral("Last trade — most recent transaction price from yfinance."));
+    live_last_label_->setToolTip(QStringLiteral("Last trade price"));
     info_bar->addWidget(live_last_label_);
 
     live_bidask_label_ = new QLabel;
     live_bidask_label_->setStyleSheet(live_cyan);
-    live_bidask_label_->setToolTip(QStringLiteral("Bid x Ask — best-effort snapshot, may be delayed; dash outside "
-                                                  "regular hours or for illiquid tickers."));
+    live_bidask_label_->setToolTip(QStringLiteral("Bid × ask snapshot, may be delayed"));
     info_bar->addWidget(live_bidask_label_);
 
     live_range_label_ = new QLabel;
@@ -504,9 +502,8 @@ void PortfolioPerfChart::set_period(const QString& period) {
             const bool indexed_ok = current_period_ != QStringLiteral("1D");
             indexed_btn_->setEnabled(indexed_ok);
             indexed_btn_->setToolTip(indexed_ok
-                                         ? QStringLiteral("Indexed view: rebase to 100 at the start of the period.")
-                                         : QStringLiteral("Indexed view is unavailable in 1D — intraday is rendered "
-                                                          "as raw price/NAV."));
+                                         ? QStringLiteral("Rebase to 100 at the start of the period")
+                                         : QStringLiteral("Not available in 1D"));
         }
         emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
         update_chart();
@@ -520,8 +517,7 @@ void PortfolioPerfChart::set_period(const QString& period) {
     intraday_values_.clear();
     if (indexed_btn_) {
         indexed_btn_->setEnabled(true);
-        indexed_btn_->setToolTip(QStringLiteral("Indexed view: rebase portfolio and benchmark to 100 at the start of\n"
-                                                "the period for a like-for-like return comparison."));
+        indexed_btn_->setToolTip(QStringLiteral("Rebase portfolio and benchmark to 100"));
     }
 
     // Focus mode: ask the owner to refetch this symbol's history for the new
@@ -1026,10 +1022,9 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
                                       .arg(pnl_pct >= 0 ? "+" : "")
                                       .arg(QString::number(pnl_pct, 'f', 2)));
     period_change_label_->setToolTip(
-        multi_day ? tr("Change over the window, from its first bar.")
-        : base_is_prev_close
-            ? tr("Change since the previous close — the same base as the day change in the stats ribbon.")
-            : tr("Previous close unknown — change measured from the session's first bar."));
+        multi_day            ? tr("Change over the window")
+        : base_is_prev_close ? tr("Change since the previous close")
+                             : tr("Change since the session's first bar"));
     period_change_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(pcol));
 
     if (is_aggregate) {
@@ -1206,8 +1201,7 @@ void PortfolioPerfChart::update_chart_focus() {
             known ? QString("UNREALIZED  %1%2%").arg(total_pct >= 0 ? "+" : "").arg(QString::number(total_pct, 'f', 2))
                   : QStringLiteral("UNREALIZED  ") + ui::formatting::placeholder());
         total_return_label_->setToolTip(
-            tr("Unrealized return of the open position vs its average cost.\n"
-               "Realized P&L: %1 %2   Dividends: %1 %3")
+            tr("Realized P&L: %1 %2   Dividends: %1 %3")
                 .arg(currency_)
                 .arg(std::isfinite(held->realized_pnl) ? QString::number(held->realized_pnl, 'f', 2)
                                                        : ui::formatting::placeholder())
@@ -1391,19 +1385,16 @@ void PortfolioPerfChart::update_chart() {
         const double total_pnl =
             summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
         total_return_label_->setToolTip(
-            tr("Unrealized return of open positions vs their average cost.\n"
-               "Unrealized P&L: %1 %2\nRealized P&L: %1 %3\nDividends: %1 %4\n"
-               "Total P&L (unrealized + realized + dividends): %1 %5%6")
+            tr("Unrealized P&L: %1 %2\nRealized P&L: %1 %3\nDividends: %1 %4\nTotal P&L: %1 %5%6")
                 .arg(currency_)
                 .arg(QString::number(summary_.total_unrealized_pnl, 'f', 2))
                 .arg(QString::number(summary_.total_realized_pnl, 'f', 2))
                 .arg(QString::number(summary_.total_dividend_income, 'f', 2))
                 .arg(QString::number(total_pnl, 'f', 2))
-                .arg(QString(approx.isEmpty() ? QString() : tr("\n(estimate — some holdings at a stale price)")) +
-                     (note.isEmpty() ? QString() : tr("\n(%1: no price or no currency conversion)").arg(note)) +
-                     (summary_.flows_fx_incomplete
-                          ? tr("\n(realized P&L / dividends leave out a sale or payment with no currency conversion)")
-                          : QString())));
+                .arg(QString(approx.isEmpty() ? QString() : tr("\nEstimate: some prices are stale")) +
+                     (note.isEmpty() ? QString() : tr("\n%1: no price or FX rate").arg(note)) +
+                     (summary_.flows_fx_incomplete ? tr("\nA sale or dividend has no FX rate and is left out")
+                                                   : QString())));
 
         nav_label_->setText(
             QString("NAV %1 %2").arg(currency_, summary_.total_text(approx + QString::number(live_nav, 'f', 2))));
@@ -1463,8 +1454,7 @@ void PortfolioPerfChart::update_chart() {
             QString("%1  %2 insufficient NAV history").arg(current_period_, ui::formatting::placeholder()));
         period_change_label_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
-        period_change_label_->setToolTip(tr("Fewer than two daily NAV snapshots fall in this period.\n"
-                                            "The history grows one point per day."));
+        period_change_label_->setToolTip(tr("Needs two daily snapshots in this period"));
         fill_total_labels();
         return;
     }
@@ -1700,8 +1690,8 @@ void PortfolioPerfChart::update_chart() {
             QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
         period_change_label_->setToolTip(
             period_ret.fx_unknown
-                ? QStringLiteral("Period return unavailable: a trade in this period has no known FX rate.")
-                : QStringLiteral("Not enough snapshot history yet — backfill in progress."));
+                ? QStringLiteral("A trade in this period has no FX rate")
+                : QStringLiteral("Not enough history yet"));
     } else {
         const char* pnl_color = period_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
         // A degraded window (zero/dust-valued segments were skipped) is an
@@ -1717,16 +1707,15 @@ void PortfolioPerfChart::update_chart() {
         // and the figure is already exact here (TWR's gain_value, net of
         // flows) — so it goes in the tooltip beside the return it explains.
         period_change_label_->setToolTip(
-            (period_ret.valid ? tr("Time-weighted return from %1 to now; deposits and withdrawals don't move "
-                                   "it%2")
+            (period_ret.valid ? tr("Time-weighted return since %1%2\n")
                                     .arg(filtered.first().snapshot_date.left(10))
                                     .arg(period_ret.net_external_flow != 0.0
-                                             ? tr(" (net external flow this period: %1 %2).")
+                                             ? tr(" · net flow %1 %2")
                                                    .arg(currency_)
                                                    .arg(QString::number(period_ret.net_external_flow, 'f', 2))
-                                             : QStringLiteral("."))
+                                             : QString())
                               : QString()) +
-            tr("\nGain over the period: %1 %2").arg(currency_).arg(QString::number(period_pnl, 'f', 2)));
+            tr("Gain: %1 %2").arg(currency_).arg(QString::number(period_pnl, 'f', 2)));
     }
 
     fill_total_labels();

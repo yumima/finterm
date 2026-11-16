@@ -583,8 +583,7 @@ void EquityTechnicalsTab::build_ui() {
     // pulled, not the bar size the indicators are built from — and since every
     // reading is taken off the latest daily bar with a fixed lookback, the
     // selections that clear the warm-up floor land on the same verdict.
-    period_lbl->setToolTip("How much price history is fetched. Indicators always use at least two years of daily "
-                           "bars, so the shorter periods give the same rating.");
+    period_lbl->setToolTip(QStringLiteral("Price history shown"));
     period_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
                                   .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addWidget(period_lbl);
@@ -628,8 +627,7 @@ void EquityTechnicalsTab::build_ui() {
     // describes the multi-week one — they disagree often, and that disagreement
     // is the useful part.
     auto* bars_lbl = new QLabel("BARS");
-    bars_lbl->setToolTip("Which bars the indicators are built from. Daily reads the multi-week trend, weekly the "
-                         "multi-month one; the two can disagree.");
+    bars_lbl->setToolTip(QStringLiteral("Bars the indicators are built from"));
     bars_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
                                 .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addSpacing(14);
@@ -753,8 +751,7 @@ void EquityTechnicalsTab::build_ui() {
     // came from.
     auto* tally_caption = new QLabel("WHAT THE INDICATORS SAY");
     tally_caption->setAlignment(Qt::AlignCenter);
-    tally_caption->setToolTip("The table's own tally, not the verdict. The verdict comes from how the moving "
-                              "averages are stacked; the two often disagree.");
+    tally_caption->setToolTip(QStringLiteral("The table’s tally, not the verdict"));
     tally_caption->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;"
                                          "background:transparent;border:0;")
                                      .arg(ui::colors::TEXT_TERTIARY()));
@@ -775,8 +772,7 @@ void EquityTechnicalsTab::build_ui() {
     accuracy_label_ = new QLabel("96% on the trend in place \xe2\x80\xb7 53% on the next 40 days");
     accuracy_label_->setAlignment(Qt::AlignCenter);
     accuracy_label_->setWordWrap(true);
-    accuracy_label_->setToolTip("The verdict describes the trend already in place (96% agreement over 178 large caps), "
-                                "not a forecast: against the next 40 days it scores 53%, barely off a coin flip.");
+    accuracy_label_->setToolTip(QStringLiteral("Describes the current trend, not a forecast"));
     accuracy_label_->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
                                        .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(accuracy_label_);
@@ -1288,8 +1284,7 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
         bits << QStringLiteral("STALE \u2014 refreshing\u2026");
 
     as_of_label_->setText(bits.join(QStringLiteral(" \u00b7 ")));
-    as_of_label_->setToolTip("Which bar the verdict describes and when the data was fetched. During market hours "
-                             "the latest bar is still forming, so the verdict can move. STALE: cached, refetching.");
+    as_of_label_->setToolTip(QStringLiteral("Bar the verdict describes · STALE = refetching"));
     as_of_label_->setVisible(!bits.isEmpty());
 }
 

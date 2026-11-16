@@ -116,9 +116,7 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
         live_label_->setText(live ? QStringLiteral("\u25CF LIVE") : QStringLiteral("\u25CB CACHED"));
         live_label_->setStyleSheet(
             QString("color:%1; font-weight:700;").arg(live ? ui::colors::POSITIVE() : ui::colors::TEXT_SECONDARY()));
-        live_label_->setToolTip(live ? QStringLiteral("Values computed from a fresh quote fetch.")
-                                     : QStringLiteral("Values restored from the on-disk cache — a refresh\n"
-                                                      "is in flight; they update when it lands."));
+        live_label_->setToolTip(live ? QString() : QStringLiteral("Cached values — refreshing"));
     }
 
     // No holding valued: unknown, not 0 (nor a gain's colour); some left

@@ -1095,7 +1095,7 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     btn_row->addSpacing(8);
     btn_comp_ = new QPushButton(QStringLiteral("COMP"));
     btn_comp_->setCursor(Qt::PointingHandCursor);
-    btn_comp_->setToolTip("Comparison overlays — click to focus the ticker input");
+    btn_comp_->setToolTip(QStringLiteral("Comparison overlays"));
     btn_comp_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
                 "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
@@ -1484,8 +1484,8 @@ void EquityOverviewTab::rebuild_comp_strip() {
         hl->setSpacing(4);
 
         auto* rm = new QPushButton(QStringLiteral("✕"));
+        rm->setToolTip(QStringLiteral("Remove from comparison")); // icon-only: the tooltip is its label
         rm->setCursor(Qt::PointingHandCursor);
-        rm->setToolTip("Remove from comparison");
         rm->setFixedSize(16, 16);
         rm->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:0;"
                                   "padding:0;font-size:11px;font-weight:700;}"
@@ -1657,10 +1657,8 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         // Which basis this actually used depends on whether the loaded window
         // spans a year; say the one that was used rather than assuming.
         primary_52w_lbl_->setToolTip(
-            derived_hi > 0.0 ? QStringLiteral("Distance from the 52-week high of the adjusted series on this chart. "
-                                              "The 52 WEEK RANGE panel uses raw prices.")
-                             : QStringLiteral("Window shorter than a year: uses the vendor's raw 52-week high, "
-                                              "against an adjusted close. Select 1Y or longer for a consistent figure."));
+            derived_hi > 0.0 ? QStringLiteral("From the 52-week high, adjusted prices")
+                             : QStringLiteral("From the vendor's raw 52-week high"));
         // Green when close to the high (within 5%), dim otherwise. Always
         // negative for normal data so we don't bother with a "+" prefix.
         set_fg(primary_52w_lbl_,
@@ -1896,10 +1894,7 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
     // What was missing is that only the technical badge said so: the gauge
     // prints its own hit rates, this one asserted a verdict with no horizon
     // and no provenance at all, and the asymmetry read as a contradiction.
-    p->setToolTip(QStringLiteral("Sell-side consensus as published by the data vendor; targets are twelve-month "
-                                 "price objectives. CONSENSUS is the mean rating on a 1–5 scale, 5 = Strong Buy "
-                                 "(the vendor's raw figure is inverted).\nA fundamental view, not the Technicals "
-                                 "verdict — the two often disagree."));
+    p->setToolTip(QStringLiteral("Analyst consensus: 1–5 scale, 5 = Strong Buy"));
     target_high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     target_mean_val_ = add_row(p, "MEAN", YELLOW);
     target_low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
@@ -1938,8 +1933,7 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
 
 QWidget* EquityOverviewTab::build_52w_panel() {
     auto* p = make_panel("52 WEEK RANGE", YELLOW);
-    p->setToolTip(QStringLiteral("Unadjusted (raw) prices, the same basis as the quote header and the analyst "
-                                 "targets. The chart uses split/dividend-adjusted prices, so its band can differ."));
+    p->setToolTip(QStringLiteral("Raw (unadjusted) prices"));
     w52h_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     w52l_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     avg_vol_val_ = add_row(p, "AVG VOL", CYAN);

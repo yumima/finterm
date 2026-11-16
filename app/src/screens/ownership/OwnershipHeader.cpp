@@ -152,8 +152,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         }
         institutions_.note->setText(n);
         institutions_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Institutional shares from 13F filers above a size floor, divided by the vendor's share "
-                           "count. The vendor's own percentage is shown beside it and can differ.")));
+            QStringLiteral("13F institutional shares ÷ the vendor's share count")));
     }
 
     // ── Insiders ────────────────────────────────────────────────────────────
@@ -184,8 +183,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         }
         insiders_.note->setText(n);
         insiders_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Open-market transactions only (codes P and S). Buys exclude 10% owners and "
-                           "10b5-1 plan trades. Sells are counted but never scored.")));
+            QStringLiteral("Open-market trades only; plan and 10% owner buys excluded")));
     }
 
     // ── Top 10 ──────────────────────────────────────────────────────────────
@@ -200,8 +198,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
                                                  .arg(pct_or_dash(h.broad_share, 0))
                                            : QString());
         top10_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Concentration over every filer. Index and broad books (a thousand or more names) "
-                           "move with index flow rather than decide.")));
+            QStringLiteral("Concentration across every filer")));
     }
 
     // ── Quarter change ──────────────────────────────────────────────────────
@@ -220,7 +217,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         change_.note->clear();
     }
     change_.note->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Counts of filers, not shares. Only filers present in both quarters are compared.")));
+        QStringLiteral("Counts of filers, not shares")));
 
     // ── Short ───────────────────────────────────────────────────────────────
     {
@@ -255,8 +252,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         }
         shorts_.note->setText(n);
         shorts_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Settled short position from FINRA, twice a month, published about ten business days "
-                           "after settlement. SI ÷ 13F shares is a proxy for the borrow fee.")));
+            QStringLiteral("Settled short interest (FINRA, twice a month)")));
     }
 
     // ── 5% stakes ───────────────────────────────────────────────────────────
@@ -283,8 +279,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
                                         .arg(s.window_months)
                                   : QString());
         stakes_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("13D declares intent to influence (due within five business days); 13G is the passive "
-                           "equivalent. The stake percentage is in the filing, one click away on the holder row.")));
+            QStringLiteral("13D = activist intent · 13G = passive")));
     }
 
     // ── Flags ───────────────────────────────────────────────────────────────

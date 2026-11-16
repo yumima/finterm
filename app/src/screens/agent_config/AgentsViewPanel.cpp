@@ -181,7 +181,7 @@ QWidget* AgentsViewPanel::build_config_panel() {
 
     llm_profile_combo_ = new QComboBox;
     llm_profile_combo_->setToolTip(
-        "Select which LLM profile this agent uses. Create profiles in Settings > LLM Config > Profiles.");
+        "LLM profile for this agent");
     llm_profile_combo_->setStyleSheet(
         QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:5px 10px;font-size:12px;}"
                 "QComboBox::drop-down{border:none;}")

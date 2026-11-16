@@ -1491,9 +1491,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     auto* mcp_btn = new QPushButton("MCP TOOLS", status_bar);
     mcp_btn->setCursor(Qt::PointingHandCursor);
     mcp_btn->setCheckable(true);
-    mcp_btn->setToolTip("Start/stop the finterm MCP tool server\n"
-                        "Gives RD-Agent loops access to market data,\n"
-                        "financial news and economics tools.");
+    mcp_btn->setToolTip("Start or stop the finterm MCP tool server");
     mcp_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                                    "font-family:%2; font-size:%3px; padding:2px 8px; border-radius:2px; }"
                                    "QPushButton:checked { background:%4; color:%5; border-color:%4; }"
@@ -5630,8 +5628,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     auto* bot_hl = new QHBoxLayout(bottom_bar);
     bot_hl->setContentsMargins(12, 6, 12, 6);
     auto* analyze_btn = make_run_button("⚡ FULL ANALYSIS — FETCH ALL & COMPUTE", bottom_bar);
-    analyze_btn->setToolTip("Fetches live order book + trades, computes book metrics, market making quotes, toxic "
-                            "flow, and slippage in one call");
+    analyze_btn->setToolTip("Order book, trades and book metrics in one call");
     connect(analyze_btn, &QPushButton::clicked, this, [this]() {
         status_label_->setText("Running full microstructure analysis...");
         QJsonObject p;

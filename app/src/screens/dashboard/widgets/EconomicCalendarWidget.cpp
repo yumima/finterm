@@ -134,7 +134,7 @@ void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events, bool s
 
     set_loading(false);
     populate(out);
-    setToolTip(stale ? QStringLiteral("ForexFactory refused the refresh; showing the last copy fetched.")
+    setToolTip(stale ? QStringLiteral("Refresh refused — showing the last copy")
                      : QString());
 }
 

@@ -750,7 +750,7 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     // is applied in update_market_status_badge.
     mkt_status_label_ = new QLabel("");
     mkt_status_label_->setVisible(false);
-    mkt_status_label_->setToolTip("Market session status for this listing's exchange");
+    mkt_status_label_->setToolTip(QStringLiteral("Exchange session status"));
     hl->addWidget(mkt_status_label_);
 
     price_label_ = make_label("—", ui::colors::TEXT_PRIMARY());
@@ -767,7 +767,7 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     // Alerts on this symbol, prefilled with the price the header shows.
     auto* alert_btn = new QPushButton(QStringLiteral("+ ALERT"));
     alert_btn->setCursor(Qt::PointingHandCursor);
-    alert_btn->setToolTip(QStringLiteral("Add an alert on this symbol (price level, day move, insider cluster buy)"));
+    alert_btn->setToolTip(QStringLiteral("Add an alert on this symbol"));
     alert_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px solid %2; "
                                      "border-radius: 3px; padding: 3px 10px; font-size: 12px; font-weight: 700; }"
                                      "QPushButton:hover { border-color: %1; }")
@@ -1321,8 +1321,7 @@ void EquityResearchScreen::refresh_recommendation_chip() {
         return;
     if (!services::finnhub::FinnhubService::instance().has_api_key()) {
         rec_label_->setText("");
-        rec_label_->setToolTip("Add a Finnhub API key in Settings → Credentials "
-                               "to see analyst recommendations.");
+        rec_label_->setToolTip(QStringLiteral("Needs a Finnhub key (Settings › Credentials)"));
         rec_label_->setVisible(false);
         return;
     }
