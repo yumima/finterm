@@ -648,9 +648,8 @@ void EquityReportTab::schedule_render() {
 }
 
 void EquityReportTab::update_status() {
-    int ready = 0, pending = 0, failed = 0;
+    int pending = 0, failed = 0;
     for (const auto& p : parts_) {
-        ready += p.state == Source::State::Ready;
         pending += p.state == Source::State::Pending;
         failed += p.state == Source::State::Failed;
     }
