@@ -81,6 +81,7 @@ EquityReportTab::EquityReportTab(QWidget* parent) : QWidget(parent) {
         {QStringLiteral("Share price, one year"), QStringLiteral("Yahoo Finance")},
         {QStringLiteral("Benchmark, one year"), kBenchmark + QStringLiteral(" · Yahoo Finance")},
         {QStringLiteral("Annual and quarterly reports"), QStringLiteral("SEC EDGAR")},
+        {QStringLiteral("Share price, five years"), QStringLiteral("Yahoo Finance")},
     };
     build_ui();
 
@@ -174,6 +175,9 @@ void EquityReportTab::reset(const QString& symbol) {
         p.detail.clear();
     }
     narrative_started_ = false;
+    remembered_ = false;
+    link_candles_.clear();
+    link_defs_.clear();
     narrative_pending_ = 0;
     narrative_model_.clear();
     narrative_written_at_ = {};
@@ -243,9 +247,13 @@ void EquityReportTab::set_symbol(const QString& symbol) {
         };
     };
 
-    svc.subscribe_info(this, sym, bind(Info, [this](const QVariant& v) {
+    svc.subscribe_info(this, sym, bind(Info, [this, sym](const QVariant& v) {
         doc_.info = v.value<eq::StockInfo>();
         doc_.has_info = doc_.info.valid;
+        // Subscribing from inside a delivery is fine (unsubscribing is not);
+        // queued anyway so the info callback returns first.
+        if (doc_.has_info && link_defs_.isEmpty())
+            QMetaObject::invokeMethod(this, [this, sym]() { if (sym == symbol_) follow_links(sym); }, Qt::QueuedConnection);
         return doc_.has_info;
     }));
     svc.subscribe_financials(this, sym, bind(Financials, [this](const QVariant& v) {
@@ -274,6 +282,10 @@ void EquityReportTab::set_symbol(const QString& symbol) {
     svc.subscribe_historical(this, kBenchmark, QStringLiteral("1y"), bind(Benchmark, [this](const QVariant& v) {
         doc_.bench = v.value<QVector<eq::Candle>>();
         return !doc_.bench.isEmpty();
+    }));
+    svc.subscribe_historical(this, sym, QStringLiteral("5y"), bind(History, [this](const QVariant& v) {
+        doc_.candles_5y = v.value<QVector<eq::Candle>>();
+        return !doc_.candles_5y.isEmpty();
     }));
 
     // A basket of index funds is the "no basket" answer, not a peer group.
@@ -333,7 +345,88 @@ void EquityReportTab::set_symbol(const QString& symbol) {
     });
 
     read_insiders();
+    read_outlook_record();
     schedule_render();
+}
+
+void EquityReportTab::follow_links(const QString& symbol) {
+    // What the shares are read against: rates, oil and gold for every
+    // company, plus the commodity its own industry lives on. Not sources the
+    // report waits for — each row appears when its history arrives.
+    link_defs_ = {{QStringLiteral("ZN=F"), QStringLiteral("10-year Treasury note (price)")},
+                  {QStringLiteral("CL=F"), QStringLiteral("Crude oil (WTI)")},
+                  {QStringLiteral("GC=F"), QStringLiteral("Gold")}};
+    const QString industry = (doc_.info.sector + QLatin1Char(' ') + doc_.info.industry).toLower();
+    auto also = [this](const char* sym, const char* label) {
+        for (const auto& d : std::as_const(link_defs_))
+            if (d.first == QLatin1String(sym))
+                return;
+        link_defs_.append({QLatin1String(sym), QLatin1String(label)});
+    };
+    if (industry.contains(QLatin1String("gas")) || industry.contains(QLatin1String("utilit")))
+        also("NG=F", "Natural gas");
+    if (industry.contains(QLatin1String("copper")) || industry.contains(QLatin1String("industrial metals")) ||
+        industry.contains(QLatin1String("mining")))
+        also("HG=F", "Copper");
+    if (industry.contains(QLatin1String("silver")))
+        also("SI=F", "Silver");
+    if (industry.contains(QLatin1String("farm")) || industry.contains(QLatin1String("agricultur")) ||
+        industry.contains(QLatin1String("packaged foods")))
+        also("ZC=F", "Corn");
+    if (industry.contains(QLatin1String("semiconductor")) || industry.contains(QLatin1String("software")) ||
+        industry.contains(QLatin1String("internet")))
+        also("NQ=F", "Nasdaq-100 futures");
+    const quint64 epoch = epoch_;
+    for (const auto& def : std::as_const(link_defs_)) {
+        const QString fut = def.first;
+        eq::EquityResearchService::instance().subscribe_historical(this, fut, QStringLiteral("1y"), [this, epoch, fut, symbol](const QState& s) {
+            if (epoch != epoch_ || symbol != symbol_ || !s.data.isValid() || s.data.isNull())
+                return;
+            link_candles_.insert(fut, s.data.value<QVector<eq::Candle>>());
+            schedule_render();
+        });
+    }
+}
+
+void EquityReportTab::read_outlook_record() {
+    ReportDoc::OutlookRecord rec;
+    for (const AiPrediction& p : AiPredictionRepository::instance().for_ticker(symbol_)) {
+        if (p.source != QLatin1String("report"))
+            continue;
+        if (p.resolved) {
+            ++rec.graded;
+            rec.right += p.correct ? 1 : 0;
+        } else {
+            ++rec.pending;
+            const QDate due = QDate::fromString(p.resolve_date, Qt::ISODate);
+            if (due.isValid() && (!rec.next_due.isValid() || due < rec.next_due))
+                rec.next_due = due;
+        }
+    }
+    doc_.outlook_record = rec;
+}
+
+void EquityReportTab::remember_and_compare() {
+    // Once per build, when every source has answered: read the last report
+    // that is at least a week old (a report from yesterday has nothing to
+    // say about a quarter), then remember today's.
+    if (remembered_ || !doc_.has_info)
+        return;
+    for (int p = 0; p < PartCount; ++p)
+        if (!settled(static_cast<Part>(p)))
+            return;
+    remembered_ = true;
+    const QDate today = QDate::currentDate();
+    for (const QJsonObject& o : eq::remembered_reports(symbol_)) { // newest first
+        const Snapshot s = snapshot_from_json(o);
+        if (s.valid() && s.date.daysTo(today) >= 7) {
+            doc_.previous = s;
+            break;
+        }
+    }
+    ReportDoc now = doc_;
+    now.generated = QDateTime::currentDateTime();
+    eq::remember_report(symbol_, today, to_json(make_snapshot(now)));
 }
 
 void EquityReportTab::read_insiders() {
@@ -583,6 +676,12 @@ void EquityReportTab::render() {
         return;
     doc_.generated = QDateTime::currentDateTime();
     doc_.sources = parts_;
+    remember_and_compare();
+    read_outlook_record();
+    doc_.links.clear();
+    for (const auto& def : std::as_const(link_defs_))
+        if (link_candles_.contains(def.first))
+            doc_.links.append(return_link(def.second, doc_.candles, link_candles_.value(def.first)));
     if (narrative_pending_ > 0)
         doc_.narrative_note = QStringLiteral("The model is writing this section — a local model takes a minute or two…");
     else if (!narrative_problem_.isEmpty())

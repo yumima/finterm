@@ -58,7 +58,7 @@ class EquityReportTab : public QWidget {
     void set_symbol(const QString& symbol);
 
   private:
-    enum Part { Info, Financials, Extras, Earnings, Peers, News, Technicals, Prices, Benchmark, Filings, PartCount };
+    enum Part { Info, Financials, Extras, Earnings, Peers, News, Technicals, Prices, Benchmark, Filings, History, PartCount };
 
     void build_ui();
     void apply_theme();
@@ -69,6 +69,9 @@ class EquityReportTab : public QWidget {
     void render();
     void update_status();
     void read_insiders();
+    void read_outlook_record();
+    void follow_links(const QString& symbol);
+    void remember_and_compare();
 
     /// One written section: what to ask, and how to read the answer into the report.
     struct Section {
@@ -96,6 +99,9 @@ class EquityReportTab : public QWidget {
     int narrative_pending_ = 0;
     QString narrative_model_;
     QDateTime narrative_written_at_;
+    bool remembered_ = false; ///< today's snapshot stored and the earlier one read, for this build
+    QHash<QString, QVector<services::equity::Candle>> link_candles_; ///< by futures symbol
+    QVector<QPair<QString, QString>> link_defs_;                     ///< (symbol, label), in display order
     int figures_removed_ = 0; ///< by number grounding, across this report's sections
     QString narrative_problem_;
 

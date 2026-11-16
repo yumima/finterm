@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`caa06cb6c`](https://github.com/yumima/finterm/commit/caa06cb6c) ipo watch: a company that has listed leaves the pre-IPO list
 - [`28f916329`](https://github.com/yumima/finterm/commit/28f916329) review: nine findings across the Report tab, the Futures paper book and read-aloud
 - [`0fe3a30ea`](https://github.com/yumima/finterm/commit/0fe3a30ea) er report: segment and geography revenue, named customers, real peers, foreign filers, graded outlook
 - [`28413b3f6`](https://github.com/yumima/finterm/commit/28413b3f6) futures: calendar-spread history, a majors board, live front month, roll warnings, tools for agents

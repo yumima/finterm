@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 #include <functional>
 
@@ -47,5 +48,10 @@ KeptNarrative kept_narrative(const QString& section, const QString& symbol);
 /// Call only with a reply that parsed: an unreadable one is not worth a day.
 void keep_narrative(const QString& section, const QString& symbol, const QString& reply, const QString& model);
 void forget_narrative(const QString& section, const QString& symbol);
+
+/// Remember what a report said (one per company per day, kept about a year),
+/// and read back what earlier reports said — newest first, as (date, JSON).
+void remember_report(const QString& symbol, const QDate& date, const QJsonObject& snapshot);
+QVector<QJsonObject> remembered_reports(const QString& symbol);
 
 } // namespace finterm::services::equity

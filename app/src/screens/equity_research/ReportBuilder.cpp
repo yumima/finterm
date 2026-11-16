@@ -232,12 +232,39 @@ Inputs make_inputs(const ReportDoc& d) {
         in.peer_growth = stat_of(d, QStringLiteral("Revenue growth"), &eq::PeerData::revenue_growth, 100.0);
     }
     in.insiders = d.insiders;
+    in.sector = sector_profile(d.info.sector, d.info.industry);
     in.filings = d.filings;
     in.risk = risk_profile(d.candles, d.bench);
     in.has_technicals = d.has_technicals;
     in.technicals_rated = d.has_technicals && d.technicals.rated;
     in.technical_signal = d.technicals.overall_signal;
     return in;
+}
+
+Snapshot make_snapshot(const ReportDoc& d) {
+    Snapshot s;
+    s.date = d.generated.date();
+    s.price = d.info.current_price;
+    s.target_mean = d.info.target_mean;
+    s.forward_pe = d.info.forward_pe;
+    if (const auto* e = estimate(d, QStringLiteral("0y")))
+        s.eps_fy0 = opt(e->eps_avg);
+    if (const auto* e = estimate(d, QStringLiteral("+1y")))
+        s.eps_fy1 = opt(e->eps_avg);
+    if (!d.extras.quarters.isEmpty())
+        s.latest_quarter = d.extras.quarters.first().period;
+    for (const auto& b : d.extras.rec_trend)
+        if (b.period == QLatin1String("0m")) {
+            s.analysts_buy = std::max(0, b.strong_buy) + std::max(0, b.buy);
+            s.analysts_total = b.total();
+        }
+    for (const auto& f : derive_findings(make_inputs(d))) {
+        if (f.tone == Tone::Strength)
+            s.strengths << f.title;
+        else if (f.tone == Tone::Risk)
+            s.risks << f.title;
+    }
+    return s;
 }
 
 QVector<Headline> headlines(const ReportDoc& d) {
@@ -478,6 +505,13 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
         const QString line = QStringLiteral("%1 — %2").arg(f.title, f.detail);
         (f.tone == Tone::Strength ? strengths : f.tone == Tone::Risk ? risks : notes) << line;
     }
+    if (d.previous.valid()) {
+        const QStringList changed = changes_since(d.previous, make_snapshot(d));
+        if (!changed.isEmpty()) {
+            h.sub(QStringLiteral("SINCE THE REPORT OF %1").arg(d.previous.date.toString(QStringLiteral("d MMMM yyyy")).toUpper()));
+            h.bullets(changed.mid(0, 10), pal.accent);
+        }
+    }
     if (!findings.isEmpty()) {
         auto column = [&](const QString& title, const QStringList& items, const QColor& col, const QString& glyph) {
             return QStringLiteral("<p style='margin:6px 0 2px 0;color:%1;font-size:%2px;font-weight:700;'>%3 (%4)</p>%5")
@@ -499,6 +533,49 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
         }
         h.note(QStringLiteral("Read off the data by fixed rules, each stated beside its figure. They describe what has "
                               "happened; none is a forecast."));
+    }
+
+    if (d.summary.valid) {
+        h.raw(QStringLiteral("<table width='100%' cellspacing='0' cellpadding='0'><tr><td width='50%' valign='top' style='padding-right:14px;'>"
+                             "<p style='margin:10px 0 2px 0;color:%1;font-size:%2px;font-weight:700;'>THE CASE FOR</p>%3</td>"
+                             "<td width='50%' valign='top'><p style='margin:10px 0 2px 0;color:%4;font-size:%2px;font-weight:700;'>THE CASE AGAINST</p>%5</td></tr></table>")
+                  .arg(h.c(pal.positive))
+                  .arg(px)
+                  .arg(h.bullets_html(d.summary.bull_case, pal.positive, QStringLiteral("▲")), h.c(pal.negative),
+                       h.bullets_html(d.summary.bear_case, pal.negative, QStringLiteral("▼"))));
+        if (!d.summary.watch.isEmpty()) {
+            h.sub(QStringLiteral("WHAT TO WATCH IN THE NEXT REPORT"));
+            h.bullets(d.summary.watch, pal.accent);
+        }
+        if (!d.summary.direction.isEmpty()) {
+            const QColor col = d.summary.direction == QLatin1String("up") ? pal.positive
+                               : d.summary.direction == QLatin1String("down") ? pal.negative
+                                                                               : pal.text;
+            h.raw(QStringLiteral("<table cellspacing='0' cellpadding='10' style='margin-top:12px;'><tr><td bgcolor='%1'>"
+                                 "<span style='color:%2;font-size:%3px;font-weight:700;'>THE MODEL'S READING, NEXT THREE MONTHS</span><br>"
+                                 "<span style='color:%4;font-size:%5px;font-weight:700;'>%6</span>"
+                                 "<span style='color:%7;font-size:%8px;'>&nbsp;&nbsp;%9</span></td></tr></table>")
+                      .arg(h.c(pal.panel), h.c(pal.text_dim))
+                      .arg(px - 1)
+                      .arg(h.c(col))
+                      .arg(px + 8)
+                      .arg(d.summary.direction.toUpper(), h.c(pal.text))
+                      .arg(px + 1)
+                      .arg(d.summary.rationale.toHtmlEscaped()));
+            // The reading's own record, beside it: an opinion is worth what it has been worth.
+            const auto& rec = d.outlook_record;
+            QString record;
+            if (rec.graded > 0)
+                record = QStringLiteral(" Its record on %1: %2 of %3 past readings turned out right.").arg(d.symbol).arg(rec.right).arg(rec.graded);
+            else if (rec.pending > 0 && rec.next_due.isValid())
+                record = QStringLiteral(" None of its readings on %1 has come due yet; the first is graded on %2.")
+                             .arg(d.symbol, rec.next_due.toString(QStringLiteral("d MMM yyyy")));
+            else
+                record = QStringLiteral(" It has no record on %1 yet.").arg(d.symbol);
+            h.note(QStringLiteral("A language model's reading of the figures in this report — a direction (\"flat\" is within "
+                                  "5%), deliberately without a target or a probability. It is graded against the real price "
+                                  "when its three months are up.") + record);
+        }
     }
 
     // Price against the benchmark, both rebased to 100 a year ago.
@@ -620,6 +697,24 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             h.bullets(d.business.new_business, pal.accent);
         }
     }
+    if (const QuarterReview qr = review_quarter(d.extras.quarters); qr.valid()) {
+        h.sub(QStringLiteral("THE LATEST QUARTER IN NUMBERS · ENDED %1").arg(qr.period));
+        QVector<QStringList> rows;
+        QVector<QVector<QColor>> colors;
+        for (const auto& m : qr.metrics) {
+            auto change = [&m](double v) { return !ok(v) ? fmt::placeholder() : m.in_points ? pts(v) : spct(v); };
+            rows.append({m.name,
+                         m.in_points ? pct(m.latest) : m.is_money ? sp + compact(m.latest) : sp + num(m.latest, 2),
+                         change(m.vs_prior), change(m.vs_year_ago)});
+            colors.append({QColor(), QColor(), tone(pal, m.vs_prior), tone(pal, m.vs_year_ago)});
+        }
+        h.table({QStringLiteral("MEASURE"), QStringLiteral("LATEST"),
+                 qr.prior_period.isEmpty() ? QStringLiteral("VS PRIOR QUARTER") : QStringLiteral("VS QUARTER TO %1").arg(qr.prior_period),
+                 qr.year_ago_period.isEmpty() ? QStringLiteral("VS A YEAR EARLIER") : QStringLiteral("VS QUARTER TO %1").arg(qr.year_ago_period)},
+                rows, colors);
+        h.note(QStringLiteral("The quarter-on-quarter column carries the company's seasonality; the year-earlier column does not. "
+                              "A dash means that quarter is not in the data."));
+    }
     if (!headlines(d).isEmpty()) {
         h.sub(QStringLiteral("HEADLINES"));
         QString list = QStringLiteral("<table cellspacing='0' cellpadding='3'>");
@@ -732,7 +827,9 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
               sccy.isEmpty() ? QString() : QStringLiteral("figures in %1").arg(sccy));
     if (d.business.valid && !d.business.investment.isEmpty())
         h.para(d.business.investment);
-    if (!years.isEmpty()) {
+    if (inputs.sector.balance_sheet_business)
+        h.note(inputs.sector.note);
+    if (!years.isEmpty() && !inputs.sector.balance_sheet_business) {
         QStringList labels;
         for (const auto& y : years)
             labels << y.label();
@@ -945,6 +1042,41 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
         }
         h.row({left.out, right.out});
     }
+    if (!mixed_currency(d)) {
+        const QVector<MultiplePoint> hist = pe_history(years, d.candles_5y, d.info.pe_ratio);
+        if (hist.size() >= 3) {
+            ChartSpec pe;
+            pe.title = QStringLiteral("Price / earnings against its own past");
+            Series series{QStringLiteral("P/E"), {}, 0};
+            double lo = kNaN, hi = kNaN;
+            for (int i = 0; i < hist.size(); ++i) {
+                pe.categories << hist[i].label;
+                series.values.append(hist[i].pe);
+                if (i + 1 < hist.size()) { // the range of the past, without today
+                    lo = ok(lo) ? std::min(lo, hist[i].pe) : hist[i].pe;
+                    hi = ok(hi) ? std::max(hi, hist[i].pe) : hist[i].pe;
+                }
+            }
+            pe.bars = {series};
+            pe.fmt = plain1;
+            pe.bar_labels = true;
+            const double now_pe = hist.last().pe;
+            pe.note = QStringLiteral("Close at each fiscal year end ÷ that year's diluted EPS; \"Now\" is trailing");
+            Html side{pal, h.half(), dpr, sink, {}, px};
+            side.sub(QStringLiteral("HOW TODAY'S MULTIPLE COMPARES"));
+            side.para(QStringLiteral("Today the shares trade at %1 times trailing earnings. At the last %2 fiscal year ends the "
+                                     "multiple ranged from %3 to %4 — today's is %5.")
+                          .arg(num(now_pe, 1))
+                          .arg(hist.size() - 1)
+                          .arg(num(lo, 1), num(hi, 1),
+                               now_pe > hi   ? QStringLiteral("above that whole range")
+                               : now_pe < lo ? QStringLiteral("below that whole range")
+                                             : QStringLiteral("inside it")));
+            side.note(QStringLiteral("A multiple above its own range means the price is paying for more growth than it has before; "
+                                     "it does not say the price is wrong. Years with a loss have no multiple and are left out."));
+            h.row({h.img(QStringLiteral("pe_history"), render_chart(pe, pal, half, dpr)), side.out});
+        }
+    }
     if (d.peers.size() >= 4 && own_row(d)) {
         struct Metric {
             QString title;
@@ -1109,6 +1241,24 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
         h.note(QStringLiteral("Computed from daily closes. What the shares did, not what they will do."));
     }
 
+    {
+        QVector<QStringList> rows;
+        for (const auto& l : d.links)
+            if (ok(l.correlation))
+                rows.append({l.label, num(l.correlation, 2),
+                             std::abs(l.correlation) >= 0.5   ? QStringLiteral("moves with it closely")
+                             : std::abs(l.correlation) >= 0.25 ? QStringLiteral("some link")
+                                                               : QStringLiteral("little link"),
+                             QString::number(l.sessions)});
+        if (!rows.isEmpty()) {
+            h.sub(QStringLiteral("WHAT THE SHARES HAVE MOVED WITH"));
+            h.table({QStringLiteral("AGAINST"), QStringLiteral("CORRELATION"), QStringLiteral("READING"), QStringLiteral("SESSIONS")}, rows, {}, 1);
+            h.note(QStringLiteral("Correlation of daily returns over the past year, from −1 to +1. A futures price is the "
+                                  "front-month series; a negative figure against the 10-year note means the shares tend to fall "
+                                  "when bond prices rise (yields fall). Co-movement, not cause."));
+        }
+    }
+
     // ── 10. Outlook ────────────────────────────────────────────────────────
     h.section(QStringLiteral("10"), QStringLiteral("OUTLOOK"));
     if (d.has_earnings) {
@@ -1129,39 +1279,8 @@ QString build_report_html(const ReportDoc& d, const Palette& pal, int width, qre
             h.note(QStringLiteral("Analyst consensus from Yahoo Finance — the street's expectation, not this report's."));
         }
     }
-    if (d.summary.valid) {
-        h.raw(QStringLiteral("<table width='100%' cellspacing='0' cellpadding='0'><tr><td width='50%' valign='top' style='padding-right:14px;'>"
-                             "<p style='margin:10px 0 2px 0;color:%1;font-size:%2px;font-weight:700;'>THE CASE FOR</p>%3</td>"
-                             "<td width='50%' valign='top'><p style='margin:10px 0 2px 0;color:%4;font-size:%2px;font-weight:700;'>THE CASE AGAINST</p>%5</td></tr></table>")
-                  .arg(h.c(pal.positive))
-                  .arg(px)
-                  .arg(h.bullets_html(d.summary.bull_case, pal.positive, QStringLiteral("▲")), h.c(pal.negative),
-                       h.bullets_html(d.summary.bear_case, pal.negative, QStringLiteral("▼"))));
-        if (!d.summary.watch.isEmpty()) {
-            h.sub(QStringLiteral("WHAT TO WATCH IN THE NEXT REPORT"));
-            h.bullets(d.summary.watch, pal.accent);
-        }
-        if (!d.summary.direction.isEmpty()) {
-            const QColor col = d.summary.direction == QLatin1String("up") ? pal.positive
-                               : d.summary.direction == QLatin1String("down") ? pal.negative
-                                                                               : pal.text;
-            h.raw(QStringLiteral("<table cellspacing='0' cellpadding='10' style='margin-top:12px;'><tr><td bgcolor='%1'>"
-                                 "<span style='color:%2;font-size:%3px;font-weight:700;'>THE MODEL'S READING, NEXT THREE MONTHS</span><br>"
-                                 "<span style='color:%4;font-size:%5px;font-weight:700;'>%6</span>"
-                                 "<span style='color:%7;font-size:%8px;'>&nbsp;&nbsp;%9</span></td></tr></table>")
-                      .arg(h.c(pal.panel), h.c(pal.text_dim))
-                      .arg(px - 1)
-                      .arg(h.c(col))
-                      .arg(px + 8)
-                      .arg(d.summary.direction.toUpper(), h.c(pal.text))
-                      .arg(px + 1)
-                      .arg(d.summary.rationale.toHtmlEscaped()));
-            h.note(QStringLiteral("A language model's reading of the figures above — a direction, deliberately without a target "
-                                  "or a probability. It is an opinion to weigh, not a measured forecast."));
-        }
-    } else {
+    if (!d.summary.valid)
         h.note(d.narrative_note);
-    }
 
     // ── Sources ────────────────────────────────────────────────────────────
     h.section(QStringLiteral("—"), QStringLiteral("SOURCES"));

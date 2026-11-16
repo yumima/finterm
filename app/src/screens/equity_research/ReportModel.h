@@ -86,6 +86,18 @@ inline double median(QVector<double> v) {
     return n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2.0;
 }
 
+inline QString p1(double v) { // "12.3%"
+    return QLocale(QLocale::English).toString(v, 'f', 1) + QLatin1Char('%');
+}
+inline QString sp1(double v) { // "+12.3%"
+    return (v > 0 ? QStringLiteral("+") : v < 0 ? QStringLiteral("−") : QString()) +
+           QLocale(QLocale::English).toString(std::abs(v), 'f', 1) + QLatin1Char('%');
+}
+inline QString pts(double v) { // "+2.1 pts"
+    return (v > 0 ? QStringLiteral("+") : v < 0 ? QStringLiteral("−") : QString()) +
+           QLocale(QLocale::English).toString(std::abs(v), 'f', 1) + QStringLiteral(" pts");
+}
+
 // ── Extras (daemon `report_extras`) ─────────────────────────────────────────
 
 struct Quarter {
@@ -558,6 +570,275 @@ inline RiskProfile risk_profile(const QVector<services::equity::Candle>& stock,
     return r;
 }
 
+/// Correlation of two instruments' daily returns over the sessions both
+/// traded; NaN with fewer than sixty such sessions.
+struct ReturnLink {
+    QString label;
+    double correlation = kNaN;
+    int sessions = 0;
+};
+
+inline ReturnLink return_link(const QString& label, const QVector<services::equity::Candle>& a,
+                              const QVector<services::equity::Candle>& b) {
+    ReturnLink out;
+    out.label = label;
+    QHash<QDate, double> bclose;
+    for (const auto& c : b)
+        if (c.close > 0)
+            bclose.insert(c.date(), c.close);
+    QVector<double> ra, rb;
+    for (int i = 1; i < a.size(); ++i) {
+        const double b1 = bclose.value(a[i].date(), kNaN), b0 = bclose.value(a[i - 1].date(), kNaN);
+        if (a[i].close > 0 && a[i - 1].close > 0 && ok(b1) && ok(b0)) {
+            ra.append(a[i].close / a[i - 1].close - 1.0);
+            rb.append(b1 / b0 - 1.0);
+        }
+    }
+    out.sessions = ra.size();
+    if (ra.size() < 60)
+        return out;
+    double ma = 0, mb = 0;
+    for (int i = 0; i < ra.size(); ++i) {
+        ma += ra[i];
+        mb += rb[i];
+    }
+    ma /= ra.size();
+    mb /= rb.size();
+    double cov = 0, va = 0, vb = 0;
+    for (int i = 0; i < ra.size(); ++i) {
+        cov += (ra[i] - ma) * (rb[i] - mb);
+        va += (ra[i] - ma) * (ra[i] - ma);
+        vb += (rb[i] - mb) * (rb[i] - mb);
+    }
+    if (va > 0 && vb > 0)
+        out.correlation = cov / std::sqrt(va * vb);
+    return out;
+}
+
+// ── The latest quarter against the one before, and a year earlier ───────────
+
+struct QuarterMetric {
+    QString name;
+    double latest = kNaN;
+    double vs_prior = kNaN;    ///< change on the quarter before
+    double vs_year_ago = kNaN; ///< change on the same quarter a year earlier
+    bool in_points = false;    ///< a margin: changes are percentage points, not percent
+    bool is_money = false;
+};
+
+struct QuarterReview {
+    QString period, prior_period, year_ago_period;
+    QVector<QuarterMetric> metrics;
+    bool valid() const { return !metrics.isEmpty(); }
+};
+
+/// Sequential changes carry the company's seasonality (a March quarter is
+/// "down" on December every year); the year-ago column is the one free of it.
+/// Both are shown, labelled, and neither is computed across a missing quarter.
+inline QuarterReview review_quarter(const QVector<Quarter>& q) {
+    QuarterReview r;
+    if (q.isEmpty())
+        return r;
+    const Quarter& now = q[0];
+    r.period = now.period;
+    // The quarter before by date as well: ~3 months earlier, not merely the next row.
+    const Quarter* prev = nullptr;
+    if (q.size() > 1) {
+        const QDate d0 = QDate::fromString(now.period, Qt::ISODate), d1 = QDate::fromString(q[1].period, Qt::ISODate);
+        if (d0.isValid() && d1.isValid() && std::abs(d1.daysTo(d0) - 91) <= 14)
+            prev = &q[1];
+    }
+    const int yi = year_ago_index(q, 0);
+    const Quarter* year = yi >= 0 ? &q[yi] : nullptr;
+    if (prev)
+        r.prior_period = prev->period;
+    if (year)
+        r.year_ago_period = year->period;
+    auto money = [&](const QString& name, double Quarter::*f) {
+        QuarterMetric m{name, now.*f, prev ? growth_pct(now.*f, prev->*f) : kNaN, year ? growth_pct(now.*f, year->*f) : kNaN,
+                        false, true};
+        if (ok(m.latest))
+            r.metrics.append(m);
+    };
+    auto margin = [&](const QString& name, double Quarter::*num) {
+        const double cur = pct_of(now.*num, now.revenue);
+        auto delta = [&](const Quarter* o) {
+            const double then = o ? pct_of(o->*num, o->revenue) : kNaN;
+            return ok(cur) && ok(then) ? cur - then : kNaN;
+        };
+        QuarterMetric m{name, cur, delta(prev), delta(year), true, false};
+        if (ok(m.latest))
+            r.metrics.append(m);
+    };
+    money(QStringLiteral("Revenue"), &Quarter::revenue);
+    margin(QStringLiteral("Gross margin"), &Quarter::gross_profit);
+    margin(QStringLiteral("Operating margin"), &Quarter::operating_income);
+    money(QStringLiteral("Net income"), &Quarter::net_income);
+    {
+        QuarterMetric m{QStringLiteral("Diluted EPS"), now.eps, prev ? growth_pct(now.eps, prev->eps) : kNaN,
+                        year ? growth_pct(now.eps, year->eps) : kNaN, false, false};
+        if (ok(m.latest))
+            r.metrics.append(m);
+    }
+    money(QStringLiteral("Free cash flow"), &Quarter::fcf);
+    return r;
+}
+
+// ── The multiple against its own past ───────────────────────────────────────
+
+struct MultiplePoint {
+    QString label; ///< "FY24", "Now"
+    double pe = kNaN;
+};
+
+/// The price/earnings multiple at each fiscal year end — that day's close over
+/// that year's diluted EPS — so today's can be read against the company's own
+/// history rather than only against other companies. A year with a loss has
+/// no multiple. `candles` must reach back to the years asked about; a year
+/// end with no bar within ten days before it is left out.
+inline QVector<MultiplePoint> pe_history(const QVector<FiscalYear>& years, const QVector<services::equity::Candle>& candles,
+                                         double pe_now) {
+    QVector<MultiplePoint> out;
+    for (const auto& y : years) {
+        const QDate end = QDate::fromString(y.period.left(10), Qt::ISODate);
+        if (!end.isValid() || !ok(y.eps) || y.eps <= 0)
+            continue;
+        double close = kNaN;
+        for (const auto& c : candles) { // oldest first
+            const QDate d = c.date();
+            if (d > end)
+                break;
+            if (d.daysTo(end) <= 10 && c.close > 0)
+                close = c.close;
+        }
+        if (ok(close))
+            out.append({y.label(), close / y.eps});
+    }
+    if (!out.isEmpty() && ok(pe_now) && pe_now > 0)
+        out.append({QStringLiteral("Now"), pe_now});
+    return out;
+}
+
+// ── What kind of company it is ──────────────────────────────────────────────
+
+/// Some of the report's yardsticks mean nothing for some businesses: a bank's
+/// "debt" is its raw material and it has no gross margin or free cash flow in
+/// the industrial sense; a REIT pays out its cash and is judged on funds from
+/// operations, which no source here carries. Those sections and rules are
+/// left out for them, and the report says so, rather than drawn empty or —
+/// worse — read as a weakness.
+struct SectorProfile {
+    bool balance_sheet_business = false; ///< banks, insurers, brokers: leverage and FCF rules do not apply
+    bool reit = false;
+    double high_roe_pct = 15.0; ///< what counts as a high return on equity here
+    QString note;               ///< said in the report when something is left out
+};
+
+inline SectorProfile sector_profile(const QString& sector, const QString& industry) {
+    SectorProfile p;
+    const QString s = sector.toLower(), i = industry.toLower();
+    if (s.contains(QLatin1String("financial")) &&
+        (i.contains(QLatin1String("bank")) || i.contains(QLatin1String("insurance")) || i.contains(QLatin1String("capital markets")) ||
+         i.contains(QLatin1String("credit")) || i.contains(QLatin1String("mortgage")) || i.contains(QLatin1String("asset management")))) {
+        p.balance_sheet_business = true;
+        p.high_roe_pct = 12.0;
+        p.note = QStringLiteral("A financial company: borrowing is its business, so the debt, free-cash-flow and gross-margin "
+                                "readings used for other companies are left out.");
+    } else if (s.contains(QLatin1String("real estate")) && i.contains(QLatin1String("reit"))) {
+        p.reit = true;
+        p.balance_sheet_business = true;
+        p.note = QStringLiteral("A REIT: it distributes most of its cash and is judged on funds from operations, which are "
+                                "not in this data, so the free-cash-flow and leverage readings are left out.");
+    }
+    return p;
+}
+
+// ── A report, remembered ────────────────────────────────────────────────────
+
+/// What a report said on the day it was built — enough to say, next time,
+/// what has changed since.
+struct Snapshot {
+    QDate date;
+    double price = kNaN, target_mean = kNaN, eps_fy0 = kNaN, eps_fy1 = kNaN, forward_pe = kNaN;
+    QString latest_quarter;
+    int analysts_buy = -1, analysts_total = -1;
+    QStringList strengths, risks; ///< finding titles
+    bool valid() const { return date.isValid(); }
+};
+
+inline QJsonObject to_json(const Snapshot& s) {
+    auto n = [](double v) { return ok(v) ? QJsonValue(v) : QJsonValue(QJsonValue::Null); };
+    return {{"date", s.date.toString(Qt::ISODate)},
+            {"price", n(s.price)},
+            {"target_mean", n(s.target_mean)},
+            {"eps_fy0", n(s.eps_fy0)},
+            {"eps_fy1", n(s.eps_fy1)},
+            {"forward_pe", n(s.forward_pe)},
+            {"latest_quarter", s.latest_quarter},
+            {"analysts_buy", s.analysts_buy},
+            {"analysts_total", s.analysts_total},
+            {"strengths", QJsonArray::fromStringList(s.strengths)},
+            {"risks", QJsonArray::fromStringList(s.risks)}};
+}
+
+inline Snapshot snapshot_from_json(const QJsonObject& o) {
+    Snapshot s;
+    s.date = QDate::fromString(o.value(QLatin1String("date")).toString(), Qt::ISODate);
+    s.price = jnum(o, QStringLiteral("price"));
+    s.target_mean = jnum(o, QStringLiteral("target_mean"));
+    s.eps_fy0 = jnum(o, QStringLiteral("eps_fy0"));
+    s.eps_fy1 = jnum(o, QStringLiteral("eps_fy1"));
+    s.forward_pe = jnum(o, QStringLiteral("forward_pe"));
+    s.latest_quarter = o.value(QLatin1String("latest_quarter")).toString();
+    s.analysts_buy = o.value(QLatin1String("analysts_buy")).toInt(-1);
+    s.analysts_total = o.value(QLatin1String("analysts_total")).toInt(-1);
+    for (const auto& v : o.value(QLatin1String("strengths")).toArray())
+        s.strengths << v.toString();
+    for (const auto& v : o.value(QLatin1String("risks")).toArray())
+        s.risks << v.toString();
+    return s;
+}
+
+/// What is different between an earlier report and this one, in sentences.
+/// Only what both reports knew is compared; nothing is said about a figure
+/// either lacked.
+inline QStringList changes_since(const Snapshot& then, const Snapshot& now) {
+    QStringList out;
+    if (!then.valid() || !now.valid())
+        return out;
+    const QLocale loc(QLocale::English);
+    auto moved = [&](const QString& what, double a, double b, int dp, const QString& prefix) {
+        const double g = growth_pct(b, a);
+        if (ok(g) && std::abs(g) >= 0.5)
+            out << QStringLiteral("%1 %2%3 → %2%4 (%5)").arg(what, prefix, loc.toString(a, 'f', dp), loc.toString(b, 'f', dp), sp1(g));
+    };
+    moved(QStringLiteral("Share price"), then.price, now.price, 2, QString());
+    moved(QStringLiteral("Mean analyst target"), then.target_mean, now.target_mean, 2, QString());
+    moved(QStringLiteral("Consensus EPS, current fiscal year"), then.eps_fy0, now.eps_fy0, 2, QString());
+    moved(QStringLiteral("Consensus EPS, next fiscal year"), then.eps_fy1, now.eps_fy1, 2, QString());
+    moved(QStringLiteral("Forward P/E"), then.forward_pe, now.forward_pe, 1, QString());
+    if (!then.latest_quarter.isEmpty() && !now.latest_quarter.isEmpty() && then.latest_quarter != now.latest_quarter)
+        out << QStringLiteral("A new quarter has been reported: the one ended %1 (it was %2).").arg(now.latest_quarter, then.latest_quarter);
+    if (then.analysts_total > 0 && now.analysts_total > 0 && then.analysts_buy >= 0 && now.analysts_buy >= 0 &&
+        then.analysts_buy != now.analysts_buy)
+        out << QStringLiteral("Analysts rating it a buy: %1 of %2 → %3 of %4.")
+                   .arg(then.analysts_buy).arg(then.analysts_total).arg(now.analysts_buy).arg(now.analysts_total);
+    // One line per kind of change, however many findings moved: the brief stays brief.
+    auto moved_findings = [&out](const QString& lead, const QStringList& from, const QStringList& to) {
+        QStringList gone;
+        for (const QString& t : from)
+            if (!to.contains(t))
+                gone << t;
+        if (!gone.isEmpty())
+            out << QStringLiteral("%1: %2.").arg(lead, gone.join(QStringLiteral("; ")));
+    };
+    moved_findings(QStringLiteral("New in its favour"), now.strengths, then.strengths);
+    moved_findings(QStringLiteral("No longer in its favour"), then.strengths, now.strengths);
+    moved_findings(QStringLiteral("New against it"), now.risks, then.risks);
+    moved_findings(QStringLiteral("No longer against it"), then.risks, now.risks);
+    return out;
+}
+
 // ── What the price implies ──────────────────────────────────────────────────
 
 struct ImpliedPrice {
@@ -617,24 +898,13 @@ struct Inputs {
     PeerStat peer_op_margin;
     PeerStat peer_growth;
     InsiderFlow insiders;
+    SectorProfile sector;
     Filings filings; ///< for the concentration findings
     RiskProfile risk;
     bool has_technicals = false;
     bool technicals_rated = false;
     services::equity::TechSignal technical_signal = services::equity::TechSignal::Neutral;
 };
-
-inline QString p1(double v) { // "12.3%"
-    return QLocale(QLocale::English).toString(v, 'f', 1) + QLatin1Char('%');
-}
-inline QString sp1(double v) { // "+12.3%"
-    return (v > 0 ? QStringLiteral("+") : v < 0 ? QStringLiteral("−") : QString()) +
-           QLocale(QLocale::English).toString(std::abs(v), 'f', 1) + QLatin1Char('%');
-}
-inline QString pts(double v) { // "+2.1 pts"
-    return (v > 0 ? QStringLiteral("+") : v < 0 ? QStringLiteral("−") : QString()) +
-           QLocale(QLocale::English).toString(std::abs(v), 'f', 1) + QStringLiteral(" pts");
-}
 
 /// Strengths and risks read off the data. Each rule fires only when its
 /// inputs exist; nothing is inferred from an absence.
@@ -690,16 +960,19 @@ inline QVector<Finding> derive_findings(const Inputs& in) {
     }
     if (ok(in.info.roe)) {
         const double roe = in.info.roe * 100.0;
-        if (roe >= 15.0)
+        if (roe >= in.sector.high_roe_pct)
             add(Tone::Strength, "PROFITABILITY", QStringLiteral("High return on equity"),
-                QStringLiteral("Return on equity %1 (15% or more counts as high).").arg(p1(roe)));
+                QStringLiteral("Return on equity %1 (%2% or more counts as high for this kind of company).")
+                    .arg(p1(roe))
+                    .arg(in.sector.high_roe_pct, 0, 'f', 0));
         else if (roe < 0)
             add(Tone::Risk, "PROFITABILITY", QStringLiteral("Negative return on equity"),
                 QStringLiteral("Return on equity %1.").arg(p1(roe)));
     }
 
     // Cash: free cash flow against revenue, and how much of profit is cash.
-    if (n >= 1 && ok(y[n - 1].fcf)) {
+    // Not for a bank, insurer or REIT, where the figure does not mean that.
+    if (!in.sector.balance_sheet_business && n >= 1 && ok(y[n - 1].fcf)) {
         const double m = y[n - 1].fcf_margin();
         if (y[n - 1].fcf < 0)
             add(Tone::Risk, "CASH", QStringLiteral("Burning cash"),
@@ -715,8 +988,9 @@ inline QVector<Finding> derive_findings(const Inputs& in) {
                     .arg(p1(sbc), y[n - 1].label()));
     }
 
-    // Balance sheet: net cash, or debt against EBITDA.
-    if (n >= 1 && ok(y[n - 1].cash) && ok(y[n - 1].debt)) {
+    // Balance sheet: net cash, or debt against EBITDA. Borrowing is a
+    // financial company's raw material, not its leverage.
+    if (!in.sector.balance_sheet_business && n >= 1 && ok(y[n - 1].cash) && ok(y[n - 1].debt)) {
         const auto& last = y[n - 1];
         if (last.cash >= last.debt)
             add(Tone::Strength, "BALANCE SHEET", QStringLiteral("More cash than debt"),

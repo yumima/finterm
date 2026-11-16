@@ -121,6 +121,120 @@ class TestReportModel : public QObject {
         QCOMPARE(latest_quarter_yoy_pct(drift), 10.0);
     }
 
+    void latest_quarter_review() {
+        auto q = [](const char* period, double revenue, double op, double eps) {
+            Quarter x;
+            x.period = period;
+            x.revenue = revenue;
+            x.operating_income = op;
+            x.eps = eps;
+            return x;
+        };
+        const QVector<Quarter> qs = {q("2026-09-30", 120, 36, 1.2), q("2026-06-30", 100, 25, 1.0), q("2026-03-31", 90, 20, 0.9),
+                                     q("2025-12-31", 95, 22, 0.95), q("2025-09-30", 96, 24, 0.8)};
+        const QuarterReview r = review_quarter(qs);
+        QVERIFY(r.valid());
+        QCOMPARE(r.prior_period, QStringLiteral("2026-06-30"));
+        QCOMPARE(r.year_ago_period, QStringLiteral("2025-09-30"));
+        const auto& rev = r.metrics[0];
+        QCOMPARE(rev.name, QStringLiteral("Revenue"));
+        QCOMPARE(rev.vs_prior, 20.0);
+        QCOMPARE(rev.vs_year_ago, 25.0);
+        const auto& om = r.metrics[1]; // gross margin is absent, so operating margin is next
+        QCOMPARE(om.name, QStringLiteral("Operating margin"));
+        QVERIFY(om.in_points);
+        QCOMPARE(om.latest, 30.0);
+        QCOMPARE(om.vs_prior, 5.0);    // points, not percent
+        QCOMPARE(om.vs_year_ago, 5.0);
+        // A missing quarter: the next row is six months back and is not called "the prior quarter".
+        const QuarterReview gap = review_quarter({q("2026-09-30", 120, 36, 1.2), q("2026-03-31", 90, 20, 0.9)});
+        QVERIFY(gap.prior_period.isEmpty());
+        QVERIFY(std::isnan(gap.metrics[0].vs_prior) && std::isnan(gap.metrics[0].vs_year_ago));
+        QVERIFY(!review_quarter({}).valid());
+    }
+
+    void multiple_against_its_own_past() {
+        namespace eq = finterm::services::equity;
+        QVector<FiscalYear> years = {fy("2023-12-31", 1, 1, 1), fy("2024-12-31", 1, 1, 1), fy("2025-12-31", 1, 1, 1)};
+        years[0].eps = 2.0;
+        years[1].eps = -1.0; // a loss: no multiple
+        years[2].eps = 4.0;
+        QVector<eq::Candle> candles;
+        auto bar = [&candles](const QDate& d, double close) {
+            eq::Candle c;
+            c.timestamp = QDateTime(d, QTime(5, 0), QTimeZone::UTC).toSecsSinceEpoch();
+            c.close = close;
+            candles.append(c);
+        };
+        bar(QDate(2023, 12, 29), 40.0); // the last session before a weekend year end
+        bar(QDate(2024, 12, 31), 50.0);
+        bar(QDate(2025, 12, 31), 100.0);
+        const auto h = pe_history(years, candles, 30.0);
+        QCOMPARE(h.size(), 3);
+        QCOMPARE(h[0].label, QStringLiteral("FY23"));
+        QCOMPARE(h[0].pe, 20.0);
+        QCOMPARE(h[1].pe, 25.0);
+        QCOMPARE(h[2].label, QStringLiteral("Now"));
+        // No bar near a year end: that year is left out, not priced off a distant one.
+        QCOMPARE(pe_history(years, {candles[2]}, 30.0).size(), 2);
+        QVERIFY(pe_history(years, {}, 30.0).isEmpty());
+    }
+
+    void sector_changes_the_yardsticks() {
+        const SectorProfile bank = sector_profile("Financial Services", "Banks - Diversified");
+        QVERIFY(bank.balance_sheet_business && !bank.note.isEmpty());
+        QCOMPARE(bank.high_roe_pct, 12.0);
+        QVERIFY(sector_profile("Real Estate", "REIT - Industrial").reit);
+        QVERIFY(!sector_profile("Technology", "Semiconductors").balance_sheet_business);
+        QVERIFY(!sector_profile("Financial Services", "Financial Data & Stock Exchanges").balance_sheet_business);
+
+        // The same balance sheet: high leverage for an industrial, not a finding for a bank.
+        Inputs in;
+        in.years = {fy("2025-12-31", 100, 20, 15), fy("2026-12-31", 105, 21, 16)};
+        in.years[1].cash = 10;
+        in.years[1].debt = 400;
+        in.years[1].ebitda = 30;
+        in.years[1].fcf = -5;
+        QVERIFY(has(derive_findings(in), Tone::Risk, "High leverage"));
+        QVERIFY(has(derive_findings(in), Tone::Risk, "Burning cash"));
+        in.sector = bank;
+        QVERIFY(!has(derive_findings(in), Tone::Risk, "High leverage"));
+        QVERIFY(!has(derive_findings(in), Tone::Risk, "Burning cash"));
+        in.info.roe = 0.13;
+        QVERIFY(has(derive_findings(in), Tone::Strength, "return on equity")); // 13% is high for a bank
+    }
+
+    void a_report_is_remembered_and_compared() {
+        Snapshot then;
+        then.date = QDate(2026, 8, 1);
+        then.price = 100;
+        then.eps_fy0 = 5.0;
+        then.latest_quarter = "2026-06-30";
+        then.analysts_buy = 20;
+        then.analysts_total = 30;
+        then.strengths = {"Margins are widening"};
+        then.risks = {"Priced well above peers"};
+        Snapshot now = snapshot_from_json(to_json(then)); // survives the round trip
+        QCOMPARE(now.price, 100.0);
+        QVERIFY(std::isnan(now.target_mean)); // absent stays absent
+        QVERIFY(changes_since(then, now).isEmpty());
+        now.date = QDate(2026, 11, 16);
+        now.price = 120;
+        now.eps_fy0 = 5.01; // under half a percent: not a change worth a line
+        now.latest_quarter = "2026-09-30";
+        now.analysts_buy = 24;
+        now.strengths = {"Margins are widening", "Estimates are being raised"};
+        now.risks = {};
+        const QStringList c = changes_since(then, now);
+        QVERIFY(c.contains("Share price 100.00 → 120.00 (+20.0%)"));
+        QVERIFY(!c.join('|').contains("Consensus EPS"));
+        QVERIFY(c.contains("A new quarter has been reported: the one ended 2026-09-30 (it was 2026-06-30)."));
+        QVERIFY(c.contains("Analysts rating it a buy: 20 of 30 → 24 of 30."));
+        QVERIFY(c.contains("New in its favour: Estimates are being raised."));
+        QVERIFY(c.contains("No longer against it: Priced well above peers."));
+        QVERIFY(changes_since(Snapshot{}, now).isEmpty());
+    }
+
     void peer_premium() {
         const PeerStat s = peer_stat("Forward P/E", 30, {20, kNaN, 10, 30});
         QCOMPARE(s.peers, 3);

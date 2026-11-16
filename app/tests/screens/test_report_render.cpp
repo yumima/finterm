@@ -176,6 +176,20 @@ ReportDoc sample(bool rich) {
          {{"Compute", 162.4e9, 102.2e9}, {"Networking", 31.4e9, 13.0e9}, {"Gaming", 16.0e9, 11.3e9}, {"New line", 6.1e9, kNaN}}},
         {"geography", "2026-01-25", "2025-01-26", 100.0, {{"United States", 149.6e9, 77.5e9}, {"Taiwan", 66.3e9, 53e9}}}};
     d.filings.customers = {{"Customer one", 22.0, "Compute & Networking", "2026-01-25"}, {"Customer two", 14.0, "", "2026-01-25"}};
+    d.candles_5y = d.candles;
+    for (int y = 0; y < 3; ++y) { // a bar at each of the last three fiscal year ends
+        eq::Candle c;
+        c.timestamp = QDateTime(QDate(2024 + y, 1, 24), QTime(5, 0), QTimeZone::UTC).toSecsSinceEpoch();
+        c.close = 40.0 + 45.0 * y;
+        d.candles_5y.prepend(c);
+    }
+    std::sort(d.candles_5y.begin(), d.candles_5y.end(), [](const eq::Candle& a, const eq::Candle& b) { return a.timestamp < b.timestamp; });
+    d.links = {{"10-year Treasury note (price)", -0.31, 248}, {"Crude oil (WTI)", 0.08, 247}, {"Gold", kNaN, 12}};
+    d.previous.date = QDate(2026, 8, 20);
+    d.previous.price = 150.0;
+    d.previous.latest_quarter = "2026-07-27";
+    d.previous.risks = {"Estimates are being cut"};
+    d.outlook_record = {3, 2, 1, QDate(2026, 12, 1)};
     d.peers_basis = "Peers are the companies nearest it in size in its Yahoo industry (Semiconductors), not a hand-picked group.";
     d.filings.quarterly.form = "10-Q";
     d.filings.quarterly.filing_date = "2026-08-26";
@@ -242,6 +256,13 @@ class TestReportRender : public QObject {
             QVERIFY(html.contains("HOW THE SHARES HAVE TRADED") && html.contains("Beta to SPY"));
             QVERIFY(html.contains("https://www.sec.gov/Archives/edgar/data/1/a-index.html"));
             QVERIFY(html.contains("nearest it in size in its Yahoo industry"));
+            QVERIFY(html.contains("SINCE THE REPORT OF 20 AUGUST 2026") && html.contains("A new quarter has been reported"));
+            QVERIFY(html.contains("THE LATEST QUARTER IN NUMBERS"));
+            QVERIFY(html.contains("against its own past") && html.contains("MULTIPLE COMPARES"));
+            QVERIFY(html.contains("WHAT THE SHARES HAVE MOVED WITH") && html.contains("Crude oil (WTI)") && !html.contains(">Gold<"));
+            QVERIFY(html.contains("2 of 3 past readings turned out right"));
+            // The brief comes first: the cases and the reading are above the business section.
+            QVERIFY(html.indexOf("THE CASE FOR") < html.indexOf("THE BUSINESS"));
             for (const char* section : {"AT A GLANCE", "THE BUSINESS", "WHAT IS NEW", "FINANCIAL PERFORMANCE",
                                         "CASH AND WHERE IT GOES", "EARNINGS AGAINST EXPECTATIONS", "VALUATION AND PEERS",
                                         "ANALYSTS AND OWNERSHIP", "ADVANTAGES AND RISKS", "OUTLOOK", "SOURCES"})

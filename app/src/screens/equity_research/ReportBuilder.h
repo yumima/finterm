@@ -54,6 +54,15 @@ struct ReportDoc {
     SummaryNarrative summary;
     QString narrative_note; ///< why the prose is absent, or which model wrote it
     QString peers_basis;    ///< where the peer group comes from, in words
+
+    QVector<services::equity::Candle> candles_5y; ///< for the multiple at each fiscal year end
+    QVector<ReturnLink> links;                    ///< what the shares have moved with
+    Snapshot previous;                            ///< the last report remembered, a week or more old
+    /// How this report's three-month readings for the symbol have turned out.
+    struct OutlookRecord {
+        int graded = 0, right = 0, pending = 0;
+        QDate next_due;
+    } outlook_record;
     QVector<Source> sources;
 };
 
@@ -67,6 +76,9 @@ Inputs make_inputs(const ReportDoc& doc);
 QString figures_block(const ReportDoc& doc);
 
 QVector<Headline> headlines(const ReportDoc& doc);
+
+/// What this report says today, to be remembered and compared against later.
+Snapshot make_snapshot(const ReportDoc& doc);
 
 /// `width` is the content width in logical pixels.
 QString build_report_html(const ReportDoc& doc, const Palette& pal, int width, qreal dpr, const ImageSink& sink);

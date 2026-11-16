@@ -10,6 +10,9 @@
 #include <QJsonDocument>
 #include <QPointer>
 
+#include <algorithm>
+#include <functional>
+
 namespace finterm::services::equity {
 
 namespace {
@@ -138,6 +141,33 @@ void keep_narrative(const QString& section, const QString& symbol, const QString
     CacheManager::instance().put(narrative_key(section, symbol),
                                  QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)), kNarrativeTtlSec,
                                  QStringLiteral("equity"));
+}
+
+namespace {
+const QString kSnapshotKey = QStringLiteral("equity:report_snapshot:v1:");
+constexpr int kSnapshotTtlSec = 400 * 24 * 3600;
+} // namespace
+
+void remember_report(const QString& symbol, const QDate& date, const QJsonObject& snapshot) {
+    if (symbol.isEmpty() || !date.isValid())
+        return;
+    CacheManager::instance().put(kSnapshotKey + symbol + QLatin1Char(':') + date.toString(Qt::ISODate),
+                                 QString::fromUtf8(QJsonDocument(snapshot).toJson(QJsonDocument::Compact)), kSnapshotTtlSec,
+                                 QStringLiteral("report_archive"));
+}
+
+QVector<QJsonObject> remembered_reports(const QString& symbol) {
+    // Keys end in an ISO date, so sorting them sorts the reports by day.
+    const QHash<QString, QString> rows = CacheManager::instance().get_prefix(kSnapshotKey + symbol + QLatin1Char(':'));
+    QStringList keys = rows.keys();
+    std::sort(keys.begin(), keys.end(), std::greater<QString>());
+    QVector<QJsonObject> out;
+    for (const QString& k : std::as_const(keys)) {
+        const QJsonObject o = QJsonDocument::fromJson(rows.value(k).toUtf8()).object();
+        if (!o.isEmpty())
+            out.append(o);
+    }
+    return out;
 }
 
 void forget_narrative(const QString& section, const QString& symbol) {
