@@ -503,7 +503,7 @@ void PythonWorker::on_ready_read() {
                 socket_ = tcp;
                 connect(tcp, &QTcpSocket::readyRead, this, &PythonWorker::on_socket_data);
                 connect(tcp, &QTcpSocket::connected, this, on_connected);
-                connect(tcp, &QTcpSocket::errorOccurred, this, [this, tcp](QAbstractSocket::SocketError err) {
+                connect(tcp, &QTcpSocket::errorOccurred, this, [tcp](QAbstractSocket::SocketError err) {
                     LOG_WARN("PythonWorker", QString("Socket error %1: %2").arg(err).arg(tcp->errorString()));
                 });
                 tcp->connectToHost(QHostAddress(QHostAddress::LocalHost), quint16(port));
@@ -516,7 +516,7 @@ void PythonWorker::on_ready_read() {
                 socket_ = local;
                 connect(local, &QLocalSocket::readyRead, this, &PythonWorker::on_socket_data);
                 connect(local, &QLocalSocket::connected, this, on_connected);
-                connect(local, &QLocalSocket::errorOccurred, this, [this, local](QLocalSocket::LocalSocketError err) {
+                connect(local, &QLocalSocket::errorOccurred, this, [local](QLocalSocket::LocalSocketError err) {
                     LOG_WARN("PythonWorker", QString("Socket error %1: %2").arg(err).arg(local->errorString()));
                 });
                 local->connectToServer(socket_path_);
