@@ -59,6 +59,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/theme/Tooltips.h"
 
+#include <cstdio>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -77,7 +78,34 @@
 #    include <Windows.h>
 #endif
 
+#ifndef FINTERM_VERSION_STRING
+#    define FINTERM_VERSION_STRING "0.0.0-dev"
+#endif
+
 int main(int argc, char* argv[]) {
+    // ── --version: answer and leave, before anything is touched ─────────────
+    // Unhandled, the flag was ignored and a whole second copy of the app came
+    // up on the user's profile. One left behind that way (2026-11-15, from a
+    // build script checking the version) sat for a day holding the profile's
+    // single-instance slot, and every later launch handed its window to it
+    // and exited without a word.
+    // Only the FIRST argument, so an option's value can never be read as it.
+    if (argc > 1 && (qstrcmp(argv[1], "--version") == 0 || qstrcmp(argv[1], "-V") == 0 ||
+                     qstrcmp(argv[1], "--help") == 0 || qstrcmp(argv[1], "-h") == 0)) {
+#ifdef Q_OS_WIN
+        // A GUI-subsystem program has no stdout; borrow the console it was run from.
+        if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+            std::freopen("CONOUT$", "w", stdout);
+        }
+#endif
+        if (qstrcmp(argv[1], "--version") == 0 || qstrcmp(argv[1], "-V") == 0)
+            std::printf("finterm %s\n", FINTERM_VERSION_STRING);
+        else
+            std::printf("usage: finterm [--profile <name>] [--version]\n");
+        std::fflush(stdout);
+        return 0;
+    }
+
     // ── Move an older build's data folder to the current name ───────────────
     // Before anything below creates the new root: once it exists, the old
     // folder can no longer be moved into place with a single rename.
@@ -165,9 +193,6 @@ int main(int argc, char* argv[]) {
     // Desktop-entry / WM_CLASS (X11) / app_id (Wayland) association — matches the
     // installed finterm.desktop so the taskbar groups windows under the brand.
     app.setDesktopFileName(finterm::AppIdentity::kDisplayName);
-#ifndef FINTERM_VERSION_STRING
-#    define FINTERM_VERSION_STRING "0.0.0-dev"
-#endif
     app.setApplicationVersion(QStringLiteral(FINTERM_VERSION_STRING));
 
     // Tooltips: instant, at the pointer, wrapped into a box. Installed here

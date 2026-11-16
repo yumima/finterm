@@ -75,11 +75,11 @@ void fetch_curve_history(const QStringList& contract_symbols, QObject* ctx,
         python::PythonWorker::kComputeActionTimeoutMs);
 }
 
-void fetch_spread_history(const QString& near, const QString& far, QObject* ctx,
+void fetch_spread_history(const QString& near_symbol, const QString& far_symbol, QObject* ctx,
                           std::function<void(bool, SpreadHistory, QString)> cb) {
     QPointer<QObject> guard(ctx);
     python::PythonWorker::instance().submit(
-        QStringLiteral("futures_spread_history"), QJsonObject{{"near", near}, {"far", far}},
+        QStringLiteral("futures_spread_history"), QJsonObject{{"near", near_symbol}, {"far", far_symbol}},
         [guard, cb](bool ok, QJsonObject result, QString err) {
             if (!guard)
                 return;

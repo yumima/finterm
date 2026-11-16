@@ -413,8 +413,8 @@ void SpreadChart::paintEvent(QPaintEvent*) {
         draw_readout(p, rect(), QPointF(x, range.y(pt.spread, plot)),
                      {pt.date.toString(QStringLiteral("d MMM yyyy")),
                       QStringLiteral("Spread  %1").arg(QLocale::c().toString(pt.spread, 'f', dp)),
-                      QStringLiteral("Far     %1").arg(QLocale::c().toString(pt.far, 'f', dp)),
-                      QStringLiteral("Near    %1").arg(QLocale::c().toString(pt.near, 'f', dp))},
+                      QStringLiteral("Far     %1").arg(QLocale::c().toString(pt.far_px, 'f', dp)),
+                      QStringLiteral("Near    %1").arg(QLocale::c().toString(pt.near_px, 'f', dp))},
                      {QColor(ui::colors::TEXT_PRIMARY()), QColor(ui::colors::AMBER()),
                       QColor(ui::colors::TEXT_SECONDARY()), QColor(ui::colors::TEXT_SECONDARY())});
     }

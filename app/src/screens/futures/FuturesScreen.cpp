@@ -923,12 +923,12 @@ void FuturesScreen::render_strip() {
         facts << QStringLiteral("front <b>%1</b> (%2)").arg(front.month_label(), front.code());
         if (s && s->rate_quoted) {
             facts << QStringLiteral("implies <b>%1%</b>").arg(num(implied_rate(front.price), 3));
-            if (sum.far >= 0) {
+            if (sum.far_month >= 0) {
                 facts << QStringLiteral("%1 implies <b>%2%</b>")
-                             .arg(curve_.contracts[sum.far].month_label(),
-                                  num(implied_rate(curve_.contracts[sum.far].price), 3));
+                             .arg(curve_.contracts[sum.far_month].month_label(),
+                                  num(implied_rate(curve_.contracts[sum.far_month].price), 3));
                 // The question a stock investor asks of this curve: how much easing or tightening is priced?
-                const double bp = priced_change_bp(front.price, curve_.contracts[sum.far].price);
+                const double bp = priced_change_bp(front.price, curve_.contracts[sum.far_month].price);
                 if (std::isfinite(bp) && std::abs(bp) >= 1.0)
                     // Between the two MONTHS named, not from today's policy rate:
                     // the front contract already averages what is expected in it.
@@ -936,15 +936,15 @@ void FuturesScreen::render_strip() {
                                  .arg(bp < 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
                                       QString::number(std::abs(bp), 'f', 0),
                                       bp < 0 ? QStringLiteral("lower") : QStringLiteral("higher"), front.month_label(),
-                                      curve_.contracts[sum.far].month_label());
+                                      curve_.contracts[sum.far_month].month_label());
             }
         } else {
-            if (sum.shape != Shape::Unknown && sum.far >= 0)
+            if (sum.shape != Shape::Unknown && sum.far_month >= 0)
                 facts << QStringLiteral("<span style='color:%1'><b>%2</b></span> · %3 %4 vs front")
                              .arg(sum.shape == Shape::Backwardation ? ui::colors::POSITIVE()
                                   : sum.shape == Shape::Contango    ? ui::colors::NEGATIVE()
                                                                     : ui::colors::TEXT_SECONDARY(),
-                                  shape_label(sum.shape), curve_.contracts[sum.far].month_label(),
+                                  shape_label(sum.shape), curve_.contracts[sum.far_month].month_label(),
                                   fmt::format_percent(sum.far_carry.spread_pct, 2, true));
             if (std::isfinite(sum.roll_yield_pct))
                 facts << QStringLiteral("roll yield <b>%1</b>/yr (%2→%3)")

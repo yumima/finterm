@@ -106,7 +106,7 @@ class TestFuturesMath : public QObject {
         const CurveSummary s = summarize(c);
         QCOMPARE(s.anchor, 1); // the vendor's front, not the nearest listed month
         QCOMPARE(s.next, 3);
-        QCOMPARE(s.far, 4); // the month a year past the front
+        QCOMPARE(s.far_month, 4); // the month a year past the front
         QCOMPARE(s.shape, Shape::Backwardation);
         QVERIFY(s.roll_yield_pct > 0); // a long earns the roll in backwardation
         QVERIFY(std::abs(s.roll_yield_pct - 1.0 * 365.0 / 62.0) < 1e-9);

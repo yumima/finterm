@@ -171,7 +171,8 @@ inline Carry carry_between(const CurveContract& anchor, const CurveContract& oth
 struct CurveSummary {
     int anchor = -1; ///< index of the front month in Curve::contracts
     int next = -1;   ///< the next month out that has printed recently
-    int far = -1;    ///< the month nearest one year past the anchor
+    // Not "far": windows.h defines near and far as (empty) macros.
+    int far_month = -1;    ///< the month nearest one year past the anchor
     Carry next_carry;
     Carry far_carry;
     Shape shape = Shape::Unknown;
@@ -212,11 +213,11 @@ inline CurveSummary summarize(const Curve& curve) {
         const int gap = std::abs(k[i].year * 12 + k[i].month - target);
         if (gap < best_gap) {
             best_gap = gap;
-            s.far = i;
+            s.far_month = i;
         }
     }
-    if (s.far >= 0) {
-        s.far_carry = carry_between(k[s.anchor], k[s.far]);
+    if (s.far_month >= 0) {
+        s.far_carry = carry_between(k[s.anchor], k[s.far_month]);
         const double p = s.far_carry.spread_pct;
         if (std::isfinite(p))
             s.shape = std::abs(p) < kFlatSlopePct ? Shape::Flat : p > 0 ? Shape::Contango : Shape::Backwardation;
@@ -228,25 +229,25 @@ inline CurveSummary summarize(const Curve& curve) {
 
 struct SpreadPoint {
     QDate date;
-    double near = kNaN, far = kNaN;
+    double near_px = kNaN, far_px = kNaN;
     double spread = kNaN; ///< far − near
 };
 
 struct SpreadHistory {
-    QString near, far; ///< contract symbols
+    QString near_symbol, far_symbol; ///< contract symbols
     QVector<SpreadPoint> points; ///< oldest first; only sessions both months traded
 };
 
 inline SpreadHistory parse_spread(const QJsonObject& o) {
     SpreadHistory h;
-    h.near = o.value(QLatin1String("near")).toString();
-    h.far = o.value(QLatin1String("far")).toString();
+    h.near_symbol = o.value(QLatin1String("near")).toString();
+    h.far_symbol = o.value(QLatin1String("far")).toString();
     for (const auto& v : o.value(QLatin1String("rows")).toArray()) {
         const QJsonObject r = v.toObject();
         SpreadPoint p;
         p.date = QDate::fromString(r.value(QLatin1String("date")).toString(), Qt::ISODate);
-        p.near = json_num(r, "near");
-        p.far = json_num(r, "far");
+        p.near_px = json_num(r, "near");
+        p.far_px = json_num(r, "far");
         p.spread = json_num(r, "spread");
         if (p.date.isValid() && std::isfinite(p.spread))
             h.points.append(p);

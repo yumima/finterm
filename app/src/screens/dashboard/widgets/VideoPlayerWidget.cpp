@@ -506,6 +506,9 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             // Empty itemData == "System default" → follow the default
             // sink; otherwise pin to the selected device's id.
             const QByteArray id = audio_device_combo_->currentData().toByteArray();
+            LOG_INFO("VideoPlayer", QStringLiteral("Audio device picked: %1 [%2] (was [%3])")
+                                        .arg(audio_device_combo_->currentText(), QString::fromUtf8(id),
+                                             QString::fromUtf8(pinned_audio_id_)));
             follow_system_default_ = id.isEmpty();
             pinned_audio_id_ = id;
             QSettings s(finterm::AppIdentity::kOrg, finterm::AppIdentity::kApp);
@@ -2619,6 +2622,26 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
     // so it only refreshes the list — it doesn't re-route or clobber the pick.
     if (obj == audio_device_combo_ && event->type() == QEvent::MouseButtonPress)
         populate_audio_devices();
+    // A closed combo box steps to the next item on a wheel notch, and here the
+    // next item is another sound device: scrolling the dashboard with the
+    // pointer passing over this 20-pixel picker silently pinned the stream to
+    // an HDMI output with nothing on it (2026-11-16 — picture, no sound, on
+    // every channel, because the pick is kept). A device is chosen from the
+    // open list, never by rolling past the closed one.
+    if (obj == audio_device_combo_ && event->type() == QEvent::Wheel) {
+        event->ignore();
+        return true;
+    }
+    // Nor by the keyboard with the list closed: an arrow, Home/End or a letter
+    // would step the device the same way. Space, F4 and Alt+Down still open
+    // the list, so the picker stays reachable without a mouse.
+    if (obj == audio_device_combo_ && event->type() == QEvent::KeyPress) {
+        const auto* ke = static_cast<QKeyEvent*>(event);
+        const bool opens = ke->key() == Qt::Key_Space || ke->key() == Qt::Key_F4 ||
+                           (ke->key() == Qt::Key_Down && (ke->modifiers() & Qt::AltModifier));
+        if (!opens && ke->key() != Qt::Key_Tab && ke->key() != Qt::Key_Backtab)
+            return true;
+    }
 #endif
     // The title is the channel picker while a channel is on (not on the list).
     // It is also the tile's drag handle: open only for a CLICK — press and
