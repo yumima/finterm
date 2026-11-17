@@ -1210,10 +1210,7 @@ void OwnershipService::load_top_firms(bool force) {
                 const auto o = parse_object(result);
                 t.error = o.value(QStringLiteral("error")).toString();
                 if (o.value(QStringLiteral("pending")).toBool()) // moves withheld until corrections exist
-                    QTimer::singleShot(0, self.data(), [self]() {
-                        if (self)
-                            self->run_13f_sync();
-                    });
+                    self->ask_for_pending_pass();
                 t.newest_quarter = iso_date(o, "newest_quarter");
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     t.partial_quarters << v.toString();
@@ -1296,10 +1293,7 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                 // pass now rather than leaving the tab waiting for the next
                 // scheduled one (run_13f_sync ignores the call while one runs).
                 if (o.value(QStringLiteral("pending")).toBool())
-                    QTimer::singleShot(0, self.data(), [self]() {
-                        if (self)
-                            self->run_13f_sync();
-                    });
+                    self->ask_for_pending_pass();
                 b.side = o.value(QStringLiteral("side")).toString();
                 b.sort = o.value(QStringLiteral("sort")).toString();
                 b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
@@ -1610,6 +1604,13 @@ void OwnershipService::start_background_sync() {
     sync_timer_->start(kSyncFirstDelayMs);
 }
 
+void OwnershipService::ask_for_pending_pass() {
+    if (pending_pass_asked_ || syncing_)
+        return;
+    pending_pass_asked_ = true;
+    QTimer::singleShot(0, this, [this]() { run_13f_sync(); });
+}
+
 void OwnershipService::run_13f_sync() {
     // Only an index that exists is kept current; building one is the user's
     // call (about 200 MB, once).
@@ -1649,6 +1650,8 @@ void OwnershipService::run_13f_sync() {
                 // `refreshed`: the pass rescanned the stored big moves with no
                 // new filing of its own (an earlier pass was cut short, or the
                 // rules changed) — the screens read that store, so they reload.
+                if (o.value(QStringLiteral("refreshed")).toBool())
+                    self->pending_pass_asked_ = false; // the scan is stored; a later need may ask again
                 if (filings || sets || o.value(QStringLiteral("refreshed")).toBool()) {
                     LOG_INFO(TAG, QStringLiteral("13F sync: %1 filings, %2 data sets, through %3")
                                       .arg(filings)

@@ -225,6 +225,10 @@ class OwnershipService : public QObject {
     QTimer* form4_timer_ = nullptr;
     QTimer* sync_timer_ = nullptr;
     bool syncing_ = false;
+    /// A screen found nothing stored and asked for a pass. Asked once: the
+    /// sync's own timers (refused, failed, more) pace everything after that.
+    bool pending_pass_asked_ = false;
+    void ask_for_pending_pass();
     QString sync_status_;
     void run_13f_sync();
     int form4_passes_ = 0;

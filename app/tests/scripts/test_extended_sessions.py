@@ -259,6 +259,19 @@ check("a finished session with its total stored is not asked about again",
 es.remember("AAPL", "post", MON.isoformat(), dict(n, volume=5.0), final=False)
 check("a final reading is not replaced by a partial one", es.recall("AAPL", "post", MON.isoformat())["volume"] == 930942.0)
 
+# Just ended: Nasdaq's summary still runs behind the tape, so this reading is
+# not the total — stored as partial, and asked for again on the next look.
+asks.clear()
+s_early = sess_of()
+es.add_volume("TSLA", "post", s_early, ask=feed(dict(n, volume=700000.0)), now=1000, settled=False)
+check("a reading minutes after the close is kept as partial",
+      s_early["volume"] == 700000.0 and es.recall("TSLA", "post", MON.isoformat())["final"] is False)
+s_later = sess_of()
+es.add_volume("TSLA", "post", s_later, ask=feed(dict(n, volume=930942.0)), now=1060, settled=True)
+check("... and replaced by the settled total on the next look",
+      len(asks) == 2 and s_later["volume"] == 930942.0 and es.recall("TSLA", "post", MON.isoformat())["final"] is True,
+      f"asks={len(asks)} {s_later['volume']}")
+
 # Finished, blanked, nothing stored: asked, then left alone for a while.
 asks.clear()
 for t_now in (1000, 1060, 1120):

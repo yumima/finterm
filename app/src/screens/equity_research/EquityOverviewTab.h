@@ -232,6 +232,11 @@ class EquityOverviewTab : public QWidget {
 
     QWidget* build_trading_panel();
     QWidget* build_extended_panel();
+
+  protected:
+    void showEvent(QShowEvent* event) override;
+
+  private:
     QWidget* build_valuation_panel();
     QWidget* build_share_stats_panel();
     QWidget* build_analyst_panel();

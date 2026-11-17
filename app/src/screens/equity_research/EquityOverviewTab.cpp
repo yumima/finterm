@@ -24,6 +24,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QSizePolicy>
 #include <QTimeZone>
 #include <QTimer>
@@ -847,7 +848,7 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
                 fetch_extended_sessions();
         });
     }
-    ext_timer_->start();
+    ext_timer_->start(60 * 1000); // not whatever pace the previous symbol left it at
 
     // Drop every prior subscription before rebinding. Without this, a late
     // resolve for the previous symbol (quote/info/historical) would still
@@ -1024,6 +1025,14 @@ QWidget* EquityOverviewTab::build_extended_panel() {
     return p;
 }
 
+void EquityOverviewTab::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // The refresh tick is skipped while the tab is hidden; coming back to it
+    // must not show an hour-old session as LIVE until the next tick.
+    if (ext_answered_ && !ext_sessions_.unsupported)
+        fetch_extended_sessions();
+}
+
 void EquityOverviewTab::fetch_extended_sessions() {
     const QString symbol = current_symbol_;
     if (symbol.isEmpty())
@@ -1105,7 +1114,7 @@ void EquityOverviewTab::render_extended_sessions() {
     const bool any = x.after_hours.valid || x.pre_market.valid;
     ext_note_->setVisible(!any);
     if (!any) {
-        ext_note_->setText(!ext_answered_ ? ui::formatting::placeholder()
+        ext_note_->setText(!ext_answered_ ? QStringLiteral("Loading\u2026") // a few seconds: two sources
                            : x.unsupported ? QStringLiteral("No US pre-market or after-hours session for this instrument.")
                                            : QStringLiteral("No pre-market or after-hours trades in the last five sessions."));
     }

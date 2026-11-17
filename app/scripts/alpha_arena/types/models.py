@@ -368,6 +368,11 @@ class PolymarketInfo(BaseModel):
     category: Optional[str] = Field(None, description="Market category")
 
 
+# CompetitionConfig names PolymarketInfo before it exists; settle it now
+# rather than at whatever first use happens to trigger pydantic's own rebuild.
+CompetitionConfig.model_rebuild()
+
+
 class PolymarketPosition(BaseModel):
     """Position in a Polymarket prediction market."""
 

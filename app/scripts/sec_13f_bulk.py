@@ -1896,8 +1896,11 @@ def _ensure_adjustments(con, prior_q, cur_q):
     con.execute("DELETE FROM cusip_link WHERE prior_quarter=? AND quarter=?", (prior_q, cur_q))
     con.executemany("INSERT OR REPLACE INTO split_adj VALUES (?,?,?,?)", split_rows)
     con.executemany("INSERT OR REPLACE INTO cusip_link VALUES (?,?,?,?,?)", link_rows)
-    if not incomplete:
-        con.execute("INSERT OR REPLACE INTO adj_runs VALUES (?,?,?)", (prior_q, cur_q, stamp))
+    # Always a row: it is what says corrections for this pair exist, which the
+    # fund ranking waits for. An incomplete run never equals the index's
+    # stamp, so the next call computes again.
+    con.execute("INSERT OR REPLACE INTO adj_runs VALUES (?,?,?)",
+                (prior_q, cur_q, ("incomplete|" + stamp) if incomplete else stamp))
     con.commit()
     return not incomplete
 

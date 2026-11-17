@@ -323,20 +323,32 @@ def apply_nasdaq(session, nasdaq):
 NASDAQ_URL = "https://api.nasdaq.com/api/quote/{}/extended-trading?markettype={}&assetclass={}"
 
 
-def _nasdaq(symbol, market):
+NASDAQ_TIMEOUT = 6       # seconds per request: the volume is an extra
+_asset_class = {}        # symbol -> "stocks" | "etf", once Nasdaq has answered for it
+
+
+def _nasdaq(symbol, market, deadline=None):
+    """Nasdaq's summary of that session, or None. Bounded: the caller's
+    answer (Yahoo's prices) is already in hand and must not wait on this."""
+    import time as _clock
     try:
+        import requests
         import ipo_calendar as ic
     except Exception:
         return None
     sym = symbol.replace("-", ".")
-    # "stocks" twice: the feed drops a request now and then, and a stock whose
-    # first answer was lost would otherwise be asked for as an ETF and given up on.
-    for asset in ("stocks", "etf", "stocks"):
+    for asset in ([_asset_class[symbol]] if symbol in _asset_class else ["stocks", "etf"]):
+        if deadline is not None and _clock.monotonic() > deadline:
+            return None
         try:
-            got = parse_nasdaq(ic._http_json("nasdaq", NASDAQ_URL.format(sym, market, asset), ic.NASDAQ_HEADERS))
+            r = requests.get(NASDAQ_URL.format(sym, market, asset), headers=ic.NASDAQ_HEADERS,
+                             timeout=NASDAQ_TIMEOUT)
+            r.raise_for_status()
+            got = parse_nasdaq(r.json())
         except Exception:
-            got = None   # the volume is an extra: never at the cost of the prices
+            got = None
         if got:
+            _asset_class[symbol] = asset
             return got
     return None
 
@@ -351,6 +363,8 @@ def _nasdaq(symbol, market):
 # volume the next day: a dash.
 
 _KEEP_DAYS = 10
+SETTLE_MINUTES = 15      # after a session ends, before Nasdaq's total is taken as final
+NASDAQ_BUDGET = 14       # seconds per fetch for all Nasdaq requests together
 _REASK_SECONDS = 15 * 60
 _asked = {}   # (symbol, market, day) -> when a finished session was last asked about in vain
 
@@ -396,29 +410,34 @@ def remember(symbol, market, day, nasdaq, final):
         pass
 
 
-def add_volume(symbol, market, session, ask=None, now=None):
+def add_volume(symbol, market, session, ask=None, now=None, settled=None):
     """Put the session's volume (and Nasdaq's range) on it, asking Nasdaq only
-    when the answer can still be new."""
+    when the answer can still be new.
+
+    `settled`: the session ended long enough ago for Nasdaq's summary to hold
+    its total. Its summary runs behind the tape, so a reading in the first
+    minutes after the session ends is still a partial one."""
     import time as _clock
     ask = ask or _nasdaq
     now = _clock.time() if now is None else now
+    settled = (not session["live"]) if settled is None else (settled and not session["live"])
     day, key = session["date"], (symbol, market, session["date"])
     stored = recall(symbol, market, day)
-    if not session["live"] and stored and stored["final"]:
+    if settled and stored and stored["final"]:
         # Finished and its total already seen: nothing left to learn.
         apply_nasdaq(session, dict(stored, date=datetime.strptime(day, "%Y-%m-%d").date()))
         return
     asked = False
-    if not session["live"] and now - _asked.get(key, 0) < _REASK_SECONDS:
+    if settled and now - _asked.get(key, 0) < _REASK_SECONDS:
         nasdaq = None   # asked a moment ago; a finished session's answer does not appear by itself
     else:
         nasdaq, asked = ask(symbol, market), True
     apply_nasdaq(session, nasdaq)
     if session["volume"] is not None:
-        remember(symbol, market, day, nasdaq, final=not session["live"])
+        remember(symbol, market, day, nasdaq, final=settled)
         _asked.pop(key, None)
         return
-    if asked and not session["live"]:
+    if asked and settled:
         _asked[key] = now   # from the asking, not from each skipped look: the wait must end
     if stored:
         # A reading from while it traded, and the total never seen: shown as a floor.
@@ -449,17 +468,26 @@ def fetch(symbol):
 
     if bars is None or getattr(bars, "empty", True):
         # yfinance answers a refused or rate-limited request with an EMPTY
-        # frame, not an exception — so an empty frame alone is not "no
-        # extended trading". But a symbol whose DAILY bars did arrive and that
-        # has no minute bar in five sessions is one that does not trade
-        # intraday at all (a mutual fund, a halted or delisted listing): an
-        # answer, and not one to ask for again every minute.
+        # frame, not an exception. With the daily bars in hand the symbol
+        # exists, and no minute bar in five sessions is most likely one that
+        # does not trade intraday (a mutual fund, a halted listing) — but it
+        # can also be a refusal of this one call. So: "no extended trades",
+        # which the panel looks at again in ten minutes, never "unsupported",
+        # which it stops asking about. Without the daily bars, no answer at all.
         if daily is not None and not getattr(daily, "empty", True):
-            return dict(empty, unsupported=True)
+            return empty
         return {"error": "extended-hours bars unavailable: no bars returned"}
 
     after, pre = summarise(bars, daily, now_et)
+    import time as _clock
+    from datetime import timedelta
+    deadline = _clock.monotonic() + NASDAQ_BUDGET
     for session, market in ((after, "post"), (pre, "pre")):
         if session:
-            add_volume(symbol, market, session)
+            day = datetime.strptime(session["date"], "%Y-%m-%d").date()
+            end = post_window(day)[1] if market == "post" else REG_OPEN
+            ended = datetime.combine(day, end, tzinfo=ET)
+            add_volume(symbol, market, session,
+                       ask=lambda s_, m_: _nasdaq(s_, m_, deadline),
+                       settled=now_et >= ended + timedelta(minutes=SETTLE_MINUTES))
     return dict(empty, after_hours=after, pre_market=pre)
