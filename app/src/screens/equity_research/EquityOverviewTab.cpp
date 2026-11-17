@@ -1045,6 +1045,13 @@ void EquityOverviewTab::fetch_extended_sessions() {
             // With nothing shown yet, say so — a bare dash reads as "loading".
             if (!ext_answered_ && ext_note_)
                 ext_note_->setText(QStringLiteral("Extended-hours data did not arrive \u2014 trying again shortly."));
+            // What is shown stays, but not as LIVE: nothing vouches for that
+            // any more, and the session may have ended since.
+            if (ext_answered_ && (ext_sessions_.after_hours.live || ext_sessions_.pre_market.live)) {
+                ext_sessions_.after_hours.live = false;
+                ext_sessions_.pre_market.live = false;
+                render_extended_sessions();
+            }
             return;
         }
         ext_sessions_ = services::equity::parse_extended_sessions(r);

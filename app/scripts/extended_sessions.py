@@ -54,7 +54,10 @@ EARLY_POST_CLOSE = _time(17, 0)
 
 
 def is_early_close(day):
-    """NYSE/Nasdaq 13:00 closes: the day after Thanksgiving, Christmas Eve and
+    """The same three occasions as is_early_close() in
+    src/services/calendar/MarketCalendar.h — change them together.
+
+    NYSE/Nasdaq 13:00 closes: the day after Thanksgiving, Christmas Eve and
     3 July, when they are trading days. After-hours then runs 13:00-17:00."""
     if day.weekday() >= 5:
         return False
@@ -145,7 +148,7 @@ def _without_stray_prints(part):
     754 around a 740 price — is not a range anybody could have traded.
 
     A stray print comes back: the minutes after it are where the minutes
-    before it were. A move does not — after an earnings jump the following
+    before it were, and it is away from both. A move does not — after an earnings jump the following
     minutes agree with it, so it is kept from its first bar. The newest bar
     has nothing after it and cannot be judged; it is kept, because holding
     back a real jump for minutes is worse than showing one bad print for one."""
@@ -154,7 +157,11 @@ def _without_stray_prints(part):
     close = part["Close"]
     before = close.shift(1).rolling(5, min_periods=1).median()
     after = close[::-1].shift(1).rolling(5, min_periods=1).median()[::-1]
-    stray = ((close / before - 1.0).abs() > STRAY_PRINT) & ((close / after - 1.0).abs() > STRAY_PRINT)
+    # ... and those two sides agree with each other. In a trend they do not
+    # (each bar sits between a lower past and a higher future), and every bar
+    # of a steady climb would otherwise be thrown out as stray.
+    stray = (((close / before - 1.0).abs() > STRAY_PRINT) & ((close / after - 1.0).abs() > STRAY_PRINT)
+             & ((after / before - 1.0).abs() <= STRAY_PRINT))
     keep = ~stray.fillna(False)
     return part[keep] if keep.any() else part
 
@@ -236,6 +243,16 @@ def summarise(bars, daily, now_et):
         earlier = [d for d in set(bars["_d"]) if d < day]
         if ref is not None and earlier and ref[0] != max(earlier):
             ref = None
+        if ref is not None and not earlier:
+            # No earlier day among the minute bars (a thin listing): then at
+            # least the weekday before. Around a holiday that gives a dash
+            # where a percentage was possible — the cheaper mistake.
+            from datetime import timedelta
+            prev = day - timedelta(days=1)
+            while prev.weekday() >= 5:
+                prev -= timedelta(days=1)
+            if ref[0] != prev:
+                ref = None
         pre = _summary(day, part, ref, rows, day == today and PRE_OPEN <= now_t < REG_OPEN)
     return after, pre
 
@@ -338,11 +355,13 @@ def _nasdaq(symbol, market, deadline=None):
         return None
     sym = symbol.replace("-", ".")
     for asset in ([_asset_class[symbol]] if symbol in _asset_class else ["stocks", "etf"]):
-        if deadline is not None and _clock.monotonic() > deadline:
+        # The deadline bounds the request itself, not only whether it starts.
+        left = NASDAQ_TIMEOUT if deadline is None else min(NASDAQ_TIMEOUT, deadline - _clock.monotonic())
+        if left < 1:
             return None
         try:
             r = requests.get(NASDAQ_URL.format(sym, market, asset), headers=ic.NASDAQ_HEADERS,
-                             timeout=NASDAQ_TIMEOUT)
+                             timeout=(min(3, left), left))
             r.raise_for_status()
             got = parse_nasdaq(r.json())
         except Exception:
@@ -363,8 +382,9 @@ def _nasdaq(symbol, market, deadline=None):
 # volume the next day: a dash.
 
 _KEEP_DAYS = 10
+_daily_cache = {}        # (symbol, ET date, after the close) -> daily frame
 SETTLE_MINUTES = 15      # after a session ends, before Nasdaq's total is taken as final
-NASDAQ_BUDGET = 14       # seconds per fetch for all Nasdaq requests together
+NASDAQ_BUDGET = 12       # seconds per fetch for all Nasdaq requests together
 _REASK_SECONDS = 15 * 60
 _asked = {}   # (symbol, market, day) -> when a finished session was last asked about in vain
 
@@ -461,10 +481,19 @@ def fetch(symbol):
     except Exception as e:
         # A refused request is not "no extended trading".
         return {"error": f"extended-hours bars unavailable: {type(e).__name__}: {str(e)[:120]}"}
-    try:
-        daily = t.history(period="2mo", interval="1d", auto_adjust=False)
-    except Exception:
-        daily = None   # prices still stand; the percentages and the average do not
+    # The daily frame feeds the reference closes and the 20-day average, which
+    # move once a day: kept until the close is in, then fetched once more.
+    dkey = (symbol, now_et.date(), now_et.time() >= _time(16, 15))
+    daily = _daily_cache.get(dkey)
+    if daily is None:
+        try:
+            daily = t.history(period="2mo", interval="1d", auto_adjust=False)
+        except Exception:
+            daily = None   # prices still stand; the percentages and the average do not
+        if daily is not None and not getattr(daily, "empty", True):
+            if len(_daily_cache) > 200:
+                _daily_cache.clear()
+            _daily_cache[dkey] = daily
 
     if bars is None or getattr(bars, "empty", True):
         # yfinance answers a refused or rate-limited request with an EMPTY

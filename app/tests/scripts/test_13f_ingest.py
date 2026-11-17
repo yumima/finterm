@@ -449,6 +449,21 @@ def main():
             bulk._adjustments = real_adjustments
             bulk.BIG_MOVE_FLOOR, bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS = saved_floors
 
+        # ── the sync corrects every pair the fund ranking shows ────────────
+        c7 = bulk.connect()
+        try:
+            pairs = bulk._screen_pairs(c7)
+            check("sync: the recent consecutive pair is corrected", ("2025-12-31", "2026-03-31") in pairs, str(pairs))
+            # A large filer whose previous filing is two quarters back.
+            c7.execute("INSERT INTO books (cik, manager, quarter, accession, stock_value, stock_count) "
+                       "VALUES ('0000000002', 'GAP FILER', '2025-09-30', 'acc-gap-prior', 1900000.0, 1)")
+            c7.commit()
+            pairs = bulk._screen_pairs(c7)
+            check("sync: a filer that skipped a quarter gets its own pair corrected",
+                  ("2025-09-30", "2026-03-31") in pairs, str(pairs))
+        finally:
+            c7.close()
+
         # ── value units ────────────────────────────────────────────────────
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.

@@ -1637,6 +1637,18 @@ void OwnershipService::run_13f_sync() {
             const int filings = o.value(QStringLiteral("filings")).toInt();
             const int sets = o.value(QStringLiteral("datasets")).toArray().size();
             const QString through = o.value(QStringLiteral("through")).toString();
+            // The pass stores its scan before it reports that SEC did not
+            // answer, so a failed pass can still have refreshed what the
+            // screens read.
+            const bool refreshed = o.value(QStringLiteral("refreshed")).toBool();
+            if (refreshed)
+                self->pending_pass_asked_ = false; // stored; a later need may ask again
+            if (failed && refreshed) {
+                self->top_firms_ = {};
+                self->big_moves_ = {};
+                emit self->top_firms_updated();
+                emit self->big_moves_updated();
+            }
             if (failed) {
                 self->sync_status_ = QStringLiteral("13F update failed — trying again in 30 minutes: ") +
                                      (result.success ? o.value(QStringLiteral("error")).toString()
@@ -1650,9 +1662,7 @@ void OwnershipService::run_13f_sync() {
                 // `refreshed`: the pass rescanned the stored big moves with no
                 // new filing of its own (an earlier pass was cut short, or the
                 // rules changed) — the screens read that store, so they reload.
-                if (o.value(QStringLiteral("refreshed")).toBool())
-                    self->pending_pass_asked_ = false; // the scan is stored; a later need may ask again
-                if (filings || sets || o.value(QStringLiteral("refreshed")).toBool()) {
+                if (filings || sets || refreshed) {
                     LOG_INFO(TAG, QStringLiteral("13F sync: %1 filings, %2 data sets, through %3")
                                       .arg(filings)
                                       .arg(sets)

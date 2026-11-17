@@ -1070,8 +1070,6 @@ def top_firms(limit=50):
         """, (floor, int(limit))).fetchall()
         firms_out = []
         corrected, pending = {}, False
-        recent = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
-        sync_pairs = set(zip(recent[1:], recent[:-1]))  # the pairs sync() keeps corrected
         for cik, manager, quarter, accession, value, count in newest:
             prior = con.execute(
                 "SELECT quarter, accession, stock_value, stock_count FROM books "
@@ -1095,8 +1093,8 @@ def top_firms(limit=50):
                     corrected[pair] = _adjustments_stored(con, *pair)
                 if corrected[pair]:
                     row["moves"] = _book_moves(con, accession, prior[1], compute=False)
-                elif pair in sync_pairs:
-                    pending = True  # the sync computes this pair: ask for a pass
+                else:
+                    pending = True  # the sync computes every pair ranked here: ask for a pass
             firms_out.append(row)
         newest_q = max((f["quarter"] for f in firms_out), default=None)
         partial = {r[0] for r in con.execute(
@@ -1919,6 +1917,30 @@ def prior_universe(con, prior_q):
     return _universe_cache[prior_q]
 
 
+def _screen_pairs(con, limit=50):
+    """The quarter pairs the screens read corrections for: the recent
+    consecutive ones, and each of the largest filers' own (newest, previous)."""
+    recent = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
+    pairs = list(zip(recent[1:], recent[:-1]))
+    floor = (quarter_pair(con) or [""])[0]
+    for cik, quarter in con.execute("""
+            SELECT b.cik, b.quarter FROM books b
+              JOIN (SELECT cik, MAX(quarter) AS q FROM books WHERE cik <> '' GROUP BY cik) n
+                ON n.cik = b.cik AND n.q = b.quarter
+             WHERE b.quarter >= ? ORDER BY b.stock_value DESC LIMIT ?""", (floor, int(limit))).fetchall():
+        prior = con.execute("SELECT quarter FROM books WHERE cik=? AND quarter<? ORDER BY quarter DESC LIMIT 1",
+                            (cik, quarter)).fetchone()
+        if prior and (prior[0], quarter) not in pairs:
+            pairs.append((prior[0], quarter))
+    return pairs
+
+
+def _adj_stamps(con, pairs):
+    _adj_tables(con)
+    return [con.execute("SELECT stamp FROM adj_runs WHERE prior_quarter=? AND quarter=?", p).fetchone()
+            for p in pairs]
+
+
 def _adjustments_stored(con, prior_q, cur_q):
     """Whether corrections for this pair have ever been computed (current or not)."""
     _adj_tables(con)
@@ -2605,8 +2627,6 @@ def sync(progress=None, max_filings=None):
         _MIN_REQ_GAP = saved_gap
         con.close()
 
-    # Warm the corrections the screens read, so a per-stock lookup (which
-    # only reads them) finds them current.
     # 3. Name the new holdings, and correct tickers picked before us_listing().
     if out["filings"] or out["datasets"]:
         newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
@@ -2625,12 +2645,22 @@ def sync(progress=None, max_filings=None):
     # ticker recheck or a rules change has to be caught up here.
     con = connect()
     try:
-        if out["filings"] or out["datasets"] or _big_moves_overdue(con):
-            qs = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
-            for a, b in zip(qs[1:], qs[:-1]):
-                _ensure_adjustments(con, a, b)
+        # Corrections first, every pass: for the recent quarter pairs and for
+        # whatever pair each of the largest filers compares (one that skipped
+        # a quarter compares across the gap). A current pair costs one stamp
+        # comparison; one with an unanswered split lookup is tried again.
+        pairs = _screen_pairs(con)
+        before = _adj_stamps(con, pairs)
+        all_answered = all([_ensure_adjustments(con, a, b) for a, b in pairs])
+        corrected = _adj_stamps(con, pairs) != before
+        # A scan stored as incomplete is worth redoing once its lookups are in.
+        row = con.execute("SELECT stamp FROM big_moves_run").fetchone() if _big_moves_stored(con) else None
+        retry = bool(row and row[0].startswith(INCOMPLETE) and all_answered)
+        scanned = False
+        if out["filings"] or out["datasets"] or retry or _big_moves_overdue(con):
             # what the screens and the alerts read, current with the filings just stored
-            out["refreshed"] = bool(_ensure_big_moves(con))
+            scanned = bool(_ensure_big_moves(con))
+        out["refreshed"] = scanned or corrected
     finally:
         con.close()
     if not urls and not out["days"] and not out["filings"] and out.get("warning"):

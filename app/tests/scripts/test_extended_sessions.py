@@ -126,6 +126,14 @@ _, p10 = es.summarise(tue, DAILY, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
 check("pre-market against Monday's close once the daily frame has it",
       p10 and p10["ref_date"] == MON.isoformat() and p10["live"], str(p10 and p10["ref_date"]))
 
+# A thin listing: no earlier day among its minute bars to say which day came
+# before. Then the weekday before, or no percentage.
+only_tue = minute_bars([(TUE, "04:00", 20, 26.30, 0.0)])
+_, p11 = es.summarise(only_tue, lagging, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
+check("thin listing, daily frame a day behind: no percentage", p11 and p11["pct"] is None, str(p11 and p11["ref_date"]))
+_, p12 = es.summarise(only_tue, DAILY, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
+check("thin listing, daily frame current: against Monday", p12 and p12["ref_date"] == MON.isoformat())
+
 # ── early closes: after-hours runs 13:00-17:00 ───────────────────────────────
 for d, want in [(date(2026, 11, 27), True), (date(2027, 11, 26), True), (date(2026, 11, 26), False),
                 (date(2026, 11, 20), False), (date(2026, 12, 24), True), (date(2027, 12, 24), False),
@@ -168,6 +176,10 @@ for n_new in (1, 2, 3):
     aj, _ = es.summarise(jump, DAILY, datetime(2026, 11, 16, 16, 25, tzinfo=ET))
     check(f"a 6% jump shows {n_new} minute(s) after it happens",
           aj and abs(aj["last"] - 28.10) < 1e-9 and aj["high"] > 28.0, str(aj and (aj["last"], aj["high"])))
+climb = minute_bars([(MON, "16:00", 6, 26.45, 0.0), (MON, "16:06", 20, 27.20, 0.80)])   # +3% a minute, 20 minutes
+ac, _ = es.summarise(climb, DAILY, now)
+check("every minute of a steady climb is kept: none of it is a stray print",
+      ac and ac["minutes"] == 26 and abs(ac["high"] - (27.20 + 0.80 * 19 + 0.02)) < 1e-6, str(ac and (ac["minutes"], ac["high"])))
 ramp = minute_bars([(MON, "16:00", 10, 26.45, 0.0), (MON, "16:10", 12, 26.70, 0.27)])   # +1% a minute
 ar, _ = es.summarise(ramp, DAILY, now)
 check("a 1%-a-minute ramp is followed to its last bar", ar and abs(ar["last"] - (26.70 + 0.27 * 11)) < 1e-6,
