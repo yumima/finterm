@@ -97,9 +97,14 @@ def has_us_extended_session(symbol):
         return False
     if s.endswith("-USD") or s.endswith("-USDT"):
         return False
-    # Yahoo writes a share class with a hyphen (BRK-B); a dot is always an
-    # exchange suffix (.L, .TO, .HK), one letter or not.
-    return re.fullmatch(r"[A-Z]{1,5}(?:-[A-Z]{1,2})?", s) is not None
+    # A share class is BRK-B on Yahoo and BRK.B on Nasdaq and at most brokers.
+    # A dot is otherwise an exchange suffix (.L, .TO, .HK) — no exchange uses
+    # .A, .B or .C, so those three read as classes.
+    return re.fullmatch(r"[A-Z]{1,5}(?:-[A-Z]{1,2}|\.[ABC])?", s) is not None
+
+
+def yahoo_symbol(symbol):
+    return re.sub(r"\.([ABC])$", r"-\1", symbol)
 
 
 def _num(v):
@@ -160,8 +165,15 @@ def _without_stray_prints(part):
     # ... and those two sides agree with each other. In a trend they do not
     # (each bar sits between a lower past and a higher future), and every bar
     # of a steady climb would otherwise be thrown out as stray.
-    stray = (((close / before - 1.0).abs() > STRAY_PRINT) & ((close / after - 1.0).abs() > STRAY_PRINT)
-             & ((after / before - 1.0).abs() <= STRAY_PRINT))
+    off_before = (close / before - 1.0).abs() > STRAY_PRINT
+    off_after = (close / after - 1.0).abs() > STRAY_PRINT
+    agree = (after / before - 1.0).abs() <= STRAY_PRINT
+    stray = off_before & off_after & agree
+    # The session's first minute has nothing before it — and is where late
+    # crosses at the old price land. It is judged by what follows alone. (The
+    # last minute, with nothing after it, is kept: see above.)
+    first = before.isna() & after.notna()
+    stray = stray | (first & off_after)
     keep = ~stray.fillna(False)
     return part[keep] if keep.any() else part
 
@@ -302,8 +314,19 @@ def volume_for(session, nasdaq):
     prices is worse than a dash."""
     if not session or not nasdaq:
         return None
+    if not nasdaq.get("volume"):
+        return None   # the session has prints; a zero is a summary that has not started yet
     if nasdaq.get("date") is not None:
-        return nasdaq["volume"] if nasdaq["date"].isoformat() == session["date"] else None
+        if nasdaq["date"].isoformat() != session["date"]:
+            return None
+        # The date is when the feed last wrote, not which session it wrote
+        # about: in a session's first moments it can still be the previous
+        # one. Two readings of one session overlap; if these do not, it is not
+        # this session's volume.
+        hi, lo, nh, nl = session.get("high"), session.get("low"), nasdaq.get("high"), nasdaq.get("low")
+        if None not in (hi, lo, nh, nl) and (nl > hi * (1 + RANGE_TOLERANCE) or nh < lo * (1 - RANGE_TOLERANCE)):
+            return None
+        return nasdaq["volume"]
     for key in ("high", "low"):
         a, b = session.get(key), nasdaq.get(key)
         if a is None or b is None or a <= 0:
@@ -382,7 +405,7 @@ def _nasdaq(symbol, market, deadline=None):
 # volume the next day: a dash.
 
 _KEEP_DAYS = 10
-_daily_cache = {}        # (symbol, ET date, after the close) -> daily frame
+_daily_cache = {}        # (symbol, ET date, after the close) -> (fetched at, daily frame)
 SETTLE_MINUTES = 15      # after a session ends, before Nasdaq's total is taken as final
 NASDAQ_BUDGET = 12       # seconds per fetch for all Nasdaq requests together
 _REASK_SECONDS = 15 * 60
@@ -475,16 +498,24 @@ def fetch(symbol):
         return dict(empty, unsupported=True)
 
     import yfinance as yf
-    t = yf.Ticker(symbol)
+    t = yf.Ticker(yahoo_symbol(symbol))
     try:
         bars = t.history(period="5d", interval="1m", prepost=True, auto_adjust=False)
     except Exception as e:
         # A refused request is not "no extended trading".
         return {"error": f"extended-hours bars unavailable: {type(e).__name__}: {str(e)[:120]}"}
-    # The daily frame feeds the reference closes and the 20-day average, which
-    # move once a day: kept until the close is in, then fetched once more.
-    dkey = (symbol, now_et.date(), now_et.time() >= _time(16, 15))
-    daily = _daily_cache.get(dkey)
+    # The daily frame feeds the reference closes and the 20-day average. Until
+    # today's close only earlier days are read from it, so one copy serves the
+    # day. From the close on, today's own row is the after-hours reference and
+    # takes a while to become official: a copy is good for two minutes in the
+    # first hour, a quarter of an hour after that.
+    import time as _clock
+    close_at = datetime.combine(now_et.date(), post_window(now_et.date())[0], tzinfo=ET)
+    since_close = (now_et - close_at).total_seconds()
+    max_age = None if since_close < 0 else (120 if since_close < 3600 else 900)
+    dkey = (symbol, now_et.date(), since_close >= 0)
+    hit = _daily_cache.get(dkey)
+    daily = hit[1] if hit and (max_age is None or _clock.time() - hit[0] < max_age) else None
     if daily is None:
         try:
             daily = t.history(period="2mo", interval="1d", auto_adjust=False)
@@ -493,7 +524,7 @@ def fetch(symbol):
         if daily is not None and not getattr(daily, "empty", True):
             if len(_daily_cache) > 200:
                 _daily_cache.clear()
-            _daily_cache[dkey] = daily
+            _daily_cache[dkey] = (_clock.time(), daily)
 
     if bars is None or getattr(bars, "empty", True):
         # yfinance answers a refused or rate-limited request with an EMPTY
@@ -508,7 +539,6 @@ def fetch(symbol):
         return {"error": "extended-hours bars unavailable: no bars returned"}
 
     after, pre = summarise(bars, daily, now_et)
-    import time as _clock
     from datetime import timedelta
     deadline = _clock.monotonic() + NASDAQ_BUDGET
     for session, market in ((after, "post"), (pre, "pre")):

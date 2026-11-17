@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`218152ced`](https://github.com/yumima/finterm/commit/218152ced) review, third pass: extended hours and 13F
 - [`c865f102c`](https://github.com/yumima/finterm/commit/c865f102c) review, second pass: extended hours and 13F
 - [`5e520a241`](https://github.com/yumima/finterm/commit/5e520a241) review: extended-hours and 13F fixes
 - [`25cbe03e6`](https://github.com/yumima/finterm/commit/25cbe03e6) big moves: each move stored once when two scans overlap

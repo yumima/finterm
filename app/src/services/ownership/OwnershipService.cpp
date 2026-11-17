@@ -1605,7 +1605,9 @@ void OwnershipService::start_background_sync() {
 }
 
 void OwnershipService::ask_for_pending_pass() {
-    if (pending_pass_asked_ || syncing_)
+    // Not while the index is being built or mapped: run_13f_sync would only
+    // push its own timer back, and the ask would be spent on nothing.
+    if (pending_pass_asked_ || syncing_ || index_busy_ || !index_ready())
         return;
     pending_pass_asked_ = true;
     QTimer::singleShot(0, this, [this]() { run_13f_sync(); });
@@ -1641,8 +1643,11 @@ void OwnershipService::run_13f_sync() {
             // answer, so a failed pass can still have refreshed what the
             // screens read.
             const bool refreshed = o.value(QStringLiteral("refreshed")).toBool();
-            if (refreshed)
-                self->pending_pass_asked_ = false; // stored; a later need may ask again
+            // A pass that ran to its end, or stored something: a later need may
+            // ask again. After a failed or refused one the sync's own retry
+            // timer is the only thing that asks.
+            if (refreshed || (!failed && !refused))
+                self->pending_pass_asked_ = false;
             if (failed && refreshed) {
                 self->top_firms_ = {};
                 self->big_moves_ = {};

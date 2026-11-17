@@ -2628,13 +2628,18 @@ def sync(progress=None, max_filings=None):
         con.close()
 
     # 3. Name the new holdings, and correct tickers picked before us_listing().
-    if out["filings"] or out["datasets"]:
-        newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
-        if newest:
-            r = resolve_cusips(limit=1500, quarter=newest)
-            out["resolved"] = r.get("resolved", 0)
-    out["recheck"] = recheck_tickers()
-    out["filed_dates"] = backfill_filed_dates()
+    # Housekeeping against outside services: whatever goes wrong here must not
+    # keep step 4 from running — it is the only place the screens' scans are made.
+    try:
+        if out["filings"] or out["datasets"]:
+            newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
+            if newest:
+                r = resolve_cusips(limit=1500, quarter=newest)
+                out["resolved"] = r.get("resolved", 0)
+        out["recheck"] = recheck_tickers()
+        out["filed_dates"] = backfill_filed_dates()
+    except Exception as e:
+        out.setdefault("warning", f"ticker and filing-date upkeep failed: {type(e).__name__}: {str(e)[:120]}")
 
     # 4. The scans the screens read. Last, because the tickers and filing dates
     # settled in step 3 are part of what they are stamped with — refreshed
@@ -2651,13 +2656,13 @@ def sync(progress=None, max_filings=None):
         # comparison; one with an unanswered split lookup is tried again.
         pairs = _screen_pairs(con)
         before = _adj_stamps(con, pairs)
-        all_answered = all([_ensure_adjustments(con, a, b) for a, b in pairs])
+        for a, b in pairs:
+            _ensure_adjustments(con, a, b)
+        # Only a change counts: a pair recomputed to the same incomplete
+        # state is not news, and must not make the screens reload every pass.
         corrected = _adj_stamps(con, pairs) != before
-        # A scan stored as incomplete is worth redoing once its lookups are in.
-        row = con.execute("SELECT stamp FROM big_moves_run").fetchone() if _big_moves_stored(con) else None
-        retry = bool(row and row[0].startswith(INCOMPLETE) and all_answered)
         scanned = False
-        if out["filings"] or out["datasets"] or retry or _big_moves_overdue(con):
+        if out["filings"] or out["datasets"] or _big_moves_overdue(con):
             # what the screens and the alerts read, current with the filings just stored
             scanned = bool(_ensure_big_moves(con))
         out["refreshed"] = scanned or corrected

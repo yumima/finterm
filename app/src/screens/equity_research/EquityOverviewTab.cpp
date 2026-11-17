@@ -1029,7 +1029,8 @@ void EquityOverviewTab::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     // The refresh tick is skipped while the tab is hidden; coming back to it
     // must not show an hour-old session as LIVE until the next tick.
-    if (ext_answered_ && !ext_sessions_.unsupported)
+    // Also when the first fetch never answered: its retry tick was skipped too.
+    if (!current_symbol_.isEmpty() && !(ext_answered_ && ext_sessions_.unsupported))
         fetch_extended_sessions();
 }
 

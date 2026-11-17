@@ -190,6 +190,13 @@ gap = minute_bars([(MON, "16:00", 30, 26.45, 0.0), (MON, "16:30", 30, 29.50, 0.0
 a8, _ = es.summarise(gap, DAILY, now)
 check("a sustained 11% move after the bell is kept", a8 and a8["last"] > 29.5 and a8["high"] > 29.5 and a8["low"] < 26.5)
 
+# The session's first minute is where a late cross at the old price lands.
+opening = minute_bars([(MON, "16:00", 1, 28.88, 0.0), (MON, "16:01", 30, 26.45, 0.002)])
+ao, _ = es.summarise(opening, DAILY, now)
+check("a stray first minute is not the session's high", ao and ao["high"] < 27.0 and ao["minutes"] == 30,
+      str(ao and (ao["high"], ao["minutes"])))
+check("yahoo spelling of a dotted share class", es.yahoo_symbol("BRK.B") == "BRK-B" and es.yahoo_symbol("AAPL") == "AAPL")
+
 # ── Nasdaq: parse, pair, tighten ─────────────────────────────────────────────
 DOC = {"data": {
     "lastUpdateInfo": ["Data last updated Nov 16, 2026 08:00 PM ET.",
@@ -206,6 +213,9 @@ check("a row without a volume is no answer",
 sess = {"date": MON.isoformat(), "last": 26.57, "high": 26.90, "low": 26.40, "volume": None}
 check("volume attached to its own session", es.volume_for(sess, n) == 930942.0)
 check("volume of another day is withheld", es.volume_for(dict(sess, date=TUE.isoformat()), n) is None)
+check("a dated answer whose range lies wholly elsewhere is another session's",
+      es.volume_for(dict(sess, high=28.50, low=27.73), n) is None)
+check("a zero volume beside a session with prints is no answer", es.volume_for(sess, dict(n, volume=0.0)) is None)
 undated = dict(n, date=None)
 check("undated answer accepted when the ranges agree",
       es.volume_for(dict(sess, high=26.88, low=26.45), undated) == 930942.0)
@@ -301,7 +311,7 @@ for label, args in [("another session's", ("IONQ", "pre", MON)), ("another day's
     check(f"{label} volume is not recalled for this one", es.recall(args[0], args[1], args[2].isoformat()) is None)
 
 # ── which symbols ────────────────────────────────────────────────────────────
-for sym, want in [("AAPL", True), ("SPY", True), ("BRK-B", True), ("F", True), ("BRK.B", False),
+for sym, want in [("AAPL", True), ("SPY", True), ("BRK-B", True), ("F", True), ("BRK.B", True), ("BF.B", True),
                   ("7203.T", False), ("VOD.L", False), ("SHOP.TO", False), ("^GSPC", False),
                   ("ES=F", False), ("EURUSD=X", False), ("BTC-USD", False), ("0700.HK", False), ("", False)]:
     check(f"extended session for {sym or '(empty)'}: {want}", es.has_us_extended_session(sym) is want)
