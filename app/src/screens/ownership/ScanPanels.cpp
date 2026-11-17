@@ -6,6 +6,8 @@
 #include "ui/components/TooltipText.h"
 #include "ui/widgets/LoadingOverlay.h"
 
+#include <QUrl>
+#include <QDesktopServices>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QHBoxLayout>
@@ -472,17 +474,37 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
     sort_->addItem(QStringLiteral("est. $ size"), QStringLiteral("value"));
     sort_->addItem(QStringLiteral("share of the manager's book"), QStringLiteral("weight"));
     bar->addWidget(sort_);
+    bar->addWidget(control_label(QStringLiteral("Filed")));
+    filed_within_ = new QComboBox;
+    filed_within_->addItem(QStringLiteral("any time"), 0);
+    filed_within_->addItem(QStringLiteral("last 7 days"), 7);
+    filed_within_->addItem(QStringLiteral("last 30 days"), 30);
+    filed_within_->addItem(QStringLiteral("last 90 days"), 90);
+    filed_within_->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "By the day the 13F reached SEC — how new the news is, not how old the position is")));
+    bar->addWidget(filed_within_);
     active_only_ = new QCheckBox(QStringLiteral("active books only"));
     active_only_->setChecked(true);
     bar->addWidget(active_only_);
-    for (auto* c : {side_, sort_})
+    for (auto* c : {side_, sort_, filed_within_})
         connect(c, &QComboBox::activated, this, [this](int) { refresh(); });
     connect(active_only_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
     root->addLayout(bar);
 
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Manager"),
                          QStringLiteral("Move"), QStringLiteral("Est. $"), QStringLiteral("% of book"),
-                         QStringLiteral("Shares now"), QStringLiteral("Shares before"), QStringLiteral("Filed for")});
+                         QStringLiteral("Shares now"), QStringLiteral("Shares before"), QStringLiteral("Filed for"),
+                         QStringLiteral("Filed")});
+    // The filing date opens the filing itself on EDGAR: every row can be checked at its source.
+    connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {
+        if (c != 9)
+            return;
+        if (auto* it = table_->item(r, c)) {
+            const QString url = it->data(Qt::UserRole).toString();
+            if (!url.isEmpty())
+                QDesktopServices::openUrl(QUrl(url));
+        }
+    });
     table_->horizontalHeaderItem(4)->setToolTip(ui::tooltip_wrap(QStringLiteral(
         "Shares changed × the price the filing implies. 13F shows quarter-end holdings, not trades, so this "
         "is an estimate of the dollars that moved.")));
@@ -502,7 +524,8 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
 void BigMovesPanel::refresh() {
     services::OwnershipService::instance().load_big_moves(side_->currentData().toString(),
                                                           sort_->currentData().toString(),
-                                                          active_only_->isChecked());
+                                                          active_only_->isChecked(),
+                                                          filed_within_->currentData().toInt());
     render();
 }
 
@@ -578,6 +601,12 @@ void BigMovesPanel::render() {
                 "This quarter's 13Fs are still coming in: the move is real, but other managers' moves in the "
                 "same quarter may not be filed yet")));
         table_->setItem(i, 8, q);
+        auto* filed = num_cell(r.filed.isValid() ? r.filed.toString(QStringLiteral("d MMM yy")) : fmt::placeholder(),
+                               r.url.isEmpty() ? QString() : ui::colors::CYAN());
+        filed->setData(Qt::UserRole, r.url);
+        if (!r.url.isEmpty())
+            filed->setToolTip(ui::tooltip_wrap(QStringLiteral("Open this 13F on SEC EDGAR")));
+        table_->setItem(i, 9, filed);
     }
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();

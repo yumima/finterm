@@ -224,7 +224,7 @@ def main():
                          "('2025-12-31','test',4,4,datetime('now'),0)")
             for i, cik in enumerate(["", "", "", "0000009999"]):
                 acc = f"prev-{i}"
-                con4.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,0)",
+                con4.execute("INSERT OR REPLACE INTO filings (accession, quarter, cik, manager, is_amendment) VALUES (?,?,?,?,0)",
                              (acc, "2025-12-31", cik, f"Exiting Filer {i}"))
                 con4.execute("INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
                              (acc, "2025-12-31", "111111111", "WIDGET CO", "COM", "",
@@ -234,7 +234,7 @@ def main():
             # Current quarter: twenty unrelated blank-CIK filers, none holding it.
             for i in range(20):
                 acc = f"cur-{i}"
-                con4.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,0)",
+                con4.execute("INSERT OR REPLACE INTO filings (accession, quarter, cik, manager, is_amendment) VALUES (?,?,?,?,0)",
                              (acc, "2026-03-31", "", f"Unrelated {i}"))
                 con4.execute("INSERT OR REPLACE INTO books VALUES (?,?,?,?,?,?)",
                              (acc, "2026-03-31", "", f"Unrelated {i}", 5000.0, 3))

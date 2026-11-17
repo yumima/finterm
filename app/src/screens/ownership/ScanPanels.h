@@ -100,6 +100,7 @@ class BigMovesPanel : public QWidget {
     QLabel* title_note_ = nullptr;
     QComboBox* side_ = nullptr;
     QComboBox* sort_ = nullptr;
+    QComboBox* filed_within_ = nullptr;
     QCheckBox* active_only_ = nullptr;
     QTableWidget* table_ = nullptr;
     QLabel* foot_ = nullptr;

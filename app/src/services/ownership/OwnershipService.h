@@ -108,7 +108,7 @@ class OwnershipService : public QObject {
     void load_top_firms(bool force = false);
     /// The largest single stake changes across every filer. The first call on
     /// a new index state computes them (a few minutes), later ones are local.
-    void load_big_moves(const QString& side, const QString& sort, bool active_only);
+    void load_big_moves(const QString& side, const QString& sort, bool active_only, int filed_within = 0);
     const ownership::BigMoves& big_moves() const { return big_moves_; }
     bool big_moves_loading() const { return big_moves_loading_; }
     const ownership::TopFirms& top_firms() const { return top_firms_; }

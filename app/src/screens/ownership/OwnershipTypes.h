@@ -471,6 +471,8 @@ struct BigMove {
     double book_value = 0.0;
     int position_count = 0;
     std::optional<double> book_pct; // of the book the stake moved in or out of
+    QDate filed;                    // the day the filing reached SEC; invalid when unknown
+    QString url;                    // the filing's EDGAR index page
 };
 
 struct BigMoves {
@@ -478,6 +480,7 @@ struct BigMoves {
     QString side;
     QString sort;
     bool active_only = true;
+    int filed_within = 0; // days; 0 = any time
     double floor = 0.0;
     int max_positions = 0;
     QStringList partial_quarters;

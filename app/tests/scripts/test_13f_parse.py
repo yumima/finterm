@@ -105,6 +105,7 @@ def test_issuer_key_ties_renames_not_namesakes():
     k = t13.issuer_key
     check("Exxon reorganisation", k("EXXON MOBIL CORP") == k("EXXONMOBIL HOLDINGS CORP"))
     check("share class words", k("ALIGHT INC-CL A") == k("ALIGHT INC"))
+    check("share descriptions", k("Exxonmobil Holdings Corporation Ordinary Shares") == k("EXXON MOBIL CORP"))
     check("two banks named First", k("FIRST CAROLINA FINL SVCS INC") != k("FIRST FNDTN INC"))
 
 
@@ -125,6 +126,13 @@ def test_compare_positions_undoes_splits_cusip_changes_and_listings():
     check("new listing: visible, not bought", out["SPCX"][3] == "listed" and out["SPCX"][6] == 0.0)
     check("real add priced at the filing", out["AAPL"][3] == "added" and abs(out["AAPL"][6] - 500.0) < 1e-9)
     check("real exit", out["MSFT"][3] == "exited" and out["MSFT"][6] == -900.0)
+
+
+def test_a_cusip_change_across_the_quarter_end_is_one_position():
+    cur = {"NEW": ("EXXONMOBIL HOLDINGS", 1_200.0, 12.0, "XOM")}
+    prior = {"NEW": ("EXXONMOBIL HOLDINGS", 400.0, 4.0, "XOM"), "OLD": ("EXXON MOBIL", 800.0, 8.0, "XOM")}
+    out = list(t13.compare_positions(cur, prior, {}, {"NEW": ("OLD", 1.0)}))
+    check("held under both: one held position", len(out) == 1 and out[0][3] == "held")
 
 
 def test_books_that_changed_shape_are_not_compared():
@@ -179,6 +187,12 @@ def test_cusip_change_ratio_is_snapped():
     check("1-for-10", abs(t13.snap_ratio(0.101) - 0.1) < 1e-12)
     check("not forced onto a fraction", abs(t13.snap_ratio(1.49) - 1.49) < 1e-12)
     check("an odd merger ratio kept", abs(t13.snap_ratio(0.343) - 0.343) < 1e-12)
+
+
+def test_every_row_links_to_its_filing():
+    check("EDGAR index page", t13.filing_url("1067983", "0000950123-26-011236") ==
+          "https://www.sec.gov/Archives/edgar/data/1067983/000095012326011236/0000950123-26-011236-index.htm")
+    check("no cik: no link", t13.filing_url("", "0000950123-26-011236") == "")
 
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

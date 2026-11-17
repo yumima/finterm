@@ -205,6 +205,9 @@ def connect():
     cols = {r[1] for r in con.execute("PRAGMA table_info(quarters)")}
     if "partial" not in cols:
         con.execute("ALTER TABLE quarters ADD COLUMN partial INTEGER DEFAULT 0")
+    # The day a filing reached SEC: what "how current is this" is measured in.
+    if "filed" not in {r[1] for r in con.execute("PRAGMA table_info(filings)")}:
+        con.execute("ALTER TABLE filings ADD COLUMN filed TEXT")
     con.commit()
     _normalise_tickers(con)
     return con
@@ -467,6 +470,7 @@ def ingest(url=None, progress=None):
             # the guessing this index exists to remove (firms rename, and two
             # unrelated filers can share a name fragment).
             acc_cik = {}
+            acc_filed = {}
             with z.open(names["SUBMISSION.TSV"]) as f:
                 head = None
                 for line in io.TextIOWrapper(f, encoding="utf-8", errors="replace"):
@@ -481,6 +485,8 @@ def ingest(url=None, progress=None):
                     # the index entirely. Only pad a value that exists.
                     raw = parts[head["CIK"]].strip()
                     acc_cik[parts[head["ACCESSION_NUMBER"]]] = raw.zfill(10) if raw else ""
+                    if "FILING_DATE" in head:
+                        acc_filed[parts[head["ACCESSION_NUMBER"]]] = _iso_quarter(parts[head["FILING_DATE"]])
 
             # Cover pages carry the manager name and the quarter reported for.
             acc_meta = {}
@@ -522,8 +528,9 @@ def ingest(url=None, progress=None):
                     chosen[key] = (a, m)
             keep = {a for a, _ in chosen.values()}
             con.executemany(
-                "INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)",
-                [(a, m[0], m[3], m[1], m[2]) for a, m in chosen.values()])
+                "INSERT OR REPLACE INTO filings (accession, quarter, cik, manager, is_amendment, filed) "
+                "VALUES (?,?,?,?,?,?)",
+                [(a, m[0], m[3], m[1], m[2], acc_filed.get(a)) for a, m in chosen.values()])
 
             n_rows = 0
             batch = []
@@ -1345,8 +1352,8 @@ def ingest_current(top=400, progress=None):
                         (_pad_cik(cik), q))
             con.execute("DELETE FROM books WHERE cik=? AND quarter=?", (_pad_cik(cik), q))
             con.execute("DELETE FROM filings WHERE cik=? AND quarter=?", (_pad_cik(cik), q))
-            con.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)",
-                        (f["accession"], q, _pad_cik(cik), manager, 0))
+            con.execute("INSERT OR REPLACE INTO filings (accession, quarter, cik, manager, is_amendment, filed) "
+                        "VALUES (?,?,?,?,?,?)", (f["accession"], q, _pad_cik(cik), manager, 0, f.get("filed")))
             con.executemany(
                 "INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
                 [(f["accession"], q, p["cusip"], p["issuer"], p["class"], p["put_call"],
@@ -1660,7 +1667,10 @@ def split_factor_between(splits, prior_q, cur_q):
 
 _NAME_SUFFIXES = {"INC", "CORP", "CORPORATION", "CO", "COMPANY", "HOLDINGS", "HOLDING", "HLDGS", "HLDG",
                   "LTD", "PLC", "LLC", "LP", "NV", "SA", "AG", "SE", "GROUP", "GRP", "THE", "NEW", "COM",
-                  "CL", "CLASS", "A", "B", "C", "ORD", "SHS", "COMMON", "STOCK", "ADR", "SPONSORED"}
+                  "CL", "CLASS", "A", "B", "C", "ORD", "SHS", "COMMON", "STOCK", "ADR", "SPONSORED",
+                  # share descriptions some filers append: "... Ordinary Shares", "COM NPV"
+                  "ORDINARY", "SHARES", "SHARE", "SH", "STK", "CAP", "NPV", "PAR", "VALUE", "REGISTERED",
+                  "REG", "USD", "ADS", "UNITS", "NEW1"}
 
 
 def issuer_key(name):
@@ -1804,10 +1814,14 @@ def _ensure_adjustments(con, prior_q, cur_q):
 
     # CUSIP changes: a security its holders left wholesale and a new one they
     # arrived in, under the same issuer name.
+    # A change dated near a quarter end straddles it: Exxon's new CUSIP was
+    # already reported by 399 holders at 30 June while 3,885 still reported
+    # the old one. So "most holders left" and "holders at least doubled", not
+    # "all gone" and "all new".
     retiring = {c: d["p"] for c, d in per.items()
-                if "p" in d and d["p"][1] >= 5 and d.get("c", (None, 0))[1] <= 0.1 * d["p"][1]}
+                if "p" in d and d["p"][1] >= 5 and d.get("c", (None, 0))[1] <= 0.25 * d["p"][1]}
     arriving = {c: d["c"] for c, d in per.items()
-                if "c" in d and d["c"][1] >= 5 and d.get("p", (None, 0))[1] <= 0.1 * d["c"][1]}
+                if "c" in d and d["c"][1] >= 5 and d.get("p", (None, 0))[1] * 2 <= d["c"][1]}
     by_key = {}
     for c, (issuer, *_rest) in retiring.items():
         if not is_fund(issuer) and len(issuer_key(issuer)) >= 4:
@@ -1903,7 +1917,13 @@ def compare_positions(cur, prior, splits, links, universe=None):
     used_prior = set()
     for cusip, (issuer, value, shares, ticker) in cur.items():
         px = value / shares if shares else 0.0
-        if cusip in prior:
+        if cusip in prior and cusip in links and links[cusip][0] in prior:
+            # Held under both CUSIPs at the last filing (a change that
+            # straddled the quarter end): the position was their sum.
+            old, ratio = links[cusip]
+            p_shares = prior[cusip][2] * splits.get(cusip, 1.0) + prior[old][2] * ratio
+            used_prior.update((cusip, old))
+        elif cusip in prior:
             p_shares = prior[cusip][2] * splits.get(cusip, 1.0)
             used_prior.add(cusip)
         elif cusip in links and links[cusip][0] in prior:
@@ -1968,16 +1988,18 @@ def _ensure_big_moves(con, progress=None):
     """)
     # v2 adds the prior book (the base of an exit's weight); an older table is rebuilt.
     cols = [r[1] for r in con.execute("PRAGMA table_info(big_moves)")]
-    if cols and "prior_book_value" not in cols:
+    if cols and "filed" not in cols:
         con.execute("DROP TABLE big_moves")
         con.execute("DELETE FROM big_moves_run")
     con.execute("""CREATE TABLE IF NOT EXISTS big_moves (
             cik TEXT, manager TEXT, quarter TEXT, prior_quarter TEXT, cusip TEXT, issuer TEXT,
             ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
-            book_value REAL, position_count INTEGER, prior_book_value REAL)""")
+            book_value REAL, position_count INTEGER, prior_book_value REAL,
+            accession TEXT, filed TEXT)""")
     stamp = "|".join(f"{q}:{n}:{t}" for q, n, t in con.execute(
         "SELECT quarter, filers, ingested_at FROM quarters ORDER BY quarter"))
     stamp += "|" + _ticker_stamp(con)
+    stamp += "|" + str(con.execute("SELECT COUNT(filed) FROM filings").fetchone()[0])
     row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
     if row and row[0] == stamp:
         return
@@ -1991,6 +2013,7 @@ def _ensure_big_moves(con, progress=None):
             ON n.cik = b.cik AND n.q = b.quarter
          WHERE b.quarter >= ? AND b.stock_value >= ? AND b.stock_count >= ?""",
         (floor, MIN_BOOK_VALUE, MIN_BOOK_POSITIONS)).fetchall()
+    filed_on = dict(con.execute("SELECT accession, filed FROM filings WHERE filed IS NOT NULL"))
     adj = {}
     adj_status = {"complete": True}
     for n, (cik, manager, quarter, accession, book_value, count) in enumerate(newest):
@@ -2013,15 +2036,17 @@ def _ensure_big_moves(con, progress=None):
             if (kind not in ("held", "listed") and abs(flow) >= BIG_MOVE_FLOOR
                     and plausible_move(flow, book_value, prior[2])):
                 out.append((cik, manager, quarter, prior[0], cusip, issuer, ticker, kind, shares,
-                            p_shares, flow, value, book_value, count, prior[2]))
-        con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", out)
+                            p_shares, flow, value, book_value, count, prior[2], accession,
+                            filed_on.get(accession)))
+        con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", out)
     con.execute("DELETE FROM big_moves_run")
     if adj_status["complete"]:
         con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
     con.commit()
 
 
-def big_moves(limit=200, side="both", sort="value", active_only=True, include_funds=False):
+def big_moves(limit=200, side="both", sort="value", active_only=True, include_funds=False,
+              filed_within=0):
     """The largest single stake changes — one manager, one stock — across
     every 13F filer, newest filing against the one before it.
 
@@ -2043,13 +2068,17 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
             where.append("flow < 0")
         if active_only:
             where.append(f"position_count <= {int(MAX_DISCRETIONARY_POSITIONS)}")
+        if int(filed_within or 0) > 0:
+            since = (_date.today() - _td(days=int(filed_within))).isoformat()
+            where.append(f"filed >= '{since}'")
         # A buy is weighed against the book it went into, a sale against the
         # book it came out of.
         base = "(CASE WHEN flow < 0 THEN prior_book_value ELSE book_value END)"
         order = f"ABS(flow) / {base} DESC" if sort == "weight" else "ABS(flow) DESC"
         rows = con.execute(f"""
             SELECT cik, manager, quarter, prior_quarter, cusip, issuer, ticker, kind, shares,
-                   prior_shares, flow, value, book_value, position_count, prior_book_value
+                   prior_shares, flow, value, book_value, position_count, prior_book_value,
+                   accession, filed
               FROM big_moves WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ?""",
             (int(limit) * (1 if include_funds else 3),)).fetchall()
         out = []
@@ -2060,12 +2089,14 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
                         "cusip": r[4], "issuer": r[5], "ticker": r[6] or "", "kind": r[7],
                         "shares": r[8], "prior_shares": r[9], "flow": r[10], "value": r[11],
                         "book_value": r[12], "position_count": r[13], "prior_book_value": r[14],
+                        "filed": r[16] or "", "url": filing_url(r[0], r[15]) if r[15] else "",
                         "book_pct": (abs(r[10]) / (r[14] if r[10] < 0 else r[12]) * 100.0)
                                     if (r[14] if r[10] < 0 else r[12]) else None})
             if len(out) >= int(limit):
                 break
         partial = [q for (q,) in con.execute("SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1")]
         return {"rows": out, "side": side, "sort": sort, "active_only": bool(active_only),
+                "filed_within": int(filed_within or 0),
                 "floor": BIG_MOVE_FLOOR, "max_positions": MAX_DISCRETIONARY_POSITIONS,
                 "partial_quarters": sorted(partial)}
     finally:
@@ -2168,7 +2199,7 @@ def _day_13f(d):
     return out
 
 
-def _store_filing(con, accession, period, cik, manager, positions):
+def _store_filing(con, accession, period, cik, manager, positions, filed=None):
     """One filer's quarter, replaced by this filing (as ingest_current does:
     deleting by accession alone would leave a second original in place)."""
     cik = _pad_cik(cik)
@@ -2176,7 +2207,8 @@ def _store_filing(con, accession, period, cik, manager, positions):
                 "(SELECT accession FROM filings WHERE cik=? AND quarter=?)", (cik, period))
     con.execute("DELETE FROM books WHERE cik=? AND quarter=?", (cik, period))
     con.execute("DELETE FROM filings WHERE cik=? AND quarter=?", (cik, period))
-    con.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)", (accession, period, cik, manager, 0))
+    con.execute("INSERT OR REPLACE INTO filings (accession, quarter, cik, manager, is_amendment, filed) "
+                "VALUES (?,?,?,?,?,?)", (accession, period, cik, manager, 0, filed))
     con.executemany("INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
                     [(accession, period, p["cusip"], p["issuer"], p["class"], p["put_call"],
                       p["value"], p["shares"]) for p in positions])
@@ -2197,6 +2229,66 @@ def _register_quarter(con, period, source):
     con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'),?)",
                 (period, source, filers, rows, 0 if complete else 1))
     return filers, complete
+
+
+def filing_url(cik, accession):
+    """The filing's index page on EDGAR — the source behind a row."""
+    try:
+        return (f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+                f"{accession.replace('-', '')}/{accession}-index.htm")
+    except (TypeError, ValueError):
+        return ""
+
+
+def backfill_filed_dates():
+    """Filing dates for filings indexed before they were kept: EDGAR's
+    quarterly full index lists every 13F-HR with the day it was filed — one
+    file per calendar quarter of filing, read once."""
+    con = connect()
+    try:
+        # Once per quarter: a filing the index never lists (an amendment, an
+        # odd form type) would otherwise send every sync to download it again.
+        con.execute("CREATE TABLE IF NOT EXISTS filed_backfill (quarter TEXT PRIMARY KEY, at TEXT)")
+        periods = [q for (q,) in con.execute("""
+            SELECT DISTINCT quarter FROM filings WHERE filed IS NULL
+               AND quarter NOT IN (SELECT quarter FROM filed_backfill)
+             ORDER BY quarter DESC LIMIT 4""")]
+        if not periods:
+            return {"filled": 0}
+    finally:
+        con.close()
+    # A quarter's 13Fs are filed in the next calendar quarter (late ones in the one after).
+    wanted = set()
+    for p in periods:
+        y, m = int(p[:4]), int(p[5:7])
+        for k in (1, 2):
+            q = (m - 1) // 3 + 1 + k
+            yy = y + (q - 1) // 4
+            wanted.add((yy, (q - 1) % 4 + 1))
+    dates = {}
+    for y, q in sorted(wanted):
+        if _date(y, (q - 1) * 3 + 1, 1) > _date.today():
+            continue
+        r = _get(f"https://www.sec.gov/Archives/edgar/full-index/{y}/QTR{q}/form.idx", timeout=300)
+        if r is None:
+            continue
+        for line in r.text.splitlines():
+            if not line.startswith("13F-HR"):
+                continue
+            m = _re.search(r"(\d{4}-\d{2}-\d{2})\s+edgar/data/\d+/(\d{10}-\d{2}-\d{6})\.txt", line)
+            if m:
+                dates[m.group(2)] = m.group(1)
+    con = connect()
+    try:
+        con.executemany("UPDATE filings SET filed=? WHERE accession=? AND filed IS NULL",
+                        [(d, a) for a, d in dates.items()])
+        if dates:  # an unreadable index is tried again next time
+            con.executemany("INSERT OR REPLACE INTO filed_backfill VALUES (?, datetime('now'))",
+                            [(q,) for q in periods])
+        con.commit()
+        return {"filled": con.total_changes, "index_entries": len(dates)}
+    finally:
+        con.close()
 
 
 def sync(progress=None, max_filings=None):
@@ -2294,7 +2386,7 @@ def sync(progress=None, max_filings=None):
                 if not positions:
                     out["failed"] += 1
                     continue
-                _store_filing(con, acc, period, cik, manager, positions)
+                _store_filing(con, acc, period, cik, manager, positions, d.isoformat())
                 known.add(acc)
                 touched.add(period)
                 out["filings"] += 1
@@ -2340,6 +2432,7 @@ def sync(progress=None, max_filings=None):
             r = resolve_cusips(limit=1500, quarter=newest)
             out["resolved"] = r.get("resolved", 0)
     out["recheck"] = recheck_tickers()
+    out["filed_dates"] = backfill_filed_dates()
     return out
 
 
@@ -2424,7 +2517,7 @@ def handle_action(action, payload):
     if action == "big_moves":
         return big_moves(int(payload.get("limit") or 200), payload.get("side") or "both",
                          payload.get("sort") or "value", bool(payload.get("active_only", True)),
-                         bool(payload.get("include_funds", False)))
+                         bool(payload.get("include_funds", False)), int(payload.get("filed_within") or 0))
     if action == "top_firms":
         return top_firms(int(payload.get("limit") or 50))
     if action == "book":

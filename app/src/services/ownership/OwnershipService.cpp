@@ -1257,8 +1257,10 @@ void OwnershipService::load_top_firms(bool force) {
     emit top_firms_updated(); // so the panel can show "loading"
 }
 
-void OwnershipService::load_big_moves(const QString& side, const QString& sort, bool active_only) {
-    const QString want = side + QLatin1Char('|') + sort + QLatin1Char('|') + (active_only ? "1" : "0");
+void OwnershipService::load_big_moves(const QString& side, const QString& sort, bool active_only,
+                                      int filed_within) {
+    const QString want = side + QLatin1Char('|') + sort + QLatin1Char('|') + (active_only ? "1" : "0") +
+                         QLatin1Char('|') + QString::number(filed_within);
     if (big_moves_loading_) {
         big_moves_pending_ = want; // the controls moved meanwhile: asked for when this one lands
         return;
@@ -1268,7 +1270,11 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
     python::PythonRunner::instance().run_interactive(
         QStringLiteral("sec_13f_bulk.py"),
         {QStringLiteral("big_moves"),
-         payload_of({{"limit", 300}, {"side", side}, {"sort", sort}, {"active_only", active_only}})},
+         payload_of({{"limit", 300},
+                     {"side", side},
+                     {"sort", sort},
+                     {"active_only", active_only},
+                     {"filed_within", filed_within}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1283,6 +1289,7 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                 b.side = o.value(QStringLiteral("side")).toString();
                 b.sort = o.value(QStringLiteral("sort")).toString();
                 b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
+                b.filed_within = o.value(QStringLiteral("filed_within")).toInt();
                 b.floor = o.value(QStringLiteral("floor")).toDouble();
                 b.max_positions = o.value(QStringLiteral("max_positions")).toInt();
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
@@ -1304,6 +1311,8 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                     m.position_count = r.value(QStringLiteral("position_count")).toInt();
                     if (r.value(QStringLiteral("book_pct")).isDouble())
                         m.book_pct = r.value(QStringLiteral("book_pct")).toDouble();
+                    m.filed = iso_date(r, "filed");
+                    m.url = r.value(QStringLiteral("url")).toString();
                     b.rows.push_back(m);
                 }
             }
@@ -1312,8 +1321,9 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
             if (!self->big_moves_pending_.isEmpty()) {
                 const QStringList p = self->big_moves_pending_.split(QLatin1Char('|'));
                 self->big_moves_pending_.clear();
-                if (p.size() == 3 && (p[0] != b.side || p[1] != b.sort || (p[2] == "1") != b.active_only))
-                    self->load_big_moves(p[0], p[1], p[2] == "1");
+                if (p.size() == 4 && (p[0] != b.side || p[1] != b.sort || (p[2] == "1") != b.active_only ||
+                                      p[3].toInt() != b.filed_within))
+                    self->load_big_moves(p[0], p[1], p[2] == "1", p[3].toInt());
             }
         },
         kMoversTimeoutMs);

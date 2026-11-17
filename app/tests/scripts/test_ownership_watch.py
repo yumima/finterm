@@ -49,7 +49,7 @@ def main():
     for acc, q, cik, mgr, shares in (("a1", "2026-03-31", "0001", "Fund One", 1000.0),
                                      ("a2", "2026-03-31", "0002", "Fund Two", 500.0),
                                      ("p1", "2025-12-31", "0001", "Fund One", 900.0)):
-        con.execute("INSERT INTO filings VALUES (?,?,?,?,0)", (acc, q, cik, mgr))
+        con.execute("INSERT INTO filings (accession, quarter, cik, manager, is_amendment) VALUES (?,?,?,?,0)", (acc, q, cik, mgr))
         con.execute("INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
                     (acc, q, "111111111", "WIDGET CO", "COM", "", shares * 10.0, shares))
         con.execute("INSERT INTO books VALUES (?,?,?,?,?,?)", (acc, q, cik, mgr, shares * 10.0, 3))
