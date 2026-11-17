@@ -5133,6 +5133,8 @@ _CACHE_TTL = {
     # also pin a transient all-zeros (swallowed 429) for the TTL.
     "quote": 8, "batch_quotes": 8, "batch_all": 8,
     "extended_hours": 8,
+    # two history calls and two Nasdaq requests; the panel asks once a minute
+    "extended_sessions": 45,
     # index_futures: the futures bars it reads are ~10 min delayed, and a TTL
     # just under the consumers' 60 s poll makes every tile and chart dialog
     # share one download a minute instead of one each.
@@ -5559,6 +5561,11 @@ def _daemon_dispatch_inner(action, payload):
         p = payload or {}
         symbols = p.get("symbols") or []
         return get_extended_hours_quotes(symbols)
+    if action == "extended_sessions":
+        # ER Overview: the latest after-hours and pre-market session of one
+        # symbol, each against its own close. See extended_sessions.py.
+        import extended_sessions
+        return extended_sessions.fetch((payload or {}).get("symbol"))
     if action == "index_futures":
         return get_index_futures((payload or {}).get("pairs") or [])
     if action == "analyst_targets":

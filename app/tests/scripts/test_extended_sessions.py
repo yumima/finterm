@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""The ER overview's after-hours / pre-market summary (scripts/extended_sessions.py).
+
+What each case guards:
+
+  - Each session is measured against ITS OWN close: after-hours against that
+    day's, pre-market against the day before. Nasdaq's feed measures an
+    after-hours print against the previous day's close — "-8%" all evening
+    beside a stock that has moved +0.4% since the bell.
+  - No matching close means no percentage, never another day's close.
+  - Daily bar labels are dates and are read as written, whatever zone they
+    are stamped in.
+  - A stray print (a late-reported trade at another moment's price) is not
+    the session's high, low or last.
+  - Of two readings of one session's range the tighter bound wins, and only
+    when the second reading is of the same day.
+  - Nasdaq's volume is attached only to the session it belongs to.
+  - Only plain US tickers are asked about at all.
+
+Self-contained: no network, no pytest, a fixed clock.
+"""
+
+import os
+import sys
+from datetime import date, datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
+
+try:
+    import pandas as pd
+except ImportError:
+    print("SKIP : pandas not available")
+    sys.exit(77)
+
+import extended_sessions as es
+
+ET = es.ET
+failures = []
+
+
+def check(name, cond, detail=""):
+    if cond:
+        print(f"PASS : {name}")
+    else:
+        print(f"FAIL : {name} {detail}")
+        failures.append(name)
+
+
+def minute_bars(spec):
+    """spec: [(date, 'HH:MM', n_minutes, start_price, step)] → 1m frame in UTC."""
+    rows, idx = [], []
+    for d, hm, n, p0, step in spec:
+        h, m = map(int, hm.split(":"))
+        t0 = pd.Timestamp(datetime(d.year, d.month, d.day, h, m, tzinfo=ET))
+        for i in range(n):
+            p = p0 + step * i
+            idx.append((t0 + pd.Timedelta(minutes=i)).tz_convert("UTC"))
+            rows.append({"Open": p, "High": p + 0.02, "Low": p - 0.02, "Close": p, "Volume": 0})
+    return pd.DataFrame(rows, index=pd.DatetimeIndex(idx))
+
+
+def daily_bars(rows, tz=None):
+    idx = pd.DatetimeIndex([pd.Timestamp(d) for d, _, _ in rows])
+    if tz:
+        idx = idx.tz_localize(tz)
+    return pd.DataFrame({"Close": [c for _, c, _ in rows], "Volume": [v for _, _, v in rows]}, index=idx)
+
+
+FRI, MON, TUE = date(2026, 11, 13), date(2026, 11, 16), date(2026, 11, 17)
+# Twenty earlier sessions so the average has something to stand on.
+EARLIER = [(date(2026, 10, d), 30.0, 1_000_000.0) for d in range(5, 31) if date(2026, 10, d).weekday() < 5]
+DAILY = daily_bars(EARLIER + [(FRI, 28.88, 2_000_000.0), (MON, 26.45, 4_000_000.0)])
+
+BARS = minute_bars([
+    (FRI, "16:00", 30, 28.80, -0.005),   # Friday after-hours
+    (MON, "04:00", 60, 28.50, -0.01),    # Monday pre-market: 28.50 → 27.91
+    (MON, "09:30", 30, 27.80, -0.04),    # regular session (ignored)
+    (MON, "16:00", 60, 26.45, 0.002),    # Monday after-hours: 26.45 → 26.568
+])
+
+# ── pairing: each session against its own close ──────────────────────────────
+now = datetime(2026, 11, 16, 23, 55, tzinfo=ET)
+after, pre = es.summarise(BARS, DAILY, now)
+check("after-hours is Monday's", after and after["date"] == MON.isoformat())
+check("after-hours measured against Monday's close",
+      after and after["ref_date"] == MON.isoformat() and abs(after["ref_close"] - 26.45) < 1e-9)
+check("after-hours percentage is the move since the bell, not since Friday",
+      after and abs(after["pct"] - (26.568 - 26.45) / 26.45 * 100) < 1e-6, str(after and after["pct"]))
+check("pre-market is Monday's", pre and pre["date"] == MON.isoformat())
+check("pre-market measured against Friday's close",
+      pre and pre["ref_date"] == FRI.isoformat() and abs(pre["ref_close"] - 28.88) < 1e-9)
+check("pre-market percentage", pre and abs(pre["pct"] - (27.91 - 28.88) / 28.88 * 100) < 1e-6)
+check("neither session is live at 23:55", after and pre and not after["live"] and not pre["live"])
+check("minutes counted", after and after["minutes"] == 60 and pre["minutes"] == 60)
+check("last print is an instant in the session",
+      after and datetime.fromtimestamp(after["last_ts"], ET).strftime("%Y-%m-%d %H:%M") == "2026-11-16 16:59")
+
+# The yardstick is the 20 full days BEFORE the session, not including it.
+vols = [v for d, _, v in EARLIER + [(FRI, 0, 2_000_000.0)] if d < MON][-20:]
+check("average volume: the 20 sessions before, the session's own day excluded",
+      after and abs(after["avg_volume"] - sum(vols) / len(vols)) < 1e-6)
+
+# ── live flags follow the clock ───────────────────────────────────────────────
+a2, p2 = es.summarise(BARS, DAILY, datetime(2026, 11, 16, 17, 0, tzinfo=ET))
+check("after-hours live at 17:00 on its own day", a2 and a2["live"] and not p2["live"])
+a3, p3 = es.summarise(BARS, DAILY, datetime(2026, 11, 17, 5, 0, tzinfo=ET))
+check("yesterday's sessions are not live the next morning", a3 and not a3["live"] and not p3["live"])
+
+# ── no matching close → no percentage ────────────────────────────────────────
+lagging = daily_bars(EARLIER + [(FRI, 28.88, 2_000_000.0)])   # Monday's daily bar not there yet
+a4, p4 = es.summarise(BARS, lagging, now)
+check("after-hours with no close for its own day carries no percentage",
+      a4 and a4["pct"] is None and a4["ref_close"] is None and a4["last"] is not None)
+check("pre-market is unaffected by that", p4 and p4["pct"] is not None)
+a5, p5 = es.summarise(BARS, None, now)
+check("no daily frame: prices stand, percentages do not",
+      a5 and p5 and a5["pct"] is None and p5["pct"] is None and a5["avg_volume"] is None)
+
+# ── daily labels are dates, in any zone ──────────────────────────────────────
+for tz in ("UTC", "America/New_York", "Asia/Tokyo"):
+    a6, p6 = es.summarise(BARS, daily_bars(EARLIER + [(FRI, 28.88, 2e6), (MON, 26.45, 4e6)], tz=tz), now)
+    check(f"daily bars stamped in {tz} pair with the same days",
+          a6 and p6 and a6["ref_date"] == MON.isoformat() and p6["ref_date"] == FRI.isoformat())
+
+# ── stray prints ─────────────────────────────────────────────────────────────
+stray = BARS.copy()
+post = [i for i, t in enumerate(stray.index.tz_convert(ET)) if t.date() == MON and t.hour >= 16]
+for col in ("Open", "High", "Low", "Close"):
+    stray.iloc[post[20], stray.columns.get_loc(col)] = 28.88     # a cross at Friday's close
+    stray.iloc[post[-1], stray.columns.get_loc(col)] = 24.60     # a bad last print
+stray.iloc[post[30], stray.columns.get_loc("High")] = 31.00      # a stray high inside a sound minute
+a7, _ = es.summarise(stray, DAILY, now)
+check("a stray print is not the session's high", a7 and a7["high"] < 27.2, str(a7 and a7["high"]))
+check("a stray print is not the session's low", a7 and a7["low"] > 26.0, str(a7 and a7["low"]))
+check("a stray print is not the last price", a7 and abs(a7["last"] - 26.566) < 0.01, str(a7 and a7["last"]))
+
+# A real move is not a stray print: the neighbours move with it.
+gap = minute_bars([(MON, "16:00", 30, 26.45, 0.0), (MON, "16:30", 30, 29.50, 0.01)])
+a8, _ = es.summarise(gap, DAILY, now)
+check("a sustained 11% move after the bell is kept", a8 and a8["last"] > 29.5 and a8["high"] > 29.5 and a8["low"] < 26.5)
+
+# ── Nasdaq: parse, pair, tighten ─────────────────────────────────────────────
+DOC = {"data": {
+    "lastUpdateInfo": ["Data last updated Nov 16, 2026 08:00 PM ET.",
+                       "This page will resume updating on Nov 17, 2026 04:00 PM ET."],
+    "infoTable": {"rows": [{"consolidated": "$26.5693 -2.3107 (-8.00%)", "volume": "930,942",
+                            "highPrice": "$26.88 (05:37:15 PM)", "lowPrice": "$26.45 (04:57:26 PM)"}]}}}
+n = es.parse_nasdaq(DOC)
+check("Nasdaq row parsed", n == {"date": MON, "volume": 930942.0, "high": 26.88, "low": 26.45}, str(n))
+check("an empty answer is not a zero volume", es.parse_nasdaq({"data": {"infoTable": {"rows": []}}}) is None
+      and es.parse_nasdaq({"data": None}) is None and es.parse_nasdaq(None) is None)
+check("a row without a volume is no answer",
+      es.parse_nasdaq({"data": {"infoTable": {"rows": [{"volume": "N/A"}]}}}) is None)
+
+sess = {"date": MON.isoformat(), "last": 26.57, "high": 26.90, "low": 26.40, "volume": None}
+check("volume attached to its own session", es.volume_for(sess, n) == 930942.0)
+check("volume of another day is withheld", es.volume_for(dict(sess, date=TUE.isoformat()), n) is None)
+undated = dict(n, date=None)
+check("undated answer accepted when the ranges agree",
+      es.volume_for(dict(sess, high=26.88, low=26.45), undated) == 930942.0)
+check("undated answer withheld when the ranges do not", es.volume_for(dict(sess, high=28.50, low=27.73), undated) is None)
+check("undated answer withheld when there is no range to compare",
+      es.volume_for(dict(sess, high=None), undated) is None)
+
+s1 = dict(sess, high=27.90, low=26.40)            # our high carries a stray print
+es.apply_nasdaq(s1, dict(n, high=26.88, low=24.00))  # theirs carries a stray low
+check("the tighter bound of each reading is kept", s1["high"] == 26.88 and s1["low"] == 26.40 and s1["volume"] == 930942.0,
+      str(s1))
+s2 = dict(sess)
+es.apply_nasdaq(s2, dict(n, date=TUE))
+check("another day's range and volume change nothing", s2["high"] == 26.90 and s2["low"] == 26.40 and s2["volume"] is None)
+s3 = dict(sess, last=27.50, high=27.60)
+es.apply_nasdaq(s3, n)
+check("a range that would exclude the last price is not applied", s3["high"] == 27.60 and s3["low"] == 26.40)
+s4 = dict(sess)
+es.apply_nasdaq(s4, None)
+check("no Nasdaq answer leaves the prices alone", s4["high"] == 26.90 and s4["volume"] is None)
+
+# ── the volume is kept past midnight, per session ────────────────────────────
+import tempfile
+os.environ["FINTERM_DATA_DIR"] = tempfile.mkdtemp(prefix="extvol")
+seen = {"date": MON.isoformat(), "volume": 930942.0}
+es.remember_volume("IONQ", "post", seen)
+later = {"date": MON.isoformat(), "volume": None}
+es.remember_volume("IONQ", "post", later)
+check("a volume seen before midnight is recalled after Nasdaq blanks it", later["volume"] == 930942.0, str(later))
+for label, args in [("another session's", ("IONQ", "pre", {"date": MON.isoformat(), "volume": None})),
+                    ("another day's", ("IONQ", "post", {"date": TUE.isoformat(), "volume": None})),
+                    ("another symbol's", ("AAPL", "post", {"date": MON.isoformat(), "volume": None}))]:
+    es.remember_volume(*args)
+    check(f"{label} volume is not recalled for this one", args[2]["volume"] is None, str(args[2]))
+grown = {"date": MON.isoformat(), "volume": 1_200_000.0}
+es.remember_volume("IONQ", "post", grown)
+again = {"date": MON.isoformat(), "volume": None}
+es.remember_volume("IONQ", "post", again)
+check("a later reading of a live session replaces the earlier one", again["volume"] == 1_200_000.0)
+
+# ── which symbols ────────────────────────────────────────────────────────────
+for sym, want in [("AAPL", True), ("SPY", True), ("BRK-B", True), ("F", True), ("BRK.B", False),
+                  ("7203.T", False), ("VOD.L", False), ("SHOP.TO", False), ("^GSPC", False),
+                  ("ES=F", False), ("EURUSD=X", False), ("BTC-USD", False), ("0700.HK", False), ("", False)]:
+    check(f"extended session for {sym or '(empty)'}: {want}", es.has_us_extended_session(sym) is want)
+
+check("empty frame yields no sessions", es.summarise(pd.DataFrame(), DAILY, now) == (None, None))
+
+print()
+if failures:
+    print(f"{len(failures)} FAILED: " + ", ".join(failures))
+    sys.exit(1)
+print("all extended-session checks passed")

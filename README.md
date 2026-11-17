@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`51deba8f2`](https://github.com/yumima/finterm/commit/51deba8f2) ownership: Largest Funds and Big Moves read the stored scan instead of redoing it
 - [`08eda5c37`](https://github.com/yumima/finterm/commit/08eda5c37) alpha arena: the script loads again; numpy capped at the release a fresh install was checked on
 - [`72fe65c12`](https://github.com/yumima/finterm/commit/72fe65c12) lifecycle: a terminate signal quits cleanly on every launch, not only the first
 - [`3fdfd9678`](https://github.com/yumima/finterm/commit/3fdfd9678) ownership: 5% stakes (13D / 13G) market-wide, and alerts on stakes, fund moves and followed funds

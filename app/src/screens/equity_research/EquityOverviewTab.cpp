@@ -19,12 +19,14 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QTimeZone>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -830,6 +832,23 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     }
     targets_timer_->start();
 
+    // The previous symbol's sessions go with it; the panel reads a dash until
+    // this one's arrive. Asked again every minute while the tab is up — an
+    // extended session moves, and the regular quote does not carry it.
+    ext_sessions_ = {};
+    ext_answered_ = false;
+    render_extended_sessions();
+    fetch_extended_sessions();
+    if (!ext_timer_) {
+        ext_timer_ = new QTimer(this);
+        ext_timer_->setInterval(60 * 1000);
+        connect(ext_timer_, &QTimer::timeout, this, [this]() {
+            if (isVisible() && !current_symbol_.isEmpty())
+                fetch_extended_sessions();
+        });
+    }
+    ext_timer_->start();
+
     // Drop every prior subscription before rebinding. Without this, a late
     // resolve for the previous symbol (quote/info/historical) would still
     // call into apply_*_state with stale data — exactly the filter-on-
@@ -931,7 +950,9 @@ QWidget* EquityOverviewTab::build_col1() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(6);
     vl->addWidget(build_trading_panel());
-    // Today's Trading is quote-driven; these two are info-driven.
+    vl->addWidget(build_extended_panel());
+    // Today's Trading is quote-driven and Extended Hours has its own fetch;
+    // these two are info-driven.
     for (QWidget* p : {build_valuation_panel(), build_share_stats_panel()}) {
         vl->addWidget(p);
         add_info_overlay(p);
@@ -948,6 +969,127 @@ QWidget* EquityOverviewTab::build_trading_panel() {
     vol_val_ = add_row(p, "VOLUME", YELLOW, "volume");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
+}
+
+QWidget* EquityOverviewTab::build_extended_panel() {
+    auto* p = make_panel("EXTENDED HOURS", ui::colors::AMBER);
+    auto* pl = static_cast<QVBoxLayout*>(p->layout());
+
+    ext_note_ = new QLabel(ui::formatting::placeholder());
+    ext_note_->setWordWrap(true);
+    ext_note_->setStyleSheet(QString("color:%1;font-size:%2px;background:transparent;border:0;")
+                                 .arg(ui::colors::TEXT_SECONDARY())
+                                 .arg(FONT_KEY));
+    pl->addWidget(ext_note_);
+
+    for (ExtBlock& b : ext_blocks_) {
+        // The panel's stylesheet is a QFrame rule and would box this in too.
+        b.box = new QFrame;
+        b.box->setStyleSheet(QStringLiteral("QFrame{background:transparent;border:0;}"));
+        auto* bl = new QVBoxLayout(b.box);
+        bl->setContentsMargins(0, 2, 0, 2);
+        bl->setSpacing(4);
+
+        auto* head = new QHBoxLayout;
+        head->setContentsMargins(0, 0, 0, 0);
+        head->setSpacing(4);
+        b.title = new QLabel;
+        b.title->setTextFormat(Qt::RichText);
+        b.title->setStyleSheet(
+            QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;background:transparent;border:0;")
+                .arg(CYAN));
+        b.when = new QLabel;
+        b.when->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        b.when->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;border:0;")
+                                  .arg(ui::colors::TEXT_SECONDARY()));
+        head->addWidget(b.title);
+        head->addWidget(b.when, 1);
+        bl->addLayout(head);
+
+        b.price = add_row(b.box, "PRICE", ui::colors::TEXT_PRIMARY);
+        b.price->setTextFormat(Qt::RichText);
+        b.range = add_row(b.box, "RANGE", ui::colors::TEXT_PRIMARY);
+        b.volume = add_row(b.box, "VOLUME", YELLOW);
+        b.volume_share = add_row(b.box, "% OF AVG DAY", YELLOW);
+        b.volume_share->setToolTip(
+            QStringLiteral("This session's volume as a share of an average full trading day\n"
+                           "(the 20 sessions before it). Extended hours are thin: a move on\n"
+                           "a fraction of a percent of a day's volume is a handful of orders.\n"
+                           "After-hours volume includes closing-auction and late-reported\n"
+                           "trades that print after 16:00, so a large share is not unusual."));
+        b.box->hide();
+        pl->addWidget(b.box);
+    }
+    pl->addStretch();
+    return p;
+}
+
+void EquityOverviewTab::fetch_extended_sessions() {
+    const QString symbol = current_symbol_;
+    if (symbol.isEmpty())
+        return;
+    services::equity::fetch_extended_sessions(symbol, this, [this, symbol](bool ok, QJsonObject r, QString) {
+        if (!ok || symbol != current_symbol_)
+            return; // a failed refresh keeps what is shown; the next minute asks again
+        ext_sessions_ = services::equity::parse_extended_sessions(r);
+        ext_answered_ = true;
+        render_extended_sessions();
+    });
+}
+
+void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::ExtSession& s, bool pre) {
+    b.box->setVisible(s.valid);
+    if (!s.valid)
+        return;
+    const QString name = pre ? QStringLiteral("PRE-MARKET") : QStringLiteral("AFTER HOURS");
+    b.title->setText(s.live ? QString("%1 <span style='color:%2;'>\u25cf LIVE</span>").arg(name, ui::colors::POSITIVE())
+                            : name);
+
+    // EVENT-STAMP: the last extended-hours print — a real instant, read in ET.
+    const QDateTime at = QDateTime::fromSecsSinceEpoch(s.last_ts, QTimeZone("America/New_York"));
+    const QLocale en = QLocale::c();
+    // No "ET" on the label: the column is 200px and it was the part cut off.
+    b.when->setText(s.last_ts > 0 ? en.toString(s.date, "ddd d MMM") + at.toString(" HH:mm")
+                                  : en.toString(s.date, "ddd d MMM"));
+    b.when->setToolTip(QString("The session's last print, Eastern time. It traded in %1 of the session's %2 minutes.")
+                           .arg(s.minutes)
+                           .arg(pre ? 330 : 240));
+
+    if (std::isfinite(s.pct)) {
+        const char* tone = s.pct > 0 ? ui::colors::POSITIVE() : s.pct < 0 ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY();
+        b.price->setText(QString("%1 <span style='color:%2;'>%3%4%</span>")
+                             .arg(fmt_price(s.last), tone, s.pct > 0 ? "+" : "", QString::number(s.pct, 'f', 2)));
+        b.price->setToolTip(QString("%1 the close of %2 on %3.")
+                                .arg(pre ? "Against the previous close:" : "Against that day's close:",
+                                     fmt_price(s.ref_close), en.toString(s.ref_date, "ddd d MMM")));
+    } else {
+        b.price->setText(fmt_price(s.last));
+        b.price->setToolTip(QStringLiteral("No close to measure this session against."));
+    }
+    b.range->setText(std::isfinite(s.low) && std::isfinite(s.high)
+                         ? QString("%1 \u2013 %2").arg(fmt_price(s.low), fmt_price(s.high))
+                         : ui::formatting::placeholder());
+    b.volume->setText(fmt_large(s.volume));
+    const double share = s.volume_pct_of_day();
+    b.volume_share->setText(std::isfinite(share) ? QString::number(share, 'f', share < 10 ? 2 : 1) + "%"
+                                                 : ui::formatting::placeholder());
+}
+
+void EquityOverviewTab::render_extended_sessions() {
+    if (!ext_note_)
+        return;
+    const auto& x = ext_sessions_;
+    const bool any = x.after_hours.valid || x.pre_market.valid;
+    ext_note_->setVisible(!any);
+    if (!any) {
+        ext_note_->setText(!ext_answered_ ? ui::formatting::placeholder()
+                           : x.unsupported ? QStringLiteral("No US pre-market or after-hours session for this instrument.")
+                                           : QStringLiteral("No pre-market or after-hours trades in the last five sessions."));
+    }
+    // The more recent session on top.
+    const bool pre_first = x.pre_is_latest();
+    render_ext_block(ext_blocks_[0], pre_first ? x.pre_market : x.after_hours, pre_first);
+    render_ext_block(ext_blocks_[1], pre_first ? x.after_hours : x.pre_market, !pre_first);
 }
 
 QWidget* EquityOverviewTab::build_valuation_panel() {

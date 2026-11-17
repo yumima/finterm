@@ -97,6 +97,23 @@ void fetch_analyst_targets(const QString& symbol, QObject* ctx, ReportJsonCallba
         python::PythonWorker::kComputeActionTimeoutMs);
 }
 
+void fetch_extended_sessions(const QString& symbol, QObject* ctx, ReportJsonCallback cb) {
+    QPointer<QObject> guard(ctx);
+    python::PythonWorker::instance().submit(
+        QStringLiteral("extended_sessions"), QJsonObject{{"symbol", symbol}},
+        [guard, cb](bool ok, QJsonObject result, QString err) {
+            if (!guard)
+                return;
+            if (!ok || result.contains(QStringLiteral("error"))) {
+                const QString body = result.value(QStringLiteral("error")).toString();
+                cb(false, {}, (err.isEmpty() ? body : err).left(160));
+                return;
+            }
+            cb(true, result, {});
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
+}
+
 void fetch_report_filings(const QString& symbol, QObject* ctx, ReportJsonCallback cb) {
     const QString key = kFilingsKey + symbol;
     if (const auto hit = CacheManager::instance().try_get(key)) {

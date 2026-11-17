@@ -622,6 +622,13 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_extended_hours.py
     )
     set_tests_properties(extended_hours PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+    # The ER overview's after-hours / pre-market summary: each session against
+    # its own close, stray prints out of the range, volume only on its own day.
+    add_test(
+        NAME extended_sessions
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_extended_sessions.py
+    )
+    set_tests_properties(extended_sessions PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
 # ── An earnings reaction must come from a session that has closed ────────────

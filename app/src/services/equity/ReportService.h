@@ -37,6 +37,10 @@ void fetch_industry_peers(const QString& symbol, QObject* ctx,
 /// `firms` list is an answer — nobody publishes targets for this symbol.
 void fetch_analyst_targets(const QString& symbol, QObject* ctx, ReportJsonCallback cb);
 
+/// The latest after-hours and pre-market session of `symbol`, each against its
+/// own close — parse with parse_extended_sessions() (ExtendedSessions.h).
+void fetch_extended_sessions(const QString& symbol, QObject* ctx, ReportJsonCallback cb);
+
 /// A section the model wrote for this company earlier today.
 ///
 /// Kept by (section, symbol, day) rather than by prompt: the prompt carries

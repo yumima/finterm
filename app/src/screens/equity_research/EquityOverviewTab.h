@@ -2,6 +2,7 @@
 #pragma once
 #include "services/equity/AnalystTargets.h"
 #include "services/equity/EquityResearchModels.h"
+#include "services/equity/ExtendedSessions.h"
 #include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
@@ -230,6 +231,7 @@ class EquityOverviewTab : public QWidget {
     QWidget* build_col4();
 
     QWidget* build_trading_panel();
+    QWidget* build_extended_panel();
     QWidget* build_valuation_panel();
     QWidget* build_share_stats_panel();
     QWidget* build_analyst_panel();
@@ -269,6 +271,26 @@ class EquityOverviewTab : public QWidget {
     QLabel* low_val_ = nullptr;
     QLabel* prev_close_val_ = nullptr;
     QLabel* vol_val_ = nullptr;
+
+    // Extended hours panel — the latest after-hours and pre-market session,
+    // the more recent one on top. Fetched on its own (not part of the quote).
+    struct ExtBlock {
+        QFrame* box = nullptr;
+        QLabel* title = nullptr;
+        QLabel* when = nullptr;
+        QLabel* price = nullptr;
+        QLabel* range = nullptr;
+        QLabel* volume = nullptr;
+        QLabel* volume_share = nullptr;
+    };
+    ExtBlock ext_blocks_[2];
+    QLabel* ext_note_ = nullptr; ///< shown instead of the blocks when there is no session to show
+    services::equity::ExtSessions ext_sessions_;
+    bool ext_answered_ = false; ///< the current symbol's sessions have arrived
+    QTimer* ext_timer_ = nullptr;
+    void fetch_extended_sessions();
+    void render_extended_sessions();
+    void render_ext_block(ExtBlock& b, const services::equity::ExtSession& s, bool pre);
 
     // Valuation panel
     QLabel* mktcap_val_ = nullptr;
