@@ -2,6 +2,7 @@
 
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
+#include "core/util/AppLifecycle.h"
 #include "core/keys/CredentialCatalogue.h"
 #include "core/logging/Logger.h"
 #include "python/PythonSetupManager.h"
@@ -427,6 +428,9 @@ void PythonRunner::start_next() {
         }
 
         auto* proc = new QProcess(this);
+        // A script can run for an hour (the 13F sync): it ends with the app,
+        // however the app ends, rather than writing on as an orphan.
+        lifecycle::bind_to_app(proc);
         QStringList full_args;
 
         // If the script is inside a sub-package (contains '/'), use -m <module>

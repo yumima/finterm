@@ -2296,6 +2296,12 @@ def sync(progress=None, max_filings=None):
     everything already in is skipped."""
     if requests is None:
         return {"error": "requests not available"}
+    # SEC refuses automated requests that do not name a contact (since
+    # 2026-10). Without one every step below fails, and quietly: say so.
+    from finterm_identity import contact_email
+    if not contact_email():
+        return {"error": "SEC needs a contact email for automated access — set \"Contact email\" "
+                         "in Settings › API keys (Your identity)", "transient": False}
     out = {"datasets": [], "days": 0, "filings": 0, "failed": 0, "quarters": {}}
     con = connect()
     try:
@@ -2433,6 +2439,10 @@ def sync(progress=None, max_filings=None):
             out["resolved"] = r.get("resolved", 0)
     out["recheck"] = recheck_tickers()
     out["filed_dates"] = backfill_filed_dates()
+    if not urls and not out["days"] and not out["filings"] and out.get("warning"):
+        # Neither source answered: a failure, not "up to date".
+        out["error"] = "SEC did not answer (data-set list and EDGAR index): " + out["warning"]
+        out["transient"] = True
     return out
 
 
