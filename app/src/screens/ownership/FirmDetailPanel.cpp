@@ -1,4 +1,8 @@
 #include "screens/ownership/FirmDetailPanel.h"
+#include <QSignalBlocker>
+#include <QPushButton>
+#include <QHBoxLayout>
+#include "services/alerts/AlertService.h"
 
 #include "services/ownership/OwnershipService.h"
 #include "ui/formatting/NumberFormat.h"
@@ -100,7 +104,26 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
                                        "padding:3px 0 1px 0;")
                                    .arg(ui::colors::AMBER()));
     book_title_->setWordWrap(true);
-    root->addWidget(book_title_);
+    // FOLLOW: an alert when this fund files its next 13F (Settings ›
+    // Notifications' ownership switch delivers it).
+    follow_ = new QPushButton;
+    follow_->setCheckable(true);
+    follow_->setCursor(Qt::PointingHandCursor);
+    follow_->setToolTip(QStringLiteral("Alert me when this fund files its next 13F, with its biggest buy and sell"));
+    follow_->setStyleSheet(QString("QPushButton{color:%1;background:transparent;border:1px solid %2;padding:2px 8px;"
+                                   "font-size:11px;font-weight:700;} QPushButton:checked{color:%3;border-color:%3;}")
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    follow_->hide();
+    connect(follow_, &QPushButton::clicked, this, [this](bool on) {
+        alerts::AlertService::instance().set_fund_followed(raw_cik_, manager_, on);
+        sync_follow();
+    });
+    connect(&alerts::AlertService::instance(), &alerts::AlertService::rules_changed, this, [this]() { sync_follow(); });
+    auto* title_row = new QHBoxLayout;
+    title_row->setContentsMargins(0, 0, 0, 0);
+    title_row->addWidget(book_title_, 1);
+    title_row->addWidget(follow_, 0, Qt::AlignVCenter);
+    root->addLayout(title_row);
 
     positions_ = new QTableWidget;
     positions_->setColumnCount(9);
@@ -176,9 +199,24 @@ void FirmDetailPanel::set_firm(const QString& cik, const QString& quarter) {
     if (key == cik_)
         return;
     cik_ = key;
+    raw_cik_ = cik;
+    manager_.clear(); // known again only once this filer's book has loaded
+    sync_follow();
     if (!cik.isEmpty())
         services::OwnershipService::instance().load_book(cik, quarter);
     render();
+}
+
+void FirmDetailPanel::sync_follow() {
+    auto& alerts = alerts::AlertService::instance();
+    const bool show = !raw_cik_.isEmpty() && !manager_.isEmpty() && alerts.running();
+    follow_->setVisible(show);
+    if (!show)
+        return;
+    const bool on = alerts.fund_followed(raw_cik_);
+    QSignalBlocker block(follow_);
+    follow_->setChecked(on);
+    follow_->setText(on ? QStringLiteral("★ FOLLOWING") : QStringLiteral("☆ FOLLOW"));
 }
 
 void FirmDetailPanel::render() {
@@ -222,6 +260,8 @@ void FirmDetailPanel::render() {
 
     book_title_->setText(b.manager.isEmpty() ? QStringLiteral("Holdings")
                                              : b.manager + QStringLiteral(" — disclosed equity holdings"));
+    manager_ = b.manager;
+    sync_follow();
 
     // Breadth is stated with the size: a book of 49,751 names is an index
     // book whatever its value, and the reader should know which kind of

@@ -49,6 +49,60 @@ InsiderBuy buy(const QString& sym, const QString& acc, const QString& who, const
 class TestAlertRules : public QObject {
     Q_OBJECT
   private slots:
+    void filing_alerts_fire_once_per_filing() {
+        const QDate today(2026, 11, 16);
+        QHash<QString, QDate> seen;
+        const QSet<QString> covered{QStringLiteral("CRS"), QStringLiteral("0001067983")};
+        const QVector<FilingEvent> rows{
+            {QStringLiteral("stake:A1"), QStringLiteral("CRS"), QDate(2026, 11, 13)},
+            {QStringLiteral("stake:A2"), QStringLiteral("XYZ"), QDate(2026, 11, 13)},        // not covered
+            {QStringLiteral("stake:A3"), QStringLiteral("CRS"), QDate(2026, 10, 1)},         // history
+            {QStringLiteral("fund:B1"), QStringLiteral("0001067983"), QDate(2026, 11, 14)},
+            {QString(), QStringLiteral("CRS"), QDate(2026, 11, 13)},                          // no key
+            {QStringLiteral("stake:A4"), QStringLiteral("CRS"), QDate(2026, 11, 20)}};       // dated ahead
+        bool changed = false;
+        const auto out = step_filings(rows, covered, seen, today, &changed);
+        QCOMPARE(out.size(), 2);
+        QCOMPARE(out[0].key, QStringLiteral("stake:A1"));
+        QCOMPARE(out[1].key, QStringLiteral("fund:B1"));
+        QVERIFY(changed);
+        changed = false;
+        QVERIFY(step_filings(rows, covered, seen, today, &changed).isEmpty()); // a re-read stays silent
+        QVERIFY(!changed);
+    }
+
+    void a_stake_is_news_when_it_is_new_or_moved() {
+        QVERIFY(stake_is_news(true, false, 5.1, kNaN));    // a new 13D
+        QVERIFY(stake_is_news(false, false, kNaN, kNaN));  // a new 13G, even without a percentage
+        QVERIFY(stake_is_news(true, true, 7.5, 6.0));      // 13D amended 1.5 points
+        QVERIFY(!stake_is_news(true, true, 6.4, 6.0));     // a restatement
+        QVERIFY(stake_is_news(true, true, 10.2, 9.8));     // crossed 10%
+        QVERIFY(!stake_is_news(false, true, 9.0, 5.0));    // 13G amendment: passive, never
+        QVERIFY(!stake_is_news(true, true, kNaN, 6.0));    // unknown now: nothing concluded
+        QVERIFY(stake_is_news(true, true, 15.0, kNaN));    // earlier filing out of reach: announced
+    }
+
+    void filing_rule_kinds_round_trip() {
+        for (Kind k : {Kind::StakeFiling, Kind::FundMove, Kind::FundFiled}) {
+            Rule r;
+            r.id = QStringLiteral("x");
+            r.kind = k;
+            r.scope = k == Kind::FundFiled ? Scope::Symbol : Scope::OwnNames;
+            r.symbol = k == Kind::FundFiled ? QStringLiteral("0001067983") : QString();
+            r.label = QStringLiteral("Berkshire Hathaway Inc");
+            QVERIFY(r.valid());
+            const auto back = rule_from_json(to_json(r));
+            QVERIFY(back.has_value());
+            QCOMPARE(int(back->kind), int(k));
+            QCOMPARE(back->label, r.label);
+            QVERIFY(is_filing_kind(k));
+        }
+        Rule bare;
+        bare.id = QStringLiteral("y");
+        bare.kind = Kind::FundFiled;
+        QVERIFY(!bare.valid()); // a followed fund needs its CIK
+    }
+
     // ── crossings ────────────────────────────────────────────────────────────
     void above_fires_once_then_rearms_across_the_band() {
         const Rule r = price_rule(Kind::PriceAbove, 100.0);

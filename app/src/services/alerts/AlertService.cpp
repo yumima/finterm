@@ -48,6 +48,8 @@ QString session_name(int market_hours) {
 QString money(double v) {
     if (!std::isfinite(v))
         return QStringLiteral("value not reported");
+    if (std::abs(v) >= 1e9) // 13F moves run to billions: "$2939.3M" read as a typo
+        return QStringLiteral("$%1B").arg(v / 1e9, 0, 'f', 1);
     if (std::abs(v) >= 1e6)
         return QStringLiteral("$%1M").arg(v / 1e6, 0, 'f', 1);
     if (std::abs(v) >= 1e3)
@@ -70,6 +72,7 @@ AlertService::AlertService() {
     insider_timer_ = new QTimer(this);
     insider_timer_->setInterval(kInsiderRecheckMs);
     connect(insider_timer_, &QTimer::timeout, this, &AlertService::check_insiders);
+    connect(insider_timer_, &QTimer::timeout, this, &AlertService::check_filings);
     switches_timer_ = new QTimer(this);
     switches_timer_->setInterval(kSwitchesRefreshMs);
     connect(switches_timer_, &QTimer::timeout, this, [this]() {
@@ -118,6 +121,7 @@ void AlertService::start() {
     switches_timer_->start();
     insider_timer_->start();
     QTimer::singleShot(kInsiderFirstCheckMs, this, &AlertService::check_insiders);
+    QTimer::singleShot(kInsiderFirstCheckMs + 5'000, this, &AlertService::check_filings);
     LOG_INFO("Alerts", QString("watching %1 alert rule(s) while the app runs").arg(set_.rules.size()));
     emit rules_changed();
 }
@@ -307,6 +311,80 @@ void AlertService::set_own_names_insider(bool on) {
         r.scope = Scope::OwnNames;
         add_rule(r);
     }
+}
+
+bool AlertService::own_names_on(Kind k) const {
+    for (const auto& r : set_.rules)
+        if (r.kind == k && r.scope == Scope::OwnNames && !r.paused)
+            return true;
+    return false;
+}
+
+void AlertService::set_own_names(Kind k, bool on) {
+    if (k == Kind::InsiderCluster) {
+        set_own_names_insider(on);
+        return;
+    }
+    if (on == own_names_on(k))
+        return;
+    for (const auto& r : set_.rules)
+        if (r.kind == k && r.scope == Scope::OwnNames) {
+            set_paused(r.id, !on);
+            if (on)
+                check_filings();
+            return;
+        }
+    if (on) {
+        Rule r;
+        r.kind = k;
+        r.scope = Scope::OwnNames;
+        add_rule(r);
+        check_filings();
+    }
+}
+
+bool AlertService::fund_followed(const QString& cik) const {
+    for (const auto& r : set_.rules)
+        if (r.kind == Kind::FundFiled && r.symbol == cik.trimmed().toUpper() && !r.paused)
+            return true;
+    return false;
+}
+
+void AlertService::set_fund_followed(const QString& cik, const QString& name, bool on) {
+    const QString c = cik.trimmed().toUpper();
+    for (const auto& r : set_.rules)
+        if (r.kind == Kind::FundFiled && r.symbol == c) {
+            if (on)
+                set_paused(r.id, false);
+            else
+                remove_rule(r.id);
+            return;
+        }
+    if (on) {
+        Rule r;
+        r.kind = Kind::FundFiled;
+        r.symbol = c;
+        r.label = name;
+        add_rule(r);
+        check_filings(); // a filing from the last week alerts at once; older ones are history
+    }
+}
+
+QSet<QString> AlertService::covered(Kind k) const {
+    QSet<QString> out;
+    bool own = false;
+    for (const auto& r : set_.rules) {
+        if (r.kind != k || r.paused)
+            continue;
+        if (r.scope == Scope::OwnNames && k != Kind::FundFiled)
+            own = true;
+        else
+            out.insert(r.symbol);
+    }
+    if (own)
+        for (const auto& s : services::OwnershipService::instance().own_symbols())
+            out.insert(s.toUpper());
+    return out;
 }
 
 bool AlertService::has_active_insider_rule() const {
@@ -607,6 +685,227 @@ void AlertService::check_insiders() {
                 self->check_insiders();
         },
         /*on_line=*/{}, 60'000);
+}
+
+// ── Stakes, fund moves, fund filings ────────────────────────────────────────
+
+namespace {
+QString pct_text(const QJsonValue& v) {
+    return v.isDouble() ? QStringLiteral("%1%").arg(v.toDouble(), 0, 'f', 1) : QStringLiteral("an unstated share");
+}
+QString quarter_text(const QDate& q) {
+    return q.isValid() ? QStringLiteral("Q%1 %2").arg((q.month() - 1) / 3 + 1).arg(q.year()) : QString();
+}
+} // namespace
+
+void AlertService::check_filings() {
+    if (!running_)
+        return;
+    if (filings_checking_) {
+        filings_recheck_ = true; // a rule was added mid-pass: look again after it
+        return;
+    }
+    refresh_delivery_switches();
+    if (!insider_on_)
+        return; // the Ownership alerts switch in Settings covers all filing alerts
+    const QSet<QString> stake_syms = covered(Kind::StakeFiling);
+    const QSet<QString> move_syms = covered(Kind::FundMove);
+    const QSet<QString> funds = covered(Kind::FundFiled);
+    if (stake_syms.isEmpty() && move_syms.isEmpty() && funds.isEmpty())
+        return;
+    filings_checking_ = true;
+    filings_pending_ = 0;
+    const QString path = db_path_;
+    QPointer<AlertService> self = this;
+    auto done_one = [self]() {
+        if (!self || --self->filings_pending_ > 0)
+            return;
+        self->filings_checking_ = false;
+        if (prune_seen(self->set_.insider_seen, QDate::currentDate()))
+            self->save_states();
+        if (self->filings_recheck_) {
+            self->filings_recheck_ = false;
+            QTimer::singleShot(0, self, [self]() {
+                if (self)
+                    self->check_filings();
+            });
+        }
+    };
+    auto run = [&](const QString& script, const QString& action, const QJsonObject& payload,
+                   std::function<void(const QJsonObject&)> handle) {
+        ++filings_pending_;
+        python::PythonRunner::instance().run(
+            script, {action, QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+            [self, path, handle, done_one](python::PythonResult result) {
+                if (!self)
+                    return;
+                done_one();
+                if (!self->running_ || self->db_path_ != path)
+                    return;
+                // A failed read is not "nothing new": nothing is concluded from it.
+                const QJsonObject o = result.success
+                                          ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
+                                          : QJsonObject{};
+                if (o.isEmpty() || o.contains(QStringLiteral("error")))
+                    return;
+                handle(o);
+            },
+            /*on_line=*/{}, 120'000);
+    };
+    auto list = [](const QSet<QString>& s) {
+        QStringList l(s.begin(), s.end());
+        l.sort();
+        return QJsonArray::fromStringList(l);
+    };
+
+    if (!stake_syms.isEmpty())
+        run(QStringLiteral("sec_stakes_market.py"), QStringLiteral("recent"),
+            QJsonObject{{"symbols", list(stake_syms)}, {"days", kInsiderFreshDays + 7}},
+            [self, stake_syms](const QJsonObject& o) {
+                QVector<FilingEvent> rows;
+                QHash<QString, QPair<QString, QString>> text;
+                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                    const auto r = v.toObject();
+                    const bool activist = r.value(QStringLiteral("activist")).toBool();
+                    const bool amendment = r.value(QStringLiteral("amendment")).toBool();
+                    if (!stake_is_news(activist, amendment, r.value(QStringLiteral("pct")).toDouble(kNaN),
+                                       r.value(QStringLiteral("prev_pct")).toDouble(kNaN)))
+                        continue;
+                    FilingEvent e{QStringLiteral("stake:") + r.value(QStringLiteral("accession")).toString(),
+                                  r.value(QStringLiteral("ticker")).toString().toUpper(),
+                                  QDate::fromString(r.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
+                    const QString form = activist ? QStringLiteral("13D") : QStringLiteral("13G");
+                    const QString was = r.value(QStringLiteral("prev_pct")).isDouble()
+                                            ? QStringLiteral(" (was %1)").arg(pct_text(r.value(QStringLiteral("prev_pct"))))
+                                            : QString();
+                    text.insert(e.key,
+                                {QStringLiteral("%1 %2%3 — %4").arg(form, amendment ? QStringLiteral("amended") : QStringLiteral("filed"),
+                                                                     QString(), e.subject),
+                                 QStringLiteral("%1 reports %2 of %3%4%5; filed %6. %7 A filing, not a call.")
+                                     .arg(r.value(QStringLiteral("filer")).toString(), pct_text(r.value(QStringLiteral("pct"))),
+                                          e.subject, was,
+                                          r.value(QStringLiteral("event_date")).toString().isEmpty()
+                                              ? QString()
+                                              : QStringLiteral(", event date %1")
+                                                    .arg(short_date(QDate::fromString(
+                                                        r.value(QStringLiteral("event_date")).toString(), Qt::ISODate))),
+                                          short_date(e.filed),
+                                          activist ? QStringLiteral("A 13D means the holder may seek influence.")
+                                                   : QStringLiteral("A 13G is a passive holder."))});
+                    rows.push_back(e);
+                }
+                bool dirty = false;
+                const auto events = step_filings(rows, stake_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
+                self->deliver_filings(events, Kind::StakeFiling, text);
+                if (dirty)
+                    self->save_states();
+            });
+
+    if (!move_syms.isEmpty())
+        run(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("big_moves"),
+            QJsonObject{{"symbols", list(move_syms)},
+                        {"filed_within", kInsiderFreshDays + 7},
+                        {"limit", 100},
+                        {"active_only", true},
+                        {"readonly", true}},
+            [self, move_syms](const QJsonObject& o) {
+                QVector<FilingEvent> rows;
+                QHash<QString, QPair<QString, QString>> text;
+                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                    const auto r = v.toObject();
+                    FilingEvent e{QStringLiteral("move:") + r.value(QStringLiteral("url")).toString() + QLatin1Char('|') +
+                                      r.value(QStringLiteral("cusip")).toString(),
+                                  r.value(QStringLiteral("ticker")).toString().toUpper(),
+                                  QDate::fromString(r.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
+                    const double flow = r.value(QStringLiteral("flow")).toDouble();
+                    const QString kind = r.value(QStringLiteral("kind")).toString();
+                    text.insert(e.key,
+                                {QStringLiteral("13F: %1 %2 %3").arg(r.value(QStringLiteral("manager")).toString(), kind, e.subject),
+                                 QStringLiteral("%1 %2 %3 — about %4 (%5% of its book), %6 vs %7; filed %8. "
+                                                "Estimated from quarter-end holdings; a filing, not a call.")
+                                     .arg(r.value(QStringLiteral("manager")).toString(), kind, e.subject,
+                                          (flow >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + money(std::fabs(flow)),
+                                          QString::number(r.value(QStringLiteral("book_pct")).toDouble(), 'f', 1),
+                                          quarter_text(QDate::fromString(r.value(QStringLiteral("quarter")).toString(), Qt::ISODate)),
+                                          quarter_text(QDate::fromString(r.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate)),
+                                          short_date(e.filed))});
+                    rows.push_back(e);
+                }
+                bool dirty = false;
+                const auto events = step_filings(rows, move_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
+                self->deliver_filings(events, Kind::FundMove, text);
+                if (dirty)
+                    self->save_states();
+            });
+
+    if (!funds.isEmpty())
+        run(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("fund_filings"), QJsonObject{{"ciks", list(funds)}},
+            [self, funds](const QJsonObject& o) {
+                QVector<FilingEvent> rows;
+                QHash<QString, QPair<QString, QString>> text;
+                for (const auto& v : o.value(QStringLiteral("funds")).toArray()) {
+                    const auto f = v.toObject();
+                    const QString cik = f.value(QStringLiteral("cik")).toString().toUpper();
+                    FilingEvent e{QStringLiteral("fund:") + f.value(QStringLiteral("accession")).toString(), cik,
+                                  QDate::fromString(f.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
+                    auto move = [](const QJsonValue& m) {
+                        const auto x = m.toObject();
+                        if (x.isEmpty())
+                            return QStringLiteral("—");
+                        const double val = x.value(QStringLiteral("value")).toDouble();
+                        const QString t = x.value(QStringLiteral("ticker")).toString();
+                        return QStringLiteral("%1 %2%3")
+                            .arg(t.isEmpty() ? x.value(QStringLiteral("issuer")).toString() : t,
+                                 val >= 0 ? QStringLiteral("+") : QStringLiteral("−"), money(std::fabs(val)));
+                    };
+                    text.insert(e.key,
+                                {QStringLiteral("13F filed — %1").arg(f.value(QStringLiteral("manager")).toString()),
+                                 QStringLiteral("%1 filed its %2 13F on %3. Biggest buy: %4. Biggest sell: %5 "
+                                                "(estimated dollars).")
+                                     .arg(f.value(QStringLiteral("manager")).toString(),
+                                          quarter_text(QDate::fromString(f.value(QStringLiteral("quarter")).toString(), Qt::ISODate)),
+                                          short_date(e.filed), move(f.value(QStringLiteral("top_buy"))),
+                                          move(f.value(QStringLiteral("top_sell"))))});
+                    rows.push_back(e);
+                }
+                bool dirty = false;
+                const auto events = step_filings(rows, funds, self->set_.insider_seen, QDate::currentDate(), &dirty);
+                self->deliver_filings(events, Kind::FundFiled, text);
+                if (dirty)
+                    self->save_states();
+            });
+    if (filings_pending_ == 0)
+        filings_checking_ = false;
+}
+
+void AlertService::deliver_filings(const QVector<FilingEvent>& events, Kind kind,
+                                   const QHash<QString, QPair<QString, QString>>& text) {
+    QStringList fired;
+    for (const auto& ev : events) {
+        const auto t = text.value(ev.key);
+        notifications::NotificationRequest req;
+        req.title = t.first;
+        req.message = t.second;
+        req.level = notifications::NotifLevel::Alert;
+        req.trigger = notifications::NotifTrigger::OwnershipAlert;
+        if (kind != Kind::FundFiled)
+            req.symbol = ev.subject;
+        notifications::NotificationService::instance().send(req);
+        for (const auto& r : set_.rules) {
+            if (r.kind != kind || r.paused)
+                continue;
+            if ((r.scope == Scope::OwnNames && kind != Kind::FundFiled) || r.symbol == ev.subject) {
+                RuleState& s = state_ref(r.id);
+                s.last_fired = QDateTime::currentDateTimeUtc();
+                fired << r.id;
+            }
+        }
+    }
+    fired.removeDuplicates();
+    if (!fired.isEmpty())
+        save_states();
+    for (const auto& id : fired)
+        emit state_changed(id);
 }
 
 // ── Delivery ─────────────────────────────────────────────────────────────────

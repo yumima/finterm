@@ -109,6 +109,10 @@ class OwnershipService : public QObject {
     /// The largest single stake changes across every filer. The first call on
     /// a new index state computes them (a few minutes), later ones are local.
     void load_big_moves(const QString& side, const QString& sort, bool active_only, int filed_within = 0);
+    /// 13D / 13G filings of the last `days` days from the local stakes store.
+    void load_stakes(int days, const QString& kind, bool new_only);
+    const ownership::Stakes& stakes() const { return stakes_; }
+    bool stakes_loading() const { return stakes_loading_; }
     const ownership::BigMoves& big_moves() const { return big_moves_; }
     bool big_moves_loading() const { return big_moves_loading_; }
     const ownership::TopFirms& top_firms() const { return top_firms_; }
@@ -160,6 +164,7 @@ class OwnershipService : public QObject {
     void firms_found();
     void top_firms_updated();
     void big_moves_updated();
+    void stakes_updated();
     /// Progress / result of pull_latest_filings, for a status line.
     void latest_pull_status(QString text);
     void index_changed(QString summary);
@@ -195,6 +200,12 @@ class OwnershipService : public QObject {
     bool short_rank_loading_ = false;
     ownership::Movers movers_;
     bool movers_loading_ = false;
+    ownership::Stakes stakes_;
+    bool stakes_loading_ = false;
+    QString stakes_pending_; ///< a request made while one ran: days|kind|new_only
+    QTimer* stakes_timer_ = nullptr;
+    bool stakes_scanning_ = false;
+    void run_stakes_scan();
     ownership::BigMoves big_moves_;
     bool big_moves_loading_ = false;
     QString big_moves_pending_; ///< a request made while one ran: side|sort|active

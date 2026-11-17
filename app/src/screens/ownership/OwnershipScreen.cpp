@@ -139,9 +139,10 @@ void OwnershipScreen::build_ui() {
     movers_ = new MoversPanel;
     largest_funds_ = new LargestFundsPanel;
     big_moves_ = new BigMovesPanel;
+    stakes_ = new StakesPanel;
     for (auto* p : {static_cast<QWidget*>(insider_buys_), static_cast<QWidget*>(short_rank_),
                     static_cast<QWidget*>(movers_), static_cast<QWidget*>(largest_funds_),
-                    static_cast<QWidget*>(big_moves_)})
+                    static_cast<QWidget*>(big_moves_), static_cast<QWidget*>(stakes_)})
         p->setContentsMargins(0, 8, 0, 0);
     tabs_->addTab(insider_buys_, QStringLiteral("INSIDER BUYS"));
     tabs_->addTab(short_rank_, QStringLiteral("SHORT-CONSTRAINED"));
@@ -149,6 +150,7 @@ void OwnershipScreen::build_ui() {
     // Appended, not inserted: saved tab indices stay valid.
     tabs_->addTab(largest_funds_, QStringLiteral("LARGEST FUNDS"));
     tabs_->addTab(big_moves_, QStringLiteral("BIG MOVES"));
+    tabs_->addTab(stakes_, QStringLiteral("5% STAKES"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int i) { load_tab(i); });
     auto open = [this](const QString& sym) { emit navigate_to_screen(QStringLiteral("equity_research"), sym); };
     connect(insider_buys_, &InsiderBuysPanel::stock_activated, this, open);
@@ -156,6 +158,7 @@ void OwnershipScreen::build_ui() {
     connect(movers_, &MoversPanel::stock_activated, this, open);
     connect(largest_funds_, &LargestFundsPanel::stock_activated, this, open);
     connect(big_moves_, &BigMovesPanel::stock_activated, this, open);
+    connect(stakes_, &StakesPanel::stock_activated, this, open);
 
     stack_->addWidget(tabs_); // 0
 
@@ -211,7 +214,7 @@ void OwnershipScreen::show_filer(const QString& cik) {
 }
 
 void OwnershipScreen::load_tab(int index) {
-    if (index < 0 || index > 4 || loaded_[index])
+    if (index < 0 || index > 5 || loaded_[index])
         return;
     loaded_[index] = true;
     if (index == 0)
@@ -222,8 +225,10 @@ void OwnershipScreen::load_tab(int index) {
         movers_->refresh();
     else if (index == 3)
         largest_funds_->refresh();
-    else
+    else if (index == 4)
         big_moves_->refresh();
+    else
+        stakes_->refresh();
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {

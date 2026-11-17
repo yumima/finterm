@@ -76,6 +76,8 @@ class AlertsDialog : public QDialog {
 
     QLabel* notes_ = nullptr;
     QCheckBox* own_insider_ = nullptr;
+    QCheckBox* own_stakes_ = nullptr;
+    QCheckBox* own_moves_ = nullptr;
     QTableWidget* table_ = nullptr;
     QPushButton* edit_btn_ = nullptr;
     QPushButton* pause_btn_ = nullptr;

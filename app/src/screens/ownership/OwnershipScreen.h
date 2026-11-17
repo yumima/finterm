@@ -16,6 +16,7 @@ namespace finterm::screens {
 class InsiderBuysPanel;
 class MoversPanel;
 class BigMovesPanel;
+class StakesPanel;
 class LargestFundsPanel;
 class ShortRankPanel;
 
@@ -68,9 +69,10 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     MoversPanel* movers_ = nullptr;
     LargestFundsPanel* largest_funds_ = nullptr;
     BigMovesPanel* big_moves_ = nullptr;
+    StakesPanel* stakes_ = nullptr;
     QWidget* empty_page_ = nullptr;
 
-    bool loaded_[5] = {false, false, false, false, false};
+    bool loaded_[6] = {false, false, false, false, false, false};
     bool shown_once_ = false;
 };
 

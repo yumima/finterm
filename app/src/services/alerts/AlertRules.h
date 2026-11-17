@@ -67,7 +67,26 @@ inline constexpr int kInsiderQueryDays = ownership::kClusterWindowDays + kInside
 /// query can return, so a remembered filing can never come back as new.
 inline constexpr int kInsiderSeenKeepDays = 120;
 
-enum class Kind { PriceAbove, PriceBelow, DayMove, InsiderCluster };
+enum class Kind {
+    PriceAbove,
+    PriceBelow,
+    DayMove,
+    InsiderCluster,
+    StakeFiling, ///< a 13D, 13D amendment that moved the stake, or new 13G on a covered name
+    FundMove,    ///< a big 13F stake change in a covered name (BIG MOVES' corrected rows)
+    FundFiled    ///< a followed fund filed its 13F; `symbol` holds the fund's CIK
+};
+
+/// Whether a kind is one of the filing alerts (insider, stake, fund): they
+/// fire once per filing, never on a price.
+inline bool is_filing_kind(Kind k) {
+    return k == Kind::InsiderCluster || k == Kind::StakeFiling || k == Kind::FundMove || k == Kind::FundFiled;
+}
+
+/// A 13D amendment is news when the stake moved at least this many points;
+/// an amendment that restates the same percentage (a new address, a joint
+/// filer added) is not.
+inline constexpr double kStakeMovePts = 1.0;
 /// Which prints a price rule watches.
 enum class Session {
     Regular, ///< regular-session quotes only (09:30–16:00 ET for US listings)
@@ -94,6 +113,7 @@ struct Rule {
     Scope scope = Scope::Symbol;
     bool paused = false;
     QDateTime created;
+    QString label; ///< FundFiled: the fund's name, for the rules table
 
     bool is_price() const { return kind == Kind::PriceAbove || kind == Kind::PriceBelow; }
     bool valid() const {
@@ -104,7 +124,11 @@ struct Rule {
             case Kind::DayMove:
                 return !symbol.isEmpty() && std::isfinite(pct) && pct > 0;
             case Kind::InsiderCluster:
+            case Kind::StakeFiling:
+            case Kind::FundMove:
                 return scope == Scope::OwnNames || !symbol.isEmpty();
+            case Kind::FundFiled:
+                return !symbol.isEmpty(); // the fund's CIK
         }
         return false;
     }
@@ -130,6 +154,12 @@ inline QString kind_key(Kind k) {
             return QStringLiteral("day_move");
         case Kind::InsiderCluster:
             return QStringLiteral("insider_cluster");
+        case Kind::StakeFiling:
+            return QStringLiteral("stake_filing");
+        case Kind::FundMove:
+            return QStringLiteral("fund_move");
+        case Kind::FundFiled:
+            return QStringLiteral("fund_filed");
     }
     return {};
 }
@@ -143,6 +173,12 @@ inline std::optional<Kind> kind_from_key(const QString& s) {
         return Kind::DayMove;
     if (s == QLatin1String("insider_cluster"))
         return Kind::InsiderCluster;
+    if (s == QLatin1String("stake_filing"))
+        return Kind::StakeFiling;
+    if (s == QLatin1String("fund_move"))
+        return Kind::FundMove;
+    if (s == QLatin1String("fund_filed"))
+        return Kind::FundFiled;
     return std::nullopt;
 }
 
@@ -201,6 +237,14 @@ inline QString describe(const Rule& r) {
                        : QStringLiteral("Insider cluster buy (%1+ insiders in %2 days)")
                              .arg(ownership::kClusterMinInsiders)
                              .arg(ownership::kClusterWindowDays);
+        case Kind::StakeFiling:
+            return r.scope == Scope::OwnNames ? QStringLiteral("5% stake filed (13D / 13G) · every watchlist & portfolio name")
+                                              : QStringLiteral("5% stake filed (13D / 13G)");
+        case Kind::FundMove:
+            return r.scope == Scope::OwnNames ? QStringLiteral("Big 13F move · every watchlist & portfolio name")
+                                              : QStringLiteral("Big 13F move by an active manager");
+        case Kind::FundFiled:
+            return QStringLiteral("13F filed by %1").arg(r.label.isEmpty() ? QStringLiteral("CIK ") + r.symbol : r.label);
     }
     return {};
 }
@@ -230,7 +274,10 @@ inline QString state_label(const Rule& r, const RuleState& s) {
             return std::isfinite(s.fired_baseline) ? QStringLiteral("armed · once per session")
                                                    : QStringLiteral("armed");
         case Kind::InsiderCluster:
-            return QStringLiteral("armed");
+        case Kind::StakeFiling:
+        case Kind::FundMove:
+        case Kind::FundFiled:
+            return QStringLiteral("armed · once per filing");
     }
     return {};
 }
@@ -432,6 +479,59 @@ inline QVector<ClusterEvent> step_insider(const QVector<InsiderBuy>& rows, const
     return out;
 }
 
+// ── 3b. Stakes, fund moves, fund filings: once per filing ───────────────────
+
+/// One filing-level event from a stake, 13F-move or fund-filing feed. `key`
+/// identifies it for good (accession, or accession + CUSIP for a single
+/// move in a book); `subject` is what a rule covers (a ticker, or a fund's
+/// CIK); `filed` is the day it reached SEC.
+struct FilingEvent {
+    QString key;
+    QString subject;
+    QDate filed;
+};
+
+/// The events to announce now: covered, filed within kInsiderFreshDays of
+/// @today (older is history however late the feed caught up), and not
+/// announced before. Every returned key is added to @seen — the same set
+/// the insider alert uses, with keys that cannot collide with an accession.
+inline QVector<FilingEvent> step_filings(const QVector<FilingEvent>& rows, const QSet<QString>& covered,
+                                         QHash<QString, QDate>& seen, const QDate& today, bool* changed = nullptr) {
+    QVector<FilingEvent> out;
+    for (const auto& e : rows) {
+        if (e.key.isEmpty() || !e.filed.isValid() || !covered.contains(e.subject))
+            continue;
+        if (e.filed.daysTo(today) > kInsiderFreshDays || e.filed > today)
+            continue;
+        if (seen.contains(e.key))
+            continue;
+        seen.insert(e.key, e.filed);
+        out.push_back(e);
+        if (changed)
+            *changed = true;
+    }
+    return out;
+}
+
+/// Whether one stake filing is worth an alert: an initial 13D or 13G always;
+/// a 13D amendment when the stake moved by kStakeMovePts or more (or crossed
+/// 10%, the line where short-swing rules start to bind), or when the earlier
+/// percentage is unknown; a 13G amendment never — those are passive holders
+/// restating a position.
+inline bool stake_is_news(bool activist, bool amendment, double pct, double prev_pct) {
+    if (!amendment)
+        return true;
+    if (!activist || !std::isfinite(pct))
+        return false;
+    // The previous filing is older than the store reaches (most amendments):
+    // what moved cannot be told, so the amendment is announced with its
+    // percentage rather than silently dropped.
+    if (!std::isfinite(prev_pct))
+        return true;
+    const bool crossed_ten = (pct >= 10.0) != (prev_pct >= 10.0);
+    return std::fabs(pct - prev_pct) >= kStakeMovePts || crossed_ten;
+}
+
 /// Forget announced accessions filed more than kInsiderSeenKeepDays ago.
 inline bool prune_seen(QHash<QString, QDate>& seen, const QDate& today) {
     bool any = false;
@@ -461,8 +561,10 @@ inline QJsonObject to_json(const Rule& r) {
                  r.session == Session::Extended ? QStringLiteral("extended") : QStringLiteral("regular"));
     } else if (r.kind == Kind::DayMove) {
         o.insert(QStringLiteral("pct"), r.pct);
-    } else if (r.kind == Kind::InsiderCluster) {
+    } else if (is_filing_kind(r.kind)) {
         o.insert(QStringLiteral("scope"), r.scope == Scope::OwnNames ? QStringLiteral("own") : QStringLiteral("symbol"));
+        if (!r.label.isEmpty())
+            o.insert(QStringLiteral("label"), r.label);
     }
     return o;
 }
@@ -484,6 +586,7 @@ inline std::optional<Rule> rule_from_json(const QJsonObject& o) {
     r.session = o.value(QStringLiteral("session")).toString() == QLatin1String("extended") ? Session::Extended
                                                                                             : Session::Regular;
     r.scope = o.value(QStringLiteral("scope")).toString() == QLatin1String("own") ? Scope::OwnNames : Scope::Symbol;
+    r.label = o.value(QStringLiteral("label")).toString();
     if (r.id.isEmpty() || !r.valid())
         return std::nullopt;
     return r;

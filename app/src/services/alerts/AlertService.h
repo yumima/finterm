@@ -74,6 +74,15 @@ class AlertService : public QObject {
     bool own_names_insider_on() const;
     void set_own_names_insider(bool on);
 
+    /// The same one-toggle rule for the other filing alerts: a 5% stake
+    /// (13D / 13G) or a big 13F move in any watchlist or portfolio name.
+    bool own_names_on(Kind k) const;
+    void set_own_names(Kind k, bool on);
+
+    /// "Alert me when this fund files its next 13F" — one rule per fund CIK.
+    bool fund_followed(const QString& cik) const;
+    void set_fund_followed(const QString& cik, const QString& name, bool on);
+
     /// True when an active insider-cluster rule covers `symbol` — the legacy
     /// any-insider-buy alert defers to it for cluster buys, so one filing is
     /// not announced twice.
@@ -121,6 +130,15 @@ class AlertService : public QObject {
     void on_quote(const QString& symbol, const services::QuoteData& q);
     void on_ticks(const QVector<services::StreamTick>& ticks);
     void check_insiders();
+    /// Stakes, fund moves and fund filings: one read of each local store per
+    /// pass, an alert once per filing (step_filings).
+    void check_filings();
+    void deliver_filings(const QVector<FilingEvent>& events, Kind kind,
+                         const QHash<QString, QPair<QString, QString>>& text);
+    QSet<QString> covered(Kind k) const;
+    bool filings_checking_ = false;
+    int filings_pending_ = 0;
+    bool filings_recheck_ = false;
     void deliver_cross(const Rule& r, double price, const QString& source);
     void deliver_move(const Rule& r, double change_pct, double baseline, double price);
     QSet<QString> insider_symbols() const;

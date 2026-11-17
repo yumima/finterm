@@ -1003,7 +1003,7 @@ def firms(query="", limit=40, quarter=None):
         con.close()
 
 
-def _book_moves(con, accession, prior_accession):
+def _book_moves(con, accession, prior_accession, compute=True):
     """Position-level moves between two of one filer's filings: counts of new,
     added, trimmed and exited common-stock positions, the dollar flow those
     moves imply, and the largest buy and sell. Options are excluded — a put
@@ -1013,7 +1013,7 @@ def _book_moves(con, accession, prior_accession):
     if not prior_accession:
         return None
     splits, links = _adjustments(con, _accession_quarter(con, prior_accession),
-                                 _accession_quarter(con, accession))
+                                 _accession_quarter(con, accession), compute=compute)
     prior_q = _accession_quarter(con, prior_accession)
     books = dict(con.execute("SELECT accession, stock_value FROM books WHERE accession IN (?,?)",
                              (accession, prior_accession)).fetchall())
@@ -2123,7 +2123,7 @@ def price_ranges(con, wanted, today=None):
 
 
 def big_moves(limit=200, side="both", sort="value", active_only=True, include_funds=False,
-              filed_within=0):
+              filed_within=0, symbols=None, readonly=False):
     """The largest single stake changes — one manager, one stock — across
     every 13F filer, newest filing against the one before it.
 
@@ -2137,7 +2137,15 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
     try:
         if not con.execute("SELECT 1 FROM books LIMIT 1").fetchone():
             return {"error": "no 13F data ingested yet"}
-        _ensure_big_moves(con)
+        if readonly:
+            # An alert check: what is stored, never minutes of recomputation
+            # (the sync keeps it current after every pass that read filings).
+            con.execute("""CREATE TABLE IF NOT EXISTS big_moves (
+                cik TEXT, manager TEXT, quarter TEXT, prior_quarter TEXT, cusip TEXT, issuer TEXT,
+                ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
+                book_value REAL, position_count INTEGER, prior_book_value REAL, accession TEXT, filed TEXT)""")
+        else:
+            _ensure_big_moves(con)
         where = ["1=1"]
         if side == "buys":
             where.append("flow > 0")
@@ -2148,6 +2156,11 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
         if int(filed_within or 0) > 0:
             since = (_date.today() - _td(days=int(filed_within))).isoformat()
             where.append(f"filed >= '{since}'")
+        args = []
+        if symbols:
+            syms = sorted({str(x).upper() for x in symbols if x})
+            where.append(f"ticker IN ({','.join('?' * len(syms))})")
+            args += syms
         # A buy is weighed against the book it went into, a sale against the
         # book it came out of.
         base = "(CASE WHEN flow < 0 THEN prior_book_value ELSE book_value END)"
@@ -2157,7 +2170,7 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
                    prior_shares, flow, value, book_value, position_count, prior_book_value,
                    accession, filed
               FROM big_moves WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ?""",
-            (int(limit) * (1 if include_funds else 3),)).fetchall()
+            args + [int(limit) * (1 if include_funds else 3)]).fetchall()
         out = []
         for r in rows:
             if not include_funds and is_fund(r[5]):
@@ -2172,8 +2185,8 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
             if len(out) >= int(limit):
                 break
         # The price range each move happened in: between the two filings.
-        ranges = price_ranges(con, {(r["ticker"], r["prior_quarter"], r["quarter"])
-                                    for r in out if r["ticker"]})
+        ranges = {} if readonly else price_ranges(con, {(r["ticker"], r["prior_quarter"], r["quarter"])
+                                                        for r in out if r["ticker"]})
         for r in out:
             lo_hi = ranges.get((r["ticker"], r["prior_quarter"], r["quarter"]))
             if lo_hi:
@@ -2522,6 +2535,7 @@ def sync(progress=None, max_filings=None):
             qs = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
             for a, b in zip(qs[1:], qs[:-1]):
                 _ensure_adjustments(con, a, b)
+            _ensure_big_moves(con)  # what the alerts read, current with the filings just stored
         finally:
             con.close()
 
@@ -2562,6 +2576,37 @@ def _get_status(url, timeout=60):
 def _LAST_REQ_SET():
     global _LAST_REQ
     _LAST_REQ = time.time()
+
+def fund_filings(ciks):
+    """Each fund's newest 13F: when it was filed, for which quarter, and its
+    biggest buy and sell against its previous filing — what a "fund you
+    follow filed" alert says. Reads stored corrections only (an alert check
+    must not start minutes of work)."""
+    con = connect()
+    try:
+        out = []
+        for cik in ciks or []:
+            c = _pad_cik(cik)
+            # The original before an amendment, then the earliest: one answer
+            # every pass, so a filing is announced once.
+            row = con.execute("""SELECT b.accession, b.quarter, b.manager, f.filed, b.stock_value
+                                   FROM books b JOIN filings f ON f.accession = b.accession
+                                  WHERE b.cik=? ORDER BY b.quarter DESC, COALESCE(f.is_amendment,0) ASC,
+                                        f.filed ASC, b.accession ASC LIMIT 1""", (c,)).fetchone()
+            if not row:
+                continue
+            prior = con.execute("SELECT accession FROM books WHERE cik=? AND quarter<? ORDER BY quarter DESC LIMIT 1",
+                                (c, row[1])).fetchone()
+            m = _book_moves(con, row[0], prior[0], compute=False) if prior else None
+            out.append({"cik": c, "accession": row[0], "quarter": row[1], "manager": row[2],
+                        "filed": row[3] or "", "book_value": row[4],
+                        "url": filing_url(c, row[0]),
+                        "top_buy": (m or {}).get("top_buy"), "top_sell": (m or {}).get("top_sell"),
+                        "new": (m or {}).get("new"), "exited": (m or {}).get("exited")})
+        return {"funds": out}
+    finally:
+        con.close()
+
 
 def handle_action(action, payload):
     if action == "status":
@@ -2621,7 +2666,10 @@ def handle_action(action, payload):
     if action == "big_moves":
         return big_moves(int(payload.get("limit") or 200), payload.get("side") or "both",
                          payload.get("sort") or "value", bool(payload.get("active_only", True)),
-                         bool(payload.get("include_funds", False)), int(payload.get("filed_within") or 0))
+                         bool(payload.get("include_funds", False)), int(payload.get("filed_within") or 0),
+                         payload.get("symbols"), bool(payload.get("readonly", False)))
+    if action == "fund_filings":
+        return fund_filings(payload.get("ciks") or [])
     if action == "top_firms":
         return top_firms(int(payload.get("limit") or 50))
     if action == "book":

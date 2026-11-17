@@ -1007,6 +1007,12 @@ if(Python3_Interpreter_FOUND)
         NAME form4_market
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_form4_market.py
     )
+    # Market-wide 13D / 13G: index spellings, header parties, structured
+    # fields (group stakes, event dates) — fixtures, no network.
+    add_test(
+        NAME stakes_market
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_stakes_market.py
+    )
     # Ownership where the reader already is: watchlist rows from the three
     # local stores, the holdings alert query, and the calendar's date math
     # (13F deadlines, FINRA publication, lock-ups) — fixture stores, stubbed

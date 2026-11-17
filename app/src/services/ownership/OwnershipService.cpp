@@ -1580,6 +1580,15 @@ QString OwnershipService::index_status_text() const {
 }
 
 void OwnershipService::start_background_sync() {
+    if (!stakes_timer_) {
+        // The 13D / 13G store fills itself the same way as the Form 4 one:
+        // a few business days per pass until the last 30 are read, then a
+        // pass every six hours for the new ones.
+        stakes_timer_ = new QTimer(this);
+        stakes_timer_->setSingleShot(true);
+        connect(stakes_timer_, &QTimer::timeout, this, [this]() { run_stakes_scan(); });
+        stakes_timer_->start(kSyncFirstDelayMs + 60'000);
+    }
     if (sync_timer_)
         return;
     sync_timer_ = new QTimer(this);
@@ -1649,6 +1658,87 @@ void OwnershipService::run_13f_sync() {
                                                    : kSyncEveryMs);
         },
         /*on_line=*/{}, kSyncTimeoutMs);
+}
+
+void OwnershipService::run_stakes_scan() {
+    if (stakes_scanning_)
+        return;
+    stakes_scanning_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_stakes_market.py"), {QStringLiteral("scan"), payload_of({{"days", 30}, {"max_new_days", 5}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->stakes_scanning_ = false;
+            const auto o = result.success ? parse_object(result) : QJsonObject{};
+            const bool failed = !result.success || o.contains(QStringLiteral("error"));
+            const int remaining = o.value(QStringLiteral("days_remaining")).toInt();
+            if (o.value(QStringLiteral("opened")).toInt() > 0) {
+                self->stakes_ = {}; // new filings: the tab reads again on next look
+                emit self->stakes_updated();
+            }
+            if (self->stakes_timer_)
+                self->stakes_timer_->start(failed ? kSyncRefusedMs : remaining > 0 ? 2 * 60'000 : kSyncEveryMs);
+        },
+        /*on_line=*/{}, kSyncTimeoutMs);
+}
+
+void OwnershipService::load_stakes(int days, const QString& kind, bool new_only) {
+    if (stakes_loading_) {
+        // The filters moved meanwhile: asked for when this read lands.
+        stakes_pending_ = QStringLiteral("%1|%2|%3").arg(days).arg(kind).arg(new_only ? 1 : 0);
+        return;
+    }
+    stakes_loading_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run_interactive(
+        QStringLiteral("sec_stakes_market.py"),
+        {QStringLiteral("recent"), payload_of({{"days", days}, {"kind", kind}, {"new_only", new_only}, {"limit", 400}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->stakes_loading_ = false;
+            Stakes st;
+            st.loaded = true;
+            if (!result.success) {
+                st.error = result.error.isEmpty() ? QStringLiteral("stakes query failed") : result.error.left(200);
+            } else {
+                const auto o = parse_object(result);
+                st.error = o.value(QStringLiteral("error")).toString();
+                st.read_through = iso_date(o, "read_through");
+                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                    const auto r = v.toObject();
+                    Stake s;
+                    s.filed = iso_date(r, "filed");
+                    s.form = r.value(QStringLiteral("form")).toString();
+                    s.ticker = r.value(QStringLiteral("ticker")).toString();
+                    s.company = r.value(QStringLiteral("company")).toString();
+                    s.filer = r.value(QStringLiteral("filer")).toString();
+                    if (r.value(QStringLiteral("pct")).isDouble())
+                        s.pct = r.value(QStringLiteral("pct")).toDouble();
+                    if (r.value(QStringLiteral("prev_pct")).isDouble())
+                        s.prev_pct = r.value(QStringLiteral("prev_pct")).toDouble();
+                    if (r.value(QStringLiteral("shares")).isDouble())
+                        s.shares = r.value(QStringLiteral("shares")).toDouble();
+                    s.event = iso_date(r, "event_date");
+                    s.activist = r.value(QStringLiteral("activist")).toBool();
+                    s.amendment = r.value(QStringLiteral("amendment")).toBool();
+                    s.url = r.value(QStringLiteral("url")).toString();
+                    st.rows.push_back(s);
+                }
+            }
+            self->stakes_ = st;
+            emit self->stakes_updated();
+            if (!self->stakes_pending_.isEmpty()) {
+                const QStringList p = self->stakes_pending_.split(QLatin1Char('|'));
+                self->stakes_pending_.clear();
+                if (p.size() == 3)
+                    self->load_stakes(p[0].toInt(), p[1], p[2] == QLatin1String("1"));
+            }
+        },
+        60'000);
+    emit stakes_updated();
 }
 
 void OwnershipService::check_for_newer_quarter() {

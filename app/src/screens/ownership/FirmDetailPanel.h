@@ -39,6 +39,10 @@ class FirmDetailPanel : public QWidget {
     void render();
 
     QString cik_; // the book cache key: OwnershipService::book_key()
+    QString raw_cik_;  ///< the filer's CIK alone, for following it
+    QString manager_;  ///< its name, for the alert
+    class QPushButton* follow_ = nullptr;
+    void sync_follow();
     QLabel* status_ = nullptr;
     QLabel* book_title_ = nullptr;
     QTableWidget* positions_ = nullptr;

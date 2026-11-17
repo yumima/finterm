@@ -63,6 +63,12 @@ QString kind_label(Kind k) {
             return QStringLiteral("Day move beyond ±%");
         case Kind::InsiderCluster:
             return QStringLiteral("Insider cluster buy (2+ insiders)");
+        case Kind::StakeFiling:
+            return QStringLiteral("5% stake filed (13D / 13G)");
+        case Kind::FundMove:
+            return QStringLiteral("Big 13F move by an active manager");
+        case Kind::FundFiled:
+            return QStringLiteral("Fund files its 13F");
     }
     return {};
 }
@@ -128,7 +134,10 @@ AlertEditDialog::AlertEditDialog(QWidget* parent, const std::optional<Rule>& exi
     form->addRow(QStringLiteral("Symbol"), symbol_);
 
     kind_ = new QComboBox;
-    for (Kind k : {Kind::PriceAbove, Kind::PriceBelow, Kind::DayMove, Kind::InsiderCluster})
+    // FundFiled is set from a fund's page (FOLLOW), not typed here: its
+    // subject is a fund, not a ticker.
+    for (Kind k : {Kind::PriceAbove, Kind::PriceBelow, Kind::DayMove, Kind::InsiderCluster, Kind::StakeFiling,
+                   Kind::FundMove})
         kind_->addItem(kind_label(k), int(k));
     form->addRow(QStringLiteral("When"), kind_);
 
@@ -277,6 +286,22 @@ void AlertEditDialog::validate() {
                        .arg(ownership::kClusterWindowDays)
                        .arg(alerts::kInsiderFreshDays);
             break;
+        case Kind::StakeFiling:
+            text = QStringLiteral("Fires once per filing when someone files a 13D or a new 13G — a stake of 5% or "
+                                  "more — or amends a 13D by %1 point or more (or across 10%). 13G amendments are "
+                                  "passive holders restating a position and never fire. Filings older than %2 "
+                                  "days are history, not alerts.")
+                       .arg(alerts::kStakeMovePts, 0, 'f', 0)
+                       .arg(alerts::kInsiderFreshDays);
+            break;
+        case Kind::FundMove:
+            text = QStringLiteral("Fires once per filing when an active manager (1,000 names or fewer) changes its "
+                                  "stake by $25M or more, as BIG MOVES shows it — splits, CUSIP changes and new "
+                                  "listings already undone. 13F positions are up to 135 days old when filed.");
+            break;
+        case Kind::FundFiled:
+            text = QStringLiteral("Fires once when the fund files its next 13F, with its biggest buy and sell.");
+            break;
     }
     hint_->setText(text);
 }
@@ -308,6 +333,14 @@ AlertsDialog::AlertsDialog(QWidget* parent) : QDialog(parent) {
     root->addWidget(own_insider_);
     connect(own_insider_, &QCheckBox::toggled, this,
             [](bool on) { AlertService::instance().set_own_names_insider(on); });
+    own_stakes_ = new QCheckBox(QStringLiteral("… and on 5% stakes (13D / 13G) filed in them"));
+    root->addWidget(own_stakes_);
+    connect(own_stakes_, &QCheckBox::toggled, this,
+            [](bool on) { AlertService::instance().set_own_names(Kind::StakeFiling, on); });
+    own_moves_ = new QCheckBox(QStringLiteral("… and on big 13F moves in them by active managers"));
+    root->addWidget(own_moves_);
+    connect(own_moves_, &QCheckBox::toggled, this,
+            [](bool on) { AlertService::instance().set_own_names(Kind::FundMove, on); });
 
     table_ = new QTableWidget(0, 4);
     table_->setHorizontalHeaderLabels(
@@ -404,7 +437,10 @@ QString AlertsDialog::selected_id() const {
 void AlertsDialog::edit_selected() {
     auto& svc = AlertService::instance();
     const auto r = svc.rule(selected_id());
-    if (!r)
+    // A followed fund has nothing to edit (its subject is a fund, set from the
+    // fund's page): pause or remove it. Opening the editor would save it back
+    // as whatever kind the editor's list starts with.
+    if (!r || r->kind == Kind::FundFiled)
         return;
     AlertEditDialog dlg(this, r, r->symbol,
                         svc.current_price(r->symbol).value_or(std::numeric_limits<double>::quiet_NaN()));
@@ -424,8 +460,8 @@ void AlertsDialog::refresh_notes() {
     for (const auto& r : svc.rules()) {
         if (r.paused)
             continue;
-        any_price |= r.kind != Kind::InsiderCluster;
-        any_insider |= r.kind == Kind::InsiderCluster;
+        any_price |= !is_filing_kind(r.kind);
+        any_insider |= is_filing_kind(r.kind);
     }
     if (any_price && !svc.price_delivery_on())
         lines << QStringLiteral("<span style='color:%1;'>Price Alerts are switched off in Settings › Notifications: "
@@ -460,6 +496,11 @@ void AlertsDialog::refresh() {
         QSignalBlocker block(own_insider_);
         own_insider_->setChecked(svc.own_names_insider_on());
         own_insider_->setEnabled(svc.running());
+    }
+    for (auto [box, kind] : {std::pair{own_stakes_, Kind::StakeFiling}, std::pair{own_moves_, Kind::FundMove}}) {
+        QSignalBlocker block(box);
+        box->setChecked(svc.own_names_on(kind));
+        box->setEnabled(svc.running());
     }
     const QString keep = selected_id();
     QSignalBlocker block(table_);

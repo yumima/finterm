@@ -633,6 +633,132 @@ void BigMovesPanel::render() {
                                : QStringLiteral("all books, index giants included")));
 }
 
+// ── 5% STAKES ────────────────────────────────────────────────────────────────
+
+StakesPanel::StakesPanel(QWidget* parent) : QWidget(parent) {
+    setStyleSheet(control_style());
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(6);
+    auto title = section_title(QStringLiteral("5% STAKES"));
+    title_note_ = title.right;
+    auto* bar = new QHBoxLayout;
+    bar->addWidget(title.widget, 1);
+    kind_ = new QComboBox;
+    kind_->addItem(QStringLiteral("13D — may seek influence"), QStringLiteral("13d"));
+    kind_->addItem(QStringLiteral("13D and 13G"), QStringLiteral("all"));
+    kind_->addItem(QStringLiteral("13G — passive"), QStringLiteral("13g"));
+    bar->addWidget(kind_);
+    bar->addWidget(control_label(QStringLiteral("Filed")));
+    days_ = new QComboBox;
+    days_->addItem(QStringLiteral("last 7 days"), 7);
+    days_->addItem(QStringLiteral("last 30 days"), 30);
+    days_->setCurrentIndex(1);
+    bar->addWidget(days_);
+    new_only_ = new QCheckBox(QStringLiteral("new stakes only"));
+    bar->addWidget(new_only_);
+    for (auto* c : {kind_, days_})
+        connect(c, &QComboBox::activated, this, [this](int) { refresh(); });
+    connect(new_only_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
+    root->addLayout(bar);
+
+    table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Holder"),
+                         QStringLiteral("Form"), QStringLiteral("% of class"), QStringLiteral("Change"),
+                         QStringLiteral("Shares"), QStringLiteral("Event"), QStringLiteral("Filed")});
+    table_->horizontalHeaderItem(7)->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "The date the holder crossed the threshold or the stake changed — the filing is due 5 business days after "
+        "for a 13D")));
+    connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
+    connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {
+        if (c != 8)
+            return;
+        if (auto* it = table_->item(r, c); it && !it->data(Qt::UserRole).toString().isEmpty())
+            QDesktopServices::openUrl(QUrl(it->data(Qt::UserRole).toString()));
+    });
+    root->addWidget(table_, 1);
+    foot_ = note_label();
+    root->addWidget(foot_);
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::stakes_updated, this,
+            [this]() { render(); });
+    render();
+}
+
+void StakesPanel::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    // Emptied by a scan that read new filings while another tab was up.
+    if (!services::OwnershipService::instance().stakes().loaded &&
+        !services::OwnershipService::instance().stakes_loading())
+        refresh();
+}
+
+void StakesPanel::refresh() {
+    services::OwnershipService::instance().load_stakes(days_->currentData().toInt(), kind_->currentData().toString(),
+                                                       new_only_->isChecked());
+    render();
+}
+
+void StakesPanel::render() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& st = svc.stakes();
+    if (!st.loaded) {
+        table_->setRowCount(0);
+        title_note_->setText(svc.stakes_loading() ? QStringLiteral("reading the local 13D / 13G store…") : QString());
+        if (!svc.stakes_loading() && isVisible())
+            refresh(); // emptied by a scan that read new filings: read again while on screen
+        return;
+    }
+    if (!st.error.isEmpty()) {
+        table_->setRowCount(0);
+        foot_->setText(st.error);
+        return;
+    }
+    title_note_->setText(st.read_through.isValid()
+                             ? QStringLiteral("EDGAR read through %1 · a 13D is due 5 business days after the stake")
+                                   .arg(st.read_through.toString(QStringLiteral("d MMM yyyy")))
+                             : QStringLiteral("the first read of EDGAR runs a few minutes after launch"));
+    table_->setUpdatesEnabled(false);
+    table_->setRowCount(st.rows.size());
+    for (int i = 0; i < st.rows.size(); ++i) {
+        const auto& s = st.rows[i];
+        table_->setItem(i, 0, ticker_cell(s.ticker, s.company));
+        table_->setItem(i, 1, cell(s.company));
+        table_->setItem(i, 2, cell(s.filer));
+        const QString form = (s.activist ? QStringLiteral("13D") : QStringLiteral("13G")) +
+                             (s.amendment ? QStringLiteral(" amend.") : QStringLiteral(" new"));
+        table_->setItem(i, 3, cell(form, s.activist ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
+        table_->setItem(i, 4, num_cell(s.pct ? QStringLiteral("%1%").arg(*s.pct, 0, 'f', 2) : fmt::placeholder()));
+        QString chg = fmt::placeholder();
+        QString col;
+        if (s.pct && s.prev_pct) {
+            const double d = *s.pct - *s.prev_pct;
+            chg = (d >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + QString::number(std::fabs(d), 'f', 2) +
+                  QStringLiteral(" pts");
+            col = d > 0 ? ui::colors::GREEN() : d < 0 ? ui::colors::RED() : QString();
+        } else if (!s.amendment) {
+            chg = QStringLiteral("new");
+            col = ui::colors::GREEN();
+        }
+        table_->setItem(i, 5, num_cell(chg, col));
+        table_->setItem(i, 6, num_cell(s.shares ? fmt::format_compact(*s.shares) : fmt::placeholder()));
+        table_->setItem(i, 7, num_cell(s.event.isValid() ? s.event.toString(QStringLiteral("d MMM")) : fmt::placeholder(),
+                                       ui::colors::TEXT_SECONDARY()));
+        auto* filed = num_cell(s.filed.toString(QStringLiteral("d MMM yy")), ui::colors::CYAN());
+        filed->setData(Qt::UserRole, s.url);
+        filed->setToolTip(ui::tooltip_wrap(QStringLiteral("Open this filing on SEC EDGAR")));
+        table_->setItem(i, 8, filed);
+    }
+    table_->setUpdatesEnabled(true);
+    table_->resizeColumnsToContents();
+    table_->setColumnWidth(1, qMin(qMax(table_->columnWidth(1), 160), 240));
+    table_->setColumnWidth(2, qMin(qMax(table_->columnWidth(2), 160), 260));
+    fill_width(table_, {1, 2});
+    foot_->setText(QStringLiteral("%1 filings · percentage and shares as the filing states them (structured filings "
+                                  "since Dec 2024; older free-text ones show none) · a group filing shows the "
+                                  "group's stake · 13G amendments are passive holders restating and are not "
+                                  "listed")
+                       .arg(st.rows.size()));
+}
+
 // ── LARGEST FUNDS ────────────────────────────────────────────────────────────
 
 namespace {

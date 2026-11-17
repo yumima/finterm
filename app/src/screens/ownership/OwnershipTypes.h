@@ -492,6 +492,29 @@ struct BigMoves {
     bool loaded = false;
 };
 
+/// One Schedule 13D / 13G — a holder of 5% or more of a company. Percentage
+/// and shares are the filing's own fields (structured filings since Dec
+/// 2024); absent when the filing does not carry them, never estimated.
+struct Stake {
+    QDate filed;
+    QString form; // "SC 13D", "SC 13D/A", "SC 13G"
+    QString ticker;
+    QString company;
+    QString filer;
+    std::optional<double> pct, prev_pct, shares;
+    QDate event;
+    bool activist = false;
+    bool amendment = false;
+    QString url;
+};
+
+struct Stakes {
+    QVector<Stake> rows;
+    QDate read_through;
+    QString error;
+    bool loaded = false;
+};
+
 /// The largest 13F filers and what each did since its previous filing.
 ///
 /// Ranked by each filer's newest indexed book, which can be a quarter ahead of

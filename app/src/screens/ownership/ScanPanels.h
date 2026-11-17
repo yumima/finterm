@@ -106,6 +106,30 @@ class BigMovesPanel : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
+/// Every 13D and 13G of the last weeks: who crossed 5% of which company, at
+/// what percentage, when — the freshest large-holder data (a 13D is due five
+/// business days after crossing; 13F can be 135 days old).
+class StakesPanel : public QWidget {
+    Q_OBJECT
+  public:
+    explicit StakesPanel(QWidget* parent = nullptr);
+    void refresh();
+  signals:
+    void stock_activated(const QString& symbol);
+
+  protected:
+    void showEvent(QShowEvent* e) override;
+
+  private:
+    void render();
+    QLabel* title_note_ = nullptr;
+    QComboBox* kind_ = nullptr;
+    QComboBox* days_ = nullptr;
+    QCheckBox* new_only_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QLabel* foot_ = nullptr;
+};
+
 class FirmDetailPanel;
 
 /// The largest 13F filers — the world's biggest asset managers' US-listed
