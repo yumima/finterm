@@ -358,6 +358,45 @@ def main():
             bulk._ensure_big_moves = real_scan
             bulk.price_ranges = real_ranges
 
+        # ── two scans at once store one copy ───────────────────────────────
+        # The screen's scan and the sync's overlapped; the first had already
+        # published its DELETE (the corrections commit mid-scan), so each
+        # inserted the full set and every move was listed twice.
+        saved_floors = (bulk.BIG_MOVE_FLOOR, bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS)
+        bulk.BIG_MOVE_FLOOR, bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS = 0.0, 0.0, 0
+        real_adjustments = bulk._adjustments
+        nested = {"done": False}
+
+        def _adjustments_with_a_rival(con_, *a, **k):
+            res = real_adjustments(con_, *a, **k)
+            con_.commit()   # what computing corrections does on a real index
+            if not nested["done"]:
+                nested["done"] = True
+                rival = bulk.connect()
+                try:
+                    bulk._ensure_big_moves(rival)   # a second scan, start to finish, inside the first
+                finally:
+                    rival.close()
+            return res
+
+        bulk._adjustments = _adjustments_with_a_rival
+        c5 = bulk.connect()
+        try:
+            c5.execute("DELETE FROM big_moves_run")
+            c5.execute("DELETE FROM big_moves")
+            c5.commit()
+            bulk._ensure_big_moves(c5)
+            total = c5.execute("SELECT COUNT(*) FROM big_moves").fetchone()[0]
+            distinct = c5.execute("SELECT COUNT(*) FROM (SELECT DISTINCT cik, quarter, cusip, kind, accession "
+                                  "FROM big_moves)").fetchone()[0]
+            check("big moves: the fixture yields moves to store", total > 0 and nested["done"], f"total={total}")
+            check("big moves: overlapping scans store each move once", total == distinct,
+                  f"rows={total} distinct={distinct}")
+        finally:
+            c5.close()
+            bulk._adjustments = real_adjustments
+            bulk.BIG_MOVE_FLOOR, bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS = saved_floors
+
         # ── value units ────────────────────────────────────────────────────
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.

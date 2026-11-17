@@ -2056,7 +2056,12 @@ def _ensure_big_moves(con, progress=None):
     row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
     if row and row[0] == stamp:
         return False
-    con.execute("DELETE FROM big_moves")
+    # Collected in memory and written in ONE transaction at the end. The scan
+    # used to DELETE first and INSERT filer by filer, but the corrections it
+    # asks for along the way commit — which published the half-done scan and
+    # let a second scan (the screen's, beside the sync's) add its own copy of
+    # every row: each move listed twice.
+    found = []
     qs = quarter_pair(con)
     floor = qs[0] if qs else ""
     newest = con.execute("""
@@ -2091,7 +2096,11 @@ def _ensure_big_moves(con, progress=None):
                 out.append((cik, manager, quarter, prior[0], cusip, issuer, ticker, kind, shares,
                             p_shares, flow, value, book_value, count, prior[2], accession,
                             filed_on.get(accession)))
-        con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", out)
+        found.extend(out)
+    con.commit()  # nothing of ours is pending; start the write from a clean state
+    con.execute("BEGIN IMMEDIATE")  # two scans finishing together: one waits, then replaces
+    con.execute("DELETE FROM big_moves")
+    con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", found)
     con.execute("DELETE FROM big_moves_run")
     if adj_status["complete"]:
         con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
@@ -2569,6 +2578,18 @@ def sync(progress=None, max_filings=None):
 
     # Warm the corrections the screens read, so a per-stock lookup (which
     # only reads them) finds them current.
+    # 3. Name the new holdings, and correct tickers picked before us_listing().
+    if out["filings"] or out["datasets"]:
+        newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
+        if newest:
+            r = resolve_cusips(limit=1500, quarter=newest)
+            out["resolved"] = r.get("resolved", 0)
+    out["recheck"] = recheck_tickers()
+    out["filed_dates"] = backfill_filed_dates()
+
+    # 4. The scans the screens read. Last, because the tickers and filing dates
+    # settled in step 3 are part of what they are stamped with — refreshed
+    # before it, the scan was already due again when the pass ended.
     # After a pass that read filings — and after one that did not, when the
     # stored scan belongs to another state of the index: the screens no longer
     # recompute, so a pass cut short before this step (the app closed), a
@@ -2583,15 +2604,6 @@ def sync(progress=None, max_filings=None):
             out["refreshed"] = bool(_ensure_big_moves(con))
     finally:
         con.close()
-
-    # 3. Name the new holdings, and correct tickers picked before us_listing().
-    if out["filings"] or out["datasets"]:
-        newest = max(list(out["quarters"]) + [x.get("quarter", "") for x in out["datasets"]] or [""])
-        if newest:
-            r = resolve_cusips(limit=1500, quarter=newest)
-            out["resolved"] = r.get("resolved", 0)
-    out["recheck"] = recheck_tickers()
-    out["filed_dates"] = backfill_filed_dates()
     if not urls and not out["days"] and not out["filings"] and out.get("warning"):
         # Neither source answered: a failure, not "up to date".
         out["error"] = "SEC did not answer (data-set list and EDGAR index): " + out["warning"]

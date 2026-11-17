@@ -1029,8 +1029,15 @@ void EquityOverviewTab::fetch_extended_sessions() {
     if (symbol.isEmpty())
         return;
     services::equity::fetch_extended_sessions(symbol, this, [this, symbol](bool ok, QJsonObject r, QString) {
-        if (!ok || symbol != current_symbol_)
-            return; // a failed refresh keeps what is shown; the next minute asks again
+        if (symbol != current_symbol_)
+            return;
+        if (!ok) {
+            // A failed refresh keeps what is shown; the next minute asks again.
+            // With nothing shown yet, say so — a bare dash reads as "loading".
+            if (!ext_answered_ && ext_note_)
+                ext_note_->setText(QStringLiteral("Extended-hours data did not arrive \u2014 trying again shortly."));
+            return;
+        }
         ext_sessions_ = services::equity::parse_extended_sessions(r);
         ext_answered_ = true;
         render_extended_sessions();
