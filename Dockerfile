@@ -12,11 +12,11 @@
 # BuildKit sets TARGETARCH automatically (`amd64` or `arm64`). The build picks
 # the right Qt kit, Kitware CMake tarball, and apt architecture for us:
 #
-#   docker build -t finterm:4.0.7 .
+#   docker build -t finterm:4.0.8 .
 #       → auto-detects host arch via BuildKit
 #
 #   docker buildx build --platform linux/amd64,linux/arm64 \
-#       -t finterm:4.0.7 --push .
+#       -t finterm:4.0.8 --push .
 #       → cross-build both archs in one go
 #
 # Pins (must match app/CMakeLists.txt + release.yml):
@@ -28,7 +28,7 @@
 # Run (X11 on Linux host):
 #   docker run --rm -it --net=host \
 #     -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
-#     finterm:4.0.7
+#     finterm:4.0.8
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Build ───────────────────────────────────────────────────────────

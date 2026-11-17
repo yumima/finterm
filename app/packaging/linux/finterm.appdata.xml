@@ -28,6 +28,11 @@
     <binary>finterm</binary>
   </provides>
   <releases>
+    <release version="4.0.8" date="2026-11-16">
+      <description>
+        <p>Version 4.0.8 — Ownership: the largest moves by every 13F filer, corrected for splits and CUSIP changes, dated and linked to the filing, with the price range each traded in; 5% stakes (13D / 13G) market-wide, with alerts; the 13F index keeps itself current from EDGAR. Equity Research shows the latest after-hours and pre-market session with range and volume. Reports print or save as PDF through the system dialog. Helper processes start and stop with the app.</p>
+      </description>
+    </release>
     <release version="4.0.7" date="2026-11-16">
       <description>
         <p>Version 4.0.7 — the Futures screen is back, built around the forward curve, with spreads, positioning and a paper account whose stops and targets work; a Report tab that writes one investor report on a company; analyst targets that say how old they are; listed companies leave IPO Watch.</p>
