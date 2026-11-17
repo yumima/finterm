@@ -586,6 +586,19 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(sec_statement_overlay PROPERTIES TIMEOUT 60)
 endif()
 
+# ── Earnings release + webcast links ─────────────────────────────────────────
+# earnings_links.py turns filing text into a clickable link on the ER Earnings
+# tab: it must find the address in each house style (bare domain, YouTube
+# channel, the call's own video) and never promote an email, a newsroom, a
+# social account or a non-web scheme. Offline — the release wordings are inline.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME earnings_links
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_earnings_links.py
+    )
+    set_tests_properties(earnings_links PROPERTIES TIMEOUT 30)
+endif()
+
 # ── Number grounding, agent runtime ──────────────────────────────────────────
 # The Python twin of ai_chat/NumberGrounding.h (ctest number_grounding), for
 # replies that come from the agent runtime instead of LlmService. Same cases,

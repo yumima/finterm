@@ -5178,6 +5178,10 @@ _CACHE_TTL = {
     # (OwnershipService), and two stacked hours showed data two hours old.
     "ownership_extras": 600,
     "parse_s1": 3600,
+    # the newest 8-K earnings release and its webcast address (EDGAR). Under
+    # the app's 600 s copy; a new release lands once a quarter, and a quarter
+    # hour stacked is the worst case for seeing it after the print.
+    "earnings_links": 300,
 }
 _CACHE_MAX = 512  # hard cap on entries; evict soonest-to-expire beyond this
 
@@ -5517,6 +5521,12 @@ def _daemon_dispatch_inner(action, payload):
         # IPO Watch detail-rail aggregator: quarterly financials, holders,
         # news. One daemon round-trip on row click.
         return get_ipo_extras((payload or {}).get("symbol"))
+    if action == "earnings_links":
+        # ER Earnings NEXT REPORT header: the last earnings release (8-K Item
+        # 2.02, EX-99.1) and the call webcast it names. EDGAR, not Yahoo, so
+        # it is its own action and never delays earnings_analysis.
+        import earnings_links
+        return earnings_links.get_earnings_links((payload or {}).get("symbol"))
     if action == "parse_s1":
         # Parse an S-1 prospectus into its "Recent Sales of Unregistered
         # Securities" section for the FUNDING tab. URL comes from

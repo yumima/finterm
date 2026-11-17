@@ -41,6 +41,8 @@ class EquityEarningsTab : public QWidget {
   private:
     void build_ui();
     void apply_state(const services::query::QueryStore::State& s);
+    /// Last earnings release + call webcast links after the NEXT REPORT title.
+    void apply_links(const services::query::QueryStore::State& s);
     void populate(const services::equity::EarningsAnalysis& a);
     void show_message(const QString& text);
 
@@ -82,6 +84,7 @@ class EquityEarningsTab : public QWidget {
     QLabel* next_yoy_ = nullptr;
     QLabel* next_analysts_ = nullptr;
     QLabel* headline_ = nullptr;
+    QLabel* next_links_ = nullptr; // after the title: ▶ WEBCAST ↗ · LAST RELEASE ↗
 
     // 1 · Will they beat?
     QLabel* beat_value_ = nullptr;

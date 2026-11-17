@@ -138,6 +138,11 @@ class EquityResearchService : public QObject {
     /// backs the ER Earnings tab.
     void subscribe_earnings_analysis(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
 
+    /// Subscribe to the last earnings release + call webcast links for
+    /// `symbol` (EDGAR). State carries EarningsLinks. Separate from the
+    /// analysis so a slow EDGAR never holds up the tab's numbers.
+    void subscribe_earnings_links(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y", const QString& interval = "1d");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
@@ -245,6 +250,8 @@ class EquityResearchService : public QObject {
     // hour on top of that meant a tab open across a print showed the pre-print
     // picture long after the daemon had the new one.
     static constexpr int kEarningsAnalysisTtlSec = 180;
+    // A release lands once a quarter; the daemon holds its copy 300 s under this.
+    static constexpr int kEarningsLinksTtlSec = 600;
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

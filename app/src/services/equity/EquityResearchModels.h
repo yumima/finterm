@@ -473,6 +473,18 @@ struct EarningsAnalysis {
     bool has_content() const { return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value(); }
 };
 
+/// The ER Earnings tab's NEXT REPORT links, from SEC EDGAR (daemon action
+/// `earnings_links`, scripts/earnings_links.py): the newest 8-K Item 2.02
+/// earnings release, and the webcast address that release names. Either
+/// URL may be empty — a foreign issuer has no 8-K, an image-only release
+/// names no webcast. URLs are http(s) only by the time they get here.
+struct EarningsLinks {
+    QString release_url;  // the EX-99.1 press release
+    QString release_filed; // ISO date the 8-K was filed
+    QString webcast_url;  // IR events page / call video the release points at
+    QString note;         // why a link is missing, for the tooltip
+};
+
 } // namespace finterm::services::equity
 
 // ── QVariant interop for QueryStore ─────────────────────────────────────────
@@ -490,3 +502,4 @@ Q_DECLARE_METATYPE(QVector<finterm::services::equity::NewsArticle>)
 Q_DECLARE_METATYPE(QVector<finterm::services::equity::PeerData>)
 Q_DECLARE_METATYPE(QVector<finterm::services::equity::EarningsEvent>)
 Q_DECLARE_METATYPE(finterm::services::equity::EarningsAnalysis)
+Q_DECLARE_METATYPE(finterm::services::equity::EarningsLinks)

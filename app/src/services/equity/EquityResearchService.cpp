@@ -17,6 +17,7 @@
 #include <QRegularExpression>
 #include <QTemporaryFile>
 #include <QTimer>
+#include <QUrl>
 
 #include <algorithm>
 #include <cmath>
@@ -2009,6 +2010,77 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
             25'000);
     };
     query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec, kEarningsAnalysisTtlSec * 8,
+                                            std::move(cb), std::move(fetcher));
+}
+
+namespace {
+
+/// Only a web address may become a link — the URL was lifted from a filing's
+/// text, and a `javascript:` or `file:` target must never reach a QLabel.
+QString web_url_or_empty(const QString& raw) {
+    const QUrl u(raw.trimmed(), QUrl::StrictMode);
+    const QString scheme = u.scheme().toLower();
+    if (!u.isValid() || u.host().isEmpty() || (scheme != "http" && scheme != "https"))
+        return {};
+    return u.toString(QUrl::FullyEncoded);
+}
+
+} // namespace
+
+static EarningsLinks parse_earnings_links(const QJsonObject& r) {
+    EarningsLinks l;
+    const auto rel = r.value("release").toObject();
+    l.release_url = web_url_or_empty(rel.value("url").toString());
+    l.release_filed = rel.value("filed").toString();
+    l.webcast_url = web_url_or_empty(r.value("webcast").toObject().value("url").toString());
+    l.note = r.value("note").toString();
+    return l;
+}
+
+void EquityResearchService::subscribe_earnings_links(QObject* owner, const QString& symbol,
+                                                     query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
+    const QString key = "equity:earnings_links:v1:" + symbol;
+    auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
+        // Disk copy first, like the analysis: a release changes once a
+        // quarter, and without this every launch made the header wait on a
+        // chain of SEC round trips before showing the same two links.
+        const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
+        if (cached_aged) {
+            const auto doc = QJsonDocument::fromJson(cached_aged->value.toUtf8());
+            if (doc.isObject()) {
+                resolve(QVariant::fromValue(parse_earnings_links(doc.object())), cached_aged->written_at);
+                return;
+            }
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        // Up to ten EDGAR requests (submissions, then for the newest earnings
+        // 8-K — and the one before it when the newest names no webcast — the
+        // filing index plus up to three documents), each capped at 10 s in
+        // scripts/earnings_links.py. SEC normally answers each in well under
+        // a second; 60 s covers the slow case without the UI giving up on a
+        // result the daemon then caches unseen.
+        run_daemon(
+            "earnings_links", payload,
+            [key, resolve, reject](bool ok, QJsonObject r, QString err) {
+                if (!ok) {
+                    reject(err);
+                    return;
+                }
+                if (r.contains("error")) {
+                    reject(r.value("error").toString());
+                    return;
+                }
+                finterm::CacheManager::instance().put(
+                    key, QVariant(QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact))),
+                    kEarningsLinksTtlSec, "equity");
+                resolve(QVariant::fromValue(parse_earnings_links(r)));
+            },
+            60'000);
+    };
+    query::QueryStore::instance().subscribe(owner, key, kEarningsLinksTtlSec, kEarningsLinksTtlSec * 6,
                                             std::move(cb), std::move(fetcher));
 }
 

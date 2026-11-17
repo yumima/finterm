@@ -30,7 +30,10 @@ using services::equity::EstimateDrift;
 // read as one surface when the user flips between them.
 namespace {
 
-QFrame* make_panel(const QString& title, const QString& accent_color, QVBoxLayout** body_out) {
+/// `header_out`, when given, receives the title row so a panel can put a
+/// control or link after its title (NEXT REPORT's release/webcast links).
+QFrame* make_panel(const QString& title, const QString& accent_color, QVBoxLayout** body_out,
+                   QHBoxLayout** header_out = nullptr) {
     auto* f = new QFrame;
     f->setStyleSheet(QString("QFrame { background:%1; border:1px solid %2; border-radius:4px; }")
                          .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
@@ -61,6 +64,8 @@ QFrame* make_panel(const QString& title, const QString& accent_color, QVBoxLayou
                                "background:transparent; border:0;")
                            .arg(accent_color));
     hl->addWidget(lbl);
+    if (header_out)
+        *header_out = hl;
     hl->addStretch();
     vl->addWidget(hdr);
 
@@ -279,8 +284,60 @@ void EquityEarningsTab::set_symbol(const QString& symbol) {
 
     auto& store = services::query::QueryStore::instance();
     store.unsubscribe_all(this);
-    services::equity::EquityResearchService::instance().subscribe_earnings_analysis(
-        this, symbol, [this](const services::query::QueryStore::State& s) { apply_state(s); });
+    auto& svc = services::equity::EquityResearchService::instance();
+    svc.subscribe_earnings_analysis(this, symbol,
+                                    [this](const services::query::QueryStore::State& s) { apply_state(s); });
+    if (new_symbol)
+        next_links_->hide(); // never the previous symbol's release under this one's title
+    svc.subscribe_earnings_links(this, symbol,
+                                 [this](const services::query::QueryStore::State& s) { apply_links(s); });
+}
+
+void EquityEarningsTab::apply_links(const services::query::QueryStore::State& s) {
+    if (!s.data.isValid() || s.data.isNull()) {
+        // Still loading, or EDGAR refused with nothing cached (no contact
+        // email set, SEC down). The links are an extra — no error page for
+        // them; the header just carries no links.
+        if (!s.error.isEmpty()) {
+            next_links_->hide();
+        }
+        return;
+    }
+    const auto l = s.data.value<services::equity::EarningsLinks>();
+    const QString link_color = ui::colors::CYAN();
+    const auto link = [&](const QString& url, const QString& text) {
+        // Double-quoted attribute: toHtmlEscaped() escapes " but not '.
+        return QStringLiteral("<a style=\"color:%1; text-decoration:none;\" href=\"%2\">%3</a>")
+            .arg(link_color, url.toHtmlEscaped(), text.toHtmlEscaped());
+    };
+    QStringList parts;
+    QStringList tip;
+    if (!l.webcast_url.isEmpty()) {
+        parts << link(l.webcast_url, QStringLiteral("▶ WEBCAST ↗"));
+        tip << QStringLiteral("WEBCAST — where the company's last earnings release said its call is webcast:\n%1\n"
+                              "Usually the investor-relations events page, which lists the next call and "
+                              "replays of past ones.")
+                   .arg(l.webcast_url);
+    }
+    if (!l.release_url.isEmpty()) {
+        const QDate filed = QDate::fromString(l.release_filed, Qt::ISODate);
+        const QString label = filed.isValid()
+                                  ? QStringLiteral("LAST RELEASE · %1 ↗").arg(filed.toString("d MMM yyyy").toUpper())
+                                  : QStringLiteral("LAST RELEASE ↗");
+        parts << link(l.release_url, label);
+        tip << QStringLiteral("LAST RELEASE — the company's most recent earnings press release (8-K Item 2.02, "
+                              "EX-99.1) on SEC EDGAR%1.")
+                   .arg(filed.isValid() ? QStringLiteral(", filed ") + filed.toString("d MMM yyyy") : QString());
+    }
+    if (!l.note.isEmpty())
+        tip << l.note;
+    if (parts.isEmpty()) {
+        next_links_->hide();
+        return;
+    }
+    next_links_->setText(parts.join(QStringLiteral("&nbsp;&nbsp;·&nbsp;&nbsp;")));
+    next_links_->setToolTip(tip.join(QStringLiteral("\n\n")));
+    next_links_->show();
 }
 
 void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s) {
@@ -393,7 +450,22 @@ void EquityEarningsTab::build_ui() {
 
 QWidget* EquityEarningsTab::build_next_report() {
     QVBoxLayout* body = nullptr;
-    auto* panel = make_panel("NEXT REPORT", ui::colors::AMBER(), &body);
+    QHBoxLayout* header = nullptr;
+    auto* panel = make_panel("NEXT REPORT", ui::colors::AMBER(), &body, &header);
+
+    // Right after the title: the company's last earnings release and where
+    // its call is webcast. Filled by apply_links(); hidden until then.
+    next_links_ = new QLabel;
+    next_links_->setTextFormat(Qt::RichText);
+    next_links_->setOpenExternalLinks(true);
+    next_links_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    next_links_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; "
+                                       "background:transparent; border:0;")
+                                   .arg(ui::colors::TEXT_TERTIARY()));
+    next_links_->hide();
+    // Before the header's trailing stretch, so the links sit beside the title.
+    header->insertSpacing(header->count() - 1, 12);
+    header->insertWidget(header->count() - 1, next_links_);
 
     auto* row = new QHBoxLayout;
     row->setSpacing(24);
