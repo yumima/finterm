@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`1646ad327`](https://github.com/yumima/finterm/commit/1646ad327) ownership: big moves, corrected for splits and CUSIP changes, kept current from EDGAR
 - [`dbcaf1574`](https://github.com/yumima/finterm/commit/dbcaf1574) **chore(release):** update README download links and updates.json for v4.0.7
 - [`b98896477`](https://github.com/yumima/finterm/commit/b98896477) lifecycle: helpers start and stop with the app
 - [`39bdfd394`](https://github.com/yumima/finterm/commit/39bdfd394) futures: panels you can move and resize, kept between sessions; sources named; failed reads retried

@@ -5141,13 +5141,15 @@ _CACHE_TTL = {
     # past sessions' settles behind the comparison curves do not change at all.
     "futures_curve": 20, "futures_curve_history": 1800, "futures_spread_history": 900,
     # slow-moving fundamentals / metadata — long (change at most daily)
-    "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
+    # Kept well inside the app's own cache of the same data (the reader sees
+    # the sum of both): info is 10 min in the app, so 4 min here.
+    "info": 240, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     # quarterly statements and rating changes — move a few times a quarter
     "report_extras": 600,
     # an industry's membership and ranking move over months
     "industry_peers": 3600,
     # a target changes when an analyst publishes — minutes matter on those days
-    "analyst_targets": 600,
+    "analyst_targets": 300,  # the Overview asks every 10 minutes
     "multiple_ratios": 600, "ipo_extras": 600,
     # earnings_dates carries the reported figure for the quarter that just
     # printed, which Yahoo fills in within hours of the call — the tile is

@@ -3,6 +3,7 @@
 #include "screens/equity_research/ReportBuilder.h"
 #include "services/query/QueryStore.h"
 
+#include <QIcon>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QImage>
@@ -87,6 +88,8 @@ class EquityReportTab : public QWidget {
     void record_direction(const QString& model);
     QString export_path(const QString& extension, const QString& filter);
     void export_pdf();
+    void print_report_dialog();
+    static QIcon printer_icon();
     void export_html();
 
     QString symbol_;
@@ -108,6 +111,7 @@ class EquityReportTab : public QWidget {
     ReportView* view_ = nullptr;
     QLabel* status_ = nullptr;
     QPushButton* write_btn_ = nullptr;
+    QPushButton* print_btn_ = nullptr;
     QPushButton* pdf_btn_ = nullptr;
     QPushButton* html_btn_ = nullptr;
     QTimer* render_timer_ = nullptr;

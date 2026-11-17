@@ -207,7 +207,12 @@ class EquityResearchService : public QObject {
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
     static constexpr int kQuoteTtlSec = 60;
-    static constexpr int kInfoTtlSec = 1800;      // fundamentals barely change minute-to-minute
+    // Two caches stand between the screen and Yahoo: this one and the data
+    // daemon's. The age a reader can see is their SUM, so the daemon's is
+    // kept well inside this one (yfinance_data.py _CACHE_TTL). Info carries
+    // the analyst consensus and targets, which move on report days: 30 min
+    // here on top of 10 there had shown figures up to 40 minutes old.
+    static constexpr int kInfoTtlSec = 600;
     static constexpr int kHistoricalTtlSec = 600; // daily candles stable within 10 min
     static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
 
@@ -230,9 +235,9 @@ class EquityResearchService : public QObject {
     static constexpr int kFinancialsTtlSec = 3600;
     // Peer fundamentals (P/E, P/B, ROE, …) move slowly — same hour-long TTL.
     static constexpr int kPeersTtlSec = 3600;
-    // Earnings dates are only updated when a new quarter is announced —
-    // session-long TTL is plenty.
-    static constexpr int kEarningsTtlSec = 3600;
+    // Earnings dates and reported results: an hour here plus the daemon's
+    // five minutes left a print up to 65 minutes behind on report day.
+    static constexpr int kEarningsTtlSec = 900;
     // Short on purpose. The daemon decides how often Yahoo is actually asked —
     // it keeps its own cache and shortens it to two minutes around a report —
     // so a revalidation here is usually an IPC round trip against a warm cache

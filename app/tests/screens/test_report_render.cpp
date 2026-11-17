@@ -6,6 +6,7 @@
 // Set FINTERM_RENDER_DIR to a directory to keep the rendered pages as PNGs.
 #include "screens/equity_research/ReportBuilder.h"
 
+#include <QPrinter>
 #include <QAbstractTextDocumentLayout>
 #include <QDir>
 #include <QJsonDocument>
@@ -329,6 +330,16 @@ class TestReportRender : public QObject {
         // far outside this means the page was laid out at the wrong scale.
         QVERIFY2(pages >= 5 && pages <= 12, qPrintable(QString::number(pages)));
         QVERIFY(QFileInfo(pdf).size() > 100 * 1024);
+
+        // The print dialog's "Print to File (PDF)" goes through print_report
+        // with a high-resolution printer: same pages as the export.
+        QPrinter printer(QPrinter::HighResolution);
+        prepare_report_printer(printer);
+        printer.setOutputFormat(QPrinter::PdfFormat);
+        const QString printed = QDir(dir).filePath("report-printed.pdf");
+        printer.setOutputFileName(printed);
+        QCOMPARE(print_report(sample(true), printer), pages);
+        QVERIFY(QFileInfo(printed).size() > 100 * 1024);
 
         const QString html = QDir(dir).filePath("report.html");
         QVERIFY(write_report_html(sample(true), html));

@@ -17,6 +17,8 @@
 
 #include <functional>
 
+class QPrinter;
+
 namespace finterm::screens::report {
 
 /// One input of the report and how it stands.
@@ -86,6 +88,13 @@ QString build_report_html(const ReportDoc& doc, const Palette& pal, int width, q
 /// The report as an A4 PDF on white. Returns the number of pages written, 0
 /// when the file could not be produced.
 int write_report_pdf(const ReportDoc& doc, const QString& path);
+
+/// Page size, margins and resolution the report is laid out for — set before
+/// a print dialog opens, so the dialog starts from them.
+void prepare_report_printer(QPrinter& printer);
+/// Print to whatever the print dialog chose: a printer, or its own
+/// "Print to File (PDF)". Returns the page count.
+int print_report(const ReportDoc& doc, QPrinter& printer);
 
 /// The report as one self-contained web page (charts embedded). False when
 /// the file could not be written.

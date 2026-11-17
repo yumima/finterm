@@ -1346,18 +1346,20 @@ class ImageDocument : public QTextDocument {
 
 } // namespace
 
-int write_report_pdf(const ReportDoc& d, const QString& path) {
-    QPrinter printer(QPrinter::ScreenResolution);
+void prepare_report_printer(QPrinter& printer) {
     // The report's sizes are in pixels. At the printer's native resolution a
     // 12 px font is a hundredth of an inch tall; at a screen-like resolution a
     // pixel is the pixel the page was designed in. The charts are rendered at
     // three times that, so they stay sharp in print.
     printer.setResolution(kPdfDpi);
-    printer.setOutputFormat(QPrinter::PdfFormat);
-    printer.setOutputFileName(path);
     printer.setPageSize(QPageSize(QPageSize::A4));
     printer.setPageMargins(QMarginsF(15, 15, 15, 15), QPageLayout::Millimeter);
+}
 
+int print_report(const ReportDoc& d, QPrinter& printer) {
+    // Whatever the print dialog chose (paper, printer, file), the page is laid
+    // out in the pixels it was designed in.
+    printer.setResolution(kPdfDpi);
     ImageDocument document;
     const QString html = build_report_html(d, Palette::paper(), kPdfWidth, 3.0, [&document](const QString& id, const QImage& img) {
         document.images.insert(id, img);
@@ -1368,6 +1370,16 @@ int write_report_pdf(const ReportDoc& d, const QString& path) {
     document.setHtml(html);
     const int pages = document.pageCount();
     document.print(&printer);
+    return pages;
+}
+
+int write_report_pdf(const ReportDoc& d, const QString& path) {
+    // The same layout path as the PRINT button: one place to fix.
+    QPrinter printer(QPrinter::ScreenResolution);
+    prepare_report_printer(printer);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(path);
+    const int pages = print_report(d, printer);
     return QFileInfo(path).size() > 0 ? pages : 0;
 }
 

@@ -13,6 +13,11 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QPainter>
+#include <QPixmap>
+#include <QIcon>
+#include <QPrintDialog>
+#include <QPrinter>
 #include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
@@ -133,10 +138,16 @@ void EquityReportTab::build_ui() {
     };
     write_btn_ = button(QStringLiteral("REWRITE NARRATIVE"),
                         QStringLiteral("Ask the model to write the summary and business sections again"));
+    print_btn_ = button(QStringLiteral("PRINT"),
+                        QStringLiteral("Print the report, or save it as a PDF from the print dialog"));
+    // The system's printer icon where the desktop theme has one, a drawn one
+    // where it has not; the word stays either way.
+    print_btn_->setIcon(QIcon::fromTheme(QStringLiteral("document-print"), printer_icon()));
     pdf_btn_ = button(QStringLiteral("EXPORT PDF"), QStringLiteral("Save the report as a PDF, on white"));
     html_btn_ = button(QStringLiteral("EXPORT HTML"),
                        QStringLiteral("Save the report as one self-contained web page, charts included"));
     connect(write_btn_, &QPushButton::clicked, this, [this]() { maybe_write_narrative(true); });
+    connect(print_btn_, &QPushButton::clicked, this, &EquityReportTab::print_report_dialog);
     connect(pdf_btn_, &QPushButton::clicked, this, &EquityReportTab::export_pdf);
     connect(html_btn_, &QPushButton::clicked, this, &EquityReportTab::export_html);
     root->addWidget(bar);
@@ -664,6 +675,7 @@ void EquityReportTab::update_status() {
         text += QStringLiteral(" · %1 source%2 unavailable (see Sources)").arg(failed).arg(failed == 1 ? "" : "s");
     status_->setText(text);
     const bool has_body = doc_.has_info;
+    print_btn_->setEnabled(has_body && pending == 0);
     pdf_btn_->setEnabled(has_body && pending == 0);
     html_btn_->setEnabled(has_body && pending == 0);
     write_btn_->setEnabled(has_body && pending == 0 && narrative_pending_ == 0 &&
@@ -742,6 +754,40 @@ void EquityReportTab::export_pdf() {
     const int pages = write_report_pdf(doc_, path);
     status_->setText(pages > 0 ? QStringLiteral("Saved %1 (%2 pages)").arg(path).arg(pages)
                                : QStringLiteral("The PDF could not be written to %1").arg(path));
+}
+
+QIcon EquityReportTab::printer_icon() {
+    // A printer in the theme's text colour: paper above, body, tray below.
+    QPixmap pm(32, 32);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const QColor ink(ui::colors::TEXT_PRIMARY());
+    p.setPen(QPen(ink, 2.4));
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(QRectF(9, 3, 14, 9));          // paper going in
+    p.drawRoundedRect(QRectF(3, 11, 26, 12), 2.5, 2.5); // body
+    p.setBrush(ink);
+    p.drawRect(QRectF(9, 20, 14, 9));         // printed sheet
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(ui::colors::BG_BASE()));
+    p.drawRect(QRectF(11, 23, 10, 1.6));      // lines on the sheet
+    p.drawRect(QRectF(11, 26, 7, 1.6));
+    return QIcon(pm);
+}
+
+void EquityReportTab::print_report_dialog() {
+    QPrinter printer(QPrinter::HighResolution);
+    prepare_report_printer(printer);
+    printer.setDocName(QStringLiteral("%1 — investor report").arg(symbol_));
+    QPrintDialog dialog(&printer, this);
+    dialog.setWindowTitle(QStringLiteral("Print %1 report").arg(symbol_));
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const int pages = print_report(doc_, printer);
+    status_->setText(printer.outputFormat() == QPrinter::PdfFormat
+                         ? QStringLiteral("Saved %1 (%2 pages)").arg(printer.outputFileName()).arg(pages)
+                         : QStringLiteral("Sent %1 pages to %2").arg(pages).arg(printer.printerName()));
 }
 
 void EquityReportTab::export_html() {
