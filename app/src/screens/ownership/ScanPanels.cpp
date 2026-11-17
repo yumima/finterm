@@ -494,7 +494,10 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Manager"),
                          QStringLiteral("Move"), QStringLiteral("Est. $"), QStringLiteral("% of book"),
                          QStringLiteral("Shares now"), QStringLiteral("Shares before"), QStringLiteral("Filed for"),
-                         QStringLiteral("Filed")});
+                         QStringLiteral("Filed"), QStringLiteral("Traded between")});
+    table_->horizontalHeaderItem(10)->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "The stock's low and high between the two filings: the shares changed hands somewhere in this range. "
+        "A 13F gives no trade prices or dates, so no average price is made up.")));
     // The filing date opens the filing itself on EDGAR: every row can be checked at its source.
     connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {
         if (c != 9)
@@ -607,6 +610,12 @@ void BigMovesPanel::render() {
         if (!r.url.isEmpty())
             filed->setToolTip(ui::tooltip_wrap(QStringLiteral("Open this 13F on SEC EDGAR")));
         table_->setItem(i, 9, filed);
+        table_->setItem(i, 10, num_cell(r.range_low && r.range_high
+                                            ? QStringLiteral("$%1 – $%2")
+                                                  .arg(QLocale().toString(*r.range_low, 'f', *r.range_low < 10 ? 2 : 0),
+                                                       QLocale().toString(*r.range_high, 'f', *r.range_high < 10 ? 2 : 0))
+                                            : fmt::placeholder(),
+                                        ui::colors::TEXT_SECONDARY()));
     }
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();

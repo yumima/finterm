@@ -472,6 +472,10 @@ struct BigMove {
     int position_count = 0;
     std::optional<double> book_pct; // of the book the stake moved in or out of
     QDate filed;                    // the day the filing reached SEC; invalid when unknown
+    /// The stock's low and high between the two filings — the prices the
+    /// shares changed hands within (13F gives no trade prices). Absent when
+    /// there is no ticker or no history.
+    std::optional<double> range_low, range_high;
     QString url;                    // the filing's EDGAR index page
 };
 

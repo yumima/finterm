@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`e40ecb5a1`](https://github.com/yumima/finterm/commit/e40ecb5a1) 13f sync: say so when SEC refuses; every script the app runs ends with it
 - [`318773853`](https://github.com/yumima/finterm/commit/318773853) ownership: every big move dated and linked to its SEC filing; CUSIP changes across a quarter end
 - [`b87f55489`](https://github.com/yumima/finterm/commit/b87f55489) report: print or save as PDF through the system print dialog; caches that do not stack
 - [`1646ad327`](https://github.com/yumima/finterm/commit/1646ad327) ownership: big moves, corrected for splits and CUSIP changes, kept current from EDGAR

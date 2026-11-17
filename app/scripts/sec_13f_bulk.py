@@ -1649,6 +1649,12 @@ def movers(limit=100, sort="breadth_up", min_holders=20, quarter=None, include_f
 
 SPLIT_GAP_LO, SPLIT_GAP_HI = 0.6, 1.67   # price-per-share ratios worth checking for a split
 
+# Bump when the rules below change: stored corrections and moves carry it, so
+# a change of rule recomputes them instead of serving the old answer (the
+# Thomson Reuters CUSIP change stayed unlinked after the name rule learned
+# "Sh Par", because the stored result predated it).
+ADJ_RULES_VERSION = 4
+
 
 def split_factor_between(splits, prior_q, cur_q):
     """Product of the split ratios dated after `prior_q` and on or before
@@ -1767,7 +1773,7 @@ def _ensure_adjustments(con, prior_q, cur_q):
     computation makes network calls, and holding SQLite's write lock through
     them would stall the background sync and every other writer."""
     _adj_tables(con)
-    stamp = _quarter_stamp(con, prior_q, cur_q) + "|" + _ticker_stamp(con)
+    stamp = f"r{ADJ_RULES_VERSION}|" + _quarter_stamp(con, prior_q, cur_q) + "|" + _ticker_stamp(con)
     row = con.execute("SELECT stamp FROM adj_runs WHERE prior_quarter=? AND quarter=?",
                       (prior_q, cur_q)).fetchone()
     if row and row[0] == stamp:
@@ -1787,6 +1793,19 @@ def _ensure_adjustments(con, prior_q, cur_q):
                  WHERE h.quarter=? AND h.put_call='' AND b.cik IN (SELECT cik FROM _adj_both)
                  GROUP BY h.cusip""", (q,)):
             per.setdefault(cusip, {})[tag] = (issuer, holders, value, shares)
+    # The name most filers give a security, not the alphabetically largest:
+    # one filer entered its own name ("Woodbridge Co Ltd/The") as the issuer
+    # of Thomson Reuters, and that hid the CUSIP change.
+    for tag, q in (("c", cur_q), ("p", prior_q)):
+        best = {}
+        for cusip, issuer, n in con.execute(
+                "SELECT cusip, issuer, COUNT(*) FROM holdings WHERE quarter=? AND put_call='' "
+                "GROUP BY cusip, issuer", (q,)):
+            if cusip in per and tag in per[cusip] and n > best.get(cusip, ("", 0))[1]:
+                best[cusip] = (issuer, n)
+        for cusip, (issuer, _n) in best.items():
+            _old, h, v, sh = per[cusip][tag]
+            per[cusip][tag] = (issuer, h, v, sh)
     tick = dict(con.execute("SELECT cusip, ticker FROM cusip_ticker WHERE ticker<>''").fetchall())
 
     # Splits: a held-through security whose price per share OR share count
@@ -1998,7 +2017,7 @@ def _ensure_big_moves(con, progress=None):
             accession TEXT, filed TEXT)""")
     stamp = "|".join(f"{q}:{n}:{t}" for q, n, t in con.execute(
         "SELECT quarter, filers, ingested_at FROM quarters ORDER BY quarter"))
-    stamp += "|" + _ticker_stamp(con)
+    stamp += "|" + _ticker_stamp(con) + f"|r{ADJ_RULES_VERSION}"
     stamp += "|" + str(con.execute("SELECT COUNT(filed) FROM filings").fetchone()[0])
     row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
     if row and row[0] == stamp:
@@ -2043,6 +2062,64 @@ def _ensure_big_moves(con, progress=None):
     if adj_status["complete"]:
         con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
     con.commit()
+
+
+def price_ranges(con, wanted, today=None):
+    """{(ticker, start, end): (low, high)} — each stock's lowest low and
+    highest high after `start` up to and including `end`: the prices a stake
+    that changed between two filings changed hands within. 13F says how many
+    shares, never when or at what price; this is the honest bound.
+
+    Yahoo's history is split-adjusted; a split after `end` is multiplied back
+    out so the range is in the shares the filing counts. Kept for a day."""
+    import json as _json
+    con.execute("CREATE TABLE IF NOT EXISTS price_range (ticker TEXT, start TEXT, end TEXT, day TEXT, "
+                "low REAL, high REAL, PRIMARY KEY (ticker, start, end))")
+    today = today or _date.today().isoformat()
+    out, todo = {}, {}
+    for t, a, b in wanted:
+        row = con.execute("SELECT low, high FROM price_range WHERE ticker=? AND start=? AND end=? AND day=?",
+                          (t, a, b, today)).fetchone()
+        if row:
+            out[(t, a, b)] = (row[0], row[1])
+        else:
+            todo.setdefault((a, b), []).append(t)
+    if not todo:
+        return out
+    try:
+        import yfinance as yf
+    except Exception:
+        return out
+    # One Ticker.history per stock, never yf.download: download's shared state
+    # hands one caller's rows to another when calls overlap (see the daemon's
+    # gate), and a wrong range would sit in the cache all day.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(job):
+        t, a, b = job
+        try:
+            h = yf.Ticker(t).history(start=(_date.fromisoformat(a) + _td(days=1)).isoformat(),
+                                     end=(_date.fromisoformat(b) + _td(days=1)).isoformat(),
+                                     auto_adjust=False)
+            lo, hi = float(h["Low"].min()), float(h["High"].max())
+        except Exception:
+            return job, None
+        return job, (lo, hi) if (lo == lo and hi == hi and lo > 0) else None
+
+    jobs = [(t, a, b) for (a, b), ts in todo.items() for t in sorted(set(ts))]
+    with ThreadPoolExecutor(max_workers=3) as pool:  # gentle: Yahoo rate-limits bursts
+        results = list(pool.map(one, jobs))
+    for (t, a, b), lo_hi in results:
+        if not lo_hi:
+            continue
+        splits = _announced_splits(con, t) or []
+        f = split_factor_between(splits, b, today)
+        lo, hi = lo_hi[0] * f, lo_hi[1] * f
+        con.execute("INSERT OR REPLACE INTO price_range VALUES (?,?,?,?,?,?)", (t, a, b, today, lo, hi))
+        out[(t, a, b)] = (lo, hi)
+    con.execute("DELETE FROM price_range WHERE day < ?", (today,))  # yesterday's are never read again
+    con.commit()
+    return out
 
 
 def big_moves(limit=200, side="both", sort="value", active_only=True, include_funds=False,
@@ -2094,6 +2171,13 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
                                     if (r[14] if r[10] < 0 else r[12]) else None})
             if len(out) >= int(limit):
                 break
+        # The price range each move happened in: between the two filings.
+        ranges = price_ranges(con, {(r["ticker"], r["prior_quarter"], r["quarter"])
+                                    for r in out if r["ticker"]})
+        for r in out:
+            lo_hi = ranges.get((r["ticker"], r["prior_quarter"], r["quarter"]))
+            if lo_hi:
+                r["range_low"], r["range_high"] = lo_hi
         partial = [q for (q,) in con.execute("SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1")]
         return {"rows": out, "side": side, "sort": sort, "active_only": bool(active_only),
                 "filed_within": int(filed_within or 0),

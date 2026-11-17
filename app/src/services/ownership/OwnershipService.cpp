@@ -1312,6 +1312,11 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                     if (r.value(QStringLiteral("book_pct")).isDouble())
                         m.book_pct = r.value(QStringLiteral("book_pct")).toDouble();
                     m.filed = iso_date(r, "filed");
+                    if (r.value(QStringLiteral("range_low")).isDouble() &&
+                        r.value(QStringLiteral("range_high")).isDouble()) {
+                        m.range_low = r.value(QStringLiteral("range_low")).toDouble();
+                        m.range_high = r.value(QStringLiteral("range_high")).toDouble();
+                    }
                     m.url = r.value(QStringLiteral("url")).toString();
                     b.rows.push_back(m);
                 }
