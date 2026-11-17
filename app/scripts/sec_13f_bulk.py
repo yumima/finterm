@@ -2451,6 +2451,7 @@ def sync(progress=None, max_filings=None):
             _LAST_REQ_SET()
             if day is None:
                 out["warning"] = f"EDGAR's index for {d} could not be read; it is asked again next time"
+                out["refused"] = True
                 break
             stored_all = True
             for cik, path, acc in day:
@@ -2464,6 +2465,8 @@ def sync(progress=None, max_filings=None):
                 if r is None and not (code in (404, 410) or code == "missing"):
                     stored_all = False  # refused or offline: this day is not finished
                     out["failed"] += 1
+                    out["refused"] = True  # asked again soon, not in six hours
+                    out["warning"] = f"SEC refused a filing request on {d} (HTTP {code}); resuming shortly"
                     break
                 parsed = parse_submission(r.text) if r is not None else None
                 if not parsed:

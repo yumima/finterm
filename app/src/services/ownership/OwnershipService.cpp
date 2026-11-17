@@ -60,6 +60,7 @@ constexpr int kSyncFirstDelayMs = 3 * 60'000;
 constexpr int kSyncEveryMs = 6 * 3600'000;
 constexpr int kSyncMoreMs = 60'000;
 constexpr int kSyncRetryMs = 30 * 60'000;
+constexpr int kSyncRefusedMs = 10 * 60'000; // SEC's throttle lifts within minutes
 constexpr int kSyncFilingsPerPass = 3000;
 constexpr int kSyncTimeoutMs = 3600'000;
 constexpr int kScanRecheckMs = 6 * 60 * 60 * 1000;
@@ -1608,6 +1609,8 @@ void OwnershipService::run_13f_sync() {
             const auto o = result.success ? parse_object(result) : QJsonObject{};
             const bool failed = !result.success || o.contains(QStringLiteral("error"));
             const bool more = o.value(QStringLiteral("more")).toBool();
+            // SEC throttled or did not answer mid-pass: try again in minutes, not hours.
+            const bool refused = o.value(QStringLiteral("refused")).toBool();
             const int filings = o.value(QStringLiteral("filings")).toInt();
             const int sets = o.value(QStringLiteral("datasets")).toArray().size();
             const QString through = o.value(QStringLiteral("through")).toString();
@@ -1640,7 +1643,10 @@ void OwnershipService::run_13f_sync() {
             }
             emit self->index_changed(self->index_status_ + QStringLiteral(" · ") + self->sync_status_);
             if (self->sync_timer_)
-                self->sync_timer_->start(failed ? kSyncRetryMs : more ? kSyncMoreMs : kSyncEveryMs);
+                self->sync_timer_->start(failed    ? kSyncRetryMs
+                                         : refused ? kSyncRefusedMs
+                                         : more    ? kSyncMoreMs
+                                                   : kSyncEveryMs);
         },
         /*on_line=*/{}, kSyncTimeoutMs);
 }
