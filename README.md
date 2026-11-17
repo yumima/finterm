@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`8638b5d4b`](https://github.com/yumima/finterm/commit/8638b5d4b) release: 4.0.8
 - [`fa2220c1e`](https://github.com/yumima/finterm/commit/fa2220c1e) 13f sync: an upkeep failure is not reported as SEC not answering; the ranking asks only for pairs the sync computes
 - [`9a3ec0438`](https://github.com/yumima/finterm/commit/9a3ec0438) review, fourth pass: extended hours and 13F
 - [`218152ced`](https://github.com/yumima/finterm/commit/218152ced) review, third pass: extended hours and 13F

@@ -10,6 +10,7 @@
 
 #    include <csignal>
 #    include <cstdlib>
+#    include <fcntl.h>
 #    include <sys/socket.h>
 #    include <unistd.h>
 #endif
@@ -38,9 +39,12 @@ void on_signal(int sig) {
 } // namespace
 
 void quit_on_terminate_signals() {
-    // CLOEXEC: the app's helpers must not inherit the pipe.
-    if (g_signal_pipe[0] != -1 || ::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, g_signal_pipe) != 0)
+    // CLOEXEC: the app's helpers must not inherit the pipe. Set with fcntl —
+    // SOCK_CLOEXEC is a Linux flag and macOS has no such thing.
+    if (g_signal_pipe[0] != -1 || ::socketpair(AF_UNIX, SOCK_STREAM, 0, g_signal_pipe) != 0)
         return;
+    for (int fd : g_signal_pipe)
+        ::fcntl(fd, F_SETFD, ::fcntl(fd, F_GETFD) | FD_CLOEXEC);
     auto* notifier = new QSocketNotifier(g_signal_pipe[1], QSocketNotifier::Read, QCoreApplication::instance());
     QObject::connect(notifier, &QSocketNotifier::activated, notifier, [notifier]() {
         notifier->setEnabled(false);
