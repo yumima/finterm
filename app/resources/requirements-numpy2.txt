@@ -2,7 +2,10 @@
 # All libraries compatible with NumPy 2.x
 
 # Core dependencies
-numpy>=2.2.3,<3.0
+# Capped at the newest release a fresh install was verified on (2.5.5): the
+# pinned yfinance 0.2.66 uses a timedelta form NumPy 2.5 already deprecates
+# and will reject later. Raise the cap together with the yfinance pin.
+numpy>=2.2.3,<2.6
 pandas>=2.3.3,<3.0
 
 # Trading platform (requires NumPy 2.2+)

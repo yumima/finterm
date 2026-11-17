@@ -293,7 +293,7 @@ class CompetitionConfig(BaseModel):
     )
 
     # Polymarket-specific config
-    polymarket_markets: Optional[List[PolymarketInfo]] = Field(
+    polymarket_markets: Optional[List["PolymarketInfo"]] = Field(
         None,
         description="Polymarket markets for prediction market competitions"
     )
