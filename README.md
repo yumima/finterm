@@ -2,50 +2,10 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-16)
+## Today's commits (2026-11-17)
 
 Latest first.
 
-- [`31a55cf16`](https://github.com/yumima/finterm/commit/31a55cf16) **chore(release):** update README download links and updates.json for v4.0.8
-- [`2de6e0bcf`](https://github.com/yumima/finterm/commit/2de6e0bcf) **fix:** close-on-exec through fcntl (SOCK_CLOEXEC does not exist on macOS)
-- [`8638b5d4b`](https://github.com/yumima/finterm/commit/8638b5d4b) release: 4.0.8
-- [`fa2220c1e`](https://github.com/yumima/finterm/commit/fa2220c1e) 13f sync: an upkeep failure is not reported as SEC not answering; the ranking asks only for pairs the sync computes
-- [`9a3ec0438`](https://github.com/yumima/finterm/commit/9a3ec0438) review, fourth pass: extended hours and 13F
-- [`218152ced`](https://github.com/yumima/finterm/commit/218152ced) review, third pass: extended hours and 13F
-- [`c865f102c`](https://github.com/yumima/finterm/commit/c865f102c) review, second pass: extended hours and 13F
-- [`5e520a241`](https://github.com/yumima/finterm/commit/5e520a241) review: extended-hours and 13F fixes
-- [`25cbe03e6`](https://github.com/yumima/finterm/commit/25cbe03e6) big moves: each move stored once when two scans overlap
-- [`680bdbe7d`](https://github.com/yumima/finterm/commit/680bdbe7d) research: after-hours and pre-market sessions on the overview
-- [`51deba8f2`](https://github.com/yumima/finterm/commit/51deba8f2) ownership: Largest Funds and Big Moves read the stored scan instead of redoing it
-- [`08eda5c37`](https://github.com/yumima/finterm/commit/08eda5c37) alpha arena: the script loads again; numpy capped at the release a fresh install was checked on
-- [`72fe65c12`](https://github.com/yumima/finterm/commit/72fe65c12) lifecycle: a terminate signal quits cleanly on every launch, not only the first
-- [`3fdfd9678`](https://github.com/yumima/finterm/commit/3fdfd9678) ownership: 5% stakes (13D / 13G) market-wide, and alerts on stakes, fund moves and followed funds
-- [`45e0a8e69`](https://github.com/yumima/finterm/commit/45e0a8e69) 13f sync: retry a timed-out filing before ending the pass
-- [`c7799428a`](https://github.com/yumima/finterm/commit/c7799428a) 13f sync: a refused request is said and retried in ten minutes, not six hours
-- [`66e60cb53`](https://github.com/yumima/finterm/commit/66e60cb53) big moves: the price range each move traded in; CUSIP changes hidden by a filer's typo
-- [`e40ecb5a1`](https://github.com/yumima/finterm/commit/e40ecb5a1) 13f sync: say so when SEC refuses; every script the app runs ends with it
-- [`318773853`](https://github.com/yumima/finterm/commit/318773853) ownership: every big move dated and linked to its SEC filing; CUSIP changes across a quarter end
-- [`b87f55489`](https://github.com/yumima/finterm/commit/b87f55489) report: print or save as PDF through the system print dialog; caches that do not stack
-- [`1646ad327`](https://github.com/yumima/finterm/commit/1646ad327) ownership: big moves, corrected for splits and CUSIP changes, kept current from EDGAR
-- [`dbcaf1574`](https://github.com/yumima/finterm/commit/dbcaf1574) **chore(release):** update README download links and updates.json for v4.0.7
-- [`b98896477`](https://github.com/yumima/finterm/commit/b98896477) lifecycle: helpers start and stop with the app
-- [`39bdfd394`](https://github.com/yumima/finterm/commit/39bdfd394) futures: panels you can move and resize, kept between sessions; sources named; failed reads retried
-- [`27916ca78`](https://github.com/yumima/finterm/commit/27916ca78) **fix:** drop a counter the Report status never reads (clang -Werror on macOS)
-- [`b6af23c55`](https://github.com/yumima/finterm/commit/b6af23c55) **fix:** brace-initialise a QFont clang read as a function declaration
-- [`4c9539a39`](https://github.com/yumima/finterm/commit/4c9539a39) **fix:** freopen_s on Windows (MSVC treats freopen's deprecation as an error)
-- [`cb190f4a7`](https://github.com/yumima/finterm/commit/cb190f4a7) **fix:** silent video after a scroll, a stray copy blocking launch, Windows build
-- [`544870ce0`](https://github.com/yumima/finterm/commit/544870ce0) release: 4.0.7
-- [`1d6251e68`](https://github.com/yumima/finterm/commit/1d6251e68) er overview: the analyst targets say how old they are
-- [`05792c590`](https://github.com/yumima/finterm/commit/05792c590) futures: stops and targets that work, and what a rate curve prices
-- [`04691a105`](https://github.com/yumima/finterm/commit/04691a105) tests: the report render test checks the page's text, not a chart's painted title
-- [`5b6b0f0bc`](https://github.com/yumima/finterm/commit/5b6b0f0bc) er report: what changed, the multiple against its own past, sector-aware rules, a brief that comes first
-- [`caa06cb6c`](https://github.com/yumima/finterm/commit/caa06cb6c) ipo watch: a company that has listed leaves the pre-IPO list
-- [`28f916329`](https://github.com/yumima/finterm/commit/28f916329) review: nine findings across the Report tab, the Futures paper book and read-aloud
-- [`0fe3a30ea`](https://github.com/yumima/finterm/commit/0fe3a30ea) er report: segment and geography revenue, named customers, real peers, foreign filers, graded outlook
-- [`28413b3f6`](https://github.com/yumima/finterm/commit/28413b3f6) futures: calendar-spread history, a majors board, live front month, roll warnings, tools for agents
-- [`05fe98315`](https://github.com/yumima/finterm/commit/05fe98315) read-aloud: "A.I." is one word, and a starved reading says so in the log
-- [`0ae2eae41`](https://github.com/yumima/finterm/commit/0ae2eae41) er: a Report tab — one investor report from everything held on a company
-- [`2b21dcabf`](https://github.com/yumima/finterm/commit/2b21dcabf) futures: the Futures screen is back, built around the forward curve
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

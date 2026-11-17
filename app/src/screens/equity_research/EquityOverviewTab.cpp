@@ -951,7 +951,13 @@ QWidget* EquityOverviewTab::build_col1() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(6);
     vl->addWidget(build_trading_panel());
-    vl->addWidget(build_extended_panel());
+    auto* ext = build_extended_panel();
+    vl->addWidget(ext);
+    // Its own overlay, not one of the info overlays: it loads on its own fetch.
+    // Tall enough for the loading box while there is only a note in it.
+    ext->setMinimumHeight(150);
+    ext_loading_ = new ui::LoadingOverlay(ext);
+    ext_loading_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     // Today's Trading is quote-driven and Extended Hours has its own fetch;
     // these two are info-driven.
     for (QWidget* p : {build_valuation_panel(), build_share_stats_panel()}) {
@@ -1044,8 +1050,11 @@ void EquityOverviewTab::fetch_extended_sessions() {
         if (!ok) {
             // A failed refresh keeps what is shown; the next minute asks again.
             // With nothing shown yet, say so — a bare dash reads as "loading".
-            if (!ext_answered_ && ext_note_)
+            if (!ext_answered_ && ext_note_) {
+                if (ext_loading_)
+                    ext_loading_->hide_loading(); // a failure is said, not animated
                 ext_note_->setText(QStringLiteral("Extended-hours data did not arrive \u2014 trying again shortly."));
+            }
             // What is shown stays, but not as LIVE: nothing vouches for that
             // any more, and the session may have ended since.
             if (ext_answered_ && (ext_sessions_.after_hours.live || ext_sessions_.pre_market.live)) {
@@ -1076,14 +1085,18 @@ void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::Ex
     if (!s.valid)
         return;
     const QString name = pre ? QStringLiteral("PRE-MARKET") : QStringLiteral("AFTER HOURS");
-    b.title->setText(s.live ? QString("%1 <span style='color:%2;'>\u25cf LIVE</span>").arg(name, ui::colors::POSITIVE())
+    // Live is a green dot (tooltip says so): the 200px column has no room
+    // for the word beside the time.
+    b.title->setText(s.live ? QString("%1 <span style='color:%2;'>\u25cf</span>").arg(name, ui::colors::POSITIVE())
                             : name);
+    b.title->setToolTip(s.live ? QStringLiteral("Trading now") : QString());
 
     // EVENT-STAMP: the last extended-hours print — a real instant, read in ET.
     const QDateTime at = QDateTime::fromSecsSinceEpoch(s.last_ts, QTimeZone("America/New_York"));
     const QLocale en = QLocale::c();
     // No "ET" on the label: the column is 200px and it was the part cut off.
-    b.when->setText(s.last_ts > 0 ? en.toString(s.date, "ddd d MMM") + at.toString(" HH:mm")
+    // No weekday: "PRE-MARKET ●" leaves no room for it beside the time.
+    b.when->setText(s.last_ts > 0 ? en.toString(s.date, "d MMM") + at.toString(" HH:mm")
                                   : en.toString(s.date, "ddd d MMM"));
     b.when->setToolTip(QString("The session's last print, Eastern time. It traded in %1 of the session's %2 minutes.")
                            .arg(s.minutes)
@@ -1118,11 +1131,17 @@ void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::Ex
 void EquityOverviewTab::render_extended_sessions() {
     if (!ext_note_)
         return;
+    if (ext_loading_) {
+        if (ext_answered_)
+            ext_loading_->hide_loading();
+        else
+            ext_loading_->show_loading(QStringLiteral("LOADING\u2026"));
+    }
     const auto& x = ext_sessions_;
     const bool any = x.after_hours.valid || x.pre_market.valid;
     ext_note_->setVisible(!any);
     if (!any) {
-        ext_note_->setText(!ext_answered_ ? QStringLiteral("Loading\u2026") // a few seconds: two sources
+        ext_note_->setText(!ext_answered_ ? QString() // the overlay's bars say it: a few seconds, two sources
                            : x.unsupported ? QStringLiteral("No US pre-market or after-hours session for this instrument.")
                                            : QStringLiteral("No pre-market or after-hours trades in the last five sessions."));
     }

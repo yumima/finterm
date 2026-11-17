@@ -292,6 +292,7 @@ class EquityOverviewTab : public QWidget {
     QLabel* ext_note_ = nullptr; ///< shown instead of the blocks when there is no session to show
     services::equity::ExtSessions ext_sessions_;
     bool ext_answered_ = false; ///< the current symbol's sessions have arrived
+    ui::LoadingOverlay* ext_loading_ = nullptr; ///< the same waving bars as the other panels
     QTimer* ext_timer_ = nullptr;
     void fetch_extended_sessions();
     void render_extended_sessions();
