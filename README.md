@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`3fdfd9678`](https://github.com/yumima/finterm/commit/3fdfd9678) ownership: 5% stakes (13D / 13G) market-wide, and alerts on stakes, fund moves and followed funds
 - [`45e0a8e69`](https://github.com/yumima/finterm/commit/45e0a8e69) 13f sync: retry a timed-out filing before ending the pass
 - [`c7799428a`](https://github.com/yumima/finterm/commit/c7799428a) 13f sync: a refused request is said and retried in ten minutes, not six hours
 - [`66e60cb53`](https://github.com/yumima/finterm/commit/66e60cb53) big moves: the price range each move traded in; CUSIP changes hidden by a filer's typo

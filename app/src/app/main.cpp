@@ -722,19 +722,19 @@ int main(int argc, char* argv[]) {
             // initial load — that delay is the daemon import, not the
             // upstream API).
             QTimer::singleShot(0, &app, []() { finterm::python::PythonWorker::instance().warm_up(); });
-    // The 13F index keeps itself current from launch, not from the first
-    // visit to Ownership (see OwnershipService::start_background_sync).
-    QTimer::singleShot(0, &app, []() { finterm::services::OwnershipService::instance().start_background_sync(); });
+            // The 13F index keeps itself current from launch, not from the first
+            // visit to Ownership (see OwnershipService::start_background_sync).
+            QTimer::singleShot(0, &app,
+                               []() { finterm::services::OwnershipService::instance().start_background_sync(); });
 
             LOG_INFO("App", "Application ready (after setup)");
         });
 
-        finterm::lifecycle::quit_on_terminate_signals(); // see below
         // A terminate signal (finterm.sh stop, logout, kill) becomes a normal
-    // quit — installed only now, at the main loop: during startup's own
-    // dialogs a quit would end just that dialog and startup would carry on.
-    finterm::lifecycle::quit_on_terminate_signals();
-    return app.exec();
+        // quit — installed only now, at the main loop: during startup's own
+        // dialogs a quit would end just that dialog and startup would carry on.
+        finterm::lifecycle::quit_on_terminate_signals();
+        return app.exec();
     }
 
     // Ensure KeyConfigManager is initialized before MainWindow registers shortcuts
@@ -813,5 +813,7 @@ int main(int argc, char* argv[]) {
     QTimer::singleShot(0, &app, []() { finterm::services::OwnershipService::instance().start_background_sync(); });
 
     LOG_INFO("App", "Application ready");
+    // Same as the first-run path above: installed only at the main loop.
+    finterm::lifecycle::quit_on_terminate_signals();
     return app.exec();
 }
