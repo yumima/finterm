@@ -800,6 +800,15 @@ target_link_libraries(test_ipo_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ipo_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ipo_format COMMAND test_ipo_format)
 
+# ── Dashboard canvas: refitting a layout to fewer columns never overlaps tiles ─
+add_executable(test_grid_refit
+    screens/test_grid_refit.cpp
+)
+target_include_directories(test_grid_refit PRIVATE ../src)
+target_link_libraries(test_grid_refit PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_grid_refit PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME grid_refit COMMAND test_grid_refit)
+
 # ── Private Market valuation math + marketplace slug matching ────────────────
 # An implied valuation needs the price and the share count from the same round
 # of the same source; a near-miss name must not bind another company's price.

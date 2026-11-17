@@ -33,10 +33,12 @@
 #include "screens/pre_ipo/PreIpoTypes.h"
 #include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
+#include "services/pre_ipo/IpoDealsFeed.h"
 
 #include <QDate>
 #include <QDeadlineTimer>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
@@ -62,6 +64,10 @@ class QTableWidgetItem;
 class QTabWidget;
 class QVBoxLayout;
 QT_FORWARD_DECLARE_CLASS(QChartView)
+
+namespace finterm::screens {
+class DashboardCanvas;
+}
 
 namespace finterm::screens::widgets {
 
@@ -291,7 +297,10 @@ class IpoWatchView : public QWidget {
     /// rounds. Rows are links (company:<id> / deal:<deal_id>).
     void render_market();
     void build_market_page();
-    void on_market_link(const QString& link);
+    void load_market_layout(); // saved arrangement, else the default
+    /// "private_market.open" {company_id | deal_id} from a Private Market widget.
+    void on_market_open(const QVariantMap& m);
+    int open_sub_ = -1;
     /// Switch lens and repaint (buttons, chips, page).
     void set_lens(Lens l);
     /// The calendar deal for a private company (by CIK, else exact name
@@ -300,6 +309,11 @@ class IpoWatchView : public QWidget {
     /// `strong` = matched by CIK or a multi-word name; a one-word name match
     /// (only a pending deal of $100M+) is weak and never proves a listing.
     const Entry* calendar_entry_for(const pre_ipo::PrivateCompany& c, bool* strong = nullptr) const;
+    /// The shared join rules over this view's calendar rows (rebuilt when
+    /// entries_version_ moves).
+    const services::IpoDealIndex& deal_index() const;
+    mutable services::IpoDealIndex deal_index_;
+    QJsonArray calendar_rows_; // the calendar answer's raw deal rows (parsed by IpoDealsFeed::parse_deal)
     /// "EXP ~Dec 3" / "S-1 · est. Jan" / "PRICED $17" … for the IPO column;
     /// empty when the company is not on the calendar.
     QString ipo_cell_text(const pre_ipo::PrivateCompany& c, QString* tip, QString* color, qint64* sort_key) const;
@@ -547,14 +561,13 @@ class IpoWatchView : public QWidget {
     QStackedWidget* left_stack_ = nullptr; // 0 = table_, 1 = MARKET page
     QTableWidget* table_ = nullptr;        // single table; columns/rows change per lens
     QWidget* market_page_ = nullptr;
-    QLabel* market_head_ = nullptr;          // C50 level + changes
-    QWidget* market_chart_host_ = nullptr;   // RangeChart for the C50
-    QLabel* market_body_ = nullptr;          // movers / upcoming IPOs / rounds
-    int market_chart_points_ = -1;           // C50 points the chart was built from
-    QDate market_chart_last_;
+    DashboardCanvas* market_canvas_ = nullptr; // MARKET: Private Market widgets
+    QScrollArea* market_scroll_ = nullptr;
+    bool market_layout_loaded_ = false; // loaded on the canvas's first real width
+    QString market_layout_json_;        // what this view last loaded or saved
     QList<QWidget*> calendar_chips_;         // filter widgets that only mean something on deal lenses
-    /// Calendar lookup for private companies ("cik:<digits>" / "name:<norm>"
-    /// → entries_ index), rebuilt when entries_version_ moves.
+    /// deal_id → entries_ index (the join itself is IpoDealsFeed::deal_for),
+    /// rebuilt when entries_version_ moves.
     mutable QHash<QString, int> cal_by_key_;
     mutable quint64 cal_index_version_ = ~quint64(0);
     quint64 entries_version_ = 0;

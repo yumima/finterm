@@ -246,6 +246,38 @@ inline int responsive_cols(int container_w) {
     return 12;    // large: 3-4 widgets (standard)
 }
 
+/// Re-fit a layout to `cols` columns: clamp each tile's width and x, then
+/// push any tile that now collides with one already placed DOWN until it
+/// fits, and compact. Clamping alone (the old path) left tiles that were side
+/// by side in 12 columns stacked on top of each other in 9 — x is clamped
+/// leftwards into its neighbour, and vertical compaction never separates two
+/// tiles on the same rows.
+inline QVector<GridItem> refit_to_cols(QVector<GridItem> items, int cols) {
+    if (cols <= 0)
+        return items;
+    std::stable_sort(items.begin(), items.end(), [](const GridItem& a, const GridItem& b) {
+        return a.cell.y != b.cell.y ? a.cell.y < b.cell.y : a.cell.x < b.cell.x;
+    });
+    QVector<GridItem> placed;
+    placed.reserve(items.size());
+    for (auto item : items) {
+        item.cell.w = std::max(1, std::min(item.cell.w, cols));
+        item.cell.x = std::max(0, std::min(item.cell.x, cols - item.cell.w));
+        if (!item.is_static) {
+            auto collides = [&]() {
+                for (const auto& p : placed)
+                    if (cells_overlap(item.cell, p.cell))
+                        return true;
+                return false;
+            };
+            while (collides())
+                ++item.cell.y;
+        }
+        placed.append(item);
+    }
+    return compact_vertical(placed);
+}
+
 /// Maximum row bottom edge across all items.
 inline int max_row(const QVector<GridItem>& items) {
     int m = 0;

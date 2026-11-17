@@ -4,11 +4,17 @@
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "screens/dashboard/canvas/AddWidgetDialog.h"
+#include "screens/dashboard/canvas/DashboardCanvas.h"
+#include "screens/dashboard/canvas/WidgetRegistry.h"
 #include "screens/pre_ipo/IpoFormat.h"
 #include "screens/pre_ipo/PrivateMarketCharts.h"
+#include "screens/pre_ipo/PrivateMarketFormat.h"
 #include "screens/pre_ipo/PrivateMarketMath.h"
+#include "screens/pre_ipo/PrivateMarketWidgets.h"
 #include "services/markets/MarketDataService.h"
 #include "services/pre_ipo/ClarityService.h"
+#include "services/pre_ipo/IpoDealsFeed.h"
 #include "services/pre_ipo/PreIpoService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/charts/ChartFactory.h"
@@ -46,6 +52,7 @@
 #include <QTableWidgetItem>
 #include <QTimer>
 #include <QUrl>
+#include <QUuid>
 #include <QVBoxLayout>
 #include <QtCharts/QCategoryAxis>
 #include <QtCharts/QChart>
@@ -168,100 +175,8 @@ void normalize_current_tab(QTabWidget* t) {
 } // namespace
 
 // Private Market helpers (money/percent text, headline valuation).
-namespace {
-
 namespace pm = finterm::pre_ipo::pm;
-
-bool finite(double x) {
-    return std::isfinite(x);
-}
-
-QString money_usd(double usd) {
-    if (!pm::usable(usd))
-        return QStringLiteral("—");
-    if (usd >= 1e12)
-        return QString("$%1T").arg(usd / 1e12, 0, 'f', 2);
-    if (usd >= 1e9)
-        return QString("$%1B").arg(usd / 1e9, 0, 'f', usd >= 1e11 ? 0 : 1);
-    if (usd >= 1e6)
-        return QString("$%1M").arg(usd / 1e6, 0, 'f', usd >= 1e8 ? 0 : 1);
-    return QString("$%1K").arg(usd / 1e3, 0, 'f', 0);
-}
-
-QString pps_text(double pps) {
-    return pm::usable(pps) ? QString("$%1").arg(pps, 0, 'f', 2) : QStringLiteral("—");
-}
-
-QString pct_text(double p, int prec = 1) {
-    if (!finite(p))
-        return QStringLiteral("—");
-    return QString("%1%2%").arg(p >= 0 ? "+" : "").arg(p, 0, 'f', prec);
-}
-
-QString pct_html(double p, int prec = 1) {
-    if (!finite(p))
-        return QStringLiteral("<span class='muted'>—</span>");
-    return QString("<span class='%1'>%2</span>").arg(p >= 0 ? "pos" : "neg", pct_text(p, prec));
-}
-
-QString round_label(const pre_ipo::FinancingRound& r) {
-    QString s = r.series.isEmpty() ? QStringLiteral("Round") : r.series;
-    if (r.month.isValid())
-        s += QStringLiteral(" · ") + r.month.toString("MMM yyyy");
-    return s;
-}
-
-/// Latest N-PORT consensus, when it sits on the marketplace's share basis.
-double same_basis_mark(const pre_ipo::PrivateCompany& c) {
-    const double m = c.analytics.consensus_mark_pps;
-    if (!pm::usable(m))
-        return pm::kNaN;
-    const double ref = c.market.has_price() ? c.market.price : pm::kNaN;
-    if (pm::usable(ref) && (m / ref > 3.0 || m / ref < 1.0 / 3.0))
-        return pm::kNaN;
-    return m;
-}
-
-/// The valuation a row leads with, and what it is: implied by the model
-/// price, else the newest stated post-money, else the list row's figure,
-/// else the curated seed.
-double headline_valuation(const pre_ipo::PrivateCompany& c, QString* what) {
-    const double implied = pm::implied_valuation(c.market, c.financing);
-    if (pm::usable(implied)) {
-        if (what)
-            *what = QStringLiteral("implied");
-        return implied;
-    }
-    if (const auto* r = pm::last_valued_round(c.financing)) {
-        if (what)
-            *what = QStringLiteral("last round");
-        return r->post_money_usd;
-    }
-    if (pm::usable(c.market.list_last_round_valuation)) {
-        if (what)
-            *what = QStringLiteral("last round");
-        return c.market.list_last_round_valuation;
-    }
-    if (c.last_valuation_usd > 0) {
-        if (what)
-            *what = QStringLiteral("reported");
-        return c.last_valuation_usd;
-    }
-    return pm::kNaN;
-}
-
-QString strip_digits_cik(const QString& cik) {
-    QString s = cik.trimmed();
-    while (s.startsWith('0'))
-        s.remove(0, 1);
-    return s;
-}
-
-QString name_key(const QString& name) {
-    return pm::slugify(pm::strip_legal_form(name));
-}
-
-} // namespace
+using namespace finterm::pre_ipo::pmfmt;
 
 // Forward declaration — defined further down inside the second anonymous
 // namespace block. render_detail_private (~1862 below) needs to call it
@@ -310,6 +225,10 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     // Deep link from News › WHAT'S ON: open one deal's dossier. Published on
     // the GUI thread after nav.switch_screen, so this view exists by then; the
     // calendar may not have loaded yet, hence the pending key.
+    // Private Market widgets (here on the MARKET canvas, or on the Dashboard)
+    // open a company or deal through the bus.
+    setProperty("privateMarketHost", true);
+    open_sub_ = EventBus::instance().subscribe("private_market.open", [this](const QVariantMap& m) { on_market_open(m); });
     select_sub_ = EventBus::instance().subscribe("ipo_watch.select", [this](const QVariantMap& m) {
         select_deal(m.value("deal_id").toString(), m.value("key").toString());
     });
@@ -514,6 +433,19 @@ void IpoWatchView::build_kpi_strip(QVBoxLayout* root) {
 }
 
 bool IpoWatchView::eventFilter(QObject* obj, QEvent* ev) {
+    if (market_scroll_ && obj == market_scroll_->viewport() && ev->type() == QEvent::Resize) {
+        // The canvas spans the viewport and its rows stretch to fill it — a
+        // screen, not a page to scroll.
+        const int w = market_scroll_->viewport()->width(), h = market_scroll_->viewport()->height();
+        if (w > 0 && w != market_canvas_->width())
+            market_canvas_->resize(w, market_canvas_->height());
+        if (w > 0 && !market_layout_loaded_) {
+            market_layout_loaded_ = true;
+            load_market_layout();
+        }
+        if (h > 0)
+            market_canvas_->fit_rows_to_viewport(h);
+    }
     if (table_ && obj == table_->viewport() && ev->type() == QEvent::Resize && empty_lbl_ && empty_lbl_->isVisible())
         empty_lbl_->setGeometry(table_->viewport()->geometry());
     if (ev->type() == QEvent::MouseButtonRelease) {
@@ -1352,7 +1284,9 @@ void IpoWatchView::apply_calendar(const QJsonObject& root, bool enriched) {
         next.append(std::move(x));
     }
     entries_ = std::move(next);
+    calendar_rows_ = root.value("deals").toArray();
     ++entries_version_;
+    services::IpoDealsFeed::instance().ingest(root); // takes enriched answers only
     calendar_loaded_ = true;
     if (enriched) {
         enriched_ = true;
@@ -1400,6 +1334,8 @@ QString IpoWatchView::status_text() const {
 IpoWatchView::~IpoWatchView() {
     if (select_sub_ >= 0)
         EventBus::instance().unsubscribe(select_sub_);
+    if (open_sub_ >= 0)
+        EventBus::instance().unsubscribe(open_sub_);
 }
 
 void IpoWatchView::select_deal(const QString& deal_id, const QString& key) {
@@ -1950,6 +1886,17 @@ void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
 }
 
 void IpoWatchView::showEvent(QShowEvent* e) {
+    // A Dashboard tile parked a company/deal to open here.
+    const QVariantMap pending = pm_take_pending_open();
+    if (!pending.isEmpty())
+        QTimer::singleShot(0, this, [this, pending]() { on_market_open(pending); });
+    // Another view (the News peek pane's) may have saved a newer arrangement.
+    if (market_canvas_ && market_layout_loaded_) {
+        const auto got = SettingsRepository::instance().get(QStringLiteral("private_market.market_layout"));
+        const QString saved = got.is_err() ? QString() : got.value();
+        if (!saved.isEmpty() && saved != market_layout_json_)
+            load_market_layout();
+    }
     QWidget::showEvent(e);
     follow_priced();
 }
@@ -3546,7 +3493,9 @@ void IpoWatchView::apply_pane_weights(bool chart_heavy) {
     // The company lenses are wide tables (twelve columns) and the MARKET page
     // is prose with tables in it: the list side gets just over half.
     if (active_lens_ == LensMarket || active_lens_ == LensPrivate) {
-        const int list_w = total * 52 / 100, right_w = total * 14 / 100;
+        // MARKET is a dashboard: at 60% of a 1728 px window it keeps the
+        // canvas's full twelve columns (it drops to nine under 1000 px).
+        const int list_w = total * (active_lens_ == LensMarket ? 60 : 52) / 100, right_w = total * 14 / 100;
         splitter_->setSizes({list_w, total - list_w - right_w, right_w});
         return;
     }
@@ -6010,141 +5959,39 @@ double IpoWatchView::parse_shares(const QString& shares) {
 
 // ── Calendar join ────────────────────────────────────────────────────────────
 
-const IpoWatchView::Entry* IpoWatchView::calendar_entry_for(const pre_ipo::PrivateCompany& c, bool* strong) const {
-    if (strong)
-        *strong = false;
+const services::IpoDealIndex& IpoWatchView::deal_index() const {
+    // The join runs over THIS view's calendar rows (matched against another
+    // snapshot, a deal id this view does not hold matched nothing), parsed by
+    // the feed's parser — one reading of a calendar row, not two.
     if (cal_index_version_ != entries_version_) {
+        QVector<services::IpoDeal> deals;
+        deals.reserve(calendar_rows_.size());
+        for (const auto& v : calendar_rows_)
+            deals.append(services::IpoDealsFeed::parse_deal(v.toObject()));
         cal_by_key_.clear();
-        // Rank: a pending deal beats a priced one beats a withdrawn one, and
-        // the newer of two of the same kind wins (a re-filing after an RW).
-        auto rank = [](const Entry& e) {
-            const int s = e.pending() ? 3 : e.status == "priced" ? 2 : 1;
-            const QDate d = e.when().isValid() ? e.when() : e.filed_date;
-            return qint64(s) * 10'000'000 + (d.isValid() ? d.toJulianDay() % 10'000'000 : 0);
-        };
-        auto put = [&](const QString& key, int idx) {
-            if (key.isEmpty())
-                return;
-            const auto it = cal_by_key_.constFind(key);
-            if (it == cal_by_key_.constEnd() || rank(entries_.at(idx)) > rank(entries_.at(*it)))
-                cal_by_key_.insert(key, idx);
-        };
-        for (int i = 0; i < entries_.size(); ++i) {
-            const Entry& e = entries_.at(i);
-            if (e.spac)
-                continue;
-            const QString cik = strip_digits_cik(e.cik);
-            if (!cik.isEmpty())
-                put(QStringLiteral("cik:") + cik, i);
-            const QString nk = name_key(e.company);
-            if (!nk.isEmpty())
-                put(QStringLiteral("name:") + nk, i);
-        }
+        for (int i = 0; i < entries_.size(); ++i)
+            cal_by_key_.insert(entries_.at(i).deal_id, i);
+        deal_index_.build(deals);
         cal_index_version_ = entries_version_;
     }
-    auto find = [&](const QString& key) -> const Entry* {
-        const auto it = cal_by_key_.constFind(key);
-        return it == cal_by_key_.constEnd() ? nullptr : &entries_.at(*it);
-    };
-    const QString cik = strip_digits_cik(c.cik);
-    if (!cik.isEmpty())
-        if (const Entry* e = find(QStringLiteral("cik:") + cik)) {
-            if (strong)
-                *strong = true;
-            return e;
-        }
-    QStringList names{c.name};
-    names += c.aliases;
-    for (const auto& n : names) {
-        const QString nk = name_key(n);
-        if (nk.isEmpty())
-            continue;
-        const Entry* e = find(QStringLiteral("name:") + nk);
-        if (!e)
-            continue;
-        if (nk.contains('-')) { // a multi-word name is distinctive enough
-            if (strong)
-                *strong = true;
-            return e;
-        }
-        // One word ("Figure", "Mercury", "Anthropic") is shared by unrelated
-        // issuers often enough that it is believed only for a deal the size
-        // of a late-stage company's IPO that has not happened yet — and never
-        // as proof the company is public (strong stays false).
-        if (e->pending() && e->deal_size_dollars >= 100e6)
-            return e;
-    }
-    return nullptr;
+    return deal_index_;
+}
+
+const IpoWatchView::Entry* IpoWatchView::calendar_entry_for(const pre_ipo::PrivateCompany& c, bool* strong) const {
+    const services::IpoDeal* d = deal_index().deal_for(c, strong);
+    if (!d)
+        return nullptr;
+    const auto it = cal_by_key_.constFind(d->deal_id);
+    return it == cal_by_key_.constEnd() ? nullptr : &entries_.at(*it);
 }
 
 bool IpoWatchView::company_is_listed(const pre_ipo::PrivateCompany& c) const {
-    const QDate today = QDate::currentDate();
-    if (pre_ipo::listing_state(c.listed_ticker, c.listed_on, today) == pre_ipo::ListingState::Listed)
-        return true;
-    // The calendar knows a deal priced even when no listing check has
-    // answered (SEC's needs a configured contact): past the same week's
-    // grace, a priced company is public.
-    bool strong = false;
-    const Entry* e = calendar_entry_for(c, &strong);
-    return e && strong && e->status == "priced" && e->priced_date.isValid() &&
-           e->priced_date.daysTo(today) > pre_ipo::kListedGraceDays;
+    return pm_is_public(c, &deal_index());
 }
 
 QString IpoWatchView::ipo_cell_text(const pre_ipo::PrivateCompany& c, QString* tip, QString* color,
                                     qint64* sort_key) const {
-    using namespace ui::colors;
-    const QDate today = QDate::currentDate();
-    *sort_key = 0x7fffffffLL;
-    if (const Entry* e = calendar_entry_for(c)) {
-        if (e->pending()) {
-            const QDate w = e->when();
-            *sort_key = w.isValid() ? today.daysTo(w) : 50'000;
-            *tip = e->proj.basis.isEmpty() ? QStringLiteral("On the IPO calendar") : e->proj.basis;
-            if (e->proj.firm() && w.isValid()) {
-                *color = POSITIVE();
-                return QStringLiteral("PRICES ") + w.toString("MMM d");
-            }
-            if (e->proj.kind == "estimate" && w.isValid()) {
-                *color = AMBER();
-                return QStringLiteral("EST. ~") + w.toString("MMM yyyy");
-            }
-            *color = INFO();
-            return QStringLiteral("S-1 ON FILE");
-        }
-        if (e->status == "priced") {
-            *sort_key = 100'000;
-            *color = POSITIVE();
-            *tip = QStringLiteral("Priced %1 at %2").arg(e->priced_date.toString("MMM d, yyyy"), e->final_price_raw);
-            return QStringLiteral("PRICED ") + (e->ticker.isEmpty() ? e->priced_date.toString("MMM d") : e->ticker);
-        }
-        if (e->status == "withdrawn") {
-            *sort_key = 200'000;
-            *color = NEGATIVE();
-            *tip = QStringLiteral("Registration withdrawn");
-            return QStringLiteral("WITHDRAWN");
-        }
-    }
-    if (!c.listed_ticker.isEmpty()) {
-        *sort_key = 100'000;
-        *color = POSITIVE();
-        *tip = QStringLiteral("Trading as %1").arg(c.listed_ticker);
-        return QStringLiteral("LISTED ") + c.listed_ticker;
-    }
-    if (c.s1.first_filed.isValid()) {
-        *sort_key = 60'000;
-        if (c.s1.withdrawn) {
-            *color = NEGATIVE();
-            *tip = QStringLiteral("S-1 withdrawn");
-            return QStringLiteral("WITHDRAWN");
-        }
-        *color = INFO();
-        *tip = QStringLiteral("S-1 first filed %1 — not yet on the exchange calendar")
-                   .arg(c.s1.first_filed.toString("MMM d, yyyy"));
-        return QStringLiteral("S-1 FILED");
-    }
-    *tip = QStringLiteral("No public registration on file");
-    *color = TEXT_SECONDARY();
-    return QStringLiteral("PRIVATE");
+    return pm_ipo_cell(c, tip, color, sort_key, &deal_index());
 }
 
 QStringList IpoWatchView::marketplace_matches(int limit) const {
@@ -6209,279 +6056,212 @@ void IpoWatchView::open_market_slug(const QString& slug) {
     render(); // the row says "reading…"
 }
 
-// ── MARKET page ──────────────────────────────────────────────────────────────
+// ── MARKET page: a dashboard canvas of Private Market widgets ────────────────
+// Each block is a dashboard widget (PrivateMarketWidgets.h) on a DashboardCanvas
+// — drag by the title, resize from the corner, close, add any dashboard widget
+// back with + WIDGET. The arrangement is the user's and is saved. The default
+// fits one screen: index + upcoming IPOs on top, three ranked lists, then the
+// recent rounds.
 
-void IpoWatchView::build_market_page() {
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    auto* inner = new QWidget;
-    auto* v = new QVBoxLayout(inner);
-    v->setContentsMargins(12, 10, 12, 10);
-    v->setSpacing(6);
+namespace {
+constexpr char kMarketLayoutKey[] = "private_market.market_layout";
 
-    market_head_ = new QLabel;
-    market_head_->setTextFormat(Qt::RichText);
-    market_head_->setWordWrap(true);
-    v->addWidget(market_head_);
-
-    market_chart_host_ = new QWidget;
-    auto* ch = new QVBoxLayout(market_chart_host_);
-    ch->setContentsMargins(0, 0, 0, 0);
-    market_chart_host_->setMinimumHeight(220);
-    v->addWidget(market_chart_host_);
-
-    market_body_ = new QLabel;
-    market_body_->setTextFormat(Qt::RichText);
-    market_body_->setWordWrap(true);
-    market_body_->setAlignment(Qt::AlignTop);
-    market_body_->setOpenExternalLinks(false);
-    connect(market_body_, &QLabel::linkActivated, this, &IpoWatchView::on_market_link);
-    connect(market_head_, &QLabel::linkActivated, this, &IpoWatchView::on_market_link);
-    v->addWidget(market_body_, 1);
-
-    scroll->setWidget(inner);
-    market_page_ = scroll;
+GridLayout default_market_layout() {
+    GridLayout l;
+    auto add = [&](const QString& id, int x, int y, int w, int h) {
+        GridItem it;
+        it.id = id;
+        it.instance_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        it.cell = {x, y, w, h, 2, 1};
+        l.items.append(it);
+    };
+    add("pm_c50", 0, 0, 5, 4);
+    add("pm_upcoming", 5, 0, 7, 4);
+    add("pm_gainers", 0, 4, 4, 4);
+    add("pm_losers", 4, 4, 4, 4);
+    add("pm_valuable", 8, 4, 4, 4);
+    add("pm_rounds", 0, 8, 12, 3);
+    return l;
 }
 
-void IpoWatchView::on_market_link(const QString& link) {
-    if (link.startsWith(QLatin1String("company:"))) {
-        render_detail_private(link.mid(8));
-    } else if (link.startsWith(QLatin1String("deal:"))) {
-        const QString id = link.mid(5);
-        for (const auto& e : entries_)
-            if (e.deal_id == id) {
-                render_detail(&e);
-                return;
-            }
-    } else if (link == QLatin1String("lens:calendar")) {
-        set_lens(LensCalendar);
-    } else if (link == QLatin1String("lens:companies")) {
-        set_lens(LensPrivate);
-    } else if (link.startsWith(QLatin1String("http"))) {
-        QDesktopServices::openUrl(QUrl(link));
+QJsonObject layout_to_json(const GridLayout& l) {
+    QJsonArray items;
+    for (const auto& it : l.items)
+        items.append(QJsonObject{{"id", it.id},
+                                 {"iid", it.instance_id},
+                                 {"x", it.cell.x},
+                                 {"y", it.cell.y},
+                                 {"w", it.cell.w},
+                                 {"h", it.cell.h},
+                                 {"config", it.config}});
+    return QJsonObject{{"v", 1}, {"cols", l.cols}, {"items", items}};
+}
+
+bool layout_from_json(const QJsonObject& o, GridLayout* out) {
+    if (o.value("v").toInt() != 1)
+        return false;
+    GridLayout l;
+    l.cols = o.value("cols").toInt(12);
+    for (const auto& v : o.value("items").toArray()) {
+        const QJsonObject j = v.toObject();
+        GridItem it;
+        it.id = j.value("id").toString();
+        if (!WidgetRegistry::instance().find(it.id))
+            continue; // a widget type that no longer exists
+        it.instance_id = j.value("iid").toString();
+        if (it.instance_id.isEmpty())
+            it.instance_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        it.cell = {j.value("x").toInt(), j.value("y").toInt(), std::max(1, j.value("w").toInt(4)),
+                   std::max(1, j.value("h").toInt(4)), 2, 1};
+        it.config = j.value("config").toObject();
+        l.items.append(it);
     }
+    if (l.items.isEmpty())
+        return false;
+    *out = l;
+    return true;
+}
+} // namespace
+
+void IpoWatchView::build_market_page() {
+    auto* page = new QWidget;
+    auto* v = new QVBoxLayout(page);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(0);
+
+    auto* bar = new QWidget;
+    auto* h = new QHBoxLayout(bar);
+    h->setContentsMargins(8, 2, 8, 2);
+    h->setSpacing(6);
+    auto* hint = new QLabel(QStringLiteral("Drag a tile by its title · resize from its corner · click a row to open it"));
+    hint->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    h->addWidget(hint);
+    h->addStretch();
+    auto mk = [&](const QString& text, const QString& tip) {
+        auto* b = new QPushButton(text);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setFixedHeight(22);
+        b->setToolTip(tip);
+        b->setStyleSheet(QString("QPushButton{color:%1;background:transparent;border:1px solid %2;padding:0 10px;"
+                                 "font-size:11px;}QPushButton:hover{color:%3;border-color:%3;}")
+                             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        h->addWidget(b);
+        return b;
+    };
+    auto* add_btn = mk(QStringLiteral("+ WIDGET"), QStringLiteral("Add a widget — any dashboard widget, or a Private "
+                                                                   "Market one you closed"));
+    auto* reset_btn = mk(QStringLiteral("RESET"), QStringLiteral("Back to the default arrangement"));
+    v->addWidget(bar);
+
+    market_canvas_ = new DashboardCanvas;
+    market_scroll_ = new QScrollArea;
+    market_scroll_->setWidgetResizable(false); // the canvas sizes itself (row height fits the viewport)
+    market_scroll_->setFrameShape(QFrame::NoFrame);
+    market_scroll_->setWidget(market_canvas_);
+    market_scroll_->viewport()->installEventFilter(this);
+    v->addWidget(market_scroll_, 1);
+
+    // The saved layout is loaded on the canvas's first real width (see
+    // eventFilter): loaded now, at the canvas's construction width, it came
+    // up squeezed into nine columns with tiles on top of each other.
+
+    auto* save_timer = new QTimer(this);
+    save_timer->setSingleShot(true);
+    save_timer->setInterval(600);
+    connect(save_timer, &QTimer::timeout, this, [this]() {
+        // Only the view on screen saves: a hidden copy (the News peek pane's)
+        // re-fitting its rows would write its stale arrangement over the
+        // user's edits. current_layout() is the design, never a narrow refit.
+        // The screen, not the MARKET page: an edit followed within the
+        // debounce by a lens switch hides the page but is still the user's.
+        if (!isVisible())
+            return;
+        market_layout_json_ = QString::fromUtf8(
+            QJsonDocument(layout_to_json(market_canvas_->current_layout())).toJson(QJsonDocument::Compact));
+        SettingsRepository::instance().set(kMarketLayoutKey, market_layout_json_, "pre_ipo");
+    });
+    connect(market_canvas_, &DashboardCanvas::layout_changed, this, [save_timer](const GridLayout&) { save_timer->start(); });
+    connect(add_btn, &QPushButton::clicked, this, [this]() {
+        auto* dlg = new AddWidgetDialog(this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        connect(dlg, &AddWidgetDialog::widget_selected, market_canvas_, &DashboardCanvas::add_widget);
+        dlg->open();
+    });
+    connect(reset_btn, &QPushButton::clicked, this, [this, save_timer]() {
+        market_canvas_->load_layout(default_market_layout());
+        if (market_scroll_->viewport()->height() > 0)
+            market_canvas_->fit_rows_to_viewport(market_scroll_->viewport()->height());
+        save_timer->start();
+    });
+
+    market_page_ = page;
+}
+
+void IpoWatchView::load_market_layout() {
+    GridLayout layout;
+    const auto got = SettingsRepository::instance().get(kMarketLayoutKey);
+    const QString saved = got.is_err() ? QString() : got.value();
+    if (saved.isEmpty() || !layout_from_json(QJsonDocument::fromJson(saved.toUtf8()).object(), &layout))
+        layout = default_market_layout();
+    market_layout_json_ = saved;
+    market_canvas_->load_layout(layout);
+    // Rows stretch to the viewport on every load, not only on a resize.
+    if (market_scroll_ && market_scroll_->viewport()->height() > 0)
+        market_canvas_->fit_rows_to_viewport(market_scroll_->viewport()->height());
 }
 
 void IpoWatchView::render_market() {
-    if (!market_body_)
+    // The tiles repaint themselves from the services. What is left here is
+    // the first-visit courtesy: open the most valuable company with a price
+    // rather than leave two thirds of the screen saying "select a deal".
+    if (auto_private_opened_ || !detail_symbol_.isEmpty() || !pending_select_.isEmpty() ||
+        !pending_select_deal_.isEmpty())
         return;
-    const auto& cl = services::ClarityService::instance();
-    const auto& idx = cl.index();
-    const QString css = build_detail_css();
-    auto esc = [](const QString& s) { return s.toHtmlEscaped(); };
-
-    // ── Head: the index.
-    {
-        QString h = css;
-        h += "<p class='sec'>C50 · CLARITY LIQUIDITY INDEX</p>";
-        if (finite(idx.level)) {
-            h += QString("<p><span class='big'>%1</span>&nbsp;&nbsp; 3M %2 &nbsp; 6M %3 &nbsp; 1Y %4 &nbsp; "
-                         "SINCE 2023 %5 &nbsp; <span class='muted'>· %6</span></p>")
-                     .arg(QString::number(idx.level, 'f', 2), pct_html(idx.chg_3m_pct), pct_html(idx.chg_6m_pct),
-                          pct_html(idx.chg_1y_pct), pct_html(idx.chg_max_pct),
-                          idx.updated.isValid() ? QStringLiteral("as of ") + idx.updated.toString("MMM d, yyyy")
-                                                : QString());
-            h += "<p class='muted'>Equal-weight price index of the 50 most liquid late-stage private companies "
-                 "on Clarity (formerly Hiive), built from indications and trades on its platform — the "
-                 "direction of the pre-IPO market, not a tradable level.</p>";
-        } else {
-            h += cl.errors().isEmpty() ? QStringLiteral("<p class='muted'>Loading the marketplace index…</p>")
-                                       : QStringLiteral("<p class='muted'>%1</p>").arg(esc(cl.errors().join(" · ")));
-        }
-        market_head_->setText(h);
-    }
-
-    // ── Chart: rebuilt only when the series changes (a range click is local).
-    if (market_chart_host_ && (idx.points.size() != market_chart_points_ ||
-                               (!idx.points.isEmpty() && idx.points.last().day != market_chart_last_))) {
-        QChartView* dummy = nullptr;
-        wipe_chart_host(market_chart_host_, dummy);
-        market_chart_points_ = idx.points.size();
-        market_chart_last_ = idx.points.isEmpty() ? QDate() : idx.points.last().day;
-        if (idx.points.size() >= 2) {
-            const QVector<pre_ipo::PricePoint> pts = idx.points;
-            auto* rc = new RangeChart([pts](int days, QString*) { return pm_charts::index_history(pts, days); }, 365);
-            market_chart_host_->layout()->addWidget(rc);
-        }
-        market_chart_host_->setVisible(idx.points.size() >= 2);
-    }
-
-    const QDate today = QDate::currentDate();
-    QString h = css;
-
-    // ── Upcoming IPOs — what NPM does not show.
-    {
-        QVector<const Entry*> up;
-        for (const auto& e : entries_)
-            if (e.pending() && !e.spac && e.when().isValid() && today.daysTo(e.when()) >= -3 &&
-                today.daysTo(e.when()) <= 45 && (e.proj.firm() || e.proj.kind == "estimate"))
-                up.append(&e);
-        std::sort(up.begin(), up.end(), [](const Entry* a, const Entry* b) {
-            if (a->proj.firm() != b->proj.firm())
-                return a->proj.firm();
-            return a->when() < b->when();
-        });
-        h += "<p class='sec'>UPCOMING IPOs · NEXT 45 DAYS</p>";
-        if (up.isEmpty()) {
-            h += entries_.isEmpty() ? "<p class='muted'>Loading the IPO calendar…</p>"
-                                    : "<p class='muted'>No operating-company IPO is scheduled or estimated in the "
-                                      "next 45 days.</p>";
-        } else {
-            h += "<table class='grid'><tr><td class='h'>WHEN</td><td class='h'>COMPANY</td><td class='h'>TICKER</td>"
-                 "<td class='h'>EXCH</td><td class='h'>RANGE</td><td class='h'>DEAL</td><td class='h'>BASIS</td></tr>";
-            int shown = 0;
-            for (const Entry* e : up) {
-                if (shown++ >= 14)
-                    break;
-                const QString when = (e->proj.firm() ? QString() : QStringLiteral("~")) + e->when().toString("MMM d");
-                const QString basis = e->proj.firm() ? (e->proj.kind == "scheduled" ? "scheduled" : "on EDGAR")
-                                                     : QStringLiteral("estimate");
-                h += QString("<tr><td><b>%1</b></td><td><a href='deal:%2'>%3</a></td><td>%4</td><td class='muted'>%5"
-                             "</td><td>%6</td><td>%7</td><td class='%8'>%9</td></tr>")
-                         .arg(esc(when), esc(e->deal_id), esc(e->company), esc(e->ticker.isEmpty() ? "—" : e->ticker),
-                              esc(e->exchange.isEmpty() ? "—" : e->exchange),
-                              esc(e->price_range.isEmpty() ? "—" : e->price_range),
-                              esc(e->deal_size.isEmpty() ? "—" : e->deal_size), e->proj.firm() ? "pos" : "muted",
-                              basis);
-            }
-            h += "</table>";
-            h += QString("<p><a href='lens:calendar'>All %1 deals on the IPO CALENDAR →</a></p>")
-                     .arg(std::count_if(entries_.cbegin(), entries_.cend(), [](const Entry& e) { return e.pending(); }));
+    const pre_ipo::PrivateCompany* best = nullptr;
+    double best_v = 0;
+    for (const auto& c : services::PreIpoService::instance().companies_ref()) {
+        if (!c.market.has_price() || company_is_listed(c))
+            continue;
+        const double v = headline_valuation(c, nullptr);
+        if (pm::usable(v) && v > best_v) {
+            best_v = v;
+            best = &c;
         }
     }
+    if (!best)
+        return;
+    auto_private_opened_ = true;
+    const QString id = best->id;
+    QTimer::singleShot(0, this, [this, id]() {
+        if (detail_symbol_.isEmpty())
+            render_detail_private(id);
+    });
+}
 
-    const auto& cos = services::PreIpoService::instance().companies_ref();
-
-    // ── Movers (6M), from every company with a model price.
-    {
-        QVector<const pre_ipo::PrivateCompany*> priced;
-        for (const auto& c : cos)
-            if (c.market.has_price() && finite(c.market.chg_6m_pct) &&
-                !company_is_listed(c))
-                priced.append(&c);
-        std::sort(priced.begin(), priced.end(), [](const auto* a, const auto* b) {
-            return a->market.chg_6m_pct > b->market.chg_6m_pct;
-        });
-        auto table = [&](const QString& title, bool top) {
-            QString t = QString("<p class='sec'>%1</p><table class='grid'><tr><td class='h'>COMPANY</td>"
-                                "<td class='h'>PRICE</td><td class='h'>6M</td><td class='h'>VS ROUND</td></tr>")
-                            .arg(title);
-            const int n = std::min<int>(8, priced.size());
-            for (int i = 0; i < n; ++i) {
-                const auto* c = top ? priced.at(i) : priced.at(priced.size() - 1 - i);
-                if (top ? c->market.chg_6m_pct < 0 : c->market.chg_6m_pct >= 0)
-                    break;
-                const auto* lr = pm::last_priced_round(c->financing);
-                t += QString("<tr><td><a href='company:%1'>%2</a></td><td>%3</td><td>%4</td><td>%5</td></tr>")
-                         .arg(esc(c->id), esc(c->name), pps_text(c->market.price), pct_html(c->market.chg_6m_pct),
-                              pct_html(lr ? pm::premium_pct(c->market.price, lr->pps) : pm::kNaN));
-            }
-            return t + "</table>";
-        };
-        if (!priced.isEmpty())
-            h += QString("<table width='100%'><tr><td width='50%' valign='top' style='padding-right:10px;'>%1</td>"
-                         "<td width='50%' valign='top'>%2</td></tr></table>")
-                     .arg(table(QStringLiteral("TOP GAINERS · 6M"), true), table(QStringLiteral("TOP LOSERS · 6M"), false));
+void IpoWatchView::on_market_open(const QVariantMap& m) {
+    // Several views can exist (the News peek pane hosts one): only the one on
+    // screen answers.
+    if (!isVisible())
+        return;
+    pm_take_pending_open(); // answered here: no later show re-opens it
+    const QString company = m.value("company_id").toString();
+    if (!company.isEmpty()) {
+        render_detail_private(company);
+        return;
     }
-
-    // ── Most valuable private companies.
-    {
-        struct Row {
-            const pre_ipo::PrivateCompany* c;
-            double v;
-            QString what;
-        };
-        QVector<Row> rows;
-        for (const auto& c : cos) {
-            if (company_is_listed(c))
-                continue;
-            QString what;
-            const double v = headline_valuation(c, &what);
-            if (pm::usable(v))
-                rows.append({&c, v, what});
+    const QString deal = m.value("deal_id").toString();
+    if (deal.isEmpty())
+        return;
+    for (const auto& e : entries_)
+        if (e.deal_id == deal) {
+            render_detail(&e);
+            return;
         }
-        std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.v > b.v; });
-        // First visit: open the most valuable company with a price rather
-        // than leave two thirds of the screen saying "select a deal".
-        if (!auto_private_opened_ && detail_symbol_.isEmpty() && pending_select_.isEmpty() &&
-            pending_select_deal_.isEmpty())
-            for (const auto& r : std::as_const(rows))
-                if (r.c->market.has_price()) {
-                    auto_private_opened_ = true;
-                    const QString id = r.c->id;
-                    QTimer::singleShot(0, this, [this, id]() {
-                        if (detail_symbol_.isEmpty())
-                            render_detail_private(id);
-                    });
-                    break;
-                }
-        if (!rows.isEmpty()) {
-            h += "<p class='sec'>MOST VALUABLE PRIVATE COMPANIES</p><table class='grid'><tr><td class='h'>COMPANY</td>"
-                 "<td class='h'>VALUATION</td><td class='h'>PRICE</td><td class='h'>1Y</td><td class='h'>LAST ROUND</td>"
-                 "<td class='h'>IPO</td></tr>";
-            for (int i = 0; i < std::min<int>(12, rows.size()); ++i) {
-                const auto& r = rows.at(i);
-                const auto* lr = pm::last_valued_round(r.c->financing);
-                QString tip, color;
-                qint64 key = 0;
-                const QString ipo = ipo_cell_text(*r.c, &tip, &color, &key);
-                h += QString("<tr><td><a href='company:%1'>%2</a></td><td>%3 <span class='muted'>%4</span></td>"
-                             "<td>%5</td><td>%6</td><td class='muted'>%7</td><td style='color:%8;'>%9</td></tr>")
-                         .arg(esc(r.c->id), esc(r.c->name), money_usd(r.v), esc(r.what), pps_text(r.c->market.price),
-                              pct_html(r.c->market.chg_1y_pct), lr ? esc(round_label(*lr)) : QStringLiteral("—"), color,
-                              esc(ipo));
-            }
-            h += "</table>";
-        }
-    }
-
-    // ── Recent financings across the followed companies.
-    {
-        struct Row {
-            const pre_ipo::PrivateCompany* c;
-            const pre_ipo::FinancingRound* r;
-        };
-        QVector<Row> rows;
-        const QDate cutoff = today.addDays(-180);
-        for (const auto& c : cos)
-            for (const auto& r : c.financing)
-                if (r.month.isValid() && r.month >= QDate(cutoff.year(), cutoff.month(), 1))
-                    rows.append({&c, &r});
-        std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
-            if (a.r->month != b.r->month)
-                return a.r->month > b.r->month;
-            return (finite(a.r->post_money_usd) ? a.r->post_money_usd : 0) >
-                   (finite(b.r->post_money_usd) ? b.r->post_money_usd : 0);
-        });
-        h += "<p class='sec'>RECENT ROUNDS &amp; TENDERS · 6 MONTHS</p>";
-        if (rows.isEmpty()) {
-            h += "<p class='muted'>Funding histories load as each company page is read (one a second, in the "
-                 "background).</p>";
-        } else {
-            h += "<table class='grid'><tr><td class='h'>MONTH</td><td class='h'>COMPANY</td><td class='h'>ROUND</td>"
-                 "<td class='h'>RAISED</td><td class='h'>POST-MONEY</td><td class='h'>$/SH</td></tr>";
-            for (int i = 0; i < std::min<int>(16, rows.size()); ++i) {
-                const auto& x = rows.at(i);
-                h += QString("<tr><td>%1</td><td><a href='company:%2'>%3</a></td><td>%4</td><td>%5</td><td>%6</td>"
-                             "<td>%7</td></tr>")
-                         .arg(x.r->month.toString("MMM yyyy"), esc(x.c->id), esc(x.c->name),
-                              esc(x.r->series.isEmpty() ? "—" : x.r->series), money_usd(x.r->raised_usd),
-                              money_usd(x.r->post_money_usd), pps_text(x.r->pps));
-            }
-            h += "</table>";
-        }
-    }
-
-    int detailed = 0;
-    for (const auto& c : cl.companies())
-        detailed += c.quote.detailed ? 1 : 0;
-    h += QString("<p class='muted'>Prices: Clarity's daily model price (an estimate from platform indications and "
-                 "trades, not a trade print) · %1 company pages read of %2 on the marketplace. Rounds &amp; tenders: "
-                 "Clarity. IPO dates: Nasdaq calendar + SEC EDGAR registration stage. Fund marks: SEC N-PORT.</p>")
-             .arg(detailed)
-             .arg(cl.universe_total());
-    market_body_->setText(h);
+    // The calendar has not loaded (or not this deal yet): wait for it, as a
+    // News deep link does — without switching lens.
+    pending_select_deal_ = deal;
+    pending_select_.clear();
+    auto_private_opened_ = true; // the user asked for this deal, not the first-visit company
 }
 
 // ── Dossier sections ─────────────────────────────────────────────────────────

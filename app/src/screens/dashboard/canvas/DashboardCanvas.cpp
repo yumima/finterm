@@ -1,5 +1,8 @@
 #include "screens/dashboard/canvas/DashboardCanvas.h"
 
+#include <QHash>
+#include <QSet>
+
 #include "core/logging/Logger.h"
 #include "screens/dashboard/canvas/DashboardTemplates.h"
 #include "screens/dashboard/canvas/WidgetRegistry.h"
@@ -59,12 +62,18 @@ DashboardCanvas::DashboardCanvas(QWidget* parent) : QWidget(parent) {
                                              : std::min(canonical_cols_, 6);
 
         if (target_cols != layout_.cols) {
+            // Always derive from the DESIGNED arrangement (the one made at the
+            // canonical column count): squeezing to 9 and widening back to 12
+            // used to keep the squeezed positions forever.
+            QHash<QString, QJsonObject> configs;
+            for (const auto& it : layout_.items)
+                configs.insert(it.instance_id, it.config);
+            QVector<GridItem> base = designed_items_.isEmpty() ? layout_.items : designed_items_;
+            for (auto& it : base)
+                if (configs.contains(it.instance_id))
+                    it.config = configs.value(it.instance_id);
             layout_.cols = target_cols;
-            for (auto& item : layout_.items) {
-                item.cell.w = std::min(item.cell.w, layout_.cols);
-                item.cell.x = std::min(item.cell.x, layout_.cols - item.cell.w);
-            }
-            layout_.items = compact_vertical(layout_.items);
+            layout_.items = target_cols == canonical_cols_ ? base : refit_to_cols(base, layout_.cols);
         }
 
         if (!dragging_tile_ && !resizing_tile_)
@@ -92,8 +101,11 @@ void DashboardCanvas::load_layout(const GridLayout& layout) {
     // but we restore to this when the panel expands back to full width.
     canonical_cols_ = layout_.cols > 0 ? layout_.cols : 12;
 
-    // Apply responsive columns for current width without clamping canonical_cols_
-    if (width() > 0)
+    // Apply responsive columns for current width without clamping canonical_cols_.
+    // A canvas not laid out yet (a screen built in the background has its
+    // default ~100 px child size) keeps the designed columns: refitting to 6
+    // there painted a 6-column dashboard that jumped to 12 on first show.
+    if (width() >= 200)
         layout_.cols = responsive_cols(width());
 
     for (auto& item : layout_.items) {
@@ -119,6 +131,24 @@ void DashboardCanvas::load_layout(const GridLayout& layout) {
         tiles_.append(tile);
         tile->show();
     }
+    // The design is the loaded layout with the same registry corrections
+    // (minimums; unknown widget types dropped), at the canonical columns.
+    designed_items_.clear();
+    for (auto item : layout.items) {
+        const WidgetMeta* meta = WidgetRegistry::instance().find(item.id);
+        if (!meta)
+            continue;
+        item.cell.min_w = meta->min_w;
+        item.cell.min_h = meta->min_h;
+        item.cell.w = std::min(std::max(item.cell.w, meta->min_w), canonical_cols_);
+        item.cell.x = std::max(0, std::min(item.cell.x, canonical_cols_ - item.cell.w));
+        item.cell.h = std::max(item.cell.h, meta->min_h);
+        designed_items_.append(item);
+    }
+    // Loaded into fewer columns than it was designed for: the per-tile clamps
+    // above can land tiles on each other — separate them.
+    if (layout_.cols != canonical_cols_)
+        layout_.items = refit_to_cols(layout_.items, layout_.cols);
 
     reflow_tiles();
     update_canvas_height();
@@ -147,7 +177,7 @@ void DashboardCanvas::apply_template(const QString& template_id) {
             }
             layout.items = compact_vertical(layout.items);
             load_layout(layout);
-            emit layout_changed(layout_);
+            notify_layout_changed();
             return;
         }
     }
@@ -180,7 +210,7 @@ void DashboardCanvas::add_widget(const QString& widget_type_id) {
     reflow_tiles();
     update_canvas_height();
     emit widget_count_changed(tiles_.size());
-    emit layout_changed(layout_);
+    notify_layout_changed();
 }
 
 void DashboardCanvas::remove_widget(const QString& instance_id) {
@@ -199,14 +229,14 @@ void DashboardCanvas::remove_widget(const QString& instance_id) {
     reflow_tiles(true);
     update_canvas_height();
     emit widget_count_changed(tiles_.size());
-    emit layout_changed(layout_);
+    notify_layout_changed();
 }
 
 void DashboardCanvas::set_row_height(int px) {
     layout_.row_h = px;
     reflow_tiles(true);
     update_canvas_height();
-    emit layout_changed(layout_);
+    notify_layout_changed();
 }
 
 void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
@@ -228,7 +258,7 @@ void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
     layout_.row_h = new_rh;
     reflow_tiles(false); // no animation for viewport-driven reflow
     update_canvas_height();
-    emit layout_changed(layout_);
+    notify_layout_changed();
 }
 
 // ── Drag handling (swap on collision) ─────────────────────────────────────────
@@ -320,7 +350,7 @@ void DashboardCanvas::on_drag_released(WidgetTile* tile, QPoint /*canvas_pos*/) 
     hide_placeholder();
     reflow_tiles(true);
     update_canvas_height();
-    emit layout_changed(layout_);
+    notify_layout_changed(/*user_edit=*/true);
 }
 
 // ── Resize handling (push-down, reflows ALL tiles) ────────────────────────────
@@ -430,7 +460,7 @@ void DashboardCanvas::on_resize_released(WidgetTile* tile) {
     hide_placeholder();
     reflow_tiles(true);
     update_canvas_height();
-    emit layout_changed(layout_);
+    notify_layout_changed(/*user_edit=*/true);
 }
 
 // ── Close / scroll ────────────────────────────────────────────────────────────
@@ -461,6 +491,13 @@ void DashboardCanvas::apply_bg() {
     // Set both stylesheet AND QPalette so Qt always knows the correct background,
     // even during hide/show cycles from tab switching in ADS docking.
     QString bg = QString(tokens_.bg_base);
+    // Runs on every show: re-setting an identical stylesheet re-polishes every
+    // tile under the canvas (see DashboardScreen::refresh_theme). The palette
+    // and stylesheet persist across hide/show, so only a changed theme needs
+    // re-applying.
+    if (bg == applied_bg_)
+        return;
+    applied_bg_ = bg;
     setAttribute(Qt::WA_StyledBackground, true);
     setStyleSheet(QString("background:%1;").arg(bg));
     QPalette pal = palette();
@@ -612,7 +649,7 @@ void DashboardCanvas::connect_tile(WidgetTile* tile) {
         connect(content, &widgets::BaseWidget::config_changed, this, [this, instance_id](const QJsonObject& cfg) {
             if (auto* item = item_for_id(instance_id)) {
                 item->config = cfg;
-                emit layout_changed(layout_);
+                notify_layout_changed();
             }
         });
     }
@@ -630,6 +667,63 @@ GridItem* DashboardCanvas::item_for_id(const QString& instance_id) {
         if (i.instance_id == instance_id)
             return &i;
     return nullptr;
+}
+
+GridLayout DashboardCanvas::current_layout() const {
+    GridLayout l = layout_;
+    if (layout_.cols != canonical_cols_ && !designed_items_.isEmpty()) {
+        // Same tiles, designed positions; configs are the live ones.
+        QHash<QString, QJsonObject> configs;
+        for (const auto& it : layout_.items)
+            configs.insert(it.instance_id, it.config);
+        l.items = designed_items_;
+        for (auto& it : l.items)
+            if (configs.contains(it.instance_id))
+                it.config = configs.value(it.instance_id);
+        l.cols = canonical_cols_;
+    }
+    return l;
+}
+
+void DashboardCanvas::notify_layout_changed(bool user_edit) {
+    if (layout_.cols == canonical_cols_) {
+        designed_items_ = layout_.items;
+    } else if (user_edit) {
+        // A drag or resize made while squeezed is kept: mapped back into the
+        // canonical grid proportionally (x and w scale by canonical/current)
+        // and separated, so it survives widening — without making the
+        // squeezed column count the design's (that stuck at 9 for good).
+        QVector<GridItem> mapped = layout_.items;
+        const double k = double(canonical_cols_) / std::max(1, layout_.cols);
+        for (auto& it : mapped) {
+            it.cell.w = std::max(it.cell.min_w, int(std::lround(it.cell.w * k)));
+            it.cell.x = int(std::lround(it.cell.x * k));
+        }
+        designed_items_ = refit_to_cols(mapped, canonical_cols_);
+    } else {
+        // Squeezed: positions are a temporary refit, but membership is real —
+        // a tile added or closed now is added to / closed in the design too.
+        QSet<QString> live;
+        for (const auto& it : layout_.items)
+            live.insert(it.instance_id);
+        QSet<QString> designed;
+        QVector<GridItem> kept;
+        for (const auto& it : designed_items_)
+            if (live.contains(it.instance_id)) {
+                kept.append(it);
+                designed.insert(it.instance_id);
+            }
+        for (const auto& it : layout_.items)
+            if (!designed.contains(it.instance_id)) {
+                GridItem add = it;
+                add.cell = find_first_fit(kept, it.cell.w, it.cell.h, canonical_cols_);
+                add.cell.min_w = it.cell.min_w;
+                add.cell.min_h = it.cell.min_h;
+                kept.append(add);
+            }
+        designed_items_ = kept;
+    }
+    emit layout_changed(layout_);
 }
 
 } // namespace finterm::screens

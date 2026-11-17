@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`c35d27583`](https://github.com/yumima/finterm/commit/c35d27583) private market: IPO Watch becomes PRIVATE MARKET — marketplace prices, rounds, C50, IPO road
 - [`a4764b580`](https://github.com/yumima/finterm/commit/a4764b580) reopen as left: the launcher keeps the layout; DAY/AFT, Ownership filters and pane sizes remembered
 - [`7aeea32bc`](https://github.com/yumima/finterm/commit/7aeea32bc) research: Extended Hours loads with the same waving bars as the other panels
 

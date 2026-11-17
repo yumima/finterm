@@ -138,7 +138,7 @@ ClarityCompany ClarityService::parse_company(const QJsonObject& c) {
     x.key_investors = strings(c.value("key_investors"));
     const double at = num(c.value("fetched_at"));
     if (std::isfinite(at))
-        x.fetched_at = QDateTime::fromSecsSinceEpoch(qint64(at));
+        x.fetched_at = QDateTime::fromSecsSinceEpoch(qint64(at)); // EVENT-STAMP: when the page was read (an age check)
 
     MarketQuote& q = x.quote;
     q.source = QStringLiteral("Clarity");
@@ -286,7 +286,7 @@ void ClarityService::apply_index(const QJsonObject& root) {
     // Undated = unknown age = stale: an answer without its fetch time must
     // not pass as fresh and suppress the next read.
     const double at = num(root.value("fetched_at"));
-    index_at_ = std::isfinite(at) ? QDateTime::fromSecsSinceEpoch(qint64(at)) : QDateTime();
+    index_at_ = std::isfinite(at) ? QDateTime::fromSecsSinceEpoch(qint64(at)) : QDateTime(); // EVENT-STAMP: fetch time
     errors_.clear();
     for (const auto& e : root.value("errors").toArray())
         errors_ << e.toString();

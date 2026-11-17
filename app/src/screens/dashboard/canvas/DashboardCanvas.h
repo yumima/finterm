@@ -18,7 +18,9 @@ class DashboardCanvas : public QWidget {
     ~DashboardCanvas() override;
 
     void load_layout(const GridLayout& layout);
-    GridLayout current_layout() const { return layout_; }
+    /// The layout as designed (canonical columns) — what is saved. A narrow
+    /// viewport's temporary refit is never persisted as the user's design.
+    GridLayout current_layout() const;
     void apply_template(const QString& template_id);
     void add_widget(const QString& widget_type_id);
     void remove_widget(const QString& instance_id);
@@ -60,7 +62,13 @@ class DashboardCanvas : public QWidget {
     WidgetTile* tile_for_id(const QString& instance_id) const;
     GridItem* item_for_id(const QString& instance_id);
 
+    /// Emit layout_changed, keeping designed_items_ in step (see below).
+    void notify_layout_changed(bool user_edit = false);
+
     GridLayout layout_;
+    /// The arrangement as made at canonical_cols_. A narrow viewport refits
+    /// a copy of it; widening back restores it exactly.
+    QVector<GridItem> designed_items_;
     QVector<WidgetTile*> tiles_;
     PlaceholderOverlay* placeholder_ = nullptr;
 
@@ -90,6 +98,7 @@ class DashboardCanvas : public QWidget {
     int canonical_cols_ = 12;
 
     finterm::ui::ThemeTokens tokens_{};
+    QString applied_bg_; // background apply_bg() last applied (skip if unchanged)
 };
 
 } // namespace finterm::screens

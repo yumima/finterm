@@ -1312,6 +1312,7 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/PreIpoScreen.cpp
     src/screens/pre_ipo/IpoWatchView.cpp
     src/screens/pre_ipo/PrivateMarketCharts.cpp
+    src/screens/pre_ipo/PrivateMarketWidgets.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
@@ -1329,6 +1330,7 @@ set(SCREEN_SOURCES
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/services/pre_ipo/ClarityService.cpp
+    src/services/pre_ipo/IpoDealsFeed.cpp
 
     # Alternative Investments
     src/screens/alt_investments/AltInvestmentsScreen.cpp
@@ -1453,6 +1455,7 @@ set_source_files_properties(
     src/screens/pre_ipo/PreIpoScreen.cpp
     src/screens/pre_ipo/IpoWatchView.cpp
     src/screens/pre_ipo/PrivateMarketCharts.cpp
+    src/screens/pre_ipo/PrivateMarketWidgets.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
@@ -1470,6 +1473,7 @@ set_source_files_properties(
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/services/pre_ipo/ClarityService.cpp
+    src/services/pre_ipo/IpoDealsFeed.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/LockScreen.cpp
     src/screens/auth/LoginScreen.cpp

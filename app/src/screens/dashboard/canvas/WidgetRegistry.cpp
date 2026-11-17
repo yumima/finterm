@@ -34,6 +34,7 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 #include "screens/dashboard/widgets/WebScraperWidget.h"
+#include "screens/pre_ipo/PrivateMarketWidgets.h"
 
 namespace finterm::screens {
 
@@ -73,6 +74,26 @@ WidgetRegistry::WidgetRegistry() {
 
     register_widget({"sentiment", "Market Sentiment", "Markets", "Fear & greed, bull/bear indicators", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::MarketSentimentWidget; }});
+
+    // ── Private Market (also the PRIVATE MARKET screen's MARKET canvas) ────────
+    register_widget({"pm_c50", "C50 Private Market Index", "Private Market",
+                     "Clarity Liquidity Index — the 50 most liquid late-stage private companies", 6, 5, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmC50Widget; }});
+    register_widget({"pm_upcoming", "Upcoming IPOs", "Private Market",
+                     "Operating-company IPOs in the next 60 days, with the projected date and its basis", 6, 5, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmUpcomingIposWidget; }});
+    register_widget({"pm_gainers", "Private Gainers · 6M", "Private Market",
+                     "Private companies with the largest 6-month rise in marketplace model price", 4, 5, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmMoversWidget(true); }});
+    register_widget({"pm_losers", "Private Losers · 6M", "Private Market",
+                     "Private companies with the largest 6-month fall in marketplace model price", 4, 5, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmMoversWidget(false); }});
+    register_widget({"pm_valuable", "Most Valuable Private Cos", "Private Market",
+                     "Implied (price × round shares) or last-round valuation, with IPO status", 4, 5, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmMostValuableWidget; }});
+    register_widget({"pm_rounds", "Recent Rounds & Tenders", "Private Market",
+                     "Primary rounds and tender offers closed in the last six months", 6, 4, 3, 1,
+                     [](const QJsonObject&) { return new widgets::PmRecentRoundsWidget; }});
 
     // ── Research ──────────────────────────────────────────────────────────────
     register_widget({"news", "News Feed", "Research", "Latest financial news headlines", 8, 4, 3, 1,

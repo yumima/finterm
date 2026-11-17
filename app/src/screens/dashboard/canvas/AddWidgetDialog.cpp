@@ -24,6 +24,8 @@ QString AddWidgetDialog::accent_for_category(const QString& category) {
         return ui::colors::POSITIVE();
     if (category == "Trading")
         return ui::colors::NEGATIVE();
+    if (category == "Private Market")
+        return ui::colors::CYAN();
     if (category == "Tools")
         return ui::colors::AMBER();
     return ui::colors::TEXT_SECONDARY();
