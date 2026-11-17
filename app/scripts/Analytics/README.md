@@ -25,9 +25,7 @@ Comprehensive financial analytics library covering equity valuation, portfolio m
 
 | Library | File | Description |
 |---------|------|-------------|
-| **PyPortfolioOpt** | `pyportfolioOpt_wrapper.py` | Efficient frontier, mean-variance optimization |
 | **RiskFolioLib** | `riskfoliolib_wrapper.py` | Risk parity, hierarchical clustering |
-| **skfolio** | `skfolio_wrapper.py` + `/python_skfolio_lib/` | Scikit-learn style portfolio optimization |
 
 ## Analytics Modules Breakdown
 
@@ -190,9 +188,7 @@ analysis = analyze_company(financial_statements, ticker='AAPL')
 - **SciPy**: Optimization and statistical functions
 - **scikit-learn**: Machine learning models
 - **TA-Lib**: Technical analysis indicators
-- **PyPortfolioOpt**: Modern portfolio theory
 - **RiskFolioLib**: Advanced portfolio optimization
-- **skfolio**: Portfolio optimization toolkit
 
 ---
 

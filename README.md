@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`31a55cf16`](https://github.com/yumima/finterm/commit/31a55cf16) **chore(release):** update README download links and updates.json for v4.0.8
+- [`2de6e0bcf`](https://github.com/yumima/finterm/commit/2de6e0bcf) **fix:** close-on-exec through fcntl (SOCK_CLOEXEC does not exist on macOS)
 - [`8638b5d4b`](https://github.com/yumima/finterm/commit/8638b5d4b) release: 4.0.8
 - [`fa2220c1e`](https://github.com/yumima/finterm/commit/fa2220c1e) 13f sync: an upkeep failure is not reported as SEC not answering; the ranking asks only for pairs the sync computes
 - [`9a3ec0438`](https://github.com/yumima/finterm/commit/9a3ec0438) review, fourth pass: extended hours and 13F

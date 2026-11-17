@@ -979,13 +979,23 @@ def firms(query="", limit=40, quarter=None):
     """
     con = connect()
     try:
-        if not quarter:
-            row = con.execute(
-                "SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 1").fetchone()
-            if not row:
-                return {"error": "no 13F data ingested yet"}
-            quarter = row[0]
         q = (query or "").strip()
+        if not quarter:
+            if not con.execute("SELECT 1 FROM quarters LIMIT 1").fetchone():
+                return {"error": "no 13F data ingested yet"}
+            # Each filer at its newest filing. The newest quarter alone is
+            # often a partial EDGAR pull of the largest filers: searching only
+            # there, Berkshire Hathaway — not yet filed for it — was not found.
+            floor = (quarter_pair(con) or [""])[0]
+            rows = con.execute("""
+                SELECT b.cik, b.manager, b.stock_value, b.stock_count FROM books b
+                  JOIN (SELECT cik, MAX(quarter) AS q FROM books WHERE cik <> '' GROUP BY cik) n
+                    ON n.cik = b.cik AND n.q = b.quarter
+                 WHERE b.quarter >= ? AND b.manager LIKE ?
+                 ORDER BY b.stock_value DESC LIMIT ?""", (floor, f"%{q}%", int(limit))).fetchall()
+            return {"quarter": None, "query": q,
+                    "firms": [{"cik": r[0], "manager": r[1], "book_value": r[2],
+                               "position_count": r[3]} for r in rows]}
         if q:
             rows = con.execute(
                 "SELECT cik, manager, stock_value, stock_count FROM books "
@@ -1034,8 +1044,13 @@ def _book_moves(con, accession, prior_accession, compute=True):
     return m
 
 
-def top_firms(limit=50):
-    """The largest 13F filers, each with what it did since its previous filing.
+TOP_FIRMS = 20   # the ranking's length; the user's own funds are added below it
+
+
+def top_firms(limit=TOP_FIRMS, ciks=None):
+    """The largest 13F filers, each with what it did since its previous filing,
+    then the filers the user added to the list (`ciks`) that are not among
+    them, each marked `mine`.
 
     Ranked by each filer's NEWEST indexed book, which may be a quarter the bulk
     sets have not reached yet (ingest_current pulls those straight from EDGAR
@@ -1068,16 +1083,30 @@ def top_firms(limit=50):
              WHERE b.quarter >= ?
              ORDER BY b.stock_value DESC LIMIT ?
         """, (floor, int(limit))).fetchall()
+        mine = _norm_ciks(ciks)
+        ranked = {r[0] for r in newest}
+        # The user's own funds: each at its newest filing, whatever its size,
+        # and whether or not it is still filing (it is theirs to remove).
+        extra = []
+        for cik in mine:
+            if cik in ranked:
+                continue
+            r = con.execute("SELECT cik, manager, quarter, accession, stock_value, stock_count FROM books "
+                            "WHERE cik=? ORDER BY quarter DESC LIMIT 1", (cik,)).fetchone()
+            if r:
+                extra.append(r)
+        extra.sort(key=lambda r: -(r[4] or 0))
         firms_out = []
         corrected, pending = {}, False
-        sync_pairs = set(_screen_pairs(con))  # exactly the pairs sync() keeps corrected
-        for cik, manager, quarter, accession, value, count in newest:
+        sync_pairs = set(_screen_pairs(con, limit, mine))  # exactly the pairs sync() keeps corrected
+        for cik, manager, quarter, accession, value, count in list(newest) + extra:
             prior = con.execute(
                 "SELECT quarter, accession, stock_value, stock_count FROM books "
                 "WHERE cik=? AND quarter<? ORDER BY quarter DESC LIMIT 1",
                 (cik, quarter)).fetchone()
             row = {"cik": cik, "manager": manager, "quarter": quarter,
-                   "book_value": value, "position_count": count}
+                   "book_value": value, "position_count": count,
+                   "mine": cik in mine, "ranked": cik in ranked}
             if prior:
                 row.update({"prior_quarter": prior[0], "prior_book_value": prior[2],
                             "prior_position_count": prior[3]})
@@ -1100,7 +1129,7 @@ def top_firms(limit=50):
         newest_q = max((f["quarter"] for f in firms_out), default=None)
         partial = {r[0] for r in con.execute(
             "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1").fetchall()}
-        return {"firms": firms_out, "newest_quarter": newest_q,
+        return {"firms": firms_out, "newest_quarter": newest_q, "top": int(limit),
                 "partial_quarters": sorted(partial), "pending": pending}
     finally:
         con.close()
@@ -1315,7 +1344,7 @@ def _information_table_url(cik, accession):
     return None
 
 
-def ingest_current(top=400, progress=None):
+def ingest_current(top=400, progress=None, ciks=None):
     """Pull the current quarter straight from EDGAR for the largest filers.
 
     Ranked by book size in the newest indexed quarter, because that is the only
@@ -1333,6 +1362,14 @@ def ingest_current(top=400, progress=None):
         rows = con.execute(
             "SELECT cik, manager FROM books WHERE quarter=? AND cik<>'' "
             "ORDER BY stock_value DESC LIMIT ?", (latest, int(top))).fetchall()
+        # And the funds the user added to the list, whatever their size.
+        have = {r[0] for r in rows}
+        for cik in _norm_ciks(ciks):
+            if cik not in have:
+                r = con.execute("SELECT cik, manager FROM books WHERE cik=? ORDER BY quarter DESC LIMIT 1",
+                                (cik,)).fetchone()
+                if r:
+                    rows.append(r)
 
         added = skipped = failed = 0
         new_quarter = ""
@@ -1907,28 +1944,88 @@ def _ensure_adjustments(con, prior_q, cur_q):
 _universe_cache = {}
 
 
+def _universe_tables(con):
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS universe (quarter TEXT, cusip TEXT, PRIMARY KEY (quarter, cusip)) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS universe_runs (quarter TEXT PRIMARY KEY, stamp TEXT);
+    """)
+
+
+def _universe_stamp(con, q):
+    r = con.execute("SELECT filers, ingested_at FROM quarters WHERE quarter=?", (q,)).fetchone()
+    n = con.execute("SELECT COUNT(*) FROM books WHERE quarter=?", (q,)).fetchone()[0]
+    return f"{r[0] if r else ''}:{r[1] if r else ''}:{n}"
+
+
+def _ensure_universe(con, q):
+    """Store `q`'s universe for the screens — the sync's job. Reading it from
+    the holdings is a scan of every row of the quarter (5 s on a full index),
+    which the fund ranking and every fund's page paid on each open."""
+    _universe_tables(con)
+    stamp = _universe_stamp(con, q)
+    row = con.execute("SELECT stamp FROM universe_runs WHERE quarter=?", (q,)).fetchone()
+    if row and row[0] == stamp:
+        return False
+    cusips = [(q, c) for (c,) in con.execute(
+        "SELECT DISTINCT cusip FROM holdings WHERE quarter=? AND put_call=''", (q,))]
+    con.execute("DELETE FROM universe WHERE quarter=?", (q,))
+    con.executemany("INSERT OR IGNORE INTO universe VALUES (?,?)", cusips)
+    con.execute("INSERT OR REPLACE INTO universe_runs VALUES (?,?)", (q, stamp))
+    con.commit()
+    _universe_cache.pop(q, None)
+    return True
+
+
 def prior_universe(con, prior_q):
     """Every security any filer reported in `prior_q` (a complete quarter).
     One absent from it was not reportable then — a new listing — so a
     position in it now is a holding that became visible, not a purchase:
-    Fidelity's pre-IPO SpaceX stake read as a $36B buy (2026-11-16)."""
+    Fidelity's pre-IPO SpaceX stake read as a $36B buy (2026-11-16).
+
+    Read from the copy the sync stores when there is one, even if a filing
+    has arrived since: the universe only grows, and a security reported for
+    the first time by that late filing is one no screen is waiting on. With
+    no copy (a new index), from the holdings themselves."""
     if prior_q not in _universe_cache:
-        _universe_cache[prior_q] = {c for (c,) in con.execute(
+        stored = None
+        try:
+            if con.execute("SELECT 1 FROM universe_runs WHERE quarter=?", (prior_q,)).fetchone():
+                stored = {c for (c,) in con.execute("SELECT cusip FROM universe WHERE quarter=?", (prior_q,))}
+        except sqlite3.OperationalError:
+            stored = None
+        _universe_cache[prior_q] = stored if stored is not None else {c for (c,) in con.execute(
             "SELECT DISTINCT cusip FROM holdings WHERE quarter=? AND put_call=''", (prior_q,))}
     return _universe_cache[prior_q]
 
 
-def _screen_pairs(con, limit=50):
+def _norm_ciks(ciks):
+    """CIKs as the index keys them: ten digits, zero-padded."""
+    out = []
+    for c in ciks or []:
+        d = "".join(ch for ch in str(c) if ch.isdigit())
+        if d and d.zfill(10) not in out:
+            out.append(d.zfill(10))
+    return out
+
+
+def _screen_pairs(con, limit=TOP_FIRMS, ciks=None):
     """The quarter pairs the screens read corrections for: the recent
-    consecutive ones, and each of the largest filers' own (newest, previous)."""
+    consecutive ones, and the (previous, newest) pair of each of the largest
+    filers and of each filer the user added to the list (one that skipped a
+    quarter compares across the gap)."""
     recent = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
     pairs = list(zip(recent[1:], recent[:-1]))
     floor = (quarter_pair(con) or [""])[0]
-    for cik, quarter in con.execute("""
+    newest = [r for r in con.execute("""
             SELECT b.cik, b.quarter FROM books b
               JOIN (SELECT cik, MAX(quarter) AS q FROM books WHERE cik <> '' GROUP BY cik) n
                 ON n.cik = b.cik AND n.q = b.quarter
-             WHERE b.quarter >= ? ORDER BY b.stock_value DESC LIMIT ?""", (floor, int(limit))).fetchall():
+             WHERE b.quarter >= ? ORDER BY b.stock_value DESC LIMIT ?""", (floor, int(limit))).fetchall()]
+    for cik in _norm_ciks(ciks):
+        r = con.execute("SELECT cik, quarter FROM books WHERE cik=? ORDER BY quarter DESC LIMIT 1", (cik,)).fetchone()
+        if r:
+            newest.append(r)
+    for cik, quarter in newest:
         prior = con.execute("SELECT quarter FROM books WHERE cik=? AND quarter<? ORDER BY quarter DESC LIMIT 1",
                             (cik, quarter)).fetchone()
         if prior and (prior[0], quarter) not in pairs:
@@ -2489,7 +2586,7 @@ def backfill_filed_dates():
         con.close()
 
 
-def sync(progress=None, max_filings=None):
+def sync(progress=None, max_filings=None, ciks=None):
     """Bring the index up to the newest filing SEC has. Safe to run often:
     everything already in is skipped."""
     if requests is None:
@@ -2656,7 +2753,11 @@ def sync(progress=None, max_filings=None):
         # whatever pair each of the largest filers compares (one that skipped
         # a quarter compares across the gap). A current pair costs one stamp
         # comparison; one with an unanswered split lookup is tried again.
-        pairs = _screen_pairs(con)
+        pairs = _screen_pairs(con, TOP_FIRMS, ciks)
+        # The universes the screens compare against: every prior quarter of
+        # those pairs. Cheap when current (a stamp), 5 s each when not.
+        for q in sorted({a for a, _b in pairs}):
+            _ensure_universe(con, q)
         before = _adj_stamps(con, pairs)
         for a, b in pairs:
             _ensure_adjustments(con, a, b)
@@ -2741,7 +2842,7 @@ def handle_action(action, payload):
     if action == "ingest":
         return ingest(payload.get("url"))
     if action == "ingest_current":
-        return ingest_current(int(payload.get("top") or 400))
+        return ingest_current(int(payload.get("top") or 400), None, payload.get("ciks"))
     if action == "ingest_recent":
         return ingest_recent(int(payload.get("quarters") or 2))
     if action == "resolve":
@@ -2783,7 +2884,7 @@ def handle_action(action, payload):
     if action == "sync":
         def prog(n, day):
             print(f"PROGRESS {n} {day}", file=sys.stderr, flush=True)
-        return sync(prog, payload.get("max_filings"))
+        return sync(prog, payload.get("max_filings"), payload.get("ciks"))
     if action == "recheck_tickers":
         return recheck_tickers(int(payload.get("limit") or 3000))
     if action == "big_moves":
@@ -2794,7 +2895,7 @@ def handle_action(action, payload):
     if action == "fund_filings":
         return fund_filings(payload.get("ciks") or [])
     if action == "top_firms":
-        return top_firms(int(payload.get("limit") or 50))
+        return top_firms(int(payload.get("limit") or TOP_FIRMS), payload.get("ciks"))
     if action == "book":
         return firm_book(payload.get("cik"), payload.get("quarter"),
                          int(payload.get("limit") or 250))

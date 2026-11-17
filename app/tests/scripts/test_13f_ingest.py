@@ -464,6 +464,49 @@ def main():
         finally:
             c7.close()
 
+        # ── your own funds in the ranking ──────────────────────────────────
+        tf_top1 = bulk.top_firms(1)
+        top_cik = tf_top1["firms"][0]["cik"]
+        other = next(f["cik"] for f in bulk.top_firms(50)["firms"] if f["cik"] != top_cik)
+        tf_mine = bulk.top_firms(1, ciks=[other.lstrip("0"), top_cik])
+        rows = {f["cik"]: f for f in tf_mine["firms"]}
+        check("my funds: the top N, then the funds you added that are not in it",
+              [f["cik"] for f in tf_mine["firms"]] == [top_cik, other] and tf_mine["top"] == 1, str(tf_mine)[:200])
+        check("my funds: marked as yours, and as ranked or not",
+              rows[other]["mine"] and not rows[other]["ranked"] and rows[top_cik]["mine"] and rows[top_cik]["ranked"])
+        check("my funds: a CIK however written", bulk._norm_ciks(["1", "0000000001", "CIK 1"]) == ["0000000001"])
+        c8 = bulk.connect()
+        try:
+            # A fund of yours that skipped a quarter: its pair is across the gap,
+            # and only the list it is on can tell the sync to correct it.
+            c8.execute("INSERT INTO books (cik, manager, quarter, accession, stock_value, stock_count) "
+                       "VALUES ('0000000077', 'SMALL GAP FUND', '2025-06-30', 'acc-77a', 1.0, 1)")
+            c8.execute("INSERT INTO books (cik, manager, quarter, accession, stock_value, stock_count) "
+                       "VALUES ('0000000077', 'SMALL GAP FUND', '2026-03-31', 'acc-77b', 1.0, 1)")
+            c8.commit()
+            gap = ("2025-06-30", "2026-03-31")
+            check("my funds: the sync corrects your fund's own quarter pair, across a gap",
+                  gap in bulk._screen_pairs(c8, 0, ["77"]) and gap not in bulk._screen_pairs(c8, 0, []))
+            # The universe the screens compare against is stored by the sync
+            # and read from there.
+            q = "2025-12-31"
+            bulk._universe_cache.clear()
+            computed = bulk.prior_universe(c8, q)
+            bulk._universe_cache.clear()
+            check("universe: stored once", bulk._ensure_universe(c8, q) is True)
+            check("universe: current stamp, not redone", bulk._ensure_universe(c8, q) is False)
+            c8.execute("DELETE FROM universe WHERE quarter=?", (q,))   # prove the read comes from the table
+            c8.execute("INSERT INTO universe VALUES (?, 'STOREDONLY')", (q,))
+            c8.commit()
+            check("universe: the screens read the stored copy", bulk.prior_universe(c8, q) == {"STOREDONLY"})
+            bulk._universe_cache.clear()
+            c8.execute("DELETE FROM universe_runs")
+            c8.commit()
+            check("universe: without a stored copy, from the holdings", bulk.prior_universe(c8, q) == computed)
+            bulk._universe_cache.clear()
+        finally:
+            c8.close()
+
         # ── value units ────────────────────────────────────────────────────
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.

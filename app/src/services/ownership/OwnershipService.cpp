@@ -336,6 +336,64 @@ OwnershipService::OwnershipService() {
     form4_timer_ = new QTimer(this);
     form4_timer_->setSingleShot(true);
     connect(form4_timer_, &QTimer::timeout, this, [this]() { run_form4_scan(); });
+    load_my_funds();
+}
+
+// ── The user's own funds in Largest Funds ────────────────────────────────────
+
+static const QString kMyFundsKey = QStringLiteral("ownership.my_funds");
+
+static QString norm_cik(const QString& cik) {
+    QString d;
+    for (const QChar c : cik)
+        if (c.isDigit())
+            d += c;
+    return d.isEmpty() ? QString() : d.rightJustified(10, QLatin1Char('0'));
+}
+
+void OwnershipService::load_my_funds() {
+    my_funds_.clear();
+    const auto r = finterm::SettingsRepository::instance().get(kMyFundsKey);
+    if (!r.is_ok() || r.value().isEmpty())
+        return;
+    for (const auto& v : QJsonDocument::fromJson(r.value().toUtf8()).array()) {
+        const auto o = v.toObject();
+        const QString cik = norm_cik(o.value(QStringLiteral("cik")).toString());
+        if (!cik.isEmpty() && !is_my_fund(cik))
+            my_funds_.push_back({cik, o.value(QStringLiteral("name")).toString()});
+    }
+}
+
+bool OwnershipService::is_my_fund(const QString& cik) const {
+    const QString c = norm_cik(cik);
+    return std::any_of(my_funds_.begin(), my_funds_.end(), [&](const MyFund& f) { return f.cik == c; });
+}
+
+void OwnershipService::set_my_fund(const QString& cik, const QString& name, bool on) {
+    const QString c = norm_cik(cik);
+    if (c.isEmpty() || is_my_fund(c) == on)
+        return;
+    if (on)
+        my_funds_.push_back({c, name});
+    else
+        my_funds_.erase(std::remove_if(my_funds_.begin(), my_funds_.end(), [&](const MyFund& f) { return f.cik == c; }),
+                        my_funds_.end());
+    QJsonArray a;
+    for (const auto& f : my_funds_)
+        a.append(QJsonObject{{"cik", f.cik}, {"name", f.name}});
+    finterm::SettingsRepository::instance().set(kMyFundsKey, QString::fromUtf8(QJsonDocument(a).toJson(QJsonDocument::Compact)),
+                                                QStringLiteral("ownership"));
+    emit my_funds_changed();
+    load_top_firms(/*force=*/true);
+    // A fund just added may have no corrections stored for its quarter pair;
+    // the ranking says so (pending) and asks for a pass itself.
+}
+
+QJsonArray OwnershipService::my_fund_ciks() const {
+    QJsonArray a;
+    for (const auto& f : my_funds_)
+        a.append(f.cik);
+    return a;
 }
 
 // ── Per stock ────────────────────────────────────────────────────────────────
@@ -1197,7 +1255,7 @@ void OwnershipService::load_top_firms(bool force) {
     top_firms_loading_ = true;
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run_interactive(
-        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("top_firms"), payload_of({{"limit", 50}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("top_firms"), payload_of({{"limit", 20}, {"ciks", my_fund_ciks()}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1212,6 +1270,7 @@ void OwnershipService::load_top_firms(bool force) {
                 if (o.value(QStringLiteral("pending")).toBool()) // moves withheld until corrections exist
                     self->ask_for_pending_pass();
                 t.newest_quarter = iso_date(o, "newest_quarter");
+                t.top = o.value(QStringLiteral("top")).toInt(20);
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     t.partial_quarters << v.toString();
                 auto top_move = [](const QJsonValue& v) -> std::optional<FirmMoveTop> {
@@ -1230,6 +1289,8 @@ void OwnershipService::load_top_firms(bool force) {
                     f.quarter = iso_date(r, "quarter");
                     f.book_value = r.value(QStringLiteral("book_value")).toDouble();
                     f.position_count = r.value(QStringLiteral("position_count")).toInt();
+                    f.mine = r.value(QStringLiteral("mine")).toBool();
+                    f.ranked = r.value(QStringLiteral("ranked")).toBool(true);
                     if (r.contains(QStringLiteral("prior_quarter"))) {
                         f.prior_quarter = iso_date(r, "prior_quarter");
                         f.prior_book_value = r.value(QStringLiteral("prior_book_value")).toDouble();
@@ -1352,7 +1413,7 @@ void OwnershipService::pull_latest_filings(int top) {
                                 .arg(top));
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest_current"), payload_of({{"top", top}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest_current"), payload_of({{"top", top}, {"ciks", my_fund_ciks()}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1625,8 +1686,9 @@ void OwnershipService::run_13f_sync() {
     sync_status_ = QStringLiteral("13F: checking SEC for new filings…");
     emit index_changed(index_status_ + QStringLiteral(" · ") + sync_status_);
     QPointer<OwnershipService> self = this;
+    const QJsonArray self_ciks = my_fund_ciks(); // their quarter pairs are corrected too
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("sync"), payload_of({{"max_filings", kSyncFilingsPerPass}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("sync"), payload_of({{"max_filings", kSyncFilingsPerPass}, {"ciks", self_ciks}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;

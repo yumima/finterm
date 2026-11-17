@@ -547,10 +547,13 @@ struct TopFirm {
     double sold_value = 0.0;
     std::optional<FirmMoveTop> top_buy;
     std::optional<FirmMoveTop> top_sell;
+    bool mine = false;   ///< added to the list by the user
+    bool ranked = true;  ///< among the top `TopFirms::top` by book
 };
 
 struct TopFirms {
     QVector<TopFirm> firms;
+    int top = 20; ///< how many of `firms` are the ranking; the rest are the user's
     QDate newest_quarter;
     QStringList partial_quarters;
     QString error;

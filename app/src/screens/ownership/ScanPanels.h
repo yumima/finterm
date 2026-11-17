@@ -144,11 +144,14 @@ class LargestFundsPanel : public QWidget {
     explicit LargestFundsPanel(QWidget* parent = nullptr);
     void refresh();
     /// Open a fund in the side pane by CIK — the filer search's route in. A
-    /// ranked fund also gets its row highlighted; one outside the top 50 opens
+    /// listed fund also gets its row highlighted; one outside the list opens
     /// all the same, with nothing highlighted.
     void show_fund(const QString& cik);
   signals:
     void stock_activated(const QString& symbol);
+
+  protected:
+    bool eventFilter(QObject* obj, QEvent* ev) override;
 
   private:
     void render();
@@ -162,6 +165,16 @@ class LargestFundsPanel : public QWidget {
     // EDGAR-pulled quarter.
     FirmDetailPanel* detail_ = nullptr;
     ui::LoadingOverlay* loading_ = nullptr; // over the ranking while it (re)loads
+    // The last row: "＋ Add a fund…", which becomes a search field in place;
+    // its suggestions drop down under it. Your funds carry a ★; clicking it,
+    // or the row's right-click menu, removes them.
+    class QLineEdit* add_edit_ = nullptr;
+    class QListWidget* add_results_ = nullptr;
+    class QTimer* add_debounce_ = nullptr;
+    int add_row_ = -1;
+    void begin_add();
+    void end_add();
+    void pick_result(int row);
     QString selected_cik_;                  // re-selected after a reload re-fills the table
     // True when the open fund came from the search rather than a row: it may
     // not be in the ranking at all, so a reload must not close it for that.

@@ -12,13 +12,19 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMenu>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTableWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 namespace finterm::screens {
@@ -832,6 +838,17 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
     // A ticker in the buy/sell columns opens that stock; anywhere else on the
     // row opens the filer's book.
     connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {
+        if (r == add_row_) {
+            begin_add();
+            return;
+        }
+        // The ★ of a fund you added takes it off your list.
+        if (c == kRank) {
+            if (auto* it = table_->item(r, kRank); it && !it->data(Qt::UserRole).toString().isEmpty()) {
+                services::OwnershipService::instance().set_my_fund(it->data(Qt::UserRole).toString(), {}, false);
+                return;
+            }
+        }
         if (c == kTopBuy || c == kTopSell) {
             if (auto* it = table_->item(r, c)) {
                 const QString sym = it->data(Qt::UserRole).toString();
@@ -872,7 +889,85 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
     split->setStretchFactor(1, 2);
     root->addWidget(split, 1);
 
+    // Right-click any fund: keep it in your list (it stays when it drops out
+    // of the top 20), or take it off.
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        const int r = table_->rowAt(pos.y());
+        auto* name = r >= 0 && r != add_row_ ? table_->item(r, kManager) : nullptr;
+        if (!name)
+            return;
+        const QString cik = name->data(Qt::UserRole).toString();
+        const QString manager = name->text();
+        auto& svc = services::OwnershipService::instance();
+        const bool mine = svc.is_my_fund(cik);
+        QMenu menu(this);
+        menu.addAction(mine ? QStringLiteral("Remove from my list") : QStringLiteral("Keep in my list"),
+                       this, [cik, manager, mine]() {
+                           services::OwnershipService::instance().set_my_fund(cik, manager, !mine);
+                       });
+        menu.addAction(QStringLiteral("Add a fund…"), this, [this]() {
+            table_->scrollToBottom();
+            begin_add();
+        });
+        menu.exec(table_->viewport()->mapToGlobal(pos));
+    });
+
+    // Adding a fund: suggestions from the filer search, under the field.
+    add_results_ = new QListWidget(this);
+    add_results_->setWindowFlags(Qt::ToolTip); // floats over the table, takes no focus
+    add_results_->setStyleSheet(QString("QListWidget{background:%1;border:1px solid %2;color:%3;font-size:12px;}"
+                                        "QListWidget::item{padding:4px 8px;}"
+                                        "QListWidget::item:selected{background:%4;color:%3;}")
+                                    .arg(ui::colors::BG_RAISED(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
+                                         ui::colors::BG_SURFACE()));
+    add_results_->hide();
+    connect(add_results_, &QListWidget::itemClicked, this,
+            [this](QListWidgetItem* it) { pick_result(add_results_->row(it)); });
+    add_debounce_ = new QTimer(this);
+    add_debounce_->setSingleShot(true);
+    add_debounce_->setInterval(250);
+    connect(add_debounce_, &QTimer::timeout, this, [this]() {
+        if (!add_edit_)
+            return;
+        const QString q = add_edit_->text().trimmed();
+        if (q.length() < 2) {
+            add_results_->hide();
+            return;
+        }
+        services::OwnershipService::instance().search_firms(q);
+    });
+
     auto& svc = services::OwnershipService::instance();
+    connect(&svc, &services::OwnershipService::firms_found, this, [this]() {
+        if (!add_edit_ || !add_edit_->hasFocus())
+            return; // the screen's own filer search asked, not us
+        add_results_->clear();
+        auto& s = services::OwnershipService::instance();
+        for (const auto& m : s.last_firm_results()) {
+            const bool have = s.is_my_fund(m.cik) ||
+                              std::any_of(s.top_firms().firms.begin(), s.top_firms().firms.end(),
+                                          [&](const ownership::TopFirm& f) { return f.cik == m.cik; });
+            auto* it = new QListWidgetItem(QStringLiteral("%1   ·   $%2 · %3 names%4")
+                                               .arg(m.name, fmt::format_compact(m.book_value))
+                                               .arg(m.position_count)
+                                               .arg(have ? QStringLiteral("   (in the list)") : QString()));
+            it->setData(Qt::UserRole, m.cik);
+            it->setData(Qt::UserRole + 1, m.name);
+            if (have)
+                it->setFlags(it->flags() & ~Qt::ItemIsEnabled);
+            add_results_->addItem(it);
+        }
+        if (add_results_->count() == 0) {
+            add_results_->addItem(QStringLiteral("No 13F filer by that name"));
+            add_results_->item(0)->setFlags(Qt::NoItemFlags);
+        }
+        const QPoint at = add_edit_->mapToGlobal(QPoint(0, add_edit_->height()));
+        add_results_->setFixedWidth(qMax(add_edit_->width(), 420));
+        add_results_->setFixedHeight(qMin(add_results_->count(), 10) * 26 + 4);
+        add_results_->move(at);
+        add_results_->show();
+    });
     connect(&svc, &services::OwnershipService::top_firms_updated, this, [this]() { render(); });
     connect(&svc, &services::OwnershipService::latest_pull_status, this, [this](const QString& t) {
         pull_status_->setText(t);
@@ -900,6 +995,76 @@ void LargestFundsPanel::show_fund(const QString& cik) {
     detail_->set_firm(cik);
 }
 
+void LargestFundsPanel::begin_add() {
+    if (add_row_ < 0 || add_edit_)
+        return;
+    add_edit_ = new QLineEdit;
+    add_edit_->setPlaceholderText(QStringLiteral("Type a fund or manager name — Enter adds the first match, Esc cancels"));
+    add_edit_->setStyleSheet(QString("QLineEdit{color:%1;background:%2;border:1px solid %3;padding:2px 8px;font-size:12px;}")
+                                 .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(), ui::colors::AMBER()));
+    add_edit_->installEventFilter(this);
+    connect(add_edit_, &QLineEdit::textEdited, this, [this](const QString&) { add_debounce_->start(); });
+    connect(add_edit_, &QLineEdit::returnPressed, this, [this]() {
+        for (int i = 0; i < add_results_->count(); ++i)
+            if (add_results_->isVisible() && (add_results_->item(i)->flags() & Qt::ItemIsEnabled)) {
+                pick_result(add_results_->currentRow() >= 0 &&
+                                    (add_results_->currentItem()->flags() & Qt::ItemIsEnabled)
+                                ? add_results_->currentRow()
+                                : i);
+                return;
+            }
+    });
+    table_->setCellWidget(add_row_, 0, add_edit_);
+    add_edit_->setFocus();
+}
+
+void LargestFundsPanel::end_add() {
+    add_results_->hide();
+    if (!add_edit_)
+        return;
+    QLineEdit* e = add_edit_;
+    add_edit_ = nullptr;
+    if (add_row_ >= 0)
+        table_->removeCellWidget(add_row_, 0);
+    e->deleteLater();
+}
+
+void LargestFundsPanel::pick_result(int row) {
+    auto* it = add_results_->item(row);
+    if (!it || !(it->flags() & Qt::ItemIsEnabled))
+        return;
+    const QString cik = it->data(Qt::UserRole).toString();
+    const QString name = it->data(Qt::UserRole + 1).toString();
+    end_add();
+    services::OwnershipService::instance().set_my_fund(cik, name, true);
+}
+
+bool LargestFundsPanel::eventFilter(QObject* obj, QEvent* ev) {
+    if (obj == add_edit_) {
+        if (ev->type() == QEvent::KeyPress) {
+            auto* k = static_cast<QKeyEvent*>(ev);
+            if (k->key() == Qt::Key_Escape) {
+                end_add();
+                return true;
+            }
+            if ((k->key() == Qt::Key_Down || k->key() == Qt::Key_Up) && add_results_->isVisible()) {
+                const int n = add_results_->count();
+                int r = add_results_->currentRow() + (k->key() == Qt::Key_Down ? 1 : -1);
+                add_results_->setCurrentRow(qBound(0, r, n - 1));
+                return true;
+            }
+        } else if (ev->type() == QEvent::FocusOut) {
+            // Clicking a suggestion moves the mouse, not the focus (the list
+            // takes none); anything else ends the add.
+            QTimer::singleShot(150, this, [this]() {
+                if (add_edit_ && !add_edit_->hasFocus() && !add_results_->underMouse())
+                    end_add();
+            });
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
 void LargestFundsPanel::refresh() {
     services::OwnershipService::instance().load_top_firms();
     render();
@@ -915,6 +1080,10 @@ void LargestFundsPanel::render() {
     else
         loading_->hide_loading();
     const auto& t = svc.top_firms();
+    if (!t.loaded || !t.error.isEmpty()) {
+        end_add();
+        add_row_ = -1;
+    }
     if (!t.loaded) {
         table_->setRowCount(0);
         title_note_->setText(svc.top_firms_loading() ? QStringLiteral("ranking every filer's newest book…")
@@ -928,8 +1097,10 @@ void LargestFundsPanel::render() {
         foot_->setText(t.error);
         return;
     }
-    title_note_->setText(QStringLiteral("top %1 by US-listed stock book · newest filing %2")
-                             .arg(t.firms.size())
+    const int yours = std::count_if(t.firms.begin(), t.firms.end(), [](const ownership::TopFirm& f) { return !f.ranked; });
+    title_note_->setText(QStringLiteral("top %1 by US-listed stock book%2 · newest filing %3")
+                             .arg(t.top)
+                             .arg(yours ? QStringLiteral(" + %1 of yours").arg(yours) : QString())
                              .arg(quarter_label(t.newest_quarter)));
 
     auto move_cell = [](const std::optional<FirmMoveTop>& m) {
@@ -946,11 +1117,27 @@ void LargestFundsPanel::render() {
         return it;
     };
 
+    // A reload can land while a fund is being typed (the sync finishing, a
+    // pass the ranking asked for): the field is rebuilt with the row, but
+    // what was typed, and the suggestions, are carried over.
+    const bool adding = add_edit_ != nullptr;
+    const QString typed = adding ? add_edit_->text() : QString();
+    const bool suggesting = adding && add_results_->isVisible();
+    end_add();
     table_->setUpdatesEnabled(false);
-    table_->setRowCount(t.firms.size());
+    table_->clearSpans();
+    table_->setRowCount(t.firms.size() + 1); // + the "add a fund" row
     for (int i = 0; i < t.firms.size(); ++i) {
         const auto& f = t.firms[i];
-        table_->setItem(i, kRank, num_cell(QString::number(i + 1), ui::colors::TEXT_TERTIARY()));
+        // Ranked: its place. Yours and outside the top: a star in its place.
+        auto* rank = f.ranked ? num_cell(QString::number(i + 1) + (f.mine ? QStringLiteral(" ★") : QString()),
+                                         f.mine ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY())
+                              : num_cell(QStringLiteral("★"), ui::colors::AMBER());
+        if (f.mine) {
+            rank->setData(Qt::UserRole, f.cik);
+            rank->setToolTip(ui::tooltip_wrap(QStringLiteral("In your list — click the ★ to remove %1").arg(f.manager)));
+        }
+        table_->setItem(i, kRank, rank);
         auto* name = cell(f.manager, ui::colors::TEXT_PRIMARY());
         name->setData(Qt::UserRole, f.cik);
         name->setData(Qt::UserRole + 1, f.quarter.toString(Qt::ISODate));
@@ -997,8 +1184,26 @@ void LargestFundsPanel::render() {
                 table_->setItem(i, c, cell(fmt::placeholder(), ui::colors::TEXT_TERTIARY()));
         }
     }
+    // The last row adds a fund: click it and it becomes a search field.
+    add_row_ = t.firms.size();
+    auto* add = cell(QStringLiteral("＋  Add a fund…"), ui::colors::AMBER());
+    add->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "Add any 13F filer to this list by name. It stays below the top %1, marked ★, until you click the ★ "
+        "or right-click it to remove it.")
+                                         .arg(t.top)));
+    table_->setItem(add_row_, 0, add);
+    for (int c = 1; c < kFundCols; ++c)
+        table_->setItem(add_row_, c, cell(QString(), ui::colors::TEXT_TERTIARY()));
+    table_->setSpan(add_row_, 0, 1, kFundCols);
+    if (adding) {
+        begin_add();
+        add_edit_->setText(typed);
+        if (suggesting)
+            add_debounce_->start();
+    }
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();
+    table_->setColumnWidth(kRank, qMax(table_->columnWidth(kRank), 44));
     table_->setColumnWidth(kManager, qMin(qMax(table_->columnWidth(kManager), 180), 280));
     fill_width(table_, {kManager});
     // Keep the open fund's row and its book in step across a reload. After an

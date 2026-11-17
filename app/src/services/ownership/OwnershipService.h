@@ -106,6 +106,16 @@ class OwnershipService : public QObject {
     /// The largest filers by 13F book, with each one's quarter-over-quarter
     /// moves. Cached for the session once loaded; `force` reloads.
     void load_top_firms(bool force = false);
+
+    /// Funds the user added to the Largest Funds list, beyond its top 20 —
+    /// kept in settings, in the order added. CIKs as the index keys them.
+    struct MyFund {
+        QString cik;
+        QString name;
+    };
+    const QVector<MyFund>& my_funds() const { return my_funds_; }
+    bool is_my_fund(const QString& cik) const;
+    void set_my_fund(const QString& cik, const QString& name, bool on);
     /// The largest single stake changes across every filer. The first call on
     /// a new index state computes them (a few minutes), later ones are local.
     void load_big_moves(const QString& side, const QString& sort, bool active_only, int filed_within = 0);
@@ -163,6 +173,7 @@ class OwnershipService : public QObject {
     void book_updated(QString cik);
     void firms_found();
     void top_firms_updated();
+    void my_funds_changed();
     void big_moves_updated();
     void stakes_updated();
     /// Progress / result of pull_latest_filings, for a status line.
@@ -228,6 +239,9 @@ class OwnershipService : public QObject {
     /// A screen found nothing stored and asked for a pass. Asked once: the
     /// sync's own timers (refused, failed, more) pace everything after that.
     bool pending_pass_asked_ = false;
+    QVector<MyFund> my_funds_;
+    void load_my_funds();
+    QJsonArray my_fund_ciks() const;
     void ask_for_pending_pass();
     QString sync_status_;
     void run_13f_sync();

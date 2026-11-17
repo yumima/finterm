@@ -187,6 +187,12 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     loading_ = new ui::LoadingOverlay(positions_);
 
     auto& svc = services::OwnershipService::instance();
+    // The empty pane says whether there is an index to pick from, which is
+    // known only once the probe answers — the first render is usually before.
+    connect(&svc, &services::OwnershipService::index_changed, this, [this](const QString&) {
+        if (cik_.isEmpty())
+            render();
+    });
     connect(&svc, &services::OwnershipService::book_updated, this, [this](const QString& cik) {
         if (cik == cik_)
             render();
