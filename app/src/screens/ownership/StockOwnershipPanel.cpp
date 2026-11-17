@@ -17,6 +17,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSplitter>
+#include "ui/widgets/RememberedSplitter.h"
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -133,6 +134,7 @@ void StockOwnershipPanel::build_ui() {
     // proportions so the page opens balanced.
     split->setSizes({360, 320, 220});
     split->setMinimumHeight(360 + 320 + 220);
+    ui::remember_splitter(split, QStringLiteral("ownership.stock"));
     page->addWidget(split, 1);
 
     scroll_ = new QScrollArea;

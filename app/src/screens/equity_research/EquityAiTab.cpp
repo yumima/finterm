@@ -26,6 +26,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSettings>
+#include "ui/widgets/RememberedSplitter.h"
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStyle>
@@ -765,6 +766,7 @@ void EquityAiTab::build_ui() {
     top_split->setCollapsible(0, false);
     top_split->setCollapsible(1, false);
     top_split->setSizes({560, 480});
+    ui::remember_splitter(top_split, QStringLiteral("er.ai.top"));
 
     // Bottom (full width): predicted-vs-actual chart + track-record table.
     auto* bottom = new QWidget;
@@ -816,6 +818,7 @@ void EquityAiTab::build_ui() {
     main_split->setCollapsible(0, false);
     main_split->setCollapsible(1, false);
     main_split->setSizes({420, 260});
+    ui::remember_splitter(main_split, QStringLiteral("er.ai.main"));
     root->addWidget(main_split, 1);
 }
 

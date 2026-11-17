@@ -38,6 +38,7 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QSplitter>
+#include "ui/widgets/RememberedSplitter.h"
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -1165,6 +1166,8 @@ QWidget* PortfolioScreen::build_main_view() {
 
     // Left: Heatmap (220px)
     heatmap_ = new PortfolioHeatmap;
+    connect(heatmap_, &PortfolioHeatmap::mode_changed, this,
+            [this](portfolio::HeatmapMode) { ScreenStateManager::instance().notify_changed(this); });
     connect(heatmap_, &PortfolioHeatmap::symbol_selected, this, &PortfolioScreen::on_symbol_selected);
     // Heatmap pane's "PORTFOLIO" title doubles as a home-view affordance:
     // clicking it deselects the symbol and returns the perf chart and any
@@ -1246,6 +1249,7 @@ QWidget* PortfolioScreen::build_main_view() {
     top_split->addWidget(sector_panel_);
     top_split->setStretchFactor(0, 7); // ~70%
     top_split->setStretchFactor(1, 3); // ~30%
+    ui::remember_splitter(top_split, QStringLiteral("portfolio.top"));
     sector_panel_->setMinimumWidth(180);
 
     center_layout->addWidget(top_split, 40); // 40% of vertical space
@@ -1630,13 +1634,21 @@ const portfolio::HoldingWithQuote* PortfolioScreen::find_holding(const QString& 
 }
 
 QVariantMap PortfolioScreen::save_state() const {
-    return {{"portfolio_id", selected_id_}, {"symbol", selected_symbol_}};
+    QVariantMap m{{"portfolio_id", selected_id_}, {"symbol", selected_symbol_}};
+    if (heatmap_)
+        m.insert("heatmap_mode", static_cast<int>(heatmap_->mode())); // PnL / WEIGHT / DAY / AFT
+    return m;
 }
 
 void PortfolioScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value("portfolio_id").toString();
     if (!id.isEmpty())
         on_portfolio_selected(id);
+    if (heatmap_ && state.contains("heatmap_mode")) {
+        const int m = state.value("heatmap_mode").toInt();
+        if (m >= static_cast<int>(portfolio::HeatmapMode::Pnl) && m <= static_cast<int>(portfolio::HeatmapMode::Aft))
+            heatmap_->set_mode(static_cast<portfolio::HeatmapMode>(m));
+    }
     // Symbol focus is intentionally *not* restored — Portfolio always opens
     // on the aggregate HOLDINGS view (showEvent enforces the same on tab
     // switch). Symbol selection is opt-in per session.

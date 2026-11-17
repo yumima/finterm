@@ -806,6 +806,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             if (!saved_dock.isEmpty()) {
                 dock_router_->ensure_all_registered();
                 dock_restored = dock_manager_->restoreState(saved_dock);
+                LOG_INFO("MainWindow", QString("Dock layout restore: %1 bytes, %2, %3 open areas")
+                                           .arg(saved_dock.size())
+                                           .arg(dock_restored ? "accepted" : "REJECTED")
+                                           .arg(dock_manager_->openedDockAreas().size()));
 
                 // Sanity check: an unreasonable number of visible dock areas
                 // (>6) means the layout is likely corrupt.

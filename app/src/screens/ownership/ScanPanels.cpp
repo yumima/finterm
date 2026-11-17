@@ -20,6 +20,8 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSplitter>
+#include "ui/widgets/RememberedControls.h"
+#include "ui/widgets/RememberedSplitter.h"
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -117,6 +119,11 @@ InsiderBuysPanel::InsiderBuysPanel(QWidget* parent) : QWidget(parent) {
     for (auto* w : {static_cast<QWidget*>(window_), static_cast<QWidget*>(min_value_)})
         connect(static_cast<QComboBox*>(w), &QComboBox::activated, this, [this](int) { refresh(); });
     connect(min_insiders_, &QSpinBox::valueChanged, this, [this](int) { refresh(); });
+    ui::remember_choice(window_, QStringLiteral("ownership.insider.window"));
+    ui::remember_choice(min_insiders_, QStringLiteral("ownership.insider.min_insiders"));
+    ui::remember_choice(min_value_, QStringLiteral("ownership.insider.min_value"));
+    ui::remember_choice(exclude_ten_pct_, QStringLiteral("ownership.insider.exclude_ten_pct"));
+    ui::remember_choice(exclude_plan_, QStringLiteral("ownership.insider.exclude_plan"));
     connect(exclude_ten_pct_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
     connect(exclude_plan_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
 
@@ -252,6 +259,7 @@ ShortRankPanel::ShortRankPanel(QWidget* parent) : QWidget(parent) {
     sort_->addItem(QStringLiteral("days to cover"), QStringLiteral("dtc"));
     sort_->addItem(QStringLiteral("change vs prior settlement"), QStringLiteral("change"));
     sort_->addItem(QStringLiteral("shares short"), QStringLiteral("short"));
+    ui::remember_choice(sort_, QStringLiteral("ownership.short.sort"));
     connect(sort_, &QComboBox::activated, this, [this](int) { refresh(); });
     bar->addWidget(sort_);
     root->addLayout(bar);
@@ -360,6 +368,7 @@ MoversPanel::MoversPanel(QWidget* parent) : QWidget(parent) {
     sort_->addItem(QStringLiteral("focused books buying"), QStringLiteral("focused_buying"));
     sort_->addItem(QStringLiteral("focused books selling"), QStringLiteral("focused_selling"));
     sort_->addItem(QStringLiteral("most concentrated"), QStringLiteral("concentration"));
+    ui::remember_choice(sort_, QStringLiteral("ownership.movers.sort"));
     connect(sort_, &QComboBox::activated, this, [this](int) { refresh(); });
     bar->addWidget(sort_);
     root->addLayout(bar);
@@ -495,6 +504,10 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
     for (auto* c : {side_, sort_, filed_within_})
         connect(c, &QComboBox::activated, this, [this](int) { refresh(); });
     connect(active_only_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
+    ui::remember_choice(side_, QStringLiteral("ownership.big_moves.side"));
+    ui::remember_choice(sort_, QStringLiteral("ownership.big_moves.sort"));
+    ui::remember_choice(filed_within_, QStringLiteral("ownership.big_moves.filed_within"));
+    ui::remember_choice(active_only_, QStringLiteral("ownership.big_moves.active_only"));
     root->addLayout(bar);
 
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Manager"),
@@ -666,6 +679,9 @@ StakesPanel::StakesPanel(QWidget* parent) : QWidget(parent) {
     for (auto* c : {kind_, days_})
         connect(c, &QComboBox::activated, this, [this](int) { refresh(); });
     connect(new_only_, &QCheckBox::toggled, this, [this](bool) { refresh(); });
+    ui::remember_choice(kind_, QStringLiteral("ownership.stakes.kind"));
+    ui::remember_choice(days_, QStringLiteral("ownership.stakes.days"));
+    ui::remember_choice(new_only_, QStringLiteral("ownership.stakes.new_only"));
     root->addLayout(bar);
 
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Holder"),
@@ -887,6 +903,7 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
     split->addWidget(detail_);
     split->setStretchFactor(0, 3);
     split->setStretchFactor(1, 2);
+    ui::remember_splitter(split, QStringLiteral("ownership.largest_funds"));
     root->addWidget(split, 1);
 
     // Right-click any fund: keep it in your list (it stays when it drops out

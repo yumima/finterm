@@ -40,6 +40,9 @@ class PortfolioHeatmap : public QWidget {
     /// arriving from the service (either via fresh fetch or cached replay).
     void clear_fundamentals();
     void set_selected_symbol(const QString& symbol);
+    /// PnL / WEIGHT / DAY / AFT — what the tiles are coloured by.
+    void set_mode(portfolio::HeatmapMode m);
+    portfolio::HeatmapMode mode() const { return mode_; }
     void set_currency(const QString& currency);
     void refresh_theme();
 

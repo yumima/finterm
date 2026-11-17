@@ -138,12 +138,13 @@ SETUP
     distro/Homebrew Qt on CMake's default search path is used.
 
 START
-    Strips Qt window/toolbar/dock-layout state (preserves portfolio,
-    watchlists, theme, workspaces), then exec's the Qt binary in the
-    foreground. Auth runs in-process; there is no stub server.
+    Exec's the Qt binary in the foreground, which reopens the window and
+    screens as you left them (layout, sizes, the screens side by side).
+    Auth runs in-process; there is no stub server.
 
-    Set FINTERM_KEEP_WINDOW=1 to skip the window-state cleanup if you
-    want Qt to remember a hand-arranged layout across launches.
+    Set FINTERM_RESET_WINDOW=1 to start once from the default layout instead
+    (strips Qt window/toolbar/dock-layout state; keeps portfolio, watchlists,
+    theme, workspaces). `finterm repair` does the same.
 
     GPU selection (hybrid laptops):
       FINTERM_GPU=auto    (default) iGPU; auto-avoids a wedged NVIDIA dGPU
@@ -237,11 +238,12 @@ EOF
     # the binary's job (LayoutMigrations); this only unblocks the boot.
     preflight_guard
 
-    # Strip Qt window/toolbar/dock-layout state from finterm.conf
-    # so every launch starts with a clean default layout. Surgical —
-    # preserves portfolio, workspaces, theme, component-usage stats, and
-    # every other setting. Set FINTERM_KEEP_WINDOW=1 to skip.
-    if [[ "${FINTERM_KEEP_WINDOW:-0}" != "1" ]]; then
+    # The window and dock layout are kept: the app reopens as the user left
+    # it. It used to be stripped on every launch (a safeguard from before
+    # the app checked a restored layout itself — it now falls back to the
+    # default when a saved layout comes back empty, broken or from an older
+    # format). FINTERM_RESET_WINDOW=1 strips it for this launch.
+    if [[ "${FINTERM_RESET_WINDOW:-0}" == "1" ]]; then
         do_window_only_reset
     fi
 

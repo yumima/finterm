@@ -90,30 +90,10 @@ void PortfolioHeatmap::build_ui() {
     aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change"));
     pnl_btn_->setChecked(true);
 
-    auto set_mode = [this](portfolio::HeatmapMode m) {
-        mode_ = m;
-        pnl_btn_->setChecked(m == portfolio::HeatmapMode::Pnl);
-        weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
-        day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
-        aft_btn_->setChecked(m == portfolio::HeatmapMode::Aft);
-        aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
-        sync_aft_stream();
-        if (m == portfolio::HeatmapMode::Aft) {
-            fetch_aft_quotes();
-        } else {
-            // Switching out of AFT supersedes any in-flight fetch so its
-            // callback won't fire a stale block refresh while the user is
-            // looking at a different mode.
-            ++aft_gen_;
-            aft_in_flight_ = false;
-            refresh_block_appearances();
-        }
-        emit mode_changed(m);
-    };
-    connect(pnl_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
-    connect(weight_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Weight); });
-    connect(day_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
-    connect(aft_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
+    connect(pnl_btn_, &QPushButton::clicked, this, [this]() { set_mode(portfolio::HeatmapMode::Pnl); });
+    connect(weight_btn_, &QPushButton::clicked, this, [this]() { set_mode(portfolio::HeatmapMode::Weight); });
+    connect(day_btn_, &QPushButton::clicked, this, [this]() { set_mode(portfolio::HeatmapMode::DayChange); });
+    connect(aft_btn_, &QPushButton::clicked, this, [this]() { set_mode(portfolio::HeatmapMode::Aft); });
 
     layout->addLayout(mode_row);
 
@@ -1010,6 +990,27 @@ void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& tick
         if (b != block_widgets_.constEnd() && b.value())
             update_block_appearance(b.value(), h);
     }
+}
+
+void PortfolioHeatmap::set_mode(portfolio::HeatmapMode m) {
+    mode_ = m;
+    pnl_btn_->setChecked(m == portfolio::HeatmapMode::Pnl);
+    weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
+    day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
+    aft_btn_->setChecked(m == portfolio::HeatmapMode::Aft);
+    aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
+    sync_aft_stream();
+    if (m == portfolio::HeatmapMode::Aft) {
+        fetch_aft_quotes();
+    } else {
+        // Switching out of AFT supersedes any in-flight fetch so its
+        // callback won't fire a stale block refresh while the user is
+        // looking at a different mode.
+        ++aft_gen_;
+        aft_in_flight_ = false;
+        refresh_block_appearances();
+    }
+    emit mode_changed(m);
 }
 
 } // namespace finterm::screens

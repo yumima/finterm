@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`7aeea32bc`](https://github.com/yumima/finterm/commit/7aeea32bc) research: Extended Hours loads with the same waving bars as the other panels
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
