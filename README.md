@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`88281d0bf`](https://github.com/yumima/finterm/commit/88281d0bf) earnings: the current print's call + release, listened to in-app, refreshed when it lands
 - [`6349e1e44`](https://github.com/yumima/finterm/commit/6349e1e44) earnings: NEXT REPORT links the call webcast and the last release
 - [`df8d943bf`](https://github.com/yumima/finterm/commit/df8d943bf) dashboard: quotes on screen at once — no restyle per show, built before the first click
 - [`545ec62aa`](https://github.com/yumima/finterm/commit/545ec62aa) private market: MARKET is a dashboard of movable widgets; canvas never overlaps tiles

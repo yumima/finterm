@@ -2,6 +2,7 @@
 #include "screens/equity_research/EquityEarningsTab.h"
 
 #include "screens/equity_research/EarningsCallAudio.h"
+#include "screens/equity_research/EarningsCallWebPanel.h"
 
 #include "core/util/BarTime.h"
 #include "services/equity/EarningsRefresh.h"
@@ -304,7 +305,9 @@ void EquityEarningsTab::set_symbol(const QString& symbol) {
 
 void EquityEarningsTab::hide_links() {
     next_links_->hide();
+    call_panel_->close_call();      // another print's (or symbol's) call never keeps playing
     audio_->set_source({}, {}, {}); // stops playback
+    audio_->set_page({}, {});
     audio_->hide();
 }
 
@@ -381,17 +384,23 @@ void EquityEarningsTab::apply_links(const services::query::QueryStore::State& s)
     };
     const auto host = [](const QString& url) { return QUrl(url).host(); };
 
-    // ▶ LISTEN — only what finterm can play without a sign-up.
+    // ▶ LISTEN — one click, any host: a public stream plays right here; any
+    // other webcast plays in its host's own player in the panel below.
     const QString webcast = !l.call_url.isEmpty() ? l.call_url : l.call_page;
-    QString unavailable;
-    if (!webcast.isEmpty())
-        unavailable = QStringLiteral("The %1 call is public and free, but its webcast host (%2) plays it in its own "
-                                     "page — often after a short sign-up form (name, email) — rather than as a stream "
-                                     "finterm can open. Listen with CALL ↗; the release also lists a dial-in number.")
-                          .arg(day_long, host(webcast));
-    else
-        unavailable = QStringLiteral("The company hasn't posted a public stream for the %1 call.").arg(day_long);
+    const QDate today = core::bartime::market_date_et(QDateTime::currentDateTimeUtc());
+    const QString unavailable =
+        l.report_date > today
+            ? QStringLiteral("The company hasn't posted the %1 call's webcast yet — it usually appears 2-4 weeks "
+                             "ahead; finterm checks daily.")
+                  .arg(day_long)
+            : QStringLiteral("No webcast link was found for the %1 call on the company's IR site or in its "
+                             "release; the release lists the dial-in.")
+                  .arg(day_long);
     audio_->set_source(l.audio_url, l.audio_kind, unavailable);
+    // An open call is left alone: a refresh that finds the same call under a
+    // different address (the release's link vs the IR page's) must not cut
+    // it off mid-Q&A. Only a change of print or symbol closes it (hide_links).
+    audio_->set_page(webcast, host(webcast));
     audio_->show();
 
     QStringList parts;
@@ -578,6 +587,22 @@ QWidget* EquityEarningsTab::build_next_report() {
     header->insertWidget(header->count() - 1, next_links_);
     header->insertSpacing(header->count() - 1, 6);
     header->insertWidget(header->count() - 1, refresh_btn_);
+    // The call's host page, when it has no public stream: under the header,
+    // built on the first LISTEN and gone (with its audio) on close.
+    call_panel_ = new EarningsCallWebPanel;
+    body->insertWidget(1, call_panel_);
+    connect(audio_, &EarningsCallAudio::page_requested, this, [this](const QString& url) {
+        if (call_panel_->is_open()) {
+            call_panel_->close_call();
+            return;
+        }
+        audio_->stop(); // never the stream and the page at once
+        call_panel_->open(url, QStringLiteral("%1 · %2 EARNINGS CALL — %3")
+                                   .arg(current_symbol_, links_target_.toString("d MMM yyyy").toUpper(),
+                                        QUrl(url).host()));
+    });
+    // The panel's open state is the one source; the button only follows it.
+    connect(call_panel_, &EarningsCallWebPanel::open_changed, audio_, &EarningsCallAudio::set_page_open);
     connect(&services::equity::EquityResearchService::instance(),
             &services::equity::EquityResearchService::earnings_schedule_changed, this, [this](const QString& sym) {
                 if (sym == current_symbol_)

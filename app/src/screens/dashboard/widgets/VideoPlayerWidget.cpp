@@ -7,6 +7,7 @@
 #include "services/tts/TtsService.h"
 #include "services/video/LiveHlsProxy.h"
 #include "services/video/YtDlp.h"
+#include "ui/web/MediaWebProfile.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
@@ -1660,16 +1661,10 @@ void VideoPlayerWidget::resume_playback() {
 #ifdef HAS_QT_WEBENGINE
 void VideoPlayerWidget::build_web_view() {
     auto* profile = new QWebEngineProfile(QStringLiteral("finterm_tv"), this);
-    profile->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
+    // Autoplay, JS and the Chromium user agent (YouTube refuses the default
+    // "QtWebEngine/x" agent) — shared with the earnings-call player.
+    finterm::ui::configure_media_profile(profile);
     profile->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
-    profile->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
-
-    // Override the default Qt UA ("QtWebEngine/x.y.z") — YouTube detects this
-    // string as an automated browser and returns "An error occurred" with a
-    // Playback ID instead of playing the stream. A standard Chrome UA bypasses
-    // the check while still being honest about the Chromium engine version.
-    profile->setHttpUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                              "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
     web_view_ = new QWebEngineView(profile, this);
     web_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);

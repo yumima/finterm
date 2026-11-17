@@ -1,6 +1,8 @@
 // src/screens/equity_research/EarningsCallAudio.cpp
 #include "screens/equity_research/EarningsCallAudio.h"
 
+#include "screens/equity_research/EarningsCallWebPanel.h"
+
 #include "core/logging/Logger.h"
 #include "services/video/LiveHlsProxy.h"
 #include "services/video/YtDlp.h"
@@ -66,13 +68,29 @@ void EarningsCallAudio::set_source(const QString& url, const QString& kind, cons
     paint_state();
 }
 
+void EarningsCallAudio::set_page(const QString& page_url, const QString& host) {
+    page_url_ = page_url;
+    page_host_ = host;
+    paint_state();
+}
+
+void EarningsCallAudio::set_page_open(bool open) {
+    page_open_ = open;
+    paint_state();
+}
+
 void EarningsCallAudio::toggle() {
     if (active_) {
         stop();
         return;
     }
-    if (url_.isEmpty())
+    // An open host-page player means "close it" — even if a public stream
+    // has turned up since: never two copies of the call at once.
+    if (page_open_ || url_.isEmpty()) {
+        if (!page_url_.isEmpty())
+            emit page_requested(page_url_);
         return;
+    }
     active_ = true;
     retries_ = 0;
     error_.clear();
@@ -229,12 +247,26 @@ void EarningsCallAudio::fail(const QString& why) {
 }
 
 void EarningsCallAudio::paint_state() {
-    const bool available = !url_.isEmpty();
+    const bool via_page = (url_.isEmpty() || page_open_) && !page_url_.isEmpty();
+    const bool available = !url_.isEmpty() || via_page;
     setEnabled(available);
     QString text = QStringLiteral("▶ LISTEN");
     QString tip;
     if (!available) {
         tip = unavailable_;
+    } else if (via_page) {
+        if (page_open_)
+            text = QStringLiteral("■ CLOSE CALL");
+        if (page_open_)
+            tip = QStringLiteral("Close the call player (stops the audio).");
+        else if (EarningsCallWebPanel::kEmbedded)
+            tip = QStringLiteral("Listen in finterm, in the call host's own player (%1). If the host asks for a "
+                                 "name and email first (or a sign-in — one Q4 account covers every Q4-hosted "
+                                 "call), that's asked once and remembered.\n%2")
+                      .arg(page_host_, page_url_);
+        else
+            tip = QStringLiteral("Opens the call in your browser, in its host's player (%1).\n%2")
+                      .arg(page_host_, page_url_);
     } else if (active_) {
         bool playing = false;
         qint64 pos = 0;
@@ -257,10 +289,10 @@ void EarningsCallAudio::paint_state() {
     }
     setText(text);
     setToolTip(tip);
-    const QString color = !available           ? ui::colors::TEXT_TERTIARY()
-                          : !error_.isEmpty()  ? ui::colors::NEGATIVE()
-                          : active_            ? ui::colors::AMBER()
-                                               : ui::colors::CYAN();
+    const QString color = !available                 ? ui::colors::TEXT_TERTIARY()
+                          : !error_.isEmpty()        ? ui::colors::NEGATIVE()
+                          : (active_ || page_open_)  ? ui::colors::AMBER()
+                                                     : ui::colors::CYAN();
     // Restyle only when the colour changes: this runs on every position
     // tick, and setStyleSheet re-polishes the widget each time.
     if (color != painted_color_) {

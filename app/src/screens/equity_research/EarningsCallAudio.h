@@ -15,7 +15,14 @@ class LiveHlsProxy;
 
 namespace finterm::screens {
 
-/// "▶ LISTEN" — plays an earnings call inside finterm, audio only.
+/// "▶ LISTEN" — plays an earnings call inside finterm, one click, any host.
+///
+/// Two ways, chosen by what the call offers:
+///   - a public stream (below): played right here, audio only;
+///   - otherwise the host's own player page: the button asks the tab to open
+///     it in EarningsCallWebPanel (`page_requested`).
+///
+/// The public-stream path:
 ///
 /// Only sources with nothing in front of them: an audio/video file the IR
 /// site links, or YouTube (a call's video, or a channel's live stream on the
@@ -39,7 +46,16 @@ class EarningsCallAudio : public QPushButton {
     /// the button with `unavailable` as its tooltip. Setting the same source
     /// again does not interrupt playback.
     void set_source(const QString& url, const QString& kind, const QString& unavailable);
+    /// The call's webcast page, played in the host's own player when there is
+    /// no public stream. `host` names it in the tooltip.
+    void set_page(const QString& page_url, const QString& host);
+    /// The tab reports whether the page player is showing (for the label).
+    void set_page_open(bool open);
     void stop();
+
+  signals:
+    /// No public stream: the user asked to listen via the host's page.
+    void page_requested(const QString& url);
 
   private:
     void toggle();
@@ -53,6 +69,9 @@ class EarningsCallAudio : public QPushButton {
     QString kind_;
     QString unavailable_;
     QString error_;
+    QString page_url_;
+    QString page_host_;
+    bool page_open_ = false;
     QString painted_color_;
     bool active_ = false;    // the user asked for playback
     bool resolving_ = false;

@@ -16,6 +16,7 @@
 namespace finterm::screens {
 
 class EarningsCallAudio;
+class EarningsCallWebPanel;
 
 /// ER "Earnings" tab — the pre-report desk view.
 ///
@@ -93,6 +94,7 @@ class EquityEarningsTab : public QWidget {
     EarningsCallAudio* audio_ = nullptr; // ▶ LISTEN, after the title
     QLabel* next_links_ = nullptr;             // CALL · 17 NOV ↗ · RELEASE · 17 NOV ↗
     QPushButton* refresh_btn_ = nullptr;       // ↻ update now
+    EarningsCallWebPanel* call_panel_ = nullptr; // the host's player, under the header
     QDate links_target_;           // the print the links are about
     QString links_key_;            // its QueryStore key, to drop when the print changes
 
