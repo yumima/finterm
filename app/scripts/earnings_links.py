@@ -1,21 +1,31 @@
-"""Links for the ER Earnings tab's NEXT REPORT header: the company's latest
-earnings release, and where its earnings call is webcast.
+"""Links for the ER Earnings tab's NEXT REPORT header, for ONE print — the
+call the tab is about (the print of the last few days if one just happened,
+otherwise the next scheduled one; the app passes its date):
 
-Both come from SEC EDGAR, not a vendor. A US issuer furnishes every earnings
-release as an 8-K under Item 2.02, with the release itself as EX-99.1, so the
-newest 2.02 filing IS the last print, in the company's own words. That
-release almost always closes with a "Conference Call" paragraph naming where
-the call is webcast (investor.apple.com, amazon.com/ir, a Q4 events page, a
-YouTube channel). That place is where the company's next call is listed too,
-so the link points at the right page before the next call is scheduled.
+  ▶ LISTEN   the call's own live webcast / replay (events.q4inc.com/attendee/…,
+             open-exchange.net, edge.media-server.com, a YouTube video), when
+             the company has posted it — usually 2-4 weeks ahead;
+  RELEASE    that print's earnings release (8-K Item 2.02, EX-99.1) on EDGAR,
+             once filed — minutes after the numbers; until then "due <date>".
 
-Yahoo's `irWebsite` was the obvious alternative and was measured stale:
-AMZN's still points at a dead corporate-ir.net page. It is not used.
+Where the call link comes from, best first:
+  1. the IR site's upcoming-events RSS. Q4-hosted IR sites (NVDA, CRM, COST,
+     V, ORCL, META, AMZN, NFLX …) all serve /rss/Event.aspx: one item per
+     upcoming event, titled "M/D/YYYY : <name>", the description carrying a
+     "View the live Webcast" link. Matched to the print by that date.
+  2. a direct webcast link printed next to the print's date on the IR pages
+     (HD's choruscall links, INTC's media-server links).
+  3. a direct webcast link in the print's own release (GOOGL links the
+     call's YouTube video).
+Never the IR home page dressed up as the call: when none of these has it,
+the result carries `ir_url` and the UI labels it as the IR site.
 
-Not covered, and the result says so instead of guessing: foreign private
-issuers (their releases are 6-Ks with no item codes), symbols EDGAR doesn't
-list, and releases that are images (WMT's presentation exhibit). The release
-link still appears when only the webcast is missing.
+The IR site is the one the company's own releases name; Yahoo's `irWebsite`
+was measured stale (AMZN → a dead corporate-ir.net page) and is not used.
+IR sites are asked as the project (project_user_agent), never with the
+user's SEC contact. Not covered: foreign private issuers (6-K, no item
+codes), sites that refuse non-browser clients (TSLA, AVGO answer 403 — not
+worked around), and IR pages built entirely in the browser with no feed.
 """
 
 import html
@@ -23,15 +33,18 @@ import json
 import re
 import time
 import urllib.request
+from datetime import date, datetime, timedelta
+from urllib.parse import urljoin, urlparse
 
-from finterm_identity import user_agent
+from finterm_identity import project_user_agent, user_agent
 
 # A release exhibit is a few hundred KB; anything far larger is not a release.
 _MAX_DOC_BYTES = 3_000_000
-# Per request. The worst case is 1 + 1 + 2×(1 + 3) = 10 requests; the app
-# waits 60 s (EquityResearchService::subscribe_earnings_links), and SEC
-# normally answers each in well under a second.
+# Per request. SEC normally answers in well under a second; the whole action
+# also stops asking IR sites once _BUDGET_SEC is spent, so it finishes inside
+# the app's 60 s wait (EquityResearchService::subscribe_earnings_links).
 _TIMEOUT_SEC = 10
+_BUDGET_SEC = 40
 # Documents read per filing: the EX-99s first, then the cover 8-K.
 _DOCS_PER_FILING = 3
 
@@ -41,15 +54,22 @@ class _FetchFailed(Exception):
     not empty, and must not be cached as an answer."""
 
 
-def _get(url, as_json=True, limit=None):
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent(), "Accept-Encoding": "identity"})
+def _get(url, as_json=True, limit=None, sec=True, final_url=False):
+    """GET `url`. SEC requests carry the user's declared contact; anything
+    else (IR sites) the project's identity. `final_url` also returns where
+    redirects ended (amazon.com/ir → ir.aboutamazon.com)."""
+    ua = user_agent() if sec else project_user_agent()
+    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Encoding": "identity"})
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as r:
             raw = r.read(limit) if limit else r.read()
+            where = r.geturl()
     except Exception as e:  # noqa: BLE001
-        raise _FetchFailed(f"{type(e).__name__} on {url.rsplit('/', 1)[-1]}") from None
+        tail = url.rstrip("/").rsplit("/", 1)[-1] if sec else urlparse(url).netloc
+        raise _FetchFailed(f"{type(e).__name__} on {tail}") from None
     text = raw.decode("utf-8", "replace")
-    return json.loads(text) if as_json else text
+    body = json.loads(text) if as_json else text
+    return (body, where) if final_url else body
 
 
 def _cik_for(symbol):
@@ -126,7 +146,7 @@ def _score(u, bare):
     return s
 
 
-def find_webcast_url(text):
+def find_webcast_url(text, sites_only=False):
     """The best "where is the call" URL in a release's plain text, or None.
 
     Only URLs within reach of a call keyword count — a release also links its
@@ -138,12 +158,14 @@ def find_webcast_url(text):
     order = 0
     for m in _KEYWORDS.finditer(text):
         win = text[max(0, m.start() - 300): m.end() + 450]
-        for y in _YOUTUBE.finditer(win):
+        for y in ([] if sites_only else _YOUTUBE.finditer(win)):
             handle = y.group(1).rstrip(".,;:")
             candidates.append((4, order, f"https://www.youtube.com/{handle}"))
             order += 1
         for raw in _URL.findall(win):
             u = _normalise(raw)
+            if sites_only and _CALL_URL.match(u):
+                continue  # a call's own webcast is not where the NEXT call is listed
             sc = _score(u, bare=not re.match(r"https?://", raw, re.I))
             if sc is not None:
                 candidates.append((sc, order, u))
@@ -188,37 +210,270 @@ def _ex99_first(exhibits):
 
 
 def _filing(cik, rec, i):
-    """(release_url, docs to search, filed, index_url) for row i of recent filings."""
+    """(release_url, docs to search, filed) for row i of recent filings."""
     acc = rec["accessionNumber"][i]
     base = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc.replace('-', '')}"
     primary = rec.get("primaryDocument", [""])[i]
-    index_url = f"{base}/{acc}-index.htm"
-    ex99 = _ex99_first(_exhibits(_get(index_url, as_json=False)))
+    ex99 = _ex99_first(_exhibits(_get(f"{base}/{acc}-index.htm", as_json=False)))
     cover = f"{base}/{primary}" if primary else ""
-    release = ex99[0] if ex99 else (cover or index_url)
+    release = ex99[0] if ex99 else cover
     docs = (ex99 + ([cover] if cover else []))[:_DOCS_PER_FILING]
-    return release, docs, rec.get("filingDate", [""])[i], index_url
+    return release, docs, rec.get("filingDate", [""])[i]
 
 
-def _webcast_in(docs):
+def _addresses_in(docs):
+    """(best address of any kind, best SITE address) the release documents
+    name for the call — the first is the call's own webcast when the release
+    links it (GOOGL's video), the second is where calls are listed."""
+    best = site = None
     for url in docs:
-        w = find_webcast_url(_plain_text(_get(url, as_json=False, limit=_MAX_DOC_BYTES)))
-        if w:
-            return {"url": w, "source_url": url}
+        text = _plain_text(_get(url, as_json=False, limit=_MAX_DOC_BYTES))
+        best = best or find_webcast_url(text)
+        site = site or find_webcast_url(text, sites_only=True)
+        if best and site:
+            break
+    return best, site
+
+
+# ── the call itself ──────────────────────────────────────────────────────────
+
+# A link that IS a call's webcast/replay, not a site, a channel or a login.
+_CALL_URL = re.compile(
+    r"https?://(?:"
+    r"events\.q4inc\.com/attendee/\d+"
+    r"|[a-z0-9-]+\.open-exchange\.net/?[^\s\"'<>]*"
+    r"|edge\.media-server\.com/mmc/p/[a-z0-9]+/?"
+    r"|event\.webcasts\.com/starthere\.jsp\?ei=\d+[^\s\"'<>]*"
+    r"|event\.choruscall\.com/mediaframe/webcast\.html\?webcastid=\w+"
+    r"|[a-z0-9.-]*onlinexperiences\.com/[^\s\"'<>]+"
+    r"|event\.on24\.com/[^\s\"'<>]+"
+    r"|(?:www\.)?youtube\.com/(?:watch\?v=|live/)[\w-]+"
+    r"|youtu\.be/[\w-]+"
+    r")", re.I)
+# "Financial Results" / "Q3 FY27" / "Earnings Call" — not "November Sales
+# Results" (COST posts monthly sales as events on its feed).
+# A file a media player can open as-is — no registration page in front.
+_MEDIA_URL = re.compile(r"https?://[^\s\"'<>]+?\.(?:mp3|m4a|aac|m3u8|mp4)(?:\?[^\s\"'<>]*)?", re.I)
+_YOUTUBE_PLAYABLE = re.compile(r"https?://(?:(?:www\.)?youtube\.com/(?:watch\?v=|live/)|youtu\.be/)[\w-]+", re.I)
+_YOUTUBE_CHANNEL = re.compile(r"^https?://(?:www\.)?youtube\.com/(@?[\w.-]+)/?$", re.I)
+_CALLISH = re.compile(r"earning|financial results|quarter|\bq[1-4]\b|conference call|webcast", re.I)
+_RSS_ITEM = re.compile(r"(?s)<item>(.*?)</item>")
+_RSS_TITLE = re.compile(r"(?s)<title>(.*?)</title>")
+_RSS_LINK = re.compile(r"(?s)<link>(.*?)</link>")
+_RSS_DATE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*:")
+
+
+def _date_patterns(d):
+    """The ways an IR page prints a date, for d−1 … d+1 (a call can sit a
+    day off the date Yahoo carries for the print)."""
+    out = []
+    for k in (-1, 0, 1):
+        x = d + timedelta(days=k)
+        M, m, day, y = x.strftime("%B"), x.strftime("%b"), x.day, x.year
+        # (?<!\d) / (?!\d): day 7 must not match inside "17 November".
+        out += [rf"{M}\.?\s+{day}(?!\d),?\s+{y}", rf"{m}\.?\s+{day}(?!\d),?\s+{y}",
+                rf"(?<!\d){day}\s+{M},?\s+{y}", rf"(?<!\d){day}\s+{m}\.?,?\s+{y}",
+                rf"(?<!\d)0?{x.month}/0?{day}/{y}(?!\d)", x.isoformat()]
+    return re.compile("|".join(out), re.I)
+
+
+def call_from_rss(xml, d):
+    """(webcast_url, event_page, media_url) — any may be None — for the feed
+    item dated at the print (±1 day) whose title reads as the earnings call.
+    An item with a webcast link beats one without (COST posts "Earnings
+    Results" and "Earnings Call" as two items on the same day)."""
+    best = None
+    for it in _RSS_ITEM.findall(xml):
+        t = _RSS_TITLE.search(it)
+        title = html.unescape(t.group(1) if t else "").strip()
+        m = _RSS_DATE.match(title)
+        if not m or not _CALLISH.search(title):
+            continue
+        try:
+            when = date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+        except ValueError:
+            continue
+        if abs((when - d).days) > 1:
+            continue
+        body = html.unescape(it)
+        call = _CALL_URL.search(body)
+        lk = _RSS_LINK.search(it)
+        link = html.unescape(lk.group(1) if lk else "").strip() or None
+        media = _MEDIA_URL.search(body)
+        # Rank by what the item CARRIES (a webcast, then a page, then a file),
+        # never by comparing the values: None and str don't order, and an
+        # empty string would rank a missing link first.
+        rank = (0 if call else 1, 0 if link else 1, 0 if media else 1)
+        if best is None or rank < best[0]:
+            best = (rank, call.group(0) if call else None, link, media.group(0) if media else None)
+    if not best:
+        return None, None, None
+    return best[1], best[2], best[3]
+
+
+def call_near_date(text, d, reach=600, pattern=None):
+    """A call link (or, with `pattern`, any link of that kind) printed within
+    `reach` characters of the print's date in a page's text, the closest one;
+    None if no such pairing."""
+    dates = [m.start() for m in _date_patterns(d).finditer(text)]
+    if not dates:
+        return None
+    best = None
+    for m in (pattern or _CALL_URL).finditer(text):
+        dist = min(abs(m.start() - x) for x in dates)
+        if dist <= reach and (best is None or dist < best[0]):
+            best = (dist, m.group(0))
+    return best[1] if best else None
+
+
+def _find_call(ir_url, d, deadline):
+    """{url, page, media, source, ir_url} for the call on date d from the IR
+    site; {ir_error} when the site would not answer."""
+    found = {}
+    try:
+        page, where = _get(ir_url, as_json=False, limit=_MAX_DOC_BYTES, sec=False, final_url=True)
+    except _FetchFailed as e:
+        return {"ir_error": str(e)}
+    where = re.sub(r"^(https://[^/:]+):443(?=/|$)", r"\1", where)  # redirects keep the default port
+    host = urlparse(where).netloc
+    found["ir_url"] = where
+    # Feeds: the Q4 platform's standard one, plus any events feed the page
+    # itself advertises.
+    feeds = [f"https://{host}/rss/Event.aspx?LanguageId=1"]
+    for h in re.findall(r'href="([^"]*rss[^"]*)"', page, re.I):
+        if re.search(r"event", h, re.I):
+            feeds.append(urljoin(where, html.unescape(h)))
+    for f in dict.fromkeys(feeds):
+        if time.monotonic() > deadline:
+            return found
+        try:
+            xml = _get(f, as_json=False, limit=_MAX_DOC_BYTES, sec=False)
+        except _FetchFailed:
+            continue
+        if "<rss" not in xml[:2000] and "<item>" not in xml:
+            continue
+        url, event_page, media = call_from_rss(xml, d)
+        if url or event_page:
+            found.update({"url": url, "page": event_page, "media": media, "source": f})
+            if url:
+                return found
+    # Pages: the IR page and up to two events pages it links to.
+    pages = [(where, page)]
+    for h in dict.fromkeys(urljoin(where, h) for h in re.findall(r'href="([^"]+)"', page)
+                           if re.search(r"event", h, re.I) and not re.search(r"rss|\.ics|mailto:", h, re.I)):
+        if len(pages) >= 3 or time.monotonic() > deadline:
+            break
+        try:
+            pages.append((h, _get(h, as_json=False, limit=_MAX_DOC_BYTES, sec=False)))
+        except _FetchFailed:
+            continue
+    for u, p in pages:
+        text = _plain_text(p)
+        media = call_near_date(text, d, pattern=_MEDIA_URL)
+        if media and not found.get("media"):
+            found["media"] = media
+        url = call_near_date(text, d)
+        if url and not found.get("url"):
+            found.update({"url": url, "source": u})
+    return found
+
+
+def playable_audio(call_url, media_url, site_url, d, today):
+    """{url, kind} that finterm can play itself, or None.
+
+    Only sources with no registration in front: a media file, or YouTube (a
+    call's video, or — on the print's day — a channel's live stream, which is
+    how NFLX hosts its interview). Q4 / Choruscall / open-exchange / media-
+    server webcasts sit behind a sign-up form or the platform's own player
+    scripts; they open in the browser instead and are never scraped.
+    """
+    if media_url:
+        return {"url": media_url, "kind": "media"}
+    if call_url and _YOUTUBE_PLAYABLE.match(call_url):
+        return {"url": call_url, "kind": "youtube"}
+    ch = _YOUTUBE_CHANNEL.match(site_url or "")
+    if ch and d and abs((d - today).days) <= 1:
+        return {"url": f"https://www.youtube.com/{ch.group(1)}/live", "kind": "youtube_live"}
     return None
 
 
-def get_earnings_links(symbol):
-    """{release, webcast, note} for the symbol's newest 8-K Item 2.02 filing.
+def _today_et():
+    try:
+        from zoneinfo import ZoneInfo
 
-    Any request that fails makes the whole answer an {"error"} — the daemon
-    does not cache those — rather than a confident "no webcast" built on a
-    document that was never read.
+        return datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:  # noqa: BLE001
+        return date.today()
+
+
+def _earnings_8ks(cik):
+    """(recent-filings table, indices of its Item 2.02 8-Ks, newest first)."""
+    sub = _get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
+    rec = (sub.get("filings") or {}).get("recent") or {}
+    forms, items = rec.get("form", []), rec.get("items", [])
+    hits = [i for i, f in enumerate(forms) if f == "8-K" and "2.02" in str(items[i] if i < len(items) else "")]
+    return rec, hits
+
+
+def _release_for(rec, hits, d):
+    """Index of the Item 2.02 8-K FOR the print on d, or None.
+
+    Filed on d or up to three days after: an evening filing accepted after
+    EDGAR's 17:30 cutoff carries the NEXT business day's date, so a Friday
+    after-close print is filed "Monday". Never the day before — a guidance or
+    pre-announcement 8-K (also Item 2.02) furnished the day before the print
+    is not its release, and counting it would declare the release out and
+    stop the watch early."""
+    for i in hits:
+        try:
+            filed = date.fromisoformat(rec["filingDate"][i])
+        except (KeyError, ValueError, IndexError):
+            continue
+        if timedelta(days=0) <= filed - d <= timedelta(days=3):
+            return i
+    return None
+
+
+def release_filed(symbol, report_date):
+    """Cheap check — ONE SEC request — for whether the print on report_date
+    has its earnings 8-K on EDGAR yet. Polled each minute in the release
+    window instead of the full links/analysis fetch. {filed, sec}."""
+    try:
+        d = date.fromisoformat(report_date)
+    except (TypeError, ValueError):
+        return {"error": f"bad report_date {report_date!r}"}
+    try:
+        cik = _cik_for(symbol)
+        if not cik:
+            return {"filed": False, "sec": False}
+        rec, hits = _earnings_8ks(cik)
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"EDGAR didn't answer ({type(e).__name__})"}
+    return {"filed": _release_for(rec, hits, d) is not None, "sec": bool(hits)}
+
+
+def get_earnings_links(symbol, report_date=None):
+    """Links for the print on `report_date` (ISO, ET): its call (page and, if
+    public, playable audio) and its release.
+
+    EDGAR failures make the answer an {"error"} — the daemon does not cache
+    those — rather than a confident "no release" built on a filing list that
+    was never read. An IR site that refuses or times out is not an error
+    (TSLA refuses every non-browser client, permanently); it is reported as
+    `ir_error` and the app asks again at its next scheduled refresh.
     """
     symbol = (symbol or "").strip()
     if not symbol:
         return {"error": "no symbol"}
-    out = {"symbol": symbol, "as_of": int(time.time()), "release": None, "webcast": None, "note": ""}
+    t0 = time.monotonic()
+    deadline = t0 + _BUDGET_SEC
+    try:
+        d = date.fromisoformat(report_date) if report_date else None
+    except ValueError:
+        return {"error": f"bad report_date {report_date!r}"}
+    today = _today_et()
+    out = {"symbol": symbol, "as_of": int(time.time()), "report_date": report_date or "",
+           "release": None, "release_due": "", "call": None, "audio": None, "ir_url": "", "note": ""}
     try:
         cik = _cik_for(symbol)
     except Exception as e:  # noqa: BLE001
@@ -228,29 +483,48 @@ def get_earnings_links(symbol):
         out["note"] = "Not an SEC registrant — no EDGAR release to link."
         return out
     out["cik"] = cik
+    site = None
     try:
-        sub = _get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
-        rec = (sub.get("filings") or {}).get("recent") or {}
-        forms, items = rec.get("form", []), rec.get("items", [])
-        hits = [i for i, f in enumerate(forms)
-                if f == "8-K" and "2.02" in str(items[i] if i < len(items) else "")][:2]
+        rec, hits = _earnings_8ks(cik)
         if not hits:
             out["note"] = "No 8-K earnings release (Item 2.02) on EDGAR — foreign issuers report on 6-K."
             return out
-
-        release, docs, filed, index_url = _filing(cik, rec, hits[0])
-        out["release"] = {"url": release, "filed": filed, "index_url": index_url,
-                          "report_date": rec.get("reportDate", [""])[hits[0]] or ""}
-        out["webcast"] = _webcast_in(docs)
-        # Item 2.02 also carries pre-announcements and guidance updates, which
-        # hold no call paragraph. The release before it (the actual quarterly
-        # print) names the same webcast page — use it for the webcast only;
-        # LAST RELEASE stays the newest filing.
-        if not out["webcast"] and len(hits) > 1:
-            _, prev_docs, _, _ = _filing(cik, rec, hits[1])
-            out["webcast"] = _webcast_in(prev_docs)
+        target = _release_for(rec, hits, d) if d else None
+        # Read this print's filing (wherever it sits — a later pre-announcement
+        # can be newer), then the newest two for the IR site. At most three.
+        order = list(dict.fromkeys(([target] if target is not None else []) + hits[:2]))
+        for i in order:
+            if time.monotonic() > deadline:
+                break
+            release, docs, filed = _filing(cik, rec, i)
+            best, named_site = _addresses_in(docs)
+            if i == target:
+                out["release"] = {"url": release, "filed": filed}
+                if best and _CALL_URL.match(best):
+                    out["call"] = {"url": best, "page": None, "source": release}
+            site = site or named_site
+            if site and (target is None or out["release"]):
+                break
+        if d and out["release"] is None and d >= today - timedelta(days=1):
+            out["release_due"] = d.isoformat()
     except _FetchFailed as e:
         return {"error": f"EDGAR didn't answer ({e})"}
-    if not out["webcast"]:
-        out["note"] = "The release names no webcast address."
+
+    media = None
+    if d and site and not (out["call"] or {}).get("url"):
+        found = _find_call(site, d, deadline)
+        out["ir_url"] = found.get("ir_url") or site
+        if found.get("url") or found.get("page"):
+            out["call"] = {"url": found.get("url"), "page": found.get("page"), "source": found.get("source")}
+        media = found.get("media")
+        if found.get("ir_error"):
+            out["ir_error"] = found["ir_error"]
+    elif site:
+        out["ir_url"] = site
+    if d:
+        out["audio"] = playable_audio((out["call"] or {}).get("url"), media, out["ir_url"], d, today)
+    if not out["call"]:
+        out["note"] = ("The company hasn't posted this call's webcast on its IR site yet."
+                       if out["ir_url"] else "The company's releases name no IR site.")
+    out["elapsed_s"] = round(time.monotonic() - t0, 1)
     return out

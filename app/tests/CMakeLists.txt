@@ -187,6 +187,18 @@ set_target_properties(test_extended_hours_math PROPERTIES
 
 add_test(NAME extended_hours_math COMMAND test_extended_hours_math)
 
+# ── Earnings refresh policy ──────────────────────────────────────────────────
+# When the ER Earnings data is refreshed: once a day between prints, each
+# minute in a release window, at the reaction close. Pure policy, real ET times.
+add_executable(test_earnings_refresh
+    services/test_earnings_refresh.cpp
+    ../src/services/equity/EarningsRefresh.cpp
+)
+target_include_directories(test_earnings_refresh PRIVATE ../src)
+target_link_libraries(test_earnings_refresh PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_earnings_refresh PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME earnings_refresh COMMAND test_earnings_refresh)
+
 # ── Earnings signal tests ────────────────────────────────────────────────────
 # The pre-earnings BUY/HOLD/SELL scorer. Pure struct-in/verdict-out — no
 # network, no widgets — so its calibration and its missing-data behaviour can

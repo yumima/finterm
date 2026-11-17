@@ -882,6 +882,7 @@ set(SERVICE_SOURCES
     src/services/databento/DatabentoService.cpp
     src/services/dbnomics/DBnomicsService.cpp
     src/services/gov_data/GovDataService.cpp
+    src/services/equity/EarningsRefresh.cpp
     src/services/equity/EarningsSignal.cpp
     src/services/equity/EquityResearchService.cpp
     src/services/equity/ReportService.cpp
@@ -1354,6 +1355,7 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EarningsReactionChart.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityEarningsTab.cpp
+    src/screens/equity_research/EarningsCallAudio.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/equity_research/EquityOptionsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
@@ -1569,6 +1571,7 @@ set_source_files_properties(
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EarningsReactionChart.cpp
     src/screens/equity_research/EquityEarningsTab.cpp
+    src/screens/equity_research/EarningsCallAudio.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
     src/screens/equity_research/EquityOverviewTab.cpp

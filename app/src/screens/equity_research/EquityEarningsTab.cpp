@@ -1,7 +1,10 @@
 // src/screens/equity_research/EquityEarningsTab.cpp
 #include "screens/equity_research/EquityEarningsTab.h"
 
+#include "screens/equity_research/EarningsCallAudio.h"
+
 #include "core/util/BarTime.h"
+#include "services/equity/EarningsRefresh.h"
 #include "services/equity/EquityResearchService.h"
 #include "storage/repositories/EarningsSignalRepository.h"
 #include "ui/formatting/NumberFormat.h"
@@ -14,6 +17,8 @@
 #include <QHash>
 #include <QHeaderView>
 #include <QScrollArea>
+#include <QTimer>
+#include <QUrl>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -287,10 +292,72 @@ void EquityEarningsTab::set_symbol(const QString& symbol) {
     auto& svc = services::equity::EquityResearchService::instance();
     svc.subscribe_earnings_analysis(this, symbol,
                                     [this](const services::query::QueryStore::State& s) { apply_state(s); });
-    if (new_symbol)
-        next_links_->hide(); // never the previous symbol's release under this one's title
-    svc.subscribe_earnings_links(this, symbol,
-                                 [this](const services::query::QueryStore::State& s) { apply_links(s); });
+    // unsubscribe_all dropped the links subscription too; populate() picks
+    // the print and re-subscribes once the analysis says which one it is.
+    links_key_.clear();
+    if (new_symbol) {
+        links_target_ = QDate();
+        hide_links(); // never the previous symbol's links (or its audio) under this one's title
+    }
+    paint_refresh_tooltip();
+}
+
+void EquityEarningsTab::hide_links() {
+    next_links_->hide();
+    audio_->set_source({}, {}, {}); // stops playback
+    audio_->hide();
+}
+
+void EquityEarningsTab::paint_refresh_tooltip() {
+    const auto [at, why] = services::equity::EquityResearchService::instance().earnings_next_refresh(current_symbol_);
+    QString tip = QStringLiteral("Update the earnings data now.");
+    if (at.isValid()) {
+        // EVENT-STAMP: a scheduled instant, shown in market time.
+        const QDateTime et_at = at.toTimeZone(QTimeZone("America/New_York"));
+        tip += QStringLiteral("\n\nNext automatic update: %1 ET — %2.\n"
+                              "Between prints the data refreshes once a day; in a release window finterm checks "
+                              "EDGAR each minute and updates the moment the results are filed.")
+                   .arg(et_at.toString("ddd d MMM HH:mm"), why);
+    }
+    refresh_btn_->setToolTip(tip);
+}
+
+void EquityEarningsTab::follow_links_target(const EarningsAnalysis& a) {
+    // The print the links are about — the same one the refresh schedule
+    // watches (current_print: a print of the last few days, reported or still
+    // pending, else the next one). A pending print must keep its links:
+    // `next` has already moved to the following quarter by then, and
+    // switching would hide the release that just landed and stop the call.
+    const QDate target =
+        services::equity::current_print(a, QDateTime::currentDateTimeUtc()).date;
+    if (!target.isValid()) {
+        // No print to be about: drop the subscription too, or a later
+        // revalidate would re-show links under a header with no date.
+        if (!links_key_.isEmpty())
+            services::query::QueryStore::instance().unsubscribe(this, links_key_);
+        links_key_.clear();
+        links_target_ = QDate();
+        hide_links();
+        return;
+    }
+    const QString symbol = current_symbol_;
+    if (symbol.isEmpty() || (target == links_target_ && !links_key_.isEmpty()))
+        return;
+    // Out of the analysis callback: re-subscribing while QueryStore is
+    // delivering a result is the pattern that has bitten this store before.
+    QTimer::singleShot(0, this, [this, symbol, target]() {
+        if (symbol != current_symbol_)
+            return;
+        auto& store = services::query::QueryStore::instance();
+        if (!links_key_.isEmpty())
+            store.unsubscribe(this, links_key_);
+        if (target != links_target_)
+            hide_links(); // never another print's links under this title
+        links_target_ = target;
+        links_key_ = services::equity::EquityResearchService::earnings_links_key(symbol, target);
+        services::equity::EquityResearchService::instance().subscribe_earnings_links(
+            this, symbol, target, [this](const services::query::QueryStore::State& s) { apply_links(s); });
+    });
 }
 
 void EquityEarningsTab::apply_links(const services::query::QueryStore::State& s) {
@@ -298,36 +365,61 @@ void EquityEarningsTab::apply_links(const services::query::QueryStore::State& s)
         // Still loading, or EDGAR refused with nothing cached (no contact
         // email set, SEC down). The links are an extra — no error page for
         // them; the header just carries no links.
-        if (!s.error.isEmpty()) {
-            next_links_->hide();
-        }
+        if (!s.error.isEmpty())
+            hide_links();
         return;
     }
     const auto l = s.data.value<services::equity::EarningsLinks>();
-    const QString link_color = ui::colors::CYAN();
-    const auto link = [&](const QString& url, const QString& text) {
+    if (l.report_date != links_target_)
+        return; // an answer about a print the tab has moved past
+    const QString day = l.report_date.toString("d MMM").toUpper();
+    const QString day_long = l.report_date.toString("d MMM yyyy");
+    const auto link = [](const QString& url, const QString& text) {
         // Double-quoted attribute: toHtmlEscaped() escapes " but not '.
         return QStringLiteral("<a style=\"color:%1; text-decoration:none;\" href=\"%2\">%3</a>")
-            .arg(link_color, url.toHtmlEscaped(), text.toHtmlEscaped());
+            .arg(ui::colors::CYAN(), url.toHtmlEscaped(), text.toHtmlEscaped());
     };
+    const auto host = [](const QString& url) { return QUrl(url).host(); };
+
+    // ▶ LISTEN — only what finterm can play without a sign-up.
+    const QString webcast = !l.call_url.isEmpty() ? l.call_url : l.call_page;
+    QString unavailable;
+    if (!webcast.isEmpty())
+        unavailable = QStringLiteral("The %1 call is public and free, but its webcast host (%2) plays it in its own "
+                                     "page — often after a short sign-up form (name, email) — rather than as a stream "
+                                     "finterm can open. Listen with CALL ↗; the release also lists a dial-in number.")
+                          .arg(day_long, host(webcast));
+    else
+        unavailable = QStringLiteral("The company hasn't posted a public stream for the %1 call.").arg(day_long);
+    audio_->set_source(l.audio_url, l.audio_kind, unavailable);
+    audio_->show();
+
     QStringList parts;
     QStringList tip;
-    if (!l.webcast_url.isEmpty()) {
-        parts << link(l.webcast_url, QStringLiteral("▶ WEBCAST ↗"));
-        tip << QStringLiteral("WEBCAST — where the company's last earnings release said its call is webcast:\n%1\n"
-                              "Usually the investor-relations events page, which lists the next call and "
-                              "replays of past ones.")
-                   .arg(l.webcast_url);
+    if (!webcast.isEmpty()) {
+        parts << link(webcast, QStringLiteral("CALL · %1 ↗").arg(day));
+        tip << QStringLiteral("CALL — the %1 earnings call: the webcast with its slides, live and as a replay "
+                              "afterwards, as the company posted it:\n%2")
+                   .arg(day_long, webcast);
+        if (!l.call_url.isEmpty() && !l.call_page.isEmpty() && l.call_page != l.call_url)
+            tip << QStringLiteral("Event page: %1").arg(l.call_page);
+    } else if (!l.ir_url.isEmpty()) {
+        parts << link(l.ir_url, QStringLiteral("IR SITE ↗"));
+        tip << QStringLiteral("IR SITE — the company hasn't posted the %1 call where finterm can read it yet; its "
+                              "investor-relations site will list it:\n%2")
+                   .arg(day_long, l.ir_url);
     }
     if (!l.release_url.isEmpty()) {
-        const QDate filed = QDate::fromString(l.release_filed, Qt::ISODate);
-        const QString label = filed.isValid()
-                                  ? QStringLiteral("LAST RELEASE · %1 ↗").arg(filed.toString("d MMM yyyy").toUpper())
-                                  : QStringLiteral("LAST RELEASE ↗");
-        parts << link(l.release_url, label);
-        tip << QStringLiteral("LAST RELEASE — the company's most recent earnings press release (8-K Item 2.02, "
-                              "EX-99.1) on SEC EDGAR%1.")
-                   .arg(filed.isValid() ? QStringLiteral(", filed ") + filed.toString("d MMM yyyy") : QString());
+        parts << link(l.release_url, QStringLiteral("RELEASE · %1 ↗").arg(day));
+        tip << QStringLiteral("RELEASE — the %1 earnings release (8-K Item 2.02, EX-99.1) on SEC EDGAR%2.")
+                   .arg(day_long, l.release_filed.isValid()
+                                      ? QStringLiteral(", filed ") + l.release_filed.toString("d MMM yyyy")
+                                      : QString());
+    } else if (l.release_due.isValid()) {
+        parts << QStringLiteral("<span style=\"color:%1;\">RELEASE · DUE %2</span>")
+                     .arg(ui::colors::TEXT_TERTIARY(), l.release_due.toString("d MMM").toUpper());
+        tip << QStringLiteral("RELEASE — filed on SEC EDGAR minutes after the numbers; finterm watches for it and "
+                              "updates the tab the moment it lands.");
     }
     if (!l.note.isEmpty())
         tip << l.note;
@@ -453,8 +545,13 @@ QWidget* EquityEarningsTab::build_next_report() {
     QHBoxLayout* header = nullptr;
     auto* panel = make_panel("NEXT REPORT", ui::colors::AMBER(), &body, &header);
 
-    // Right after the title: the company's last earnings release and where
-    // its call is webcast. Filled by apply_links(); hidden until then.
+    // Right after the title, for the print the links are about:
+    //   ▶ LISTEN   play the call here (when it has a public stream)
+    //   CALL ↗     the call's webcast / presentation page, in the browser
+    //   RELEASE ↗  the earnings release on EDGAR
+    //   ↻          update now (and when the next automatic update is)
+    audio_ = new EarningsCallAudio;
+    audio_->hide();
     next_links_ = new QLabel;
     next_links_->setTextFormat(Qt::RichText);
     next_links_->setOpenExternalLinks(true);
@@ -463,9 +560,29 @@ QWidget* EquityEarningsTab::build_next_report() {
                                        "background:transparent; border:0;")
                                    .arg(ui::colors::TEXT_TERTIARY()));
     next_links_->hide();
-    // Before the header's trailing stretch, so the links sit beside the title.
+    refresh_btn_ = new QPushButton(QStringLiteral("↻"));
+    refresh_btn_->setFlat(true);
+    refresh_btn_->setCursor(Qt::PointingHandCursor);
+    refresh_btn_->setStyleSheet(QString("QPushButton { color:%1; font-size:14px; font-weight:700; background:transparent; "
+                                        "border:0; padding:0 4px; } QPushButton:hover { color:%2; }")
+                                    .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+    refresh_btn_->setToolTip(QStringLiteral("Update the earnings data now"));
+    connect(refresh_btn_, &QPushButton::clicked, this, [this]() {
+        if (!current_symbol_.isEmpty())
+            services::equity::EquityResearchService::instance().refresh_earnings(current_symbol_);
+    });
+    // Before the header's trailing stretch, so they sit beside the title.
     header->insertSpacing(header->count() - 1, 12);
+    header->insertWidget(header->count() - 1, audio_);
+    header->insertSpacing(header->count() - 1, 10);
     header->insertWidget(header->count() - 1, next_links_);
+    header->insertSpacing(header->count() - 1, 6);
+    header->insertWidget(header->count() - 1, refresh_btn_);
+    connect(&services::equity::EquityResearchService::instance(),
+            &services::equity::EquityResearchService::earnings_schedule_changed, this, [this](const QString& sym) {
+                if (sym == current_symbol_)
+                    paint_refresh_tooltip();
+            });
 
     auto* row = new QHBoxLayout;
     row->setSpacing(24);
@@ -746,6 +863,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
     const auto record = services::equity::forecast_record(a);
 
     fill_next_report(a, outlook);
+    follow_links_target(a);
     fill_beat(outlook);
     fill_size(a, outlook);
     fill_direction(outlook);

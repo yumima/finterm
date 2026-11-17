@@ -136,10 +136,10 @@ void QueryStore::invalidate(const QString& key) {
     }
 }
 
-void QueryStore::revalidate(const QString& key, bool force) {
+bool QueryStore::revalidate(const QString& key, bool force) {
     auto it = entries_.find(key);
     if (it == entries_.end() || it.value().inflight || !it.value().pending_fetcher)
-        return;
+        return false;
     // Respect the key's own TTL. A caller ticking every 20s must not refetch
     // 30-minute fundamentals 90 times an hour: each key refreshes on ITS
     // schedule, so one periodic tick can safely cover a panel whose parts
@@ -147,7 +147,7 @@ void QueryStore::revalidate(const QString& key, bool force) {
     // fundamentals 30min).
     const auto& e = it.value();
     if (!force && !e.cached_value.isNull() && !revalidate_due(e.fetched_at, e.ttl_sec, QDateTime::currentDateTime())) {
-        return;
+        return false;
     }
     // Failure backoff. The TTL gate above never engages for a key with no
     // cached value (a failed cold fetch) and a failure advances fetched_at
@@ -157,12 +157,13 @@ void QueryStore::revalidate(const QString& key, bool force) {
     // goes straight through.
     if (!force && e.last_failed_at.isValid() &&
         e.last_failed_at.secsTo(QDateTime::currentDateTime()) < kMinRevalidateSec) {
-        return;
+        return false;
     }
     // Deliberately does NOT clear cached_value: subscribers keep rendering
     // real numbers until the replacement arrives, and a failed refresh
     // leaves them with the last good value instead of a blank panel.
     kick_fetch(key, e.pending_fetcher);
+    return true;
 }
 
 bool QueryStore::revalidate_due(const QDateTime& fetched_at, int ttl_sec, const QDateTime& now) {
@@ -192,6 +193,16 @@ QDateTime QueryStore::oldest_fetched_at(QObject* owner) const {
         }
     }
     return oldest;
+}
+
+bool QueryStore::has_live_subscribers(const QString& key) const {
+    const auto it = entries_.constFind(key);
+    if (it == entries_.cend())
+        return false;
+    for (const auto& sub : it.value().subscribers)
+        if (sub.owner)
+            return true;
+    return false;
 }
 
 void QueryStore::revalidate_owner(QObject* owner) {

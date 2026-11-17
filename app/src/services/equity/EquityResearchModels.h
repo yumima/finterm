@@ -2,6 +2,7 @@
 #pragma once
 #include "core/util/BarTime.h"
 
+#include <QDate>
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -473,16 +474,20 @@ struct EarningsAnalysis {
     bool has_content() const { return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value(); }
 };
 
-/// The ER Earnings tab's NEXT REPORT links, from SEC EDGAR (daemon action
-/// `earnings_links`, scripts/earnings_links.py): the newest 8-K Item 2.02
-/// earnings release, and the webcast address that release names. Either
-/// URL may be empty — a foreign issuer has no 8-K, an image-only release
-/// names no webcast. URLs are http(s) only by the time they get here.
+/// The ER Earnings tab's NEXT REPORT links for ONE print — the one on
+/// `report_date` (daemon action `earnings_links`, scripts/earnings_links.py).
+/// Any URL may be empty; all are http(s) only by the time they get here.
 struct EarningsLinks {
-    QString release_url;  // the EX-99.1 press release
-    QString release_filed; // ISO date the 8-K was filed
-    QString webcast_url;  // IR events page / call video the release points at
-    QString note;         // why a link is missing, for the tooltip
+    QDate report_date;
+    QString call_url;      // the call's own live webcast / replay
+    QString call_page;     // the company's page for this call (no webcast link posted yet)
+    QString ir_url;        // the IR site — only a fallback, never labelled as the call
+    QString audio_url;     // something finterm can play itself (no registration in front)
+    QString audio_kind;    // "media" | "youtube" | "youtube_live"
+    QString release_url;   // this print's EX-99.1 release, once filed
+    QDate release_filed;
+    QDate release_due;     // set while this print's release isn't out yet
+    QString note;          // why a link is missing, for the tooltip
 };
 
 } // namespace finterm::services::equity

@@ -143,7 +143,8 @@ class QueryStore : public QObject {
     /// still fresh, a fetch is in flight, or the key was never subscribed.
     /// `force` bypasses the due-check: an explicit user-initiated refresh
     /// should not be told to wait for a TTL it never agreed to.
-    void revalidate(const QString& key, bool force = false);
+    /// Returns true when a fetch was started.
+    bool revalidate(const QString& key, bool force = false);
 
     /// Oldest upstream fetch time across every populated entry `owner` is
     /// subscribed to; invalid if none. The honest single stamp for an "as of"
@@ -197,6 +198,9 @@ class QueryStore : public QObject {
     /// "throwing away all view state" case (e.g. symbol switch where all
     /// three categories rebind to new keys at once).
     void unsubscribe_all(QObject* owner);
+    /// Is anyone alive still subscribed to `key`? Lets a scheduled refresh
+    /// skip work nobody would see.
+    bool has_live_subscribers(const QString& key) const;
 
   private:
     explicit QueryStore(QObject* parent = nullptr);

@@ -15,6 +15,8 @@
 
 namespace finterm::screens {
 
+class EarningsCallAudio;
+
 /// ER "Earnings" tab — the pre-report desk view.
 ///
 /// Leads with the three questions anyone asks before a print, each answered
@@ -41,8 +43,12 @@ class EquityEarningsTab : public QWidget {
   private:
     void build_ui();
     void apply_state(const services::query::QueryStore::State& s);
-    /// Last earnings release + call webcast links after the NEXT REPORT title.
+    /// Call webcast + release links after the NEXT REPORT title, for the
+    /// print follow_links_target() picked (just reported, else next).
+    void follow_links_target(const services::equity::EarningsAnalysis& a);
     void apply_links(const services::query::QueryStore::State& s);
+    void hide_links();
+    void paint_refresh_tooltip();
     void populate(const services::equity::EarningsAnalysis& a);
     void show_message(const QString& text);
 
@@ -84,7 +90,11 @@ class EquityEarningsTab : public QWidget {
     QLabel* next_yoy_ = nullptr;
     QLabel* next_analysts_ = nullptr;
     QLabel* headline_ = nullptr;
-    QLabel* next_links_ = nullptr; // after the title: ▶ WEBCAST ↗ · LAST RELEASE ↗
+    EarningsCallAudio* audio_ = nullptr; // ▶ LISTEN, after the title
+    QLabel* next_links_ = nullptr;             // CALL · 17 NOV ↗ · RELEASE · 17 NOV ↗
+    QPushButton* refresh_btn_ = nullptr;       // ↻ update now
+    QDate links_target_;           // the print the links are about
+    QString links_key_;            // its QueryStore key, to drop when the print changes
 
     // 1 · Will they beat?
     QLabel* beat_value_ = nullptr;

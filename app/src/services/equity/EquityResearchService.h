@@ -5,6 +5,9 @@
 #include "services/query/QueryStore.h"
 
 #include <QObject>
+#include <QDate>
+#include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QTimer>
 
@@ -138,10 +141,29 @@ class EquityResearchService : public QObject {
     /// backs the ER Earnings tab.
     void subscribe_earnings_analysis(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
 
-    /// Subscribe to the last earnings release + call webcast links for
-    /// `symbol` (EDGAR). State carries EarningsLinks. Separate from the
-    /// analysis so a slow EDGAR never holds up the tab's numbers.
-    void subscribe_earnings_links(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
+    /// Subscribe to the call webcast + earnings release links for the print
+    /// on `report_date` (ET) — IR site + EDGAR. State carries EarningsLinks.
+    /// Separate from the analysis so a slow source never holds up the tab's
+    /// numbers. Refreshed on the same schedule as the analysis.
+    void subscribe_earnings_links(QObject* owner, const QString& symbol, const QDate& report_date,
+                                  query::QueryStore::Callback cb);
+    static QString earnings_links_key(const QString& symbol, const QDate& report_date) {
+        return "equity:earnings_links:v3:" + symbol + ":" + report_date.toString(Qt::ISODate);
+    }
+    static QString earnings_analysis_key(const QString& symbol) {
+        // v4: next.timestamp of a date-only print is midnight ET (was UTC
+        // midnight — the day before in ET; the card said "date has passed"
+        // on NVDA's print day).
+        return "equity:earnings_analysis:v4:" + symbol;
+    }
+
+    /// Refetch `symbol`'s earnings analysis and links now, past every cache
+    /// (the app's disk copy and the daemon's). The ↻ button; also what the
+    /// schedule calls when a release lands.
+    void refresh_earnings(const QString& symbol);
+    /// When the earnings data for `symbol` will next refresh itself, and why
+    /// ("watching for the release"); invalid when nothing is scheduled.
+    QPair<QDateTime, QString> earnings_next_refresh(const QString& symbol) const;
 
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y", const QString& interval = "1d");
@@ -153,6 +175,8 @@ class EquityResearchService : public QObject {
                         const QString& period = "2y");
 
   signals:
+    /// The refresh schedule for `symbol` changed (for the ↻ tooltip).
+    void earnings_schedule_changed(const QString& symbol);
     /// `query` lets a listener drop a late answer to an older query.
     void search_results_loaded(QVector<finterm::services::equity::SearchResult> results, QString query);
     /// search_symbols(query) could not get an answer (Yahoo refused, timeout).
@@ -249,9 +273,35 @@ class EquityResearchService : public QObject {
     // rather than a network fetch. Holding the client copy for a quarter of an
     // hour on top of that meant a tab open across a print showed the pre-print
     // picture long after the daemon had the new one.
-    static constexpr int kEarningsAnalysisTtlSec = 180;
-    // A release lands once a quarter; the daemon holds its copy 300 s under this.
-    static constexpr int kEarningsLinksTtlSec = 600;
+    // A CEILING, not the refresh rate. Earnings data is refreshed when it is
+    // expected to change (EarningsRefresh.h: daily after the close, each
+    // minute in a print's release window) by the schedule below; this only
+    // bounds how old a copy can get if the schedule never runs. It used to be
+    // 180 s, which re-fetched six Yahoo calls + 3 y of bars every 3 minutes
+    // for the ~90 days between prints whenever the tab was on screen.
+    static constexpr int kEarningsAnalysisTtlSec = 12 * 3600;
+    // Same: a ceiling; the earnings schedule refreshes the links with the
+    // analysis (and the moment a release is seen).
+    static constexpr int kEarningsLinksTtlSec = 12 * 3600;
+
+    // ── Earnings refresh schedule (EarningsRefresh.h) ─────────────────────────
+    struct EarningsWatch {
+        EarningsAnalysis analysis;
+        QDateTime fetched_at;   // upstream (as_of), not cache-read time
+        QDate release_seen;     // the cheap check found this print's 8-K
+        QDateTime last_forced;  // loop guard
+        QString links_key;      // the links key last subscribed for the symbol
+        bool sec = true;        // false: no EDGAR filings to watch — refresh instead
+        QDateTime next_at;
+        QString next_why;
+        class QTimer* timer = nullptr;
+    };
+    QHash<QString, EarningsWatch> earnings_watch_;
+    /// Keys whose next fetch must skip the disk copy and tell the daemon `fresh`.
+    QSet<QString> force_fresh_;
+    void note_earnings(const QString& symbol, const EarningsAnalysis& a, const QDateTime& fetched_at);
+    void replan_earnings(const QString& symbol);
+    void on_earnings_due(const QString& symbol);
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

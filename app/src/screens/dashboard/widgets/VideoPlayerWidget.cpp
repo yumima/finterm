@@ -6,6 +6,7 @@
 #include "core/logging/Logger.h"
 #include "services/tts/TtsService.h"
 #include "services/video/LiveHlsProxy.h"
+#include "services/video/YtDlp.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
@@ -2145,31 +2146,7 @@ void VideoPlayerWidget::refresh_data() {
 }
 
 QString VideoPlayerWidget::resolve_ytdlp_program() const {
-#ifdef _WIN32
-    const QString exe_name = "yt-dlp.exe";
-#else
-    const QString exe_name = "yt-dlp";
-#endif
-    const QString exe_dir = QCoreApplication::applicationDirPath();
-    const QStringList local_candidates = {
-        QDir(exe_dir).filePath(exe_name),
-        QDir(exe_dir).filePath("tools/" + exe_name),
-        QDir(exe_dir).filePath("bin/" + exe_name),
-        QDir(exe_dir).filePath("../tools/" + exe_name),
-    };
-
-    for (const auto& candidate : local_candidates) {
-        if (QFileInfo::exists(candidate)) {
-            return QDir::cleanPath(candidate);
-        }
-    }
-
-    const QString from_path = QStandardPaths::findExecutable("yt-dlp");
-    if (!from_path.isEmpty()) {
-        return from_path;
-    }
-
-    return {};
+    return finterm::services::video::ytdlp_program();
 }
 
 void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, const QString& title) {
@@ -2216,7 +2193,7 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     if (ceiling > 720)
         fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
     fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
-    proc->start(ytdlp_program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", youtube_url});
+    proc->start(ytdlp_program, finterm::services::video::ytdlp_resolve_args(fmt, youtube_url));
 }
 
 // yt-dlp's stderr opens with boilerplate — a version-age nag, an update hint,
@@ -2225,27 +2202,7 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
 // "yt-dlp error: WARNING: Your yt-dlp version (2026.03.17) is older than 90
 // days!", which names a real annoyance and hides the real error.
 QString VideoPlayerWidget::ytdlp_real_error(const QByteArray& stderr_bytes) {
-    const QStringList lines = QString::fromUtf8(stderr_bytes).split(QLatin1Char('\n'));
-    QStringList errors, warnings;
-    for (const QString& raw : lines) {
-        const QString line = raw.trimmed();
-        if (line.isEmpty())
-            continue;
-        if (line.startsWith(QLatin1String("ERROR"), Qt::CaseInsensitive)) {
-            errors << line;
-        } else if (line.startsWith(QLatin1String("WARNING"), Qt::CaseInsensitive)) {
-            // Keep warnings only as a fallback, and drop the two that say
-            // nothing about why THIS call failed.
-            if (!line.contains(QLatin1String("is older than"), Qt::CaseInsensitive) &&
-                !line.contains(QLatin1String("To suppress this warning"), Qt::CaseInsensitive))
-                warnings << line;
-        } else if (errors.isEmpty() && warnings.isEmpty()) {
-            // Continuation of an unlabelled traceback / usage message.
-            warnings << line;
-        }
-    }
-    const QStringList& pick = !errors.isEmpty() ? errors : warnings;
-    return pick.isEmpty() ? QString() : pick.join(QLatin1String(" · "));
+    return finterm::services::video::ytdlp_error(stderr_bytes);
 }
 
 void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*status*/) {
@@ -2490,7 +2447,7 @@ void VideoPlayerWidget::refresh_live_session() {
     if (ceiling > 720)
         fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
     fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
-    proc->start(program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", current_url_});
+    proc->start(program, finterm::services::video::ytdlp_resolve_args(fmt, current_url_));
 #endif
 }
 

@@ -87,7 +87,97 @@ def main():
     failed += not ok
     print(f"{'ok  ' if ok else 'FAIL'} ex99 order: {got!r}")
 
-    print(f"{len(CASES) + 3 - failed}/{len(CASES) + 3} passed")
+    extra = 3
+    from datetime import date
+
+    def check(name, got, want):
+        nonlocal failed, extra
+        extra += 1
+        ok = got == want
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} {name}: {got!r}" + ("" if ok else f" (want {want!r})"))
+
+    # ── the call, from a Q4 IR site's upcoming-events feed ──────────────────
+    # Item shapes as served 2026-11-17 (investor.costco.com, .nvidia.com).
+    def item(title, link, webcast=None):
+        desc = (f"<description>&lt;br /&gt;&lt;a href=\"{webcast}\"&gt;View the live Webcast&lt;/a&gt;"
+                "</description>") if webcast else "<description />"
+        return f"<item><title>{title}</title><guid>x</guid>{desc}<link>{link}</link></item>"
+
+    costco = "<rss><channel>" + "".join([
+        item("12/2/2026 : November Sales Results", "https://ir/nov-sales"),
+        item("12/10/2026 : Q1 2027 Earnings Results", "https://ir/q1-results"),
+        item("12/10/2026 : Q1 2027 Earnings Call", "https://ir/q1-call", "https://events.q4inc.com/attendee/689013617"),
+        item("1/6/2027 : December Sales Results", "https://ir/dec-sales"),
+    ]) + "</channel></rss>"
+    # Two items on the print's date: the one carrying the webcast wins.
+    check("rss call", el.call_from_rss(costco, date(2026, 12, 10)),
+          ("https://events.q4inc.com/attendee/689013617", "https://ir/q1-call", None))
+    # A day off is still the print (Yahoo's date vs the call's).
+    check("rss ±1 day", el.call_from_rss(costco, date(2026, 12, 11))[0],
+          "https://events.q4inc.com/attendee/689013617")
+    # A sales-results event on the date is not an earnings call…
+    check("rss not a call", el.call_from_rss(costco, date(2026, 12, 2)), (None, None, None))
+    # …and a different print's call is never borrowed.
+    check("rss other print", el.call_from_rss(costco, date(2027, 3, 5)), (None, None, None))
+    # Posted without its webcast link yet: the event's own page, never a guess.
+    nv = "<rss>" + item("11/17/2026 : NVIDIA 3rd Quarter FY27 Financial Results", "https://ir/nvda-q3") + "</rss>"
+    check("rss page only", el.call_from_rss(nv, date(2026, 11, 17)), (None, "https://ir/nvda-q3", None))
+    # Two earnings items, neither with a webcast, one without a <link>: the
+    # sort used to compare None with str and raise (review, reproduced).
+    two = ("<rss><item><title>11/17/2026 : Q3 Earnings Call</title><description /></item>"
+           + item("11/17/2026 : Q3 Earnings Results", "https://ir/a") + "</rss>")
+    check("rss None vs str", el.call_from_rss(two, date(2026, 11, 17)), (None, "https://ir/a", None))
+    # A replay file in the item is playable as-is.
+    mp3 = "<rss>" + item("11/17/2026 : Q3 Earnings Call", "https://ir/c",
+                         "https://cdn.example.com/q3-call.mp3") + "</rss>"
+    check("rss media", el.call_from_rss(mp3, date(2026, 11, 17))[2], "https://cdn.example.com/q3-call.mp3")
+
+    # ── the call, printed next to its date on an IR page (HD) ───────────────
+    page = ("Q2 2026 Earnings Call August 18, 2026 https://event.choruscall.com/mediaframe/webcast.html?webcastid=OLD1 "
+            + "Presentation slides and more. " * 10 +
+            "Q3 2026 Earnings Call November 17, 2026 9:00 AM ET "
+            "https://event.choruscall.com/mediaframe/webcast.html?webcastid=tz6tzaIE")
+    check("page by date", el.call_near_date(page, date(2026, 11, 17)),
+          "https://event.choruscall.com/mediaframe/webcast.html?webcastid=tz6tzaIE")
+    check("page other date", el.call_near_date(page, date(2026, 11, 3)), None)
+    # Day 7 must not match inside "17 November" (review, reproduced).
+    check("day inside day", el.call_near_date("Q3 Earnings Call 17 November 2026 "
+                                              "https://event.choruscall.com/mediaframe/webcast.html?webcastid=X",
+                                              date(2026, 11, 7)), None)
+    # A site/login link beside the date is not a call.
+    check("page not a call", el.call_near_date("November 17, 2026 https://identity.q4inc.com/oauth/auth "
+                                               "https://www.youtube.com/Salesforce", date(2026, 11, 17)), None)
+
+    # ── which 8-K is the print's release ─────────────────────────────────────
+    rec = {"filingDate": ["2026-11-23", "2026-11-19", "2026-11-16"]}
+    # Fri 20 Nov after-close print, filed after 17:30 → dated Mon 23 Nov.
+    check("release Monday after Friday", el._release_for(rec, [0, 1, 2], date(2026, 11, 20)), 0)
+    # A guidance 2.02 the day BEFORE the print is not its release.
+    check("release not day before", el._release_for({"filingDate": ["2026-11-19"]}, [0], date(2026, 11, 20)), None)
+    check("release other quarter", el._release_for(rec, [0, 1, 2], date(2027, 2, 20)), None)
+
+    # ── what finterm may play itself ─────────────────────────────────────────
+    today = date(2026, 11, 17)
+    check("audio youtube video", el.playable_audio("https://www.youtube.com/watch?v=X9mm", None, "", today, today),
+          {"url": "https://www.youtube.com/watch?v=X9mm", "kind": "youtube"})
+    check("audio media first", el.playable_audio("https://events.q4inc.com/attendee/1", "https://c/x.mp3", "",
+                                                 today, today), {"url": "https://c/x.mp3", "kind": "media"})
+    # A registration-gated webcast is never "playable".
+    check("audio q4 gated", el.playable_audio("https://events.q4inc.com/attendee/1", None,
+                                              "https://investor.nvidia.com", today, today), None)
+    # A channel plays its live stream only around the print…
+    check("audio channel live", el.playable_audio(None, None, "https://www.youtube.com/netflixir", today, today),
+          {"url": "https://www.youtube.com/netflixir/live", "kind": "youtube_live"})
+    # …not weeks ahead, when /live would be whatever else is streaming.
+    check("audio channel early", el.playable_audio(None, None, "https://www.youtube.com/netflixir",
+                                                   date(2027, 1, 20), today), None)
+    # Last quarter's call video is never offered as the IR site.
+    check("site skips calls", el.find_webcast_url(
+        "The conference call webcast is at https://www.youtube.com/watch?v=OLD and investor.example.com.",
+        sites_only=True), "https://investor.example.com")
+
+    print(f"{len(CASES) + extra - failed}/{len(CASES) + extra} passed")
     return 1 if failed else 0
 
 

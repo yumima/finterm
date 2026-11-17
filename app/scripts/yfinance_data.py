@@ -3756,7 +3756,16 @@ def get_earnings_analysis(symbol, quarters=12):
             dates = [dates]
         if dates and nxt["timestamp"] is None:
             try:
-                nxt["timestamp"] = int(pd.Timestamp(dates[0]).timestamp())
+                # A bare DATE, not an instant: pin it to midnight ET of that
+                # date — the convention _announce_et and the app's card both
+                # read as "date only, treated as after close". Stamped at UTC
+                # midnight it decoded as 19:00 ET the DAY BEFORE: on NVDA's
+                # print day (17 Nov) the card read "Mon 16 Nov — date has
+                # passed", and the links header named the wrong day.
+                # Take the calendar DATE first: converting a tz-aware UTC
+                # midnight to ET would land on the day before again.
+                d0 = pd.Timestamp(pd.Timestamp(dates[0]).date()).tz_localize("America/New_York")
+                nxt["timestamp"] = int(d0.timestamp())
             except Exception:
                 pass
         # A single calendar date means Yahoo has a confirmed day; a range means
@@ -5178,9 +5187,8 @@ _CACHE_TTL = {
     # (OwnershipService), and two stacked hours showed data two hours old.
     "ownership_extras": 600,
     "parse_s1": 3600,
-    # the newest 8-K earnings release and its webcast address (EDGAR). Under
-    # the app's 600 s copy; a new release lands once a quarter, and a quarter
-    # hour stacked is the worst case for seeing it after the print.
+    # one print's call webcast (IR site) and release (EDGAR). The app's
+    # release-time schedule bypasses this with `fresh` when it matters.
     "earnings_links": 300,
 }
 _CACHE_MAX = 512  # hard cap on entries; evict soonest-to-expire beyond this
@@ -5277,6 +5285,10 @@ _EARNINGS_HOT_TTL_SEC = 120
 
 def _effective_ttl(action, result, default_ttl):
     """Cache lifetime for one result — shortened near a report."""
+    if action == "earnings_links" and isinstance(result, dict):
+        # An IR site that timed out is worth asking again soon. Print-day
+        # freshness is the app's job: its refresh schedule sends `fresh`.
+        return 45 if result.get("ir_error") else default_ttl
     if action != "earnings_analysis" or not isinstance(result, dict):
         return default_ttl
     try:
@@ -5406,13 +5418,20 @@ def _daemon_dispatch(action, payload):
     and the action is retried once so callers don't see a cascade of failures
     every time Yahoo Finance rotates its auth crumb mid-session.
     """
+    # `fresh`: the caller knows the cached answer is out of date (an earnings
+    # release just landed, the user pressed refresh). Skip the READ, still
+    # share an in-flight call and still WRITE the result — under the same key
+    # as an ordinary request, so the next ordinary reader gets the new answer.
+    fresh = isinstance(payload, dict) and bool(payload.get("fresh"))
+    if fresh:
+        payload = {k: v for k, v in payload.items() if k != "fresh"}
     ttl = _CACHE_TTL.get(action)
     if not ttl:
         # Uncached actions are pass-through: no key, nothing to share.
         return _daemon_dispatch_with_crumb_retry(action, payload)
 
     key = _cache_key(action, payload)
-    hit = _cache_get(key)
+    hit = None if fresh else _cache_get(key)
     if hit is not None:
         return hit
 
@@ -5424,7 +5443,7 @@ def _daemon_dispatch(action, payload):
                 # leader can finish between the read above and this point,
                 # and a burst of workers dispatched from one recv loop hits
                 # that window routinely.
-                hit = _cache_get(key)
+                hit = None if fresh else _cache_get(key)
                 if hit is not None:
                     return hit
                 flight = _Flight()
@@ -5521,12 +5540,20 @@ def _daemon_dispatch_inner(action, payload):
         # IPO Watch detail-rail aggregator: quarterly financials, holders,
         # news. One daemon round-trip on row click.
         return get_ipo_extras((payload or {}).get("symbol"))
-    if action == "earnings_links":
-        # ER Earnings NEXT REPORT header: the last earnings release (8-K Item
-        # 2.02, EX-99.1) and the call webcast it names. EDGAR, not Yahoo, so
-        # it is its own action and never delays earnings_analysis.
+    if action == "earnings_release_filed":
+        # Polled each minute in a print's release window: one SEC request
+        # says whether the earnings 8-K is up, and only then does the app pay
+        # for the full analysis + links refresh. Uncached on purpose.
         import earnings_links
-        return earnings_links.get_earnings_links((payload or {}).get("symbol"))
+        p = payload or {}
+        return earnings_links.release_filed(p.get("symbol"), p.get("report_date"))
+    if action == "earnings_links":
+        # ER Earnings NEXT REPORT header: for the print on report_date, the
+        # call's webcast (IR site) and the release (8-K Item 2.02, EX-99.1).
+        # Its own action so EDGAR / IR sites never delay earnings_analysis.
+        import earnings_links
+        p = payload or {}
+        return earnings_links.get_earnings_links(p.get("symbol"), p.get("report_date"))
     if action == "parse_s1":
         # Parse an S-1 prospectus into its "Recent Sales of Unregistered
         # Securities" section for the FUNDING tab. URL comes from

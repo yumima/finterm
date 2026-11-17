@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/equity/EarningsRefresh.h"
 #include "services/equity/TechnicalRating.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
@@ -1958,59 +1959,224 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
                                                         query::QueryStore::Callback cb) {
     if (symbol.isEmpty())
         return;
-    // Version segment for the same reason as kTechnicalsSchemaTag: the payload
-    // shape changes with the engine, and although the 180s TTL makes stale
-    // shapes self-heal in minutes, this project has been bitten by unversioned
-    // cache keys before — a version segment makes the window zero instead.
-    //
-    //   v2  per-row runup_20d_pct; runup_90d moved to a calendar basis.
-    //   v3  reaction_pct is withheld until the reaction session closes (the
-    //       live figure moved to reaction_live_pct); runup_60d and
-    //       rel_runup_90d dropped.
-    //
-    // v3 is not cosmetic and the TTL is not good enough here. A v2 entry
-    // carries a reaction_pct that may be a still-running close, and
-    // record_and_resolve would settle that print into earnings_signal_records
-    // — a write resolve() never revisits. The bump makes that window zero.
-    const QString key = "equity:earnings_analysis:v3:" + symbol;
+    // Version segment (earnings_analysis_key): this project has been bitten
+    // by unversioned cache keys before — a bump makes a stale shape's window
+    // zero instead of one TTL.
+    //   v3  reaction_pct withheld until the reaction session closes (a v2
+    //       entry could settle a still-running close into the ledger).
+    //   v4  a date-only next.timestamp is midnight ET, not UTC.
+    const QString key = earnings_analysis_key(symbol);
     auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
-        const QVariant cached = cached_aged ? QVariant(cached_aged->value) : QVariant();
-        if (!cached.isNull()) {
-            const auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
-            if (doc.isObject()) {
-                // Resolve with the cache entry's WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                resolve(QVariant::fromValue(parse_earnings_analysis(doc.object())), cached_aged->written_at);
-                return;
+        // A scheduled or ↻ refresh knows the copies are out of date: skip
+        // the disk copy here and the daemon's with `fresh`.
+        const bool fresh = force_fresh_.remove(key);
+        if (!fresh) {
+            const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
+            if (cached_aged) {
+                const auto doc = QJsonDocument::fromJson(cached_aged->value.toUtf8());
+                if (doc.isObject()) {
+                    // Resolve with the cache entry's WRITE time: a hit answers
+                    // instantly, and stamping "now" would present a value
+                    // hydrated from disk at startup as brand new.
+                    const auto a = parse_earnings_analysis(doc.object());
+                    // Plan from when Yahoo was ASKED (the payload's as_of),
+                    // not when the copy was written — the daemon may have
+                    // handed the app an already-aged answer.
+                    // EVENT-STAMP: the daemon's upstream fetch instant.
+                    note_earnings(symbol, a,
+                                  a.as_of > 0 ? QDateTime::fromSecsSinceEpoch(a.as_of) : cached_aged->written_at);
+                    resolve(QVariant::fromValue(a), cached_aged->written_at);
+                    return;
+                }
             }
         }
         QJsonObject payload;
         payload["symbol"] = symbol;
+        if (fresh)
+            payload["fresh"] = true;
         // 25 s, not the 10 s default: the daemon fans this out into six
         // upstream Yahoo calls (info, three estimate frames, earnings dates,
         // 3 y of daily bars) and any one of them can stall.
         run_daemon(
             "earnings_analysis", payload,
-            [this, key, resolve, reject](bool ok, QJsonObject result, QString err) {
+            [this, symbol, key, resolve, reject](bool ok, QJsonObject result, QString err) {
                 if (!ok) {
                     reject(err);
+                    replan_earnings(symbol); // a failed refresh is retried on the schedule
                     return;
                 }
                 if (result.contains("error")) {
                     reject(result.value("error").toString());
+                    replan_earnings(symbol);
                     return;
                 }
                 finterm::CacheManager::instance().put(
                     key, QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
                     kEarningsAnalysisTtlSec, "equity");
-                resolve(QVariant::fromValue(parse_earnings_analysis(result)));
+                const auto a = parse_earnings_analysis(result);
+                // EVENT-STAMP: the daemon's upstream fetch instant.
+                const QDateTime upstream = a.as_of > 0 ? QDateTime::fromSecsSinceEpoch(a.as_of)
+                                                       : QDateTime::currentDateTimeUtc();
+                note_earnings(symbol, a, upstream);
+                resolve(QVariant::fromValue(a));
             },
             25'000);
     };
-    query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec, kEarningsAnalysisTtlSec * 8,
+    query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec, kEarningsAnalysisTtlSec * 2,
                                             std::move(cb), std::move(fetcher));
+    // A copy already in memory is delivered without a fetch, so nothing would
+    // look at whether it is past its moment (a print since it was fetched).
+    // Plan from it — from the store's copy when the watch was pruned.
+    if (earnings_watch_.contains(symbol) && earnings_watch_[symbol].fetched_at.isValid()) {
+        replan_earnings(symbol);
+    } else {
+        const QVariant v = query::QueryStore::instance().peek(key);
+        if (v.isValid() && !v.isNull()) {
+            const auto a = v.value<EarningsAnalysis>();
+            if (a.as_of > 0)
+                // EVENT-STAMP: the daemon's upstream fetch instant.
+                note_earnings(symbol, a, QDateTime::fromSecsSinceEpoch(a.as_of));
+        }
+    }
+}
+
+// ── Earnings refresh schedule ───────────────────────────────────────────────
+// One timer per symbol, set from EarningsRefresh's plan each time new data
+// arrives. It does nothing nobody would see: when it fires with no live
+// subscriber it stops, and the next subscribe re-plans (and refreshes at once
+// if a planned moment passed meanwhile).
+
+void EquityResearchService::note_earnings(const QString& symbol, const EarningsAnalysis& a,
+                                          const QDateTime& fetched_at) {
+    auto& w = earnings_watch_[symbol];
+    w.analysis = a;
+    w.fetched_at = fetched_at.isValid() ? fetched_at : QDateTime::currentDateTimeUtc();
+    replan_earnings(symbol);
+}
+
+void EquityResearchService::replan_earnings(const QString& symbol) {
+    auto it = earnings_watch_.find(symbol);
+    if (it == earnings_watch_.end())
+        return;
+    auto& w = it.value();
+    if (!w.fetched_at.isValid())
+        return; // created by a links subscribe; nothing to plan from until the analysis lands
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const auto plan = plan_earnings_refresh(w.analysis, w.fetched_at, now, w.release_seen);
+    w.next_at = plan.at;
+    w.next_why = plan.why;
+    if (!w.timer) {
+        w.timer = new QTimer(this);
+        w.timer->setSingleShot(true);
+        connect(w.timer, &QTimer::timeout, this, [this, symbol]() { on_earnings_due(symbol); });
+    }
+    // Loop guard: a refresh that came back with the same old data must not
+    // fire again at once. QTimer takes int ms; a day is far inside that.
+    qint64 ms = std::max<qint64>(0, now.msecsTo(plan.at));
+    if (w.last_forced.isValid())
+        ms = std::max<qint64>(ms, now.msecsTo(w.last_forced.addSecs(60)));
+    w.timer->start(static_cast<int>(std::min<qint64>(ms, 24LL * 3600 * 1000)));
+    emit earnings_schedule_changed(symbol);
+}
+
+void EquityResearchService::on_earnings_due(const QString& symbol) {
+    auto it = earnings_watch_.find(symbol);
+    if (it == earnings_watch_.end())
+        return;
+    auto& store = query::QueryStore::instance();
+    if (!store.has_live_subscribers(earnings_analysis_key(symbol))) {
+        // Nobody is looking: drop the watch (its analysis copy and timer).
+        // The next subscribe plans again from the store's copy and refreshes
+        // at once if a planned moment passed meanwhile.
+        if (it->timer)
+            it->timer->deleteLater();
+        earnings_watch_.erase(it);
+        return;
+    }
+    auto& w = it.value();
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const auto plan = plan_earnings_refresh(w.analysis, w.fetched_at, now, w.release_seen);
+    if (plan.at > now.addSecs(5)) { // the day moved on under a long timer — re-plan
+        replan_earnings(symbol);
+        return;
+    }
+    if (plan.mode == EarningsRefreshMode::Watch && !w.sec) {
+        // Nothing on EDGAR to watch (a 6-K filer): the full refresh is the
+        // only signal, so take it at most every 15 minutes, not each minute.
+        constexpr int kNoSecWatchSec = 15 * 60;
+        if (w.last_forced.isValid() && w.last_forced.secsTo(now) < kNoSecWatchSec) {
+            w.timer->start(static_cast<int>(now.msecsTo(w.last_forced.addSecs(kNoSecWatchSec))));
+            return;
+        }
+        refresh_earnings(symbol);
+        return;
+    }
+    if (plan.mode == EarningsRefreshMode::Refresh) {
+        refresh_earnings(symbol);
+        return;
+    }
+    // WATCH: one SEC request instead of the full refresh.
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    payload["report_date"] = plan.print.toString(Qt::ISODate);
+    const QDate print = plan.print;
+    run_daemon(
+        "earnings_release_filed", payload,
+        [this, symbol, print](bool ok, QJsonObject r, QString) {
+            auto jt = earnings_watch_.find(symbol);
+            if (jt == earnings_watch_.end())
+                return;
+            if (ok && !r.contains("error")) {
+                if (r.value("filed").toBool()) {
+                    LOG_INFO("Earnings", QString("%1: %2 release is on EDGAR — refreshing").arg(symbol, print.toString(Qt::ISODate)));
+                    jt->release_seen = print;
+                    refresh_earnings(symbol);
+                    return;
+                }
+                if (!r.value("sec").toBool(true))
+                    jt->sec = false; // nothing to watch on EDGAR — the plan refreshes instead
+            }
+            replan_earnings(symbol);
+        },
+        15'000);
+}
+
+void EquityResearchService::refresh_earnings(const QString& symbol) {
+    if (symbol.isEmpty())
+        return;
+    auto& w = earnings_watch_[symbol];
+    w.last_forced = QDateTime::currentDateTimeUtc();
+    auto& store = query::QueryStore::instance();
+    // The flag is consumed by the fetch revalidate() starts; when it starts
+    // none (nothing subscribed, or a fetch already in flight) the flag must
+    // not linger for some later, unrelated fetch to spend.
+    const auto force = [&](const QString& key) {
+        force_fresh_.insert(key);
+        if (store.revalidate(key, /*force=*/true))
+            return true;
+        force_fresh_.remove(key);
+        return false;
+    };
+    const QString akey = earnings_analysis_key(symbol);
+    const bool started = force(akey);
+    if (!w.links_key.isEmpty() && !force(w.links_key) && !store.has_live_subscribers(w.links_key))
+        w.links_key.clear(); // a print the tab has left
+    if (!started && store.has_live_subscribers(akey)) {
+        // A fetch is already in flight — and may be the stale one this
+        // refresh exists to replace. Ask again once it has landed.
+        QTimer::singleShot(3000, this, [this, symbol]() {
+            auto jt = earnings_watch_.find(symbol);
+            if (jt != earnings_watch_.end() && jt->last_forced.secsTo(QDateTime::currentDateTimeUtc()) >= 3)
+                refresh_earnings(symbol);
+        });
+    }
+}
+
+QPair<QDateTime, QString> EquityResearchService::earnings_next_refresh(const QString& symbol) const {
+    const auto it = earnings_watch_.constFind(symbol);
+    if (it == earnings_watch_.cend())
+        return {};
+    return {it->next_at, it->next_why};
 }
 
 namespace {
@@ -2029,39 +2195,57 @@ QString web_url_or_empty(const QString& raw) {
 
 static EarningsLinks parse_earnings_links(const QJsonObject& r) {
     EarningsLinks l;
+    l.report_date = QDate::fromString(r.value("report_date").toString(), Qt::ISODate);
+    const auto call = r.value("call").toObject();
+    l.call_url = web_url_or_empty(call.value("url").toString());
+    l.call_page = web_url_or_empty(call.value("page").toString());
+    const auto audio = r.value("audio").toObject();
+    l.audio_url = web_url_or_empty(audio.value("url").toString());
+    l.audio_kind = audio.value("kind").toString();
+    l.ir_url = web_url_or_empty(r.value("ir_url").toString());
     const auto rel = r.value("release").toObject();
     l.release_url = web_url_or_empty(rel.value("url").toString());
-    l.release_filed = rel.value("filed").toString();
-    l.webcast_url = web_url_or_empty(r.value("webcast").toObject().value("url").toString());
+    l.release_filed = QDate::fromString(rel.value("filed").toString(), Qt::ISODate);
+    l.release_due = QDate::fromString(r.value("release_due").toString(), Qt::ISODate);
     l.note = r.value("note").toString();
     return l;
 }
 
-void EquityResearchService::subscribe_earnings_links(QObject* owner, const QString& symbol,
+void EquityResearchService::subscribe_earnings_links(QObject* owner, const QString& symbol, const QDate& report_date,
                                                      query::QueryStore::Callback cb) {
-    if (symbol.isEmpty())
+    if (symbol.isEmpty() || !report_date.isValid())
         return;
-    const QString key = "equity:earnings_links:v1:" + symbol;
-    auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        // Disk copy first, like the analysis: a release changes once a
-        // quarter, and without this every launch made the header wait on a
-        // chain of SEC round trips before showing the same two links.
-        const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
-        if (cached_aged) {
-            const auto doc = QJsonDocument::fromJson(cached_aged->value.toUtf8());
-            if (doc.isObject()) {
-                resolve(QVariant::fromValue(parse_earnings_links(doc.object())), cached_aged->written_at);
-                return;
+    // The date is in the key: when the print the tab is about changes (the
+    // numbers came out, Yahoo moved on to the next quarter), it is a new
+    // question, not a stale answer to refresh.
+    const QString key = earnings_links_key(symbol, report_date);
+    earnings_watch_[symbol].links_key = key; // refreshed with the analysis
+    auto fetcher = [this, symbol, key, report_date](query::QueryStore::Resolver resolve,
+                                                    query::QueryStore::Rejecter reject) {
+        const bool fresh = force_fresh_.remove(key);
+        if (!fresh) {
+            // Disk copy first, like the analysis, so a launch shows the links
+            // without waiting on SEC and the IR site. The schedule refreshes
+            // it past this copy the moment the release lands.
+            const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
+            if (cached_aged) {
+                const auto doc = QJsonDocument::fromJson(cached_aged->value.toUtf8());
+                if (doc.isObject()) {
+                    resolve(QVariant::fromValue(parse_earnings_links(doc.object())), cached_aged->written_at);
+                    return;
+                }
             }
         }
         QJsonObject payload;
         payload["symbol"] = symbol;
-        // Up to ten EDGAR requests (submissions, then for the newest earnings
-        // 8-K — and the one before it when the newest names no webcast — the
-        // filing index plus up to three documents), each capped at 10 s in
-        // scripts/earnings_links.py. SEC normally answers each in well under
-        // a second; 60 s covers the slow case without the UI giving up on a
-        // result the daemon then caches unseen.
+        payload["report_date"] = report_date.toString(Qt::ISODate);
+        if (fresh)
+            payload["fresh"] = true;
+        // EDGAR (submissions, a filing index, up to three documents per
+        // release, at most three releases) then the IR site (its page, the
+        // events feed, up to two events pages), each request capped at 10 s
+        // and the whole cut off at 40 s in scripts/earnings_links.py.
+        // Typically 2-4 s in all.
         run_daemon(
             "earnings_links", payload,
             [key, resolve, reject](bool ok, QJsonObject r, QString err) {
@@ -2073,14 +2257,16 @@ void EquityResearchService::subscribe_earnings_links(QObject* owner, const QStri
                     reject(r.value("error").toString());
                     return;
                 }
+                // An IR site that timed out: keep the disk copy only briefly,
+                // so the next launch asks again rather than trusting it.
                 finterm::CacheManager::instance().put(
                     key, QVariant(QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact))),
-                    kEarningsLinksTtlSec, "equity");
+                    r.contains("ir_error") ? 300 : kEarningsLinksTtlSec, "equity");
                 resolve(QVariant::fromValue(parse_earnings_links(r)));
             },
             60'000);
     };
-    query::QueryStore::instance().subscribe(owner, key, kEarningsLinksTtlSec, kEarningsLinksTtlSec * 6,
+    query::QueryStore::instance().subscribe(owner, key, kEarningsLinksTtlSec, kEarningsLinksTtlSec * 2,
                                             std::move(cb), std::move(fetcher));
 }
 

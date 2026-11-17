@@ -1,0 +1,62 @@
+// src/services/video/YtDlp.h
+#pragma once
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QString>
+#include <QStringList>
+
+namespace finterm::services::video {
+
+/// The yt-dlp to run: the copy bundled next to the binary (the build copies
+/// it there), else one on PATH; empty if neither exists. Shared by the
+/// dashboard video player and the earnings-call audio player.
+inline QString ytdlp_program() {
+#ifdef _WIN32
+    const QString exe_name = "yt-dlp.exe";
+#else
+    const QString exe_name = "yt-dlp";
+#endif
+    const QString exe_dir = QCoreApplication::applicationDirPath();
+    for (const QString& candidate : {QDir(exe_dir).filePath(exe_name), QDir(exe_dir).filePath("tools/" + exe_name),
+                                     QDir(exe_dir).filePath("bin/" + exe_name),
+                                     QDir(exe_dir).filePath("../tools/" + exe_name)}) {
+        if (QFileInfo::exists(candidate))
+            return QDir::cleanPath(candidate);
+    }
+    return QStandardPaths::findExecutable("yt-dlp");
+}
+
+/// The arguments for resolving `url` to a direct stream URL (`-g`) with the
+/// format chain `format`. One place for the flags both players depend on:
+/// --js-runtimes node (yt-dlp 2025+ needs a JS runtime for YouTube).
+inline QStringList ytdlp_resolve_args(const QString& format, const QString& url) {
+    return {"-f", format, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", url};
+}
+
+/// The line(s) of yt-dlp's stderr that say why it failed. Its stderr opens
+/// with boilerplate — a version-age nag, an update hint, a JS-runtime notice —
+/// and the actual ERROR is underneath; warnings only as a fallback.
+inline QString ytdlp_error(const QByteArray& stderr_bytes) {
+    const QStringList lines = QString::fromUtf8(stderr_bytes).split(QLatin1Char('\n'));
+    QStringList errors, warnings;
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.isEmpty())
+            continue;
+        if (line.startsWith(QLatin1String("ERROR"), Qt::CaseInsensitive)) {
+            errors << line;
+        } else if (line.startsWith(QLatin1String("WARNING"), Qt::CaseInsensitive)) {
+            if (!line.contains(QLatin1String("is older than"), Qt::CaseInsensitive) &&
+                !line.contains(QLatin1String("To suppress this warning"), Qt::CaseInsensitive))
+                warnings << line;
+        } else if (errors.isEmpty() && warnings.isEmpty()) {
+            warnings << line; // continuation of an unlabelled traceback / usage message
+        }
+    }
+    const QStringList& pick = !errors.isEmpty() ? errors : warnings;
+    return pick.isEmpty() ? QString() : pick.join(QLatin1String(" · "));
+}
+
+} // namespace finterm::services::video
