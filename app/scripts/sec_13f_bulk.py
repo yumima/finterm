@@ -1079,7 +1079,12 @@ def top_firms(limit=50):
             if prior:
                 row.update({"prior_quarter": prior[0], "prior_book_value": prior[2],
                             "prior_position_count": prior[3]})
-                row["moves"] = _book_moves(con, accession, prior[1])
+                # Stored corrections only. Computing them is market-wide work
+                # with network calls, due again after every filing the sync
+                # stores — started from here it ran past the screen's time
+                # limit and the ranking came back empty. The sync keeps them
+                # current and the screen reloads when a pass ends.
+                row["moves"] = _book_moves(con, accession, prior[1], compute=False)
             firms_out.append(row)
         newest_q = max((f["quarter"] for f in firms_out), default=None)
         partial = {r[0] for r in con.execute(
@@ -1998,6 +2003,38 @@ def plausible_move(flow, book, prior_book):
     return abs(flow) <= max(book or 0.0, prior_book or 0.0)
 
 
+def _big_moves_stored(con):
+    """Whether a big-moves scan is stored, current or not: its rows, or the
+    stamp of a scan that found none."""
+    try:
+        return (con.execute("SELECT 1 FROM big_moves LIMIT 1").fetchone() is not None
+                or con.execute("SELECT 1 FROM big_moves_run LIMIT 1").fetchone() is not None)
+    except sqlite3.OperationalError:
+        return False  # no table yet
+
+
+def _big_moves_stamp(con):
+    stamp = "|".join(f"{q}:{n}:{t}" for q, n, t in con.execute(
+        "SELECT quarter, filers, ingested_at FROM quarters ORDER BY quarter"))
+    stamp += "|" + _ticker_stamp(con) + f"|r{ADJ_RULES_VERSION}"
+    stamp += "|" + str(con.execute("SELECT COUNT(filed) FROM filings").fetchone()[0])
+    return stamp
+
+
+def _big_moves_overdue(con):
+    """A stored scan from another state of the index — an earlier pass was cut
+    short before its scan, tickers were rechecked, or the rules changed. A
+    scan stored WITHOUT a stamp (a split lookup went unanswered) is not
+    overdue: it is redone when the next filing arrives, not on every pass."""
+    try:
+        row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
+    except sqlite3.OperationalError:
+        return True  # never scanned
+    if row is None:
+        return not _big_moves_stored(con)
+    return row[0] != _big_moves_stamp(con)
+
+
 def _ensure_big_moves(con, progress=None):
     """Every filer's stake changes of BIG_MOVE_FLOOR or more, newest filing
     against the one before it, corporate actions undone. Kept per state of the
@@ -2015,13 +2052,10 @@ def _ensure_big_moves(con, progress=None):
             ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
             book_value REAL, position_count INTEGER, prior_book_value REAL,
             accession TEXT, filed TEXT)""")
-    stamp = "|".join(f"{q}:{n}:{t}" for q, n, t in con.execute(
-        "SELECT quarter, filers, ingested_at FROM quarters ORDER BY quarter"))
-    stamp += "|" + _ticker_stamp(con) + f"|r{ADJ_RULES_VERSION}"
-    stamp += "|" + str(con.execute("SELECT COUNT(filed) FROM filings").fetchone()[0])
+    stamp = _big_moves_stamp(con)
     row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
     if row and row[0] == stamp:
-        return
+        return False
     con.execute("DELETE FROM big_moves")
     qs = quarter_pair(con)
     floor = qs[0] if qs else ""
@@ -2062,6 +2096,7 @@ def _ensure_big_moves(con, progress=None):
     if adj_status["complete"]:
         con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
     con.commit()
+    return True
 
 
 def price_ranges(con, wanted, today=None):
@@ -2144,7 +2179,12 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
                 cik TEXT, manager TEXT, quarter TEXT, prior_quarter TEXT, cusip TEXT, issuer TEXT,
                 ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
                 book_value REAL, position_count INTEGER, prior_book_value REAL, accession TEXT, filed TEXT)""")
-        else:
+        elif not _big_moves_stored(con):
+            # Nothing stored yet (a new index): the one time the screen waits
+            # for the scan. After that it reads what the sync last stored —
+            # the scan is due again after every filing the sync reads, takes
+            # minutes, and run from here it was killed at the screen's time
+            # limit with nothing to show.
             _ensure_big_moves(con)
         where = ["1=1"]
         if side == "buys":
@@ -2529,15 +2569,20 @@ def sync(progress=None, max_filings=None):
 
     # Warm the corrections the screens read, so a per-stock lookup (which
     # only reads them) finds them current.
-    if out["filings"] or out["datasets"]:
-        con = connect()
-        try:
+    # After a pass that read filings — and after one that did not, when the
+    # stored scan belongs to another state of the index: the screens no longer
+    # recompute, so a pass cut short before this step (the app closed), a
+    # ticker recheck or a rules change has to be caught up here.
+    con = connect()
+    try:
+        if out["filings"] or out["datasets"] or _big_moves_overdue(con):
             qs = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
             for a, b in zip(qs[1:], qs[:-1]):
                 _ensure_adjustments(con, a, b)
-            _ensure_big_moves(con)  # what the alerts read, current with the filings just stored
-        finally:
-            con.close()
+            # what the screens and the alerts read, current with the filings just stored
+            out["refreshed"] = bool(_ensure_big_moves(con))
+    finally:
+        con.close()
 
     # 3. Name the new holdings, and correct tickers picked before us_listing().
     if out["filings"] or out["datasets"]:

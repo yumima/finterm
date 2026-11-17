@@ -302,6 +302,62 @@ def main():
         check("partial: holder count comes from the complete quarter",
               h2["holder_count"] == 4, str(h2["holder_count"]))
 
+        # ── the screens read, the sync computes ────────────────────────────
+        # Largest Funds and Big Moves once recomputed the market-wide
+        # corrections whenever the sync had stored a filing since the last
+        # run: minutes of work with network calls, killed at the screen's
+        # 300 s limit, leaving both tabs empty for as long as the sync ran.
+        calls = {"adj": 0, "scan": 0}
+        real_adj, real_scan = bulk._ensure_adjustments, bulk._ensure_big_moves
+
+        def _no_adj(*a, **k):
+            calls["adj"] += 1
+            raise AssertionError("a screen query started the corrections")
+
+        def _count_scan(con_, *a, **k):
+            calls["scan"] += 1
+            return real_scan(con_, *a, **k)
+
+        # A filer with an earlier filing: only a row that HAS a prior book
+        # reaches the corrections, and a fixture without one would pass
+        # whatever the ranking did.
+        c4 = bulk.connect()
+        c4.execute("INSERT INTO books (cik, manager, quarter, accession, stock_value, stock_count) "
+                   "VALUES ('0000000001', 'PRIOR BOOK', '2025-12-31', 'acc-prior-book', 900000.0, 1)")
+        c4.commit()
+        c4.close()
+        bulk._ensure_adjustments = _no_adj
+        try:
+            tf = bulk.top_firms(50)
+            check("screens: the fund ranking answers", not tf.get("error") and tf.get("firms"), str(tf)[:160])
+            check("screens: a ranked fund has a prior filing to compare (fixture)",
+                  any(f.get("prior_quarter") for f in tf.get("firms", [])), str(tf)[:200])
+            check("screens: the fund ranking computes no corrections", calls["adj"] == 0)
+        except AssertionError as e:
+            check("screens: the fund ranking computes no corrections", False, str(e))
+        finally:
+            bulk._ensure_adjustments = real_adj
+
+        bulk._ensure_big_moves = _count_scan
+        real_ranges, bulk.price_ranges = bulk.price_ranges, (lambda *a, **k: {})   # no network here
+        try:
+            bulk.big_moves()   # nothing stored yet: the one scan a screen waits for
+            first = calls["scan"]
+            c3 = bulk.connect()
+            c3.execute("INSERT INTO big_moves (cik, manager, issuer, ticker, kind, flow, value, book_value, "
+                       "prior_book_value, position_count) VALUES ('1','M','ISSUER CORP','ISS','added',5e7,5e7,1e9,1e9,10)")
+            c3.execute("DELETE FROM big_moves_run")   # as after a filing the sync stored: due again
+            c3.commit()
+            c3.close()
+            bm = bulk.big_moves()
+            check("screens: big moves scans once when nothing is stored", first == 1, str(first))
+            check("screens: big moves reads the stored scan even when it is due again",
+                  calls["scan"] == first and any(r["ticker"] == "ISS" for r in bm.get("rows", [])),
+                  f"scans={calls['scan']} rows={len(bm.get('rows', []))}")
+        finally:
+            bulk._ensure_big_moves = real_scan
+            bulk.price_ranges = real_ranges
+
         # ── value units ────────────────────────────────────────────────────
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.

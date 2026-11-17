@@ -1633,7 +1633,10 @@ void OwnershipService::run_13f_sync() {
                 self->sync_status_ = through.isEmpty()
                                          ? QStringLiteral("13F up to date")
                                          : QStringLiteral("13F filings read through %1").arg(through);
-                if (filings || sets) {
+                // `refreshed`: the pass rescanned the stored big moves with no
+                // new filing of its own (an earlier pass was cut short, or the
+                // rules changed) — the screens read that store, so they reload.
+                if (filings || sets || o.value(QStringLiteral("refreshed")).toBool()) {
                     LOG_INFO(TAG, QStringLiteral("13F sync: %1 filings, %2 data sets, through %3")
                                       .arg(filings)
                                       .arg(sets)
