@@ -1070,6 +1070,7 @@ def top_firms(limit=50):
         """, (floor, int(limit))).fetchall()
         firms_out = []
         corrected, pending = {}, False
+        sync_pairs = set(_screen_pairs(con))  # exactly the pairs sync() keeps corrected
         for cik, manager, quarter, accession, value, count in newest:
             prior = con.execute(
                 "SELECT quarter, accession, stock_value, stock_count FROM books "
@@ -1093,8 +1094,8 @@ def top_firms(limit=50):
                     corrected[pair] = _adjustments_stored(con, *pair)
                 if corrected[pair]:
                     row["moves"] = _book_moves(con, accession, prior[1], compute=False)
-                else:
-                    pending = True  # the sync computes every pair ranked here: ask for a pass
+                elif pair in sync_pairs:
+                    pending = True  # one the sync computes: ask for a pass
             firms_out.append(row)
         newest_q = max((f["quarter"] for f in firms_out), default=None)
         partial = {r[0] for r in con.execute(
@@ -2639,7 +2640,8 @@ def sync(progress=None, max_filings=None):
         out["recheck"] = recheck_tickers()
         out["filed_dates"] = backfill_filed_dates()
     except Exception as e:
-        out.setdefault("warning", f"ticker and filing-date upkeep failed: {type(e).__name__}: {str(e)[:120]}")
+        # Its own key: `warning` is what turns a quiet pass into "SEC did not answer".
+        out["upkeep_warning"] = f"ticker and filing-date upkeep failed: {type(e).__name__}: {str(e)[:120]}"
 
     # 4. The scans the screens read. Last, because the tickers and filing dates
     # settled in step 3 are part of what they are stamped with — refreshed
