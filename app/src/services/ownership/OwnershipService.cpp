@@ -1209,6 +1209,11 @@ void OwnershipService::load_top_firms(bool force) {
             } else {
                 const auto o = parse_object(result);
                 t.error = o.value(QStringLiteral("error")).toString();
+                if (o.value(QStringLiteral("pending")).toBool()) // moves withheld until corrections exist
+                    QTimer::singleShot(0, self.data(), [self]() {
+                        if (self)
+                            self->run_13f_sync();
+                    });
                 t.newest_quarter = iso_date(o, "newest_quarter");
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     t.partial_quarters << v.toString();
@@ -1287,6 +1292,14 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
             } else {
                 const auto o = parse_object(result);
                 b.error = o.value(QStringLiteral("error")).toString();
+                // Nothing stored yet: the scan is the sync's to run. Ask for a
+                // pass now rather than leaving the tab waiting for the next
+                // scheduled one (run_13f_sync ignores the call while one runs).
+                if (o.value(QStringLiteral("pending")).toBool())
+                    QTimer::singleShot(0, self.data(), [self]() {
+                        if (self)
+                            self->run_13f_sync();
+                    });
                 b.side = o.value(QStringLiteral("side")).toString();
                 b.sort = o.value(QStringLiteral("sort")).toString();
                 b.active_only = o.value(QStringLiteral("active_only")).toBool(true);

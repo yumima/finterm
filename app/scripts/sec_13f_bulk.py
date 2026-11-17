@@ -1069,6 +1069,9 @@ def top_firms(limit=50):
              ORDER BY b.stock_value DESC LIMIT ?
         """, (floor, int(limit))).fetchall()
         firms_out = []
+        corrected, pending = {}, False
+        recent = [q for (q,) in con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 3")]
+        sync_pairs = set(zip(recent[1:], recent[:-1]))  # the pairs sync() keeps corrected
         for cik, manager, quarter, accession, value, count in newest:
             prior = con.execute(
                 "SELECT quarter, accession, stock_value, stock_count FROM books "
@@ -1084,13 +1087,22 @@ def top_firms(limit=50):
                 # stores — started from here it ran past the screen's time
                 # limit and the ranking came back empty. The sync keeps them
                 # current and the screen reloads when a pass ends.
-                row["moves"] = _book_moves(con, accession, prior[1], compute=False)
+                # No corrections stored for this pair yet (a new index, a
+                # quarter just read): without them a 10:1 split reads as a
+                # tenfold purchase, so the moves wait for the sync as well.
+                pair = (prior[0], quarter)
+                if pair not in corrected:
+                    corrected[pair] = _adjustments_stored(con, *pair)
+                if corrected[pair]:
+                    row["moves"] = _book_moves(con, accession, prior[1], compute=False)
+                elif pair in sync_pairs:
+                    pending = True  # the sync computes this pair: ask for a pass
             firms_out.append(row)
         newest_q = max((f["quarter"] for f in firms_out), default=None)
         partial = {r[0] for r in con.execute(
             "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1").fetchall()}
         return {"firms": firms_out, "newest_quarter": newest_q,
-                "partial_quarters": sorted(partial)}
+                "partial_quarters": sorted(partial), "pending": pending}
     finally:
         con.close()
 
@@ -1904,6 +1916,13 @@ def prior_universe(con, prior_q):
     return _universe_cache[prior_q]
 
 
+def _adjustments_stored(con, prior_q, cur_q):
+    """Whether corrections for this pair have ever been computed (current or not)."""
+    _adj_tables(con)
+    return con.execute("SELECT 1 FROM adj_runs WHERE prior_quarter=? AND quarter=?",
+                       (prior_q, cur_q)).fetchone() is not None
+
+
 def _adjustments(con, prior_q, cur_q, compute=True, status=None):
     """({cusip: split factor}, {new_cusip: (old_cusip, ratio)}) for a pair.
 
@@ -2003,14 +2022,20 @@ def plausible_move(flow, book, prior_book):
     return abs(flow) <= max(book or 0.0, prior_book or 0.0)
 
 
+INCOMPLETE = "incomplete|"   # stamp prefix: stored, but a split lookup went unanswered
+
+
 def _big_moves_stored(con):
-    """Whether a big-moves scan is stored, current or not: its rows, or the
-    stamp of a scan that found none."""
+    """Whether a big-moves scan in today's layout is stored, current or not.
+    The stamp row says so — every finished scan leaves one, even a scan that
+    found no moves or could not finish its split lookups."""
     try:
-        return (con.execute("SELECT 1 FROM big_moves LIMIT 1").fetchone() is not None
-                or con.execute("SELECT 1 FROM big_moves_run LIMIT 1").fetchone() is not None)
+        cols = [r[1] for r in con.execute("PRAGMA table_info(big_moves)")]
+        if "filed" not in cols:
+            return False  # no table, or one from before the filing date was kept: the scan rebuilds it
+        return con.execute("SELECT 1 FROM big_moves_run LIMIT 1").fetchone() is not None
     except sqlite3.OperationalError:
-        return False  # no table yet
+        return False
 
 
 def _big_moves_stamp(con):
@@ -2022,17 +2047,14 @@ def _big_moves_stamp(con):
 
 
 def _big_moves_overdue(con):
-    """A stored scan from another state of the index — an earlier pass was cut
-    short before its scan, tickers were rechecked, or the rules changed. A
-    scan stored WITHOUT a stamp (a split lookup went unanswered) is not
-    overdue: it is redone when the next filing arrives, not on every pass."""
-    try:
-        row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
-    except sqlite3.OperationalError:
-        return True  # never scanned
-    if row is None:
-        return not _big_moves_stored(con)
-    return row[0] != _big_moves_stamp(con)
+    """No stored scan, or one from another state of the index — an earlier
+    pass was cut short before its scan, tickers were rechecked, or the rules
+    changed. A scan stored as incomplete for THIS state is not overdue: its
+    lookups are tried again when the next filing arrives, not on every pass."""
+    if not _big_moves_stored(con):
+        return True
+    row = con.execute("SELECT stamp FROM big_moves_run").fetchone()
+    return row[0] not in (_big_moves_stamp(con), INCOMPLETE + _big_moves_stamp(con))
 
 
 def _ensure_big_moves(con, progress=None):
@@ -2102,8 +2124,11 @@ def _ensure_big_moves(con, progress=None):
     con.execute("DELETE FROM big_moves")
     con.executemany("INSERT INTO big_moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", found)
     con.execute("DELETE FROM big_moves_run")
-    if adj_status["complete"]:
-        con.execute("INSERT INTO big_moves_run VALUES (?)", (stamp,))
+    # Always a stamp: its presence is what says a scan is stored. An
+    # incomplete one never equals the index's stamp, so the next call that is
+    # allowed to scan does.
+    con.execute("INSERT INTO big_moves_run VALUES (?)",
+                (stamp if adj_status["complete"] else INCOMPLETE + stamp,))
     con.commit()
     return True
 
@@ -2189,12 +2214,13 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
                 ticker TEXT, kind TEXT, shares REAL, prior_shares REAL, flow REAL, value REAL,
                 book_value REAL, position_count INTEGER, prior_book_value REAL, accession TEXT, filed TEXT)""")
         elif not _big_moves_stored(con):
-            # Nothing stored yet (a new index): the one time the screen waits
-            # for the scan. After that it reads what the sync last stored —
-            # the scan is due again after every filing the sync reads, takes
-            # minutes, and run from here it was killed at the screen's time
-            # limit with nothing to show.
-            _ensure_big_moves(con)
+            # Nothing stored yet (a new index, or a table from an older
+            # layout). The scan takes minutes on a full index — longer than
+            # this screen waits — so it is the sync's to run, never ours;
+            # `pending` asks the app to start a pass now.
+            return {"rows": [], "pending": True,
+                    "error": "Big moves are being worked out from the 13F index — a few minutes on a "
+                             "new index. This tab fills in when the scan finishes."}
         where = ["1=1"]
         if side == "buys":
             where.append("flow > 0")

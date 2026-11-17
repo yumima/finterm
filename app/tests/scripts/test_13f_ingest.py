@@ -333,6 +333,23 @@ def main():
             check("screens: a ranked fund has a prior filing to compare (fixture)",
                   any(f.get("prior_quarter") for f in tf.get("firms", [])), str(tf)[:200])
             check("screens: the fund ranking computes no corrections", calls["adj"] == 0)
+            # No corrections stored for the pair: a split would read as a
+            # purchase, so the moves are withheld rather than shown wrong.
+            c6 = bulk.connect()
+            bulk._adj_tables(c6)
+            c6.execute("DELETE FROM adj_runs")
+            c6.commit()
+            tf1 = bulk.top_firms(50)
+            withheld = [f for f in tf1["firms"] if f.get("prior_quarter") and "moves" not in f]
+            check("screens: moves are withheld until the pair's corrections exist",
+                  bool(withheld) and tf1.get("pending") is True, str(tf1)[:300])
+            c6.execute("INSERT OR REPLACE INTO adj_runs VALUES ('2025-12-31', '2026-03-31', 'any')")
+            c6.commit()
+            c6.close()
+            tf2 = bulk.top_firms(50)
+            check("screens: with corrections stored the moves are shown",
+                  any("moves" in f for f in tf2["firms"] if f.get("prior_quarter")) and not tf2.get("pending"),
+                  str(tf2)[:300])
         except AssertionError as e:
             check("screens: the fund ranking computes no corrections", False, str(e))
         finally:
@@ -341,19 +358,54 @@ def main():
         bulk._ensure_big_moves = _count_scan
         real_ranges, bulk.price_ranges = bulk.price_ranges, (lambda *a, **k: {})   # no network here
         try:
-            bulk.big_moves()   # nothing stored yet: the one scan a screen waits for
-            first = calls["scan"]
             c3 = bulk.connect()
-            c3.execute("INSERT INTO big_moves (cik, manager, issuer, ticker, kind, flow, value, book_value, "
-                       "prior_book_value, position_count) VALUES ('1','M','ISSUER CORP','ISS','added',5e7,5e7,1e9,1e9,10)")
-            c3.execute("DELETE FROM big_moves_run")   # as after a filing the sync stored: due again
+            c3.execute("DROP TABLE IF EXISTS big_moves")
+            c3.execute("DROP TABLE IF EXISTS big_moves_run")
             c3.commit()
             c3.close()
+            first = bulk.big_moves()   # nothing stored: the scan is the sync's, never the screen's
+            check("screens: big moves with nothing stored asks for a sync pass and does not scan",
+                  calls["scan"] == 0 and first.get("pending") is True and first.get("error") and first["rows"] == [],
+                  f"scans={calls['scan']} {str(first)[:120]}")
+            c3 = bulk.connect()
+            real_scan(c3)             # what the sync does
+            c3.execute("INSERT INTO big_moves (cik, manager, issuer, ticker, kind, flow, value, book_value, "
+                       "prior_book_value, position_count) VALUES ('1','M','ISSUER CORP','ISS','added',5e7,5e7,1e9,1e9,10)")
+            c3.execute("UPDATE big_moves_run SET stamp = 'another state of the index'")   # due again
+            c3.commit()
+            overdue = bulk._big_moves_overdue(c3)
+            c3.close()
             bm = bulk.big_moves()
-            check("screens: big moves scans once when nothing is stored", first == 1, str(first))
             check("screens: big moves reads the stored scan even when it is due again",
-                  calls["scan"] == first and any(r["ticker"] == "ISS" for r in bm.get("rows", [])),
+                  calls["scan"] == 0 and not bm.get("pending") and any(r["ticker"] == "ISS" for r in bm.get("rows", [])),
                   f"scans={calls['scan']} rows={len(bm.get('rows', []))}")
+            check("sync: a scan from another state of the index is overdue", overdue is True)
+
+            # A scan that could not finish its split lookups and found nothing
+            # is still a stored scan: not redone by every screen open and pass.
+            c3 = bulk.connect()
+            c3.execute("DELETE FROM big_moves")
+            c3.execute("UPDATE big_moves_run SET stamp = ?", (bulk.INCOMPLETE + bulk._big_moves_stamp(c3),))
+            c3.commit()
+            check("sync: an incomplete scan of THIS state is stored, and not overdue",
+                  bulk._big_moves_stored(c3) and bulk._big_moves_overdue(c3) is False)
+            c3.execute("UPDATE big_moves_run SET stamp = ?", (bulk.INCOMPLETE + "an older state",))
+            c3.commit()
+            check("sync: an incomplete scan of another state is overdue", bulk._big_moves_overdue(c3) is True)
+
+            # A table from before the filing date was kept: rebuilt by the scan, not read.
+            c3.execute("DROP TABLE big_moves")
+            c3.execute("CREATE TABLE big_moves (cik TEXT, flow REAL)")
+            c3.execute("INSERT INTO big_moves VALUES ('1', 5e7)")
+            c3.commit()
+            c3.close()
+            old_layout = bulk.big_moves()
+            check("screens: a table in an older layout is not read", old_layout.get("pending") is True,
+                  str(old_layout)[:120])
+            c3 = bulk.connect()
+            real_scan(c3)
+            c3.close()
+            check("sync: the scan rebuilds it", not bulk.big_moves().get("pending"))
         finally:
             bulk._ensure_big_moves = real_scan
             bulk.price_ranges = real_ranges

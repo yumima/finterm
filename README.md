@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`25cbe03e6`](https://github.com/yumima/finterm/commit/25cbe03e6) big moves: each move stored once when two scans overlap
 - [`680bdbe7d`](https://github.com/yumima/finterm/commit/680bdbe7d) research: after-hours and pre-market sessions on the overview
 - [`51deba8f2`](https://github.com/yumima/finterm/commit/51deba8f2) ownership: Largest Funds and Big Moves read the stored scan instead of redoing it
 - [`08eda5c37`](https://github.com/yumima/finterm/commit/08eda5c37) alpha arena: the script loads again; numpy capped at the release a fresh install was checked on

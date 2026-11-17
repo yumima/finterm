@@ -116,6 +116,32 @@ a5, p5 = es.summarise(BARS, None, now)
 check("no daily frame: prices stand, percentages do not",
       a5 and p5 and a5["pct"] is None and p5["pct"] is None and a5["avg_volume"] is None)
 
+# Tuesday pre-market while the daily frame still ends on Friday: Friday's
+# close is not "the previous close", and the percentage would carry Monday.
+tue = minute_bars([(MON, "09:30", 30, 27.80, -0.04), (MON, "16:00", 30, 26.45, 0.0), (TUE, "04:00", 20, 26.30, 0.0)])
+_, p9 = es.summarise(tue, lagging, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
+check("pre-market with a daily frame a day behind carries no percentage",
+      p9 and p9["date"] == TUE.isoformat() and p9["pct"] is None, str(p9 and (p9["ref_date"], p9["pct"])))
+_, p10 = es.summarise(tue, DAILY, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
+check("pre-market against Monday's close once the daily frame has it",
+      p10 and p10["ref_date"] == MON.isoformat() and p10["live"], str(p10 and p10["ref_date"]))
+
+# ── early closes: after-hours runs 13:00-17:00 ───────────────────────────────
+for d, want in [(date(2026, 11, 27), True), (date(2027, 11, 26), True), (date(2026, 11, 26), False),
+                (date(2026, 11, 20), False), (date(2026, 12, 24), True), (date(2027, 12, 24), False),
+                (date(2028, 7, 3), True), (date(2026, 7, 3), False), (MON, False)]:
+    check(f"early close on {d}: {want}", es.is_early_close(d) is want)
+BF = date(2026, 11, 27)
+half = minute_bars([(BF, "09:30", 30, 50.0, 0.0), (BF, "13:00", 40, 50.0, 0.01)])
+half_daily = daily_bars(EARLIER + [(date(2026, 11, 25), 49.0, 1e6), (BF, 50.0, 5e5)])
+ah, _ = es.summarise(half, half_daily, datetime(2026, 11, 27, 13, 30, tzinfo=ET))
+check("half day: trades after 13:00 are the after-hours session, and it is live",
+      ah and ah["date"] == BF.isoformat() and ah["minutes"] == 40 and ah["live"], str(ah))
+ah2, _ = es.summarise(half, half_daily, datetime(2026, 11, 27, 18, 0, tzinfo=ET))
+check("half day: not live at 18:00", ah2 and not ah2["live"])
+normal_mid, _ = es.summarise(BARS, DAILY, datetime(2026, 11, 16, 13, 30, tzinfo=ET))
+check("normal day: 13:30 is not after-hours", normal_mid and not normal_mid["live"])
+
 # ── daily labels are dates, in any zone ──────────────────────────────────────
 for tz in ("UTC", "America/New_York", "Asia/Tokyo"):
     a6, p6 = es.summarise(BARS, daily_bars(EARLIER + [(FRI, 28.88, 2e6), (MON, 26.45, 4e6)], tz=tz), now)
@@ -127,12 +153,25 @@ stray = BARS.copy()
 post = [i for i, t in enumerate(stray.index.tz_convert(ET)) if t.date() == MON and t.hour >= 16]
 for col in ("Open", "High", "Low", "Close"):
     stray.iloc[post[20], stray.columns.get_loc(col)] = 28.88     # a cross at Friday's close
-    stray.iloc[post[-1], stray.columns.get_loc(col)] = 24.60     # a bad last print
+    stray.iloc[post[21], stray.columns.get_loc(col)] = 28.88     # ... two minutes running
+    stray.iloc[post[-2], stray.columns.get_loc(col)] = 24.60     # a bad print just before the end
 stray.iloc[post[30], stray.columns.get_loc("High")] = 31.00      # a stray high inside a sound minute
 a7, _ = es.summarise(stray, DAILY, now)
 check("a stray print is not the session's high", a7 and a7["high"] < 27.2, str(a7 and a7["high"]))
 check("a stray print is not the session's low", a7 and a7["low"] > 26.0, str(a7 and a7["low"]))
-check("a stray print is not the last price", a7 and abs(a7["last"] - 26.566) < 0.01, str(a7 and a7["last"]))
+check("the last price is the last bar's", a7 and abs(a7["last"] - 26.568) < 1e-6, str(a7 and a7["last"]))
+
+# The move the panel exists for: it must show from its first minute, not
+# after enough bars have piled up to outvote the old price.
+for n_new in (1, 2, 3):
+    jump = minute_bars([(MON, "16:00", 20, 26.45, 0.0), (MON, "16:20", n_new, 28.10, 0.0)])
+    aj, _ = es.summarise(jump, DAILY, datetime(2026, 11, 16, 16, 25, tzinfo=ET))
+    check(f"a 6% jump shows {n_new} minute(s) after it happens",
+          aj and abs(aj["last"] - 28.10) < 1e-9 and aj["high"] > 28.0, str(aj and (aj["last"], aj["high"])))
+ramp = minute_bars([(MON, "16:00", 10, 26.45, 0.0), (MON, "16:10", 12, 26.70, 0.27)])   # +1% a minute
+ar, _ = es.summarise(ramp, DAILY, now)
+check("a 1%-a-minute ramp is followed to its last bar", ar and abs(ar["last"] - (26.70 + 0.27 * 11)) < 1e-6,
+      str(ar and ar["last"]))
 
 # A real move is not a stray print: the neighbours move with it.
 gap = minute_bars([(MON, "16:00", 30, 26.45, 0.0), (MON, "16:30", 30, 29.50, 0.01)])
@@ -172,6 +211,10 @@ check("another day's range and volume change nothing", s2["high"] == 26.90 and s
 s3 = dict(sess, last=27.50, high=27.60)
 es.apply_nasdaq(s3, n)
 check("a range that would exclude the last price is not applied", s3["high"] == 27.60 and s3["low"] == 26.40)
+s5 = dict(sess, high=27.90, low=26.40, live=True)
+es.apply_nasdaq(s5, dict(n, high=26.88, low=26.45))
+check("a live session's range is not narrowed by a summary that runs behind",
+      s5["high"] == 27.90 and s5["low"] == 26.40 and s5["volume"] == 930942.0, str(s5))
 s4 = dict(sess)
 es.apply_nasdaq(s4, None)
 check("no Nasdaq answer leaves the prices alone", s4["high"] == 26.90 and s4["volume"] is None)
@@ -179,21 +222,58 @@ check("no Nasdaq answer leaves the prices alone", s4["high"] == 26.90 and s4["vo
 # ── the volume is kept past midnight, per session ────────────────────────────
 import tempfile
 os.environ["FINTERM_DATA_DIR"] = tempfile.mkdtemp(prefix="extvol")
-seen = {"date": MON.isoformat(), "volume": 930942.0}
-es.remember_volume("IONQ", "post", seen)
-later = {"date": MON.isoformat(), "volume": None}
-es.remember_volume("IONQ", "post", later)
-check("a volume seen before midnight is recalled after Nasdaq blanks it", later["volume"] == 930942.0, str(later))
-for label, args in [("another session's", ("IONQ", "pre", {"date": MON.isoformat(), "volume": None})),
-                    ("another day's", ("IONQ", "post", {"date": TUE.isoformat(), "volume": None})),
-                    ("another symbol's", ("AAPL", "post", {"date": MON.isoformat(), "volume": None}))]:
-    es.remember_volume(*args)
-    check(f"{label} volume is not recalled for this one", args[2]["volume"] is None, str(args[2]))
-grown = {"date": MON.isoformat(), "volume": 1_200_000.0}
-es.remember_volume("IONQ", "post", grown)
-again = {"date": MON.isoformat(), "volume": None}
-es.remember_volume("IONQ", "post", again)
-check("a later reading of a live session replaces the earlier one", again["volume"] == 1_200_000.0)
+asks = []
+
+
+def feed(answer):
+    def ask(symbol, market):
+        asks.append((symbol, market))
+        return answer
+    return ask
+
+
+def sess_of(day=MON, live=False):
+    return {"date": day.isoformat(), "live": live, "last": 26.57, "high": 26.90, "low": 26.40,
+            "volume": None, "volume_partial": False}
+
+
+# Read while it trades, then gone by the next look: a floor, marked as one.
+s_live = sess_of(live=True)
+es.add_volume("IONQ", "post", s_live, ask=feed(dict(n, volume=200000.0)), now=1000)
+check("live: volume read", s_live["volume"] == 200000.0 and not s_live["volume_partial"])
+s_next = sess_of()
+es.add_volume("IONQ", "post", s_next, ask=feed(None), now=2000)
+check("a mid-session reading is recalled as partial, not as the session's total",
+      s_next["volume"] == 200000.0 and s_next["volume_partial"] is True, str(s_next))
+
+# Read after the session ended: final, and never asked for again.
+s_done = sess_of()
+es.add_volume("AAPL", "post", s_done, ask=feed(dict(n)), now=1000)
+check("finished: volume read and range tightened", s_done["volume"] == 930942.0 and s_done["high"] == 26.88)
+asks.clear()
+s_again = sess_of()
+es.add_volume("AAPL", "post", s_again, ask=feed(None), now=1100)
+check("a finished session with its total stored is not asked about again",
+      asks == [] and s_again["volume"] == 930942.0 and not s_again["volume_partial"] and s_again["high"] == 26.88,
+      f"asks={asks} {s_again}")
+es.remember("AAPL", "post", MON.isoformat(), dict(n, volume=5.0), final=False)
+check("a final reading is not replaced by a partial one", es.recall("AAPL", "post", MON.isoformat())["volume"] == 930942.0)
+
+# Finished, blanked, nothing stored: asked, then left alone for a while.
+asks.clear()
+for t_now in (1000, 1060, 1120):
+    es.add_volume("MSFT", "pre", sess_of(), ask=feed(None), now=t_now)
+check("a blanked session is asked about once, not every minute", len(asks) == 1, str(asks))
+es.add_volume("MSFT", "pre", sess_of(), ask=feed(None), now=1000 + es._REASK_SECONDS + 1)
+check("... and again after a while", len(asks) == 2, str(asks))
+asks.clear()
+for t_now in (1000, 1060):
+    es.add_volume("MSFT", "post", sess_of(live=True), ask=feed(None), now=t_now)
+check("a live session is asked about every time", len(asks) == 2, str(asks))
+
+for label, args in [("another session's", ("IONQ", "pre", MON)), ("another day's", ("IONQ", "post", TUE)),
+                    ("another symbol's", ("NVDA", "post", MON))]:
+    check(f"{label} volume is not recalled for this one", es.recall(args[0], args[1], args[2].isoformat()) is None)
 
 # ── which symbols ────────────────────────────────────────────────────────────
 for sym, want in [("AAPL", True), ("SPY", True), ("BRK-B", True), ("F", True), ("BRK.B", False),

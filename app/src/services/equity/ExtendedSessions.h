@@ -34,6 +34,7 @@ struct ExtSession {
     double low = std::numeric_limits<double>::quiet_NaN();
     int minutes = 0; ///< minutes of the session with at least one print
     double volume = std::numeric_limits<double>::quiet_NaN();
+    bool volume_partial = false; ///< read while the session traded; the total was never seen
     double avg_volume = std::numeric_limits<double>::quiet_NaN(); ///< average FULL-day volume, 20 sessions
 
     /// The session's volume as a share of an average full day, in percent.
@@ -86,6 +87,7 @@ inline ExtSession session(const QJsonValue& v) {
     const double m = num(o, "minutes");
     s.minutes = std::isfinite(m) ? static_cast<int>(m) : 0;
     s.volume = num(o, "volume");
+    s.volume_partial = o.value(QLatin1String("volume_partial")).toBool();
     s.avg_volume = num(o, "avg_volume");
     return s;
 }

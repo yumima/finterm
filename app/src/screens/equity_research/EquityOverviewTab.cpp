@@ -1040,6 +1040,16 @@ void EquityOverviewTab::fetch_extended_sessions() {
         }
         ext_sessions_ = services::equity::parse_extended_sessions(r);
         ext_answered_ = true;
+        // An instrument with no extended session will not grow one: stop
+        // asking. One that simply has not traded outside regular hours lately
+        // (a fund priced once a day, a thin listing) is looked at now and then.
+        if (ext_timer_) {
+            const bool any = ext_sessions_.after_hours.valid || ext_sessions_.pre_market.valid;
+            if (ext_sessions_.unsupported)
+                ext_timer_->stop();
+            else
+                ext_timer_->start(any ? 60 * 1000 : 10 * 60 * 1000);
+        }
         render_extended_sessions();
     });
 }
@@ -1076,9 +1086,15 @@ void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::Ex
     b.range->setText(std::isfinite(s.low) && std::isfinite(s.high)
                          ? QString("%1 \u2013 %2").arg(fmt_price(s.low), fmt_price(s.high))
                          : ui::formatting::placeholder());
-    b.volume->setText(fmt_large(s.volume));
+    // A partial reading is a floor, and is shown as one.
+    const QString more = s.volume_partial && std::isfinite(s.volume) ? QStringLiteral("+") : QString();
+    b.volume->setText(fmt_large(s.volume) + more);
+    b.volume->setToolTip(s.volume_partial
+                             ? QStringLiteral("At least this much: read while the session was still trading,\n"
+                                              "and its total was gone from the source by the next look.")
+                             : QString());
     const double share = s.volume_pct_of_day();
-    b.volume_share->setText(std::isfinite(share) ? QString::number(share, 'f', share < 10 ? 2 : 1) + "%"
+    b.volume_share->setText(std::isfinite(share) ? QString::number(share, 'f', share < 10 ? 2 : 1) + "%" + more
                                                  : ui::formatting::placeholder());
 }
 

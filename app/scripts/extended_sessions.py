@@ -14,6 +14,8 @@ and each session:
     high, low   the session's range
     minutes     minutes of the session in which the stock printed at all
     volume      shares traded in the session, or None
+    volume_partial  True when `volume` was read mid-session and the session's
+                total was never seen (Nasdaq blanks it at midnight ET)
     avg_volume  average full-day volume over the previous 20 sessions, or None
 
 Two sources, because neither has the whole picture:
@@ -46,6 +48,30 @@ PRE_OPEN = _time(4, 0)
 REG_OPEN = _time(9, 30)
 REG_CLOSE = _time(16, 0)
 POST_CLOSE = _time(20, 0)
+
+EARLY_CLOSE = _time(13, 0)
+EARLY_POST_CLOSE = _time(17, 0)
+
+
+def is_early_close(day):
+    """NYSE/Nasdaq 13:00 closes: the day after Thanksgiving, Christmas Eve and
+    3 July, when they are trading days. After-hours then runs 13:00-17:00."""
+    if day.weekday() >= 5:
+        return False
+    if day.month == 11 and day.weekday() == 4:
+        first = day.replace(day=1)
+        fourth_thursday = 1 + (3 - first.weekday()) % 7 + 21
+        return day.day == fourth_thursday + 1
+    if (day.month, day.day) == (12, 24):
+        return day.weekday() != 4   # a Friday 24th is the observed holiday itself
+    if (day.month, day.day) == (7, 3):
+        return day.weekday() != 4   # likewise when the 4th falls on a Saturday
+    return False
+
+
+def post_window(day):
+    return (EARLY_CLOSE, EARLY_POST_CLOSE) if is_early_close(day) else (REG_CLOSE, POST_CLOSE)
+
 
 AVG_VOLUME_DAYS = 20
 # Nasdaq's range and Yahoo's must describe the same session before Nasdaq's
@@ -98,30 +124,38 @@ def _daily_rows(daily):
     return out
 
 
-def _session(bars, lo, hi):
-    """The most recent ET date with bars in [lo, hi), as (date, frame) or None."""
-    t = bars["_t"]
-    part = bars[(t >= lo) & (t < hi)]
-    part = part[part["Close"].notna()]
-    if part.empty:
-        return None
-    day = part["_d"].iloc[-1]
-    return day, part[part["_d"] == day]
+def _session(bars, window):
+    """The most recent ET date with bars inside its own window, as (date,
+    frame) or None. `window(day)` gives that day's (start, end)."""
+    bars = bars[bars["Close"].notna()]
+    for day in sorted(set(bars["_d"]), reverse=True):
+        lo, hi = window(day)
+        part = bars[(bars["_d"] == day) & (bars["_t"] >= lo) & (bars["_t"] < hi)]
+        if not part.empty:
+            return day, part
+    return None
 
 
 def _without_stray_prints(part):
-    """Drop minutes whose price sits away from the minutes around them.
+    """Drop minutes whose price stands apart from the minutes on BOTH sides.
 
     Extended-hours tapes carry trades reported late at another moment's price
     (a prior-reference-price cross prints hours later at the old close) and
     plain bad prints. One of them as the session's high — SPY "ranging" 689 to
-    754 around a 740 price — is not a range anybody could have traded. A real
-    move drags its neighbours with it; a stray print stands alone."""
+    754 around a 740 price — is not a range anybody could have traded.
+
+    A stray print comes back: the minutes after it are where the minutes
+    before it were. A move does not — after an earnings jump the following
+    minutes agree with it, so it is kept from its first bar. The newest bar
+    has nothing after it and cannot be judged; it is kept, because holding
+    back a real jump for minutes is worse than showing one bad print for one."""
     if len(part) < 5:
         return part
     close = part["Close"]
-    around = close.rolling(11, center=True, min_periods=3).median()
-    keep = ((close / around - 1.0).abs() <= STRAY_PRINT)
+    before = close.shift(1).rolling(5, min_periods=1).median()
+    after = close[::-1].shift(1).rolling(5, min_periods=1).median()[::-1]
+    stray = ((close / before - 1.0).abs() > STRAY_PRINT) & ((close / after - 1.0).abs() > STRAY_PRINT)
+    keep = ~stray.fillna(False)
     return part[keep] if keep.any() else part
 
 
@@ -144,7 +178,7 @@ def _summary(day, part, ref, daily_rows, live):
         "change": None, "pct": None,
         "high": high, "low": low,
         "minutes": int(len(part)),
-        "volume": None, "avg_volume": None,
+        "volume": None, "volume_partial": False, "avg_volume": None,
     }
     if ref is not None:
         ref_date, ref_close = ref
@@ -179,21 +213,29 @@ def summarise(bars, daily, now_et):
     now_t = now_et.time()
 
     after = None
-    got = _session(bars, REG_CLOSE, POST_CLOSE)
+    got = _session(bars, post_window)
     if got:
         day, part = got
         # Measured against that day's own official close. No such bar (the
         # daily frame lags, or the symbol did not trade the regular session)
         # means no percentage — never some other day's close.
         ref = next(((d, c) for d, c, _ in rows if d == day), None)
-        after = _summary(day, part, ref, rows, day == today and REG_CLOSE <= now_t < POST_CLOSE)
+        lo, hi = post_window(day)
+        after = _summary(day, part, ref, rows, day == today and lo <= now_t < hi)
 
     pre = None
-    got = _session(bars, PRE_OPEN, REG_OPEN)
+    got = _session(bars, lambda _day: (PRE_OPEN, REG_OPEN))
     if got:
         day, part = got
         before = [(d, c) for d, c, _ in rows if d < day]
         ref = before[-1] if before else None
+        # It has to be the close of the trading day just before. The minute
+        # bars know which day that was; a daily frame that has not caught up
+        # would hand over an older close and fold a whole day's move into
+        # "pre-market".
+        earlier = [d for d in set(bars["_d"]) if d < day]
+        if ref is not None and earlier and ref[0] != max(earlier):
+            ref = None
         pre = _summary(day, part, ref, rows, day == today and PRE_OPEN <= now_t < REG_OPEN)
     return after, pre
 
@@ -259,10 +301,14 @@ def apply_nasdaq(session, nasdaq):
 
     Both tapes carry stray prints, and not the same ones. A stray print can
     only WIDEN a range, so of two readings of the same session the lower high
-    and the higher low are the better ones — taken only when Nasdaq states the
-    session's date and the result still holds the last price."""
+    and the higher low are the better ones — taken only for a finished session,
+    when Nasdaq states its date and the result still holds the last price."""
     session["volume"] = volume_for(session, nasdaq)
     if not nasdaq or nasdaq.get("date") is None or nasdaq["date"].isoformat() != session["date"]:
+        return
+    # Only for a finished session. While it trades, Nasdaq's summary runs
+    # behind the bars, and its "lower high" is simply a high it has not seen yet.
+    if session.get("live"):
         return
     high, low = session.get("high"), session.get("low")
     nh, nl = nasdaq.get("high"), nasdaq.get("low")
@@ -299,40 +345,85 @@ def _nasdaq(symbol, market):
 #
 # Nasdaq holds a session's summary only until midnight ET, then blanks it until
 # the next one opens — so by the morning, last evening's after-hours volume is
-# gone from every free source. What was seen while it was there is kept here.
-# A symbol nobody looked at before midnight has no volume the next day: a dash.
+# gone from every free source. What was seen while it was there is kept here,
+# marked final when it was read after the session ended and partial when the
+# session was still trading. A symbol nobody looked at before midnight has no
+# volume the next day: a dash.
 
 _KEEP_DAYS = 10
+_REASK_SECONDS = 15 * 60
+_asked = {}   # (symbol, market, day) -> when a finished session was last asked about in vain
 
 
 def _store():
     import sqlite3
     from finterm_paths import market_data_path
     con = sqlite3.connect(market_data_path("extended_volume.sqlite"), timeout=5)
-    con.execute("CREATE TABLE IF NOT EXISTS volume (symbol TEXT, market TEXT, day TEXT, volume REAL, "
-                "PRIMARY KEY (symbol, market, day))")
+    con.execute("CREATE TABLE IF NOT EXISTS session_volume (symbol TEXT, market TEXT, day TEXT, "
+                "volume REAL, high REAL, low REAL, final INTEGER, PRIMARY KEY (symbol, market, day))")
     return con
 
 
-def remember_volume(symbol, market, session):
-    """Store the session's volume if it has one; otherwise recall a stored one."""
+def recall(symbol, market, day):
+    """{volume, high, low, final} stored for that session, or None."""
     try:
         con = _store()
         try:
-            key = (symbol, market, session["date"])
-            if session.get("volume") is not None:
-                # A live session's volume only grows; the last reading wins.
-                con.execute("INSERT OR REPLACE INTO volume VALUES (?,?,?,?)", key + (session["volume"],))
-                con.execute("DELETE FROM volume WHERE day < date(?, ?)", (session["date"], f"-{_KEEP_DAYS} days"))
-                con.commit()
-            else:
-                row = con.execute("SELECT volume FROM volume WHERE symbol=? AND market=? AND day=?", key).fetchone()
-                if row:
-                    session["volume"] = row[0]
+            row = con.execute("SELECT volume, high, low, final FROM session_volume "
+                              "WHERE symbol=? AND market=? AND day=?", (symbol, market, day)).fetchone()
         finally:
             con.close()
     except Exception:
-        pass   # the store is a convenience; the answer stands without it
+        return None   # the store is a convenience; the answer stands without it
+    return {"volume": row[0], "high": row[1], "low": row[2], "final": bool(row[3])} if row else None
+
+
+def remember(symbol, market, day, nasdaq, final):
+    try:
+        con = _store()
+        try:
+            # A final reading is never replaced by a partial one.
+            con.execute("""INSERT INTO session_volume VALUES (?,?,?,?,?,?,?)
+                           ON CONFLICT(symbol, market, day) DO UPDATE SET
+                             volume=excluded.volume, high=excluded.high, low=excluded.low, final=excluded.final
+                           WHERE excluded.final >= session_volume.final""",
+                        (symbol, market, day, nasdaq["volume"], nasdaq.get("high"), nasdaq.get("low"), int(final)))
+            con.execute("DELETE FROM session_volume WHERE day < date(?, ?)", (day, f"-{_KEEP_DAYS} days"))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
+def add_volume(symbol, market, session, ask=None, now=None):
+    """Put the session's volume (and Nasdaq's range) on it, asking Nasdaq only
+    when the answer can still be new."""
+    import time as _clock
+    ask = ask or _nasdaq
+    now = _clock.time() if now is None else now
+    day, key = session["date"], (symbol, market, session["date"])
+    stored = recall(symbol, market, day)
+    if not session["live"] and stored and stored["final"]:
+        # Finished and its total already seen: nothing left to learn.
+        apply_nasdaq(session, dict(stored, date=datetime.strptime(day, "%Y-%m-%d").date()))
+        return
+    asked = False
+    if not session["live"] and now - _asked.get(key, 0) < _REASK_SECONDS:
+        nasdaq = None   # asked a moment ago; a finished session's answer does not appear by itself
+    else:
+        nasdaq, asked = ask(symbol, market), True
+    apply_nasdaq(session, nasdaq)
+    if session["volume"] is not None:
+        remember(symbol, market, day, nasdaq, final=not session["live"])
+        _asked.pop(key, None)
+        return
+    if asked and not session["live"]:
+        _asked[key] = now   # from the asking, not from each skipped look: the wait must end
+    if stored:
+        # A reading from while it traded, and the total never seen: shown as a floor.
+        session["volume"] = stored["volume"]
+        session["volume_partial"] = True
 
 
 def fetch(symbol):
@@ -351,20 +442,24 @@ def fetch(symbol):
     except Exception as e:
         # A refused request is not "no extended trading".
         return {"error": f"extended-hours bars unavailable: {type(e).__name__}: {str(e)[:120]}"}
-    # yfinance answers a refused or rate-limited request with an EMPTY frame,
-    # not an exception. A US ticker with no minute bar at all in five sessions
-    # — regular hours included — has not been answered; "no extended trades"
-    # is a frame that has bars, none of them outside the regular session.
-    if bars is None or getattr(bars, "empty", True):
-        return {"error": "extended-hours bars unavailable: no bars returned"}
     try:
         daily = t.history(period="2mo", interval="1d", auto_adjust=False)
     except Exception:
         daily = None   # prices still stand; the percentages and the average do not
 
+    if bars is None or getattr(bars, "empty", True):
+        # yfinance answers a refused or rate-limited request with an EMPTY
+        # frame, not an exception — so an empty frame alone is not "no
+        # extended trading". But a symbol whose DAILY bars did arrive and that
+        # has no minute bar in five sessions is one that does not trade
+        # intraday at all (a mutual fund, a halted or delisted listing): an
+        # answer, and not one to ask for again every minute.
+        if daily is not None and not getattr(daily, "empty", True):
+            return dict(empty, unsupported=True)
+        return {"error": "extended-hours bars unavailable: no bars returned"}
+
     after, pre = summarise(bars, daily, now_et)
     for session, market in ((after, "post"), (pre, "pre")):
         if session:
-            apply_nasdaq(session, _nasdaq(symbol, market))
-            remember_volume(symbol, market, session)
+            add_volume(symbol, market, session)
     return dict(empty, after_hours=after, pre_market=pre)
