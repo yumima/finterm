@@ -2462,6 +2462,13 @@ def sync(progress=None, max_filings=None):
                     out["more"] = True  # a pass is capped; the next one carries on
                     break
                 r, code = _get_status(f"https://www.sec.gov/Archives/{path}")
+                for wait in (3, 10):
+                    # A large submission file times out now and then; that is
+                    # the network, not SEC refusing — try it again first.
+                    if r is not None or code not in (None, 429, 500, 502, 503, 504):
+                        break
+                    time.sleep(wait)
+                    r, code = _get_status(f"https://www.sec.gov/Archives/{path}", timeout=120)
                 if r is None and not (code in (404, 410) or code == "missing"):
                     stored_all = False  # refused or offline: this day is not finished
                     out["failed"] += 1
