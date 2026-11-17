@@ -8,6 +8,9 @@
 #include <QStringList>
 #include <QVector>
 
+#include <cmath>
+#include <limits>
+
 namespace finterm::pre_ipo {
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -110,6 +113,48 @@ struct SecondaryQuote {
     double ask_pps = 0;
     double last_pps = 0;
     double change_90d_pct = 0;
+};
+
+/// One day of a secondary-market model price.
+struct PricePoint {
+    QDate day;
+    double value = 0;
+};
+
+/// One financing event as a secondary marketplace reports it (Clarity):
+/// priced primary rounds, strategic rounds and tender offers. Clarity dates
+/// rounds to the month. Every number is NaN when not reported — a round with
+/// no stated price per share is not a $0 round.
+struct FinancingRound {
+    QDate month; // first of the closing month
+    QString series;
+    bool tender = false;
+    double raised_usd = std::numeric_limits<double>::quiet_NaN();
+    double post_money_usd = std::numeric_limits<double>::quiet_NaN();
+    double pps = std::numeric_limits<double>::quiet_NaN();
+    QStringList investors;
+};
+
+/// A secondary marketplace's daily MODEL price for a private company (the
+/// Clarity Price: built from indications and transactions on its platform).
+/// An estimate, never a trade print — the UI says so wherever it is shown.
+struct MarketQuote {
+    QString source; // "Clarity"
+    QString slug;   // the marketplace's company key
+    double price = std::numeric_limits<double>::quiet_NaN();
+    QDate as_of;
+    double chg_3m_pct = std::numeric_limits<double>::quiet_NaN();
+    double chg_6m_pct = std::numeric_limits<double>::quiet_NaN();
+    double chg_1y_pct = std::numeric_limits<double>::quiet_NaN();
+    double chg_max_pct = std::numeric_limits<double>::quiet_NaN();
+    QVector<PricePoint> points; // ascending
+    /// Last-round valuation as the marketplace's list rows state it — used only
+    /// until the company page (with its rounds) has been read.
+    double list_last_round_valuation = std::numeric_limits<double>::quiet_NaN();
+    bool c50 = false;     // member of the Clarity Liquidity Index
+    bool detailed = false; // the company page was read (rounds, history)
+    bool stale = false;    // the marketplace did not answer; last copy shown
+    bool has_price() const { return std::isfinite(price) && price > 0; }
 };
 
 /// IPO pipeline status (S-1 / F-1 family).
@@ -240,6 +285,12 @@ struct PrivateCompany {
     QVector<FundMark> fund_marks;
     QVector<SpvActivity> spv_activity; // secondary-interest SPVs targeting this name
     QVector<SecondaryQuote> secondary;
+    /// Secondary-market model price + financing history (Clarity). Rebuilt
+    /// every emit from ClarityService; `market.slug` empty = not covered.
+    MarketQuote market;
+    QVector<FinancingRound> financing; // newest first
+    QString website;
+    QString employees_band; // "5001-10000"
     S1Status s1;
     Financials fin;
     Analytics analytics;

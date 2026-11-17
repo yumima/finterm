@@ -905,7 +905,7 @@ void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) 
     } else if (screen_id == QLatin1String("pre_ipo")) {
         const QString deal = args.value("deal_id").toString(), key = args.value("key").toString();
         auto* ipo = static_cast<widgets::IpoWatchView*>(peek_->show_view(
-            QStringLiteral("pre_ipo"), QStringLiteral("IPO WATCH"), []() { return new widgets::IpoWatchView; },
+            QStringLiteral("pre_ipo"), QStringLiteral("PRIVATE MARKET"), []() { return new widgets::IpoWatchView; },
             [this, deal, key]() {
                 open_full(QStringLiteral("pre_ipo"), "ipo_watch.select", QVariantMap{{"deal_id", deal}, {"key", key}},
                           this);

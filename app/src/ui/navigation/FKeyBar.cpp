@@ -25,7 +25,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         {"portfolio", "PORTFOLIO"},
         {"ownership", "OWNERSHIP"},
         {"screener", "SCREENER"},
-        {"pre_ipo", "IPO WATCH"},
+        {"pre_ipo", "PRIVATE MARKET"},
         // "equity_research" replaced "fingpt" (which had replaced "ai_chat"):
         // the per-stock AI — both forecast engines, headline sentiment and the
         // stock chat — now lives in Equity Research's AI tab, and the global

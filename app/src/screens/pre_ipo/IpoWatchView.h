@@ -1,11 +1,22 @@
 #pragma once
-// IpoWatchView — Bloomberg-style IPO research terminal.
+// IpoWatchView — the PRIVATE MARKET screen (screen id "pre_ipo").
 //
-// Lenses on one deal dataset (scripts/ipo_calendar.py — Nasdaq's calendar
-// merged per deal, staged on EDGAR, with a projected pricing date):
-//   CALENDAR    — the pipeline by projected pricing date, priced below (default)
-//   PERFORMANCE — priced deals sorted by return since IPO
-//   WATCHLIST / LOCKUPS / PRIVATE / SIGNALS — see the Lens enum
+// Modelled on Nasdaq Private Market / Hiive, with what they lack: the IPO
+// calendar, so a company can be followed from its last private round to its
+// pricing date. Two datasets:
+//   • private companies (PreIpoService): SEC Form D / N-PORT / S-1 dossiers,
+//     joined to Clarity's secondary-market MODEL price, price history and
+//     financing rounds (ClarityService);
+//   • IPO deals (scripts/ipo_calendar.py — Nasdaq's calendar merged per deal,
+//     staged on EDGAR, with a projected pricing date).
+// Lenses:
+//   MARKET       — C50 index, movers, upcoming IPOs, recent rounds (default)
+//   COMPANIES    — every private company: price, implied valuation, last
+//                  round, premium to it, fund marks, IPO status
+//   WATCHLIST    — starred companies and deals
+//   IPO CALENDAR — the pipeline by projected pricing date
+//   IPO RETURNS  — priced deals by return since IPO
+//   LOCKUPS / SIGNALS — see the Lens enum
 //
 // Layout (wide screens 2:1 and up):
 //   ┌─ title bar (lens tabs + refresh) ──────────────────────────────┐
@@ -196,7 +207,18 @@ class IpoWatchView : public QWidget {
     /// signals PreIpoService::signal_list() computes (consensus mark moves,
     /// S-1 amendment bursts, IPO-readiness jumps). Rows click through to the
     /// private dossier.
-    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups, LensPrivate, LensSignals, LensCount };
+    /// MARKET is the overview page (left_stack_ page 1); every other lens is
+    /// the table. Order = button order.
+    enum Lens {
+        LensMarket = 0,
+        LensPrivate, // "COMPANIES"
+        LensWatchlist,
+        LensCalendar,
+        LensPerformance,
+        LensLockups,
+        LensSignals,
+        LensCount
+    };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months, TW_6Months, TW_12Months, TW_Past30Days };
     // Tab indexes for the two detail-rail tab bars — kept in sync with the
     // addTab order in build_detail_rail. Use these instead of magic numbers
@@ -264,8 +286,30 @@ class IpoWatchView : public QWidget {
     void render_performance();
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
-    void render_private();          // private-company dossier list (PreIpoService::companies)
-    void show_add_company_dialog(); // user-add a private company → PreIpoService::add_user_company
+    void render_private(); // COMPANIES: private-company list (PreIpoService::companies)
+    /// MARKET overview: C50 index + chart, movers, upcoming IPOs, recent
+    /// rounds. Rows are links (company:<id> / deal:<deal_id>).
+    void render_market();
+    void build_market_page();
+    void on_market_link(const QString& link);
+    /// Switch lens and repaint (buttons, chips, page).
+    void set_lens(Lens l);
+    /// The calendar deal for a private company (by CIK, else exact name
+    /// after the legal form), or nullptr. A company that has filed shows its
+    /// projected pricing date wherever it is listed.
+    /// `strong` = matched by CIK or a multi-word name; a one-word name match
+    /// (only a pending deal of $100M+) is weak and never proves a listing.
+    const Entry* calendar_entry_for(const pre_ipo::PrivateCompany& c, bool* strong = nullptr) const;
+    /// "EXP ~Dec 3" / "S-1 · est. Jan" / "PRICED $17" … for the IPO column;
+    /// empty when the company is not on the calendar.
+    QString ipo_cell_text(const pre_ipo::PrivateCompany& c, QString* tip, QString* color, qint64* sort_key) const;
+    /// Trading for more than a week: by SEC's listing check, the
+    /// marketplace's ticker, or a priced calendar deal. Such a company leaves
+    /// the private lists (its place is Equity Research).
+    bool company_is_listed(const pre_ipo::PrivateCompany& c) const;
+    /// Company search over the marketplace's whole list: slugs matching the
+    /// query that are not yet loaded, shown as rows that read the page.
+    QStringList marketplace_matches(int limit) const;
     void render_signals();          // cross-universe derived-signal feed (signal_list)
     /// Detail-rail render for a private company, keyed by PrivateCompany::id.
     /// Pulled out separately because the per-Entry render_detail() assumes
@@ -305,6 +349,11 @@ class IpoWatchView : public QWidget {
     /// PRICE chart host. Returns true iff a trend line was plotted (≥2 quarters);
     /// false when only a placeholder was shown (caller hides the tab).
     bool rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c);
+    /// MARKET section of the private dossier (DEAL tab top): model price,
+    /// implied valuation, last round and the premium to it, with sources.
+    QString build_private_market_html(const pre_ipo::PrivateCompany& c) const;
+    /// FINANCING HISTORY table (marketplace rounds incl. tenders).
+    QString build_financing_html(const pre_ipo::PrivateCompany& c) const;
 
     /// Holds the EDGAR dossier read until the reader stops moving. This pane
     /// renders on every selection change, so arrowing down a sixty-row list
@@ -451,7 +500,7 @@ class IpoWatchView : public QWidget {
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
     // company name for upcoming deals with no ticker yet — see starred_key().
     QSet<QString> starred_;
-    Lens active_lens_ = LensCalendar;
+    Lens active_lens_ = LensMarket;
     TimeWindow time_window_ = TW_AllUpcoming;
     // Default to UPCOMING because the screen's primary value is forward
     // pipeline research — past priced deals are the COMPS context, not the
@@ -495,7 +544,28 @@ class IpoWatchView : public QWidget {
 
     // Workspace + detail
     QSplitter* splitter_ = nullptr;
-    QTableWidget* table_ = nullptr; // single table; columns/rows change per lens
+    QStackedWidget* left_stack_ = nullptr; // 0 = table_, 1 = MARKET page
+    QTableWidget* table_ = nullptr;        // single table; columns/rows change per lens
+    QWidget* market_page_ = nullptr;
+    QLabel* market_head_ = nullptr;          // C50 level + changes
+    QWidget* market_chart_host_ = nullptr;   // RangeChart for the C50
+    QLabel* market_body_ = nullptr;          // movers / upcoming IPOs / rounds
+    int market_chart_points_ = -1;           // C50 points the chart was built from
+    QDate market_chart_last_;
+    QList<QWidget*> calendar_chips_;         // filter widgets that only mean something on deal lenses
+    /// Calendar lookup for private companies ("cik:<digits>" / "name:<norm>"
+    /// → entries_ index), rebuilt when entries_version_ moves.
+    mutable QHash<QString, int> cal_by_key_;
+    mutable quint64 cal_index_version_ = ~quint64(0);
+    quint64 entries_version_ = 0;
+    /// A marketplace page the user asked for from search: opened once it lands.
+    QString pending_market_slug_;
+    bool auto_private_opened_ = false; // MARKET opened its first company once
+    /// Read a marketplace page the search found and open it when it lands.
+    void open_market_slug(const QString& slug);
+    /// Private dossiers already re-rendered with their marketplace page (so a
+    /// later background landing does not repaint the one being read).
+    QSet<QString> shown_detailed_;
 
     // ── Detail rail (3-pane Bloomberg-style) ────────────────────────────────
     // Outer splitter children: [table_, middle_pane_, right_pane_]

@@ -939,7 +939,12 @@ def _is_spv_name(norm):
     # "opportunit" for _resolve_spv's substring test, which as a token matches
     # neither "opportunities" nor "opportunity" — so the words are listed here
     # in the forms filers actually write.
-    tokens = set(_SPV_INDICATORS) | {"opportunities", "opportunity"}
+    # Plurals and the other words feeders are named with: "Anthropic -
+    # Incepto AGI Funds, LLC" passed as Anthropic itself (2026-11-17) because
+    # only the singular "fund" was a token — and its "related persons" were
+    # shown as Anthropic's leadership.
+    tokens = set(_SPV_INDICATORS) | {"opportunities", "opportunity", "funds", "investors", "investor",
+                                     "partners", "vehicle", "vehicles"}
     tokens.discard("opportunit")
     tokens.discard("co invest")
     tokens.discard("coinvest")

@@ -4,6 +4,8 @@
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "screens/pre_ipo/PrivateMarketMath.h"
+#include "services/pre_ipo/ClarityService.h"
 
 #include <QDate>
 #include <QDateTime>
@@ -91,15 +93,10 @@ QString norm_name(const QString& s) {
 }
 
 // Slugify mirroring the Python _slug (lowercase, non-alnum→'-', trim '-').
+// One implementation: company ids and marketplace slugs are matched against
+// each other, so the two must never drift.
 QString slugify(const QString& s) {
-    QString out = s.toLower();
-    static const QRegularExpression non_alnum("[^a-z0-9]+");
-    out.replace(non_alnum, "-");
-    while (out.endsWith('-'))
-        out.chop(1);
-    while (out.startsWith('-'))
-        out.remove(0, 1);
-    return out;
+    return pm::slugify(s);
 }
 
 // Fold a duplicate company entry (`other`) into `primary`, keeping primary's
@@ -219,6 +216,9 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
     load_cursors();
     load_valuation_seed();
     schedule_next_daily_refresh();
+    // Marketplace prices land on their own clock (page reads, a second
+    // apart); each landing re-joins them onto the companies.
+    connect(&ClarityService::instance(), &ClarityService::updated, this, [this]() { emit_summary(); });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -238,6 +238,9 @@ QHash<QString, QPair<QString, QDate>> parse_listings(const QJsonObject& o) {
 } // namespace
 
 void PreIpoService::load_data() {
+    // The marketplace side loads independently of EDGAR (its own cache and
+    // clock); it is cheap when fresh, so it is asked on every open.
+    ClarityService::instance().load();
     if (loading_)
         return;
     //   1. Hydrate from disk cache (if any) and emit immediately so views
@@ -1414,21 +1417,13 @@ void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
             idx = *it;
         } else if (!s.cik.isEmpty()) {
             // S-1 filers usually aren't tracked elsewhere (Form D / N-PORT)
-            // so we create a stub in the universe. Without this, clicking
-            // a pipeline card produces no Markets dossier because the
-            // PipelineView's cik→id lookup misses.
+            // so we create a stub in the universe. Without this, an S-1
+            // filer has no private dossier to open.
             PrivateCompany stub;
             stub.cik = s.cik;
             stub.name = s.company_name;
-            // Slugify the name for the id. Keep simple — same regex as the
-            // Python form-d script's _slug.
-            static const QRegularExpression non_alnum("[^a-z0-9]+");
-            QString slug = s.company_name.toLower();
-            slug.replace(non_alnum, "-");
-            while (slug.endsWith('-'))
-                slug.chop(1);
-            while (slug.startsWith('-'))
-                slug.remove(0, 1);
+            // Slugify the name for the id (the Python form-d script's _slug).
+            const QString slug = slugify(s.company_name);
             stub.id = slug.isEmpty() ? s.cik : slug;
             stub.description = QStringLiteral("Tracked via SEC S-1 / F-1 filings");
             stub.ipo_status = IpoStatus::Filed;
@@ -1935,6 +1930,7 @@ void PreIpoService::emit_summary() {
     // stub), and apply valuations AFTER recompute_analytics (which zeroes
     // last_valuation_usd on every pass).
     seed_ensure_companies();
+    market_ensure_companies();
     // Before the join and before the emit. A load rebuilds companies_ from the
     // sweep, whose view of a company is a subset of what its own filer history
     // says; folding the EDGAR reads back in AFTER the emit left the screen
@@ -1945,6 +1941,7 @@ void PreIpoService::emit_summary() {
     recompute_analytics();
     seed_apply_valuation();
     apply_listings();
+    market_apply();
     run_listings_fetch(); // no-op unless the set of companies has changed
     PreIpoSummary summary;
     summary.companies = companies();
@@ -1961,6 +1958,204 @@ void PreIpoService::emit_summary() {
     summary.last_updated = QDateTime::currentDateTime();
     summary.loaded = (pending_bits_ == 0 && failed_bits_ == 0);
     emit data_loaded(summary);
+}
+
+// ── Secondary market ─────────────────────────────────────────────────────────
+
+void PreIpoService::market_ensure_companies() {
+    auto& cl = ClarityService::instance();
+    const QSet<QString>& universe = cl.universe();
+    if (universe.isEmpty())
+        return;
+
+    // Bind. Two rows claiming one page: a marketplace stub (added below on
+    // an earlier pass, before the SEC row for the same company arrived) is
+    // folded into the other row and removed — it carries nothing the other
+    // lacks but its id, which stays as an alias so a star on it still finds
+    // the company. Otherwise the page goes to the row with an SEC filer,
+    // else the first; the other keeps no price rather than a copy.
+    auto is_market_stub = [](const PrivateCompany& c, const QString& slug) {
+        return (c.id == slug || c.id == QStringLiteral("clarity-") + slug) && c.cik.isEmpty() && c.rounds.isEmpty() &&
+               c.fund_marks.isEmpty() && c.spv_activity.isEmpty() && !c.s1.first_filed.isValid() &&
+               c.last_valuation_usd <= 0;
+    };
+    QHash<QString, int> bound;
+    QVector<int> fold_away;
+    for (int i = 0; i < companies_.size(); ++i) {
+        auto& c = companies_[i];
+        const QString slug = pm::match_slug(c.market.slug, c.id, c.name, c.aliases, universe);
+        c.market.slug.clear();
+        if (slug.isEmpty())
+            continue;
+        const auto it = bound.constFind(slug);
+        if (it != bound.constEnd()) {
+            const int j = *it;
+            if (is_market_stub(companies_[j], slug) && !is_market_stub(c, slug)) {
+                merge_company_into(c, companies_[j]);
+                companies_[j].market.slug.clear();
+                fold_away.append(j);
+            } else if (is_market_stub(c, slug) && !is_market_stub(companies_[j], slug)) {
+                merge_company_into(companies_[j], c);
+                fold_away.append(i);
+                continue;
+            } else if (!companies_[j].cik.isEmpty() || c.cik.isEmpty()) {
+                continue;
+            } else {
+                companies_[j].market.slug.clear();
+            }
+        }
+        bound.insert(slug, i);
+        c.market.slug = slug;
+    }
+    if (!fold_away.isEmpty()) {
+        std::sort(fold_away.begin(), fold_away.end(), std::greater<int>());
+        fold_away.erase(std::unique(fold_away.begin(), fold_away.end()), fold_away.end());
+        for (int idx : fold_away)
+            companies_.removeAt(idx);
+        // Indices moved: rebuild the slug → row map.
+        bound.clear();
+        for (int i = 0; i < companies_.size(); ++i)
+            if (!companies_[i].market.slug.isEmpty())
+                bound.insert(companies_[i].market.slug, i);
+    }
+
+    // The marketplace's own names that nothing else carries: its listed rows
+    // and any page read on demand (a search hit the user opened). A name the
+    // list already has under a different slug ("Perplexity" vs the page
+    // "perplexity-ai") binds that row instead of adding a second one —
+    // exact name equality after the legal form, and only to a row that has
+    // no page yet.
+    QSet<QString> ids;
+    QHash<QString, int> unbound_by_name;
+    for (int i = 0; i < companies_.size(); ++i) {
+        const auto& c = companies_.at(i);
+        ids.insert(c.id);
+        if (!c.market.slug.isEmpty())
+            continue;
+        QStringList names{c.name};
+        names += c.aliases;
+        for (const auto& n : names) {
+            const QString k = pm::slugify(pm::strip_legal_form(n));
+            if (!k.isEmpty() && !unbound_by_name.contains(k))
+                unbound_by_name.insert(k, i);
+        }
+    }
+    auto add_stub = [&](const QString& slug, const QString& name, const QString& desc) {
+        if (slug.isEmpty() || bound.contains(slug))
+            return;
+        if (!name.isEmpty()) {
+            // "Perplexity AI" on the marketplace is "Perplexity" in the list:
+            // a trailing "AI" is the one word dropped in both directions.
+            const QString k = pm::slugify(pm::strip_legal_form(name));
+            auto it = unbound_by_name.constFind(k);
+            if (it == unbound_by_name.constEnd() && k.endsWith(QLatin1String("-ai")))
+                it = unbound_by_name.constFind(k.left(k.size() - 3));
+            if (it == unbound_by_name.constEnd())
+                it = unbound_by_name.constFind(k + QStringLiteral("-ai"));
+            if (it != unbound_by_name.constEnd() && companies_[*it].market.slug.isEmpty()) {
+                auto& c = companies_[*it];
+                c.market.slug = slug;
+                // Remembered as an alias so the next pass binds it by slug.
+                if (!c.aliases.contains(slug))
+                    c.aliases << slug;
+                bound.insert(slug, *it);
+                return;
+            }
+        }
+        PrivateCompany stub;
+        // The id IS the slug, which is what makes this idempotent: the next
+        // pass's match_slug binds it by id. A clash with an unrelated id
+        // (which, by construction, did not match this slug) gets a prefix.
+        stub.id = ids.contains(slug) ? QStringLiteral("clarity-") + slug : slug;
+        stub.name = name.isEmpty() ? pm::display_from_slug(slug) : name;
+        stub.description = desc;
+        stub.market.slug = slug;
+        stub.ipo_status = IpoStatus::Unknown;
+        bound.insert(slug, companies_.size());
+        ids.insert(stub.id);
+        companies_.append(stub);
+    };
+    for (const auto& m : cl.listed())
+        add_stub(m.slug, m.name, m.description);
+    for (auto it = cl.companies().cbegin(); it != cl.companies().cend(); ++it)
+        add_stub(it.key(), it->name, it->description);
+
+    // Keep every bound page current in the background (C50/browse names are
+    // already queued by the service itself).
+    QStringList wanted;
+    for (auto it = bound.cbegin(); it != bound.cend(); ++it)
+        wanted << it.key();
+    wanted.sort();
+    cl.want(wanted);
+}
+
+void PreIpoService::market_apply() {
+    const auto& cl = ClarityService::instance();
+    QHash<QString, const ClarityMember*> listed;
+    for (const auto& m : cl.listed())
+        listed.insert(m.slug, &m);
+    QSet<QString> c50;
+    for (const auto& m : cl.index().members)
+        c50.insert(m.slug);
+
+    for (auto& c : companies_) {
+        const QString slug = c.market.slug;
+        c.financing.clear();
+        if (slug.isEmpty()) {
+            c.market = MarketQuote{};
+            continue;
+        }
+        const auto rec = cl.companies().constFind(slug);
+        if (rec != cl.companies().constEnd()) {
+            c.market = rec->quote;
+            c.financing = rec->rounds;
+            if (c.description.isEmpty() || c.description.startsWith("Tracked via") ||
+                c.description.startsWith("Source: SEC"))
+                c.description = rec->description;
+            if (c.key_investors.isEmpty())
+                c.key_investors = rec->key_investors;
+            if (!c.founded.isValid()) {
+                const int y = rec->founded.toInt();
+                if (y > 1800 && y < 2100)
+                    c.founded = QDate(y, 1, 1);
+            }
+            if (c.hq_city.isEmpty() && !rec->hq.isEmpty()) {
+                const QStringList parts = rec->hq.split(',');
+                c.hq_city = parts.value(0).trimmed();
+                c.hq_state = parts.value(1).trimmed();
+            }
+            if (c.sector.isEmpty() && !rec->tags.isEmpty())
+                c.sector = rec->tags.first();
+            if (c.sub_sector.isEmpty() && rec->tags.size() > 1)
+                c.sub_sector = rec->tags.at(1);
+            c.website = rec->website;
+            c.employees_band = rec->employees;
+            // A marketplace that reports the company public fills in where
+            // SEC has not confirmed a listing (no CIK to check by, or the
+            // listing check has not answered — it needs a configured SEC
+            // contact). SEC's own answer, when there is one, stands.
+            if (c.listed_ticker.isEmpty() && !rec->public_ticker.isEmpty()) {
+                c.listed_ticker = rec->public_ticker;
+                c.listed_on = rec->ipo_date;
+                if (listing_state(c.listed_ticker, c.listed_on, QDate::currentDate()) == ListingState::JustListed)
+                    c.ipo_status = IpoStatus::Listed;
+            }
+            if (rec->acquired && c.ipo_status == IpoStatus::Unknown)
+                c.ipo_status = IpoStatus::Acquired;
+        } else {
+            c.market = MarketQuote{};
+            c.market.slug = slug;
+            c.market.source = QStringLiteral("Clarity");
+            if (const auto it = listed.constFind(slug); it != listed.constEnd()) {
+                c.market.price = (*it)->price;
+                c.market.chg_6m_pct = (*it)->chg_6m_pct;
+                c.market.list_last_round_valuation = (*it)->last_round_valuation;
+                if (c.description.isEmpty())
+                    c.description = (*it)->description;
+            }
+        }
+        c.market.c50 = c50.contains(slug);
+    }
 }
 
 // ── Listings ─────────────────────────────────────────────────────────────────

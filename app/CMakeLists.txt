@@ -1308,15 +1308,10 @@ set(SCREEN_SOURCES
     # Alpha Arena
     src/screens/alpha_arena/AlphaArenaScreen.cpp
 
-    # Pre-IPO / Private Market Tracking
-    src/screens/pre_ipo/CompanyListPanel.cpp
-    src/screens/pre_ipo/CompanyDetailPanel.cpp
-    src/screens/pre_ipo/IpoPipelinePanel.cpp
+    # Private Market (screen id pre_ipo): marketplace prices + SEC dossiers + IPO calendar
     src/screens/pre_ipo/PreIpoScreen.cpp
     src/screens/pre_ipo/IpoWatchView.cpp
-    src/screens/pre_ipo/views/PicksView.cpp
-    src/screens/pre_ipo/views/ScreenerView.cpp
-    src/screens/pre_ipo/views/PipelineView.cpp
+    src/screens/pre_ipo/PrivateMarketCharts.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
@@ -1333,6 +1328,7 @@ set(SCREEN_SOURCES
     src/screens/ownership/Form4Dialog.cpp
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
+    src/services/pre_ipo/ClarityService.cpp
 
     # Alternative Investments
     src/screens/alt_investments/AltInvestmentsScreen.cpp
@@ -1454,14 +1450,9 @@ set_source_files_properties(
     src/screens/algo_trading/StrategyListPanel.cpp
     src/screens/alpha_arena/AlphaArenaScreen.cpp
     src/screens/alt_investments/AltInvestmentsScreen.cpp
-    src/screens/pre_ipo/CompanyListPanel.cpp
-    src/screens/pre_ipo/CompanyDetailPanel.cpp
-    src/screens/pre_ipo/IpoPipelinePanel.cpp
     src/screens/pre_ipo/PreIpoScreen.cpp
     src/screens/pre_ipo/IpoWatchView.cpp
-    src/screens/pre_ipo/views/PicksView.cpp
-    src/screens/pre_ipo/views/ScreenerView.cpp
-    src/screens/pre_ipo/views/PipelineView.cpp
+    src/screens/pre_ipo/PrivateMarketCharts.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
     src/screens/futures/FuturesScreen.cpp
@@ -1478,6 +1469,7 @@ set_source_files_properties(
     src/screens/ownership/Form4Dialog.cpp
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
+    src/services/pre_ipo/ClarityService.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/LockScreen.cpp
     src/screens/auth/LoginScreen.cpp

@@ -157,6 +157,17 @@ class PreIpoService : public QObject {
 
     void recompute_analytics();
 
+    // ── Secondary market (ClarityService) ─────────────────────────────────────
+    /// Bind each company to its marketplace page (exact slug match — see
+    /// pm::match_slug) and add the marketplace's listed names (C50, browse
+    /// page, pages read on demand) that no SEC source carries. Idempotent:
+    /// a stub's id IS its slug, so the next pass binds it instead of adding it.
+    void market_ensure_companies();
+    /// Overlay the model price, its history and the financing rounds, and fill
+    /// descriptive fields SEC left empty. After apply_listings (a ticker the
+    /// marketplace reports stands when SEC has no CIK to check).
+    void market_apply();
+
     // ── Curated valuation seed ────────────────────────────────────────────────
     // SEC Form D / N-PORT don't disclose share price or shares outstanding, so a
     // headline post-money valuation can't be derived from filings. A small hand-

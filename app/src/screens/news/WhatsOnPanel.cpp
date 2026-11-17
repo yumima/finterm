@@ -840,7 +840,7 @@ QWidget* WhatsOnPanel::make_row(const wo::Row& r) {
             v->addWidget(fig);
         }
         row->setToolTip(item.source == wo::Item::Source::Ipo
-                            ? QStringLiteral("Open in IPO Watch\n%1")
+                            ? QStringLiteral("Open in Private Market › IPO Calendar\n%1")
                                   .arg(item.detail)
                         : !item.symbol.isEmpty()            ? QStringLiteral("Open %1 in Equity Research\n\n%2")
                                                                   .arg(item.symbol, item.detail)

@@ -62,7 +62,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"relationship_map", "Relationship Map"},
         {"derivatives", "Derivatives"},
         {"alt_investments", "Alt Investments"},
-        {"pre_ipo", "IPO WATCH"},
+        {"pre_ipo", "PRIVATE MARKET"},
         {"ownership", "Ownership"},
         {"screener", "Screener"},
         {"futures", "Futures"},

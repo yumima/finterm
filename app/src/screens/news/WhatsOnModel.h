@@ -565,7 +565,7 @@ inline QVector<Item> items_from_ipo_deals(const QJsonArray& deals, const QDate& 
                                      .arg(en.toString(lo, QStringLiteral("MMM d")),
                                           en.toString(hi, QStringLiteral("MMM d")))
                                : QStringLiteral("projected");
-            it.detail = QStringLiteral("%1 — filed, no pricing date set. IPO Watch's projection: %2\n%3")
+            it.detail = QStringLiteral("%1 — filed, no pricing date set. The IPO calendar's projection: %2\n%3")
                             .arg(company, proj.value(QLatin1String("basis")).toString(), size_line);
         }
         out.append(it);

@@ -800,6 +800,17 @@ target_link_libraries(test_ipo_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ipo_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ipo_format COMMAND test_ipo_format)
 
+# ── Private Market valuation math + marketplace slug matching ────────────────
+# An implied valuation needs the price and the share count from the same round
+# of the same source; a near-miss name must not bind another company's price.
+add_executable(test_private_market_math
+    screens/test_private_market_math.cpp
+)
+target_include_directories(test_private_market_math PRIVATE ../src)
+target_link_libraries(test_private_market_math PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_private_market_math PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME private_market_math COMMAND test_private_market_math)
+
 # ── Model-collapse detection (news briefs) ───────────────────────────────────
 # looks_degenerate() is the only thing between a collapsed local model and the
 # reading pane, and it shipped blind to the collapse mode that has fresh
@@ -1084,6 +1095,16 @@ if(Python3_Interpreter_FOUND)
     add_test(
         NAME ipo_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ipo_calendar.py
+    )
+    # Form D name → CIK must not bind a company to a feeder named after it
+    add_test(
+        NAME sec_form_d_resolve
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_sec_form_d_resolve.py
+    )
+    # Private Market: Clarity page parsers (price history, rounds, C50); absent is None, never 0
+    add_test(
+        NAME clarity_market
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_clarity_market.py
     )
     # Weekly brief: week-ahead macro + top name per screen; no vendor figures published
     add_test(
