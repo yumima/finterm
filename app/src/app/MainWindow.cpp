@@ -1520,6 +1520,15 @@ void MainWindow::on_terminal_unlocked() {
     // ran on the no-PIN path). Async — returns immediately, won't block the UI.
     try_boot_prefetch();
 
+    // The home screen is built in the background once the restored screen has
+    // painted, so the first DASHBOARD click shows its (hub-seeded) quotes at
+    // once instead of after a second of construction. A click before then
+    // builds it on the spot, as before; prebuild() is a no-op once built.
+    QTimer::singleShot(1500, this, [this]() {
+        if (dock_router_ && !locked_)
+            dock_router_->prebuild(QStringLiteral("dashboard"));
+    });
+
     emit auth.terminal_unlocked();
 }
 

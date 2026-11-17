@@ -58,6 +58,7 @@ class DashboardScreen : public QWidget {
     bool pulse_visible_ = true;
     bool layout_restored_ = false;
     bool split_sized_ = false;
+    QString applied_theme_key_; // the theme refresh_theme() last applied (skip if unchanged)
 
     QHash<QString, services::QuoteData> ticker_cache_;
     QStringList ticker_subscribed_;

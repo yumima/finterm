@@ -108,6 +108,18 @@ class DockScreenRouter : public QObject {
             materialize_screen(id);
     }
 
+    /// Build a screen ahead of its first navigation, open or not (no raise,
+    /// no focus change). For the home screen: a session reopened on another
+    /// screen used to build the Dashboard on the click — 0.8–1.4 s with
+    /// nothing painted (FFmpeg init for the video tile plus every tile),
+    /// read as "the indices take seconds to load" although their quotes were
+    /// already in the hub. Its tiles subscribe on show, so a pre-built,
+    /// hidden Dashboard costs nothing after construction.
+    void prebuild(const QString& id) {
+        if (dock_widgets_.contains(id))
+            materialize_screen(id);
+    }
+
     /// True if `id`'s dock widget is currently part of the visible layout
     /// (exists, not closed, has a dock area). Use this to decide whether
     /// a "navigate to X" gesture should preserve the split (raise) or

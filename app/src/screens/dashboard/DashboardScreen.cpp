@@ -150,11 +150,34 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
             [this](const ui::ThemeTokens&) { refresh_theme(); });
+
+    // Build the tiles on the next event-loop turn rather than on first show.
+    // The router pre-builds this screen in the background after unlock; with
+    // the restore left to showEvent, that pre-build was an empty shell and the
+    // first DASHBOARD click still spent ~1 s constructing every tile (and
+    // initialising FFmpeg for the video tile) before anything painted. Hidden
+    // tiles subscribe to nothing until shown, so this costs no data traffic.
+    QTimer::singleShot(0, this, [this]() {
+        if (!layout_restored_) {
+            layout_restored_ = true;
+            restore_layout();
+        }
+    });
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 void DashboardScreen::refresh_theme() {
+    // Called on every show. setStyleSheet() re-polishes the WHOLE subtree —
+    // every tile, label and table re-matched against the stylesheet and its
+    // text laid out again — even when the string is unchanged: 0.5 s per
+    // return to the Dashboard with 11 tiles, 1.2 s with the user's 8 (one a
+    // video tile), during which the tiles' already-seeded quotes could not
+    // paint ("the indices take seconds to load"). Apply only what changed.
+    const QString key = QString(ui::colors::BG_BASE()) + ui::colors::BORDER_DIM() + ui::colors::BORDER_MED();
+    if (key == applied_theme_key_)
+        return;
+    applied_theme_key_ = key;
     const QColor bg(ui::colors::BG_BASE());
     apply_solid_background(this, bg);
 
