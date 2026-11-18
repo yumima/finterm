@@ -10,7 +10,6 @@ import sys
 import json
 import requests
 import asyncio
-import base64
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, Optional, List, Union
 from io import BytesIO
@@ -579,56 +578,6 @@ class CongressGovWrapper:
         except Exception as e:
             return CongressGovError('bill_text', str(e)).to_dict()
 
-    def download_bill_text(self, text_url: str) -> Dict[str, Any]:
-        """
-        Download bill text document
-
-        Args:
-            text_url: Direct URL to bill text document
-        """
-        try:
-            if "congress.gov" not in text_url:
-                return CongressGovError('download_bill_text', f'Invalid URL: {text_url}. Must be a valid Congress.gov URL.').to_dict()
-
-            # Download the document
-            response = self.session.get(text_url, timeout=30)
-            response.raise_for_status()
-
-            filename = text_url.split("/")[-1]
-            content_type = response.headers.get('content-type', '')
-
-            if 'pdf' in content_type.lower() or filename.lower().endswith('.pdf'):
-                # PDF content
-                pdf_content = base64.b64encode(response.content).decode('utf-8')
-                return {
-                    "success": True,
-                    "endpoint": "download_bill_text",
-                    "content": pdf_content,
-                    "filename": filename,
-                    "data_format": {
-                        "data_type": "pdf",
-                        "filename": filename
-                    },
-                    "timestamp": int(datetime.now().timestamp())
-                }
-            else:
-                # Text content
-                text_content = response.text
-                return {
-                    "success": True,
-                    "endpoint": "download_bill_text",
-                    "content": text_content,
-                    "filename": filename,
-                    "data_format": {
-                        "data_type": "text",
-                        "filename": filename
-                    },
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-        except Exception as e:
-            return CongressGovError('download_bill_text', str(e)).to_dict()
-
     # ===== COMPOSITE METHODS =====
 
     def get_comprehensive_bill_data(self, bill_url: str) -> Dict[str, Any]:
@@ -807,229 +756,11 @@ class CongressGovWrapper:
         except Exception as e:
             return CongressGovError('members', str(e)).to_dict()
 
-    def get_member_detail(self, bioguide_id: str) -> Dict[str, Any]:
-        """Detailed member info: party history, terms, depiction, sub-endpoints."""
-        try:
-            if not bioguide_id:
-                return CongressGovError('member_detail', 'bioguide_id required').to_dict()
-            url = f"{BASE_URL}member/{bioguide_id}?format=json"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('member_detail', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {}).get('member', {})
-            if not data:
-                return CongressGovError('member_detail', 'Member not found', 404).to_dict()
-            return {
-                "success": True,
-                "endpoint": "member_detail",
-                "bioguide_id": bioguide_id,
-                "member": data,
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('member_detail', str(e)).to_dict()
-
-    def get_member_sponsored(self, bioguide_id: str, limit: int = 50) -> Dict[str, Any]:
-        """Bills sponsored by this member."""
-        try:
-            if not bioguide_id:
-                return CongressGovError('member_sponsored', 'bioguide_id required').to_dict()
-            url = f"{BASE_URL}member/{bioguide_id}/sponsored-legislation?format=json&limit={min(int(limit or 50), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('member_sponsored', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            bills = data.get('sponsoredLegislation', []) or []
-            return {
-                "success": True,
-                "endpoint": "member_sponsored",
-                "bioguide_id": bioguide_id,
-                "total_bills": len(bills),
-                "bills": bills,
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('member_sponsored', str(e)).to_dict()
-
-    def get_member_cosponsored(self, bioguide_id: str, limit: int = 50) -> Dict[str, Any]:
-        """Bills cosponsored by this member."""
-        try:
-            if not bioguide_id:
-                return CongressGovError('member_cosponsored', 'bioguide_id required').to_dict()
-            url = f"{BASE_URL}member/{bioguide_id}/cosponsored-legislation?format=json&limit={min(int(limit or 50), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('member_cosponsored', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            bills = data.get('cosponsoredLegislation', []) or []
-            return {
-                "success": True,
-                "endpoint": "member_cosponsored",
-                "bioguide_id": bioguide_id,
-                "total_bills": len(bills),
-                "bills": bills,
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('member_cosponsored', str(e)).to_dict()
-
     # ===== COMMITTEE ENDPOINTS =====
-
-    def get_committees(self, congress: Optional[int] = None,
-                       chamber: Optional[str] = None,
-                       limit: int = 250) -> Dict[str, Any]:
-        """List committees. chamber must be 'house', 'senate', or 'joint' (lowercase)."""
-        try:
-            congress_num = congress or self._year_to_congress(datetime.now().year)
-            ch = (chamber or "").lower()
-            if ch and ch not in ("house", "senate", "joint"):
-                return CongressGovError('committees',
-                    "chamber must be 'house', 'senate', or 'joint'").to_dict()
-            url = f"{BASE_URL}committee/{congress_num}"
-            if ch:
-                url += f"/{ch}"
-            url += f"?format=json&limit={min(int(limit or 250), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('committees', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            return {
-                "success": True,
-                "endpoint": "committees",
-                "congress": congress_num,
-                "chamber": ch,
-                "total_committees": len(data.get('committees', []) or []),
-                "committees": data.get('committees', []),
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('committees', str(e)).to_dict()
-
-    def get_committee_detail(self, congress: int, chamber: str, system_code: str) -> Dict[str, Any]:
-        """Committee detail: subcommittees, history, bills/communications counts."""
-        try:
-            ch = (chamber or "").lower()
-            if ch not in ("house", "senate", "joint"):
-                return CongressGovError('committee_detail',
-                    "chamber must be 'house', 'senate', or 'joint'").to_dict()
-            url = f"{BASE_URL}committee/{int(congress)}/{ch}/{system_code}?format=json"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('committee_detail', result['error'], result.get('status_code')).to_dict()
-            cmte = result.get('data', {}).get('committee', {})
-            return {
-                "success": True,
-                "endpoint": "committee_detail",
-                "congress": congress,
-                "chamber": ch,
-                "system_code": system_code,
-                "committee": cmte,
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('committee_detail', str(e)).to_dict()
 
     # ===== VOTING RECORDS =====
 
-    def get_votes(self, chamber: str, congress: Optional[int] = None,
-                  session: Optional[int] = None, limit: int = 50) -> Dict[str, Any]:
-        """List recent roll-call votes for a chamber. chamber: 'house' or 'senate'."""
-        try:
-            ch = (chamber or "").lower()
-            if ch not in ("house", "senate"):
-                return CongressGovError('votes', "chamber must be 'house' or 'senate'").to_dict()
-            congress_num = congress or self._year_to_congress(datetime.now().year)
-            # Default session = current (1 for odd year, 2 for even year of congress)
-            year = datetime.now().year
-            sess = session or ((year - (1789 + 2*(congress_num-1))) % 2 + 1)
-            url = (f"{BASE_URL}{ch}-vote/{congress_num}/{sess}"
-                   f"?format=json&limit={min(int(limit or 50), 250)}")
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('votes', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            votes_key = f"{ch}RollCallVotes"
-            votes = data.get(votes_key, data.get('votes', [])) or []
-            return {
-                "success": True,
-                "endpoint": "votes",
-                "chamber": ch,
-                "congress": congress_num,
-                "session": sess,
-                "total_votes": len(votes),
-                "votes": votes,
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('votes', str(e)).to_dict()
-
     # ===== HEARINGS / NOMINATIONS / TREATIES =====
-
-    def get_hearings(self, congress: Optional[int] = None,
-                     chamber: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
-        """Committee hearings (current congress by default)."""
-        try:
-            congress_num = congress or self._year_to_congress(datetime.now().year)
-            ch = (chamber or "").lower() if chamber else ""
-            url = f"{BASE_URL}hearing/{congress_num}"
-            if ch in ("house", "senate", "joint"):
-                url += f"/{ch}"
-            url += f"?format=json&limit={min(int(limit or 50), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('hearings', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            return {
-                "success": True,
-                "endpoint": "hearings",
-                "congress": congress_num,
-                "chamber": ch,
-                "total_hearings": len(data.get('hearings', []) or []),
-                "hearings": data.get('hearings', []),
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('hearings', str(e)).to_dict()
-
-    def get_nominations(self, congress: Optional[int] = None, limit: int = 50) -> Dict[str, Any]:
-        """Presidential nominations sent to the Senate."""
-        try:
-            congress_num = congress or self._year_to_congress(datetime.now().year)
-            url = f"{BASE_URL}nomination/{congress_num}?format=json&limit={min(int(limit or 50), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('nominations', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            return {
-                "success": True,
-                "endpoint": "nominations",
-                "congress": congress_num,
-                "total_nominations": len(data.get('nominations', []) or []),
-                "nominations": data.get('nominations', []),
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('nominations', str(e)).to_dict()
-
-    def get_treaties(self, congress: Optional[int] = None, limit: int = 50) -> Dict[str, Any]:
-        """Treaties received by the Senate."""
-        try:
-            congress_num = congress or self._year_to_congress(datetime.now().year)
-            url = f"{BASE_URL}treaty/{congress_num}?format=json&limit={min(int(limit or 50), 250)}"
-            result = self._make_request(url)
-            if "error" in result:
-                return CongressGovError('treaties', result['error'], result.get('status_code')).to_dict()
-            data = result.get('data', {})
-            return {
-                "success": True,
-                "endpoint": "treaties",
-                "congress": congress_num,
-                "total_treaties": len(data.get('treaties', []) or []),
-                "treaties": data.get('treaties', []),
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return CongressGovError('treaties', str(e)).to_dict()
 
 # ===== CLI INTERFACE =====
 
@@ -1041,8 +772,6 @@ def main():
             "available_commands": [
                 "congress_bills [congress] [bill_type] [start_date] [end_date] [limit] [offset] [sort_by] [get_all]",
                 "bill_info <bill_url>",
-                "bill_text <bill_url>",
-                "download_text <text_url>",
                 "comprehensive <bill_url>",
                 "summary [congress] [limit]"
             ],
@@ -1099,24 +828,6 @@ def main():
             result = wrapper.get_bill_info(bill_url)
             print(json.dumps(result, indent=2))
 
-        elif command == "bill_text":
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: python congress_gov_data.py bill_text <bill_url>"}))
-                sys.exit(1)
-
-            bill_url = sys.argv[2]
-            result = wrapper.get_bill_text(bill_url)
-            print(json.dumps(result, indent=2))
-
-        elif command == "download_text":
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: python congress_gov_data.py download_text <text_url>"}))
-                sys.exit(1)
-
-            text_url = sys.argv[2]
-            result = wrapper.download_bill_text(text_url)
-            print(json.dumps(result, indent=2))
-
         elif command == "comprehensive":
             if len(sys.argv) < 3:
                 print(json.dumps({"success": False, "error": "Usage: python congress_gov_data.py comprehensive <bill_url>"}))
@@ -1147,79 +858,6 @@ def main():
                                          get_all=get_all)
             print(json.dumps(result, indent=2))
 
-        elif command == "member_detail":
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: member_detail <bioguide_id>"}))
-                sys.exit(1)
-            result = wrapper.get_member_detail(sys.argv[2])
-            print(json.dumps(result, indent=2))
-
-        elif command == "member_sponsored":
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: member_sponsored <bioguide_id> [limit]"}))
-                sys.exit(1)
-            limit = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else 50
-            result = wrapper.get_member_sponsored(sys.argv[2], limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "member_cosponsored":
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: member_cosponsored <bioguide_id> [limit]"}))
-                sys.exit(1)
-            limit = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else 50
-            result = wrapper.get_member_cosponsored(sys.argv[2], limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "committees":
-            # committees [congress] [chamber] [limit]
-            congress = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
-            chamber  = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
-            limit    = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 250
-            result = wrapper.get_committees(congress=congress, chamber=chamber, limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "committee_detail":
-            # committee_detail <congress> <chamber> <system_code>
-            if len(sys.argv) < 5:
-                print(json.dumps({"success": False, "error": "Usage: committee_detail <congress> <chamber> <system_code>"}))
-                sys.exit(1)
-            result = wrapper.get_committee_detail(int(sys.argv[2]), sys.argv[3], sys.argv[4])
-            print(json.dumps(result, indent=2))
-
-        elif command == "votes":
-            # votes <chamber> [congress] [session] [limit]
-            if len(sys.argv) < 3:
-                print(json.dumps({"success": False, "error": "Usage: votes <chamber=house|senate> [congress] [session] [limit]"}))
-                sys.exit(1)
-            chamber = sys.argv[2]
-            congress = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else None
-            session  = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
-            limit    = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else 50
-            result = wrapper.get_votes(chamber=chamber, congress=congress, session=session, limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "hearings":
-            # hearings [congress] [chamber] [limit]
-            congress = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
-            chamber  = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
-            limit    = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 50
-            result = wrapper.get_hearings(congress=congress, chamber=chamber, limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "nominations":
-            # nominations [congress] [limit]
-            congress = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
-            limit    = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else 50
-            result = wrapper.get_nominations(congress=congress, limit=limit)
-            print(json.dumps(result, indent=2))
-
-        elif command == "treaties":
-            # treaties [congress] [limit]
-            congress = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
-            limit    = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else 50
-            result = wrapper.get_treaties(congress=congress, limit=limit)
-            print(json.dumps(result, indent=2))
-
         else:
             print(json.dumps({
                 "success": False,
@@ -1227,20 +865,9 @@ def main():
                 "available_commands": [
                     "congress_bills [congress] [bill_type] [start_date] [end_date] [limit] [offset] [sort_by] [get_all]",
                     "bill_info <bill_url>",
-                    "bill_text <bill_url>",
-                    "download_text <text_url>",
                     "comprehensive <bill_url>",
                     "summary [congress] [limit]",
                     "members [congress] [chamber] [state] [current_only] [limit] [offset] [get_all]",
-                    "member_detail <bioguide_id>",
-                    "member_sponsored <bioguide_id> [limit]",
-                    "member_cosponsored <bioguide_id> [limit]",
-                    "committees [congress] [chamber] [limit]",
-                    "committee_detail <congress> <chamber> <system_code>",
-                    "votes <chamber> [congress] [session] [limit]",
-                    "hearings [congress] [chamber] [limit]",
-                    "nominations [congress] [limit]",
-                    "treaties [congress] [limit]"
                 ]
             }))
             sys.exit(1)

@@ -303,26 +303,11 @@ class SNBWrapper:
         return self._fetch_cube("devkum", start_date, end_date,
                                 dim_sel="D0(M0),D1(EUR1,USD1,JPY100,GBP1,CNY1,CAD1,AUD1,SEK1,NOK1)")
 
-    def get_exchange_rates_annual(self, start_date: Optional[str] = None,
-                                  end_date: Optional[str] = None) -> Dict[str, Any]:
-        """CHF exchange rates vs major currencies — annual (cube: devkua)."""
-        return self._fetch_cube("devkua", start_date, end_date)
-
     def get_monetary_aggregates(self, start_date: Optional[str] = None,
                                 end_date: Optional[str] = None) -> Dict[str, Any]:
         """M1, M2, M3 monetary aggregates — levels (cube: snbmonagg)."""
         return self._fetch_cube("snbmonagg", start_date, end_date,
                                 dim_sel="D0(B),D1(GM1,GM2,GM3)")
-
-    def get_monetary_aggregates_full(self, start_date: Optional[str] = None,
-                                     end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Full monetary aggregates with all sub-components (cube: snbmonagg)."""
-        return self._fetch_cube("snbmonagg", start_date, end_date)
-
-    def get_fx_reserves(self, start_date: Optional[str] = None,
-                        end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Foreign exchange reserves — IMF template (cube: snbimfra)."""
-        return self._fetch_cube("snbimfra", start_date, end_date)
 
     def get_inflation_forecast(self, start_date: Optional[str] = None,
                                end_date: Optional[str] = None) -> Dict[str, Any]:
@@ -351,12 +336,6 @@ class SNBWrapper:
             "source":    "Swiss National Bank",
             "timestamp": int(datetime.now(timezone.utc).timestamp()),
         }
-
-    def get_cube(self, cube_id: str, start_date: Optional[str] = None,
-                 end_date: Optional[str] = None,
-                 dim_sel: Optional[str] = None) -> Dict[str, Any]:
-        """Fetch any SNB cube by ID with optional dimSel filter."""
-        return self._fetch_cube(cube_id, start_date, end_date, dim_sel)
 
     def get_dimensions(self, cube_id: str) -> Dict[str, Any]:
         """Return all dimension codes for a cube (use to discover series codes)."""
@@ -397,17 +376,12 @@ class SNBWrapper:
 
 COMMANDS = {
     "policy_rate":      "[start] [end]              — SNB policy rate + SARON",
-    "saron":            "[start] [end]              — Money market reference rates",
     "bond_yields":      "[start] [end]              — Confederation bond yields (monthly)",
     "bond_yields_d":    "[start] [end]              — Confederation bond yields (daily)",
     "exchange_rates":   "[start] [end]              — CHF monthly FX rates",
-    "exchange_rates_a": "[start] [end]              — CHF annual FX rates",
     "monetary":         "[start] [end]              — M1/M2/M3 aggregates",
-    "monetary_full":    "[start] [end]              — All monetary aggregate components",
-    "fx_reserves":      "[start] [end]              — Foreign exchange reserves",
     "inflation":        "[start] [end]              — SNB inflation forecast",
     "overview":         "[start] [end]              — Key indicators snapshot",
-    "cube":             "<cube_id> [start] [end] [dimSel]  — Any cube by ID",
     "dimensions":       "<cube_id>                  — Show dimension codes for a cube",
     "available":        "                           — List all cubes and groups",
 }
@@ -432,7 +406,7 @@ def main() -> None:
     try:
         if cmd == "policy_rate":
             result = wrapper.get_policy_rate(_a(2), _a(3))
-        elif cmd in ("saron", "money_market"):
+        elif cmd == "money_market":
             result = wrapper.get_money_market_rates(_a(2), _a(3))
         elif cmd == "bond_yields":
             result = wrapper.get_bond_yields_monthly(_a(2), _a(3))
@@ -440,29 +414,18 @@ def main() -> None:
             result = wrapper.get_bond_yields_daily(_a(2), _a(3))
         elif cmd in ("exchange_rates", "fx"):
             result = wrapper.get_exchange_rates_monthly(_a(2), _a(3))
-        elif cmd in ("exchange_rates_a", "fx_annual"):
-            result = wrapper.get_exchange_rates_annual(_a(2), _a(3))
         elif cmd in ("monetary", "monetary_aggregates"):
             result = wrapper.get_monetary_aggregates(_a(2), _a(3))
-        elif cmd == "monetary_full":
-            result = wrapper.get_monetary_aggregates_full(_a(2), _a(3))
-        elif cmd == "fx_reserves":
-            result = wrapper.get_fx_reserves(_a(2), _a(3))
         elif cmd == "inflation":
             result = wrapper.get_inflation_forecast(_a(2), _a(3))
         elif cmd == "overview":
             result = wrapper.get_overview(_a(2), _a(3))
-        elif cmd == "cube":
-            if len(sys.argv) < 3:
-                result = {"error": "cube requires <cube_id>"}
-            else:
-                result = wrapper.get_cube(sys.argv[2], _a(3), _a(4), _a(5))
         elif cmd == "dimensions":
             if len(sys.argv) < 3:
                 result = {"error": "dimensions requires <cube_id>"}
             else:
                 result = wrapper.get_dimensions(sys.argv[2])
-        elif cmd in ("available", "cubes"):
+        elif cmd == "available":
             result = wrapper.available_cubes()
         else:
             result = {"error": f"Unknown command: {cmd}", "commands": COMMANDS}

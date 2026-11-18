@@ -499,72 +499,6 @@ class OECDWrapper:
         except Exception as e:
             return OECDError('unemployment', str(e)).to_dict()
 
-    def get_economic_summary(self, country: str = "united_states",
-                            start_date: Optional[str] = None,
-                            end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get comprehensive economic summary for a country"""
-        result = {
-            "success": True,
-            "country": country,
-            "start_date": start_date,
-            "end_date": end_date,
-            "timestamp": int(datetime.now().timestamp()),
-            "endpoints": {},
-            "failed_endpoints": []
-        }
-
-        # Define endpoints to try
-        endpoints = [
-            ('gdp_real', lambda: self.get_gdp_real(countries=country, start_date=start_date, end_date=end_date)),
-            ('cpi', lambda: self.get_consumer_price_index(countries=country, start_date=start_date, end_date=end_date)),
-            ('gdp_forecast', lambda: self.get_gdp_forecast(countries=country, start_date=start_date, end_date=end_date)),
-            ('unemployment', lambda: self.get_unemployment(countries=country, start_date=start_date, end_date=end_date))
-        ]
-
-        overall_success = False
-
-        for endpoint_name, endpoint_func in endpoints:
-            try:
-                endpoint_result = endpoint_func()
-                result["endpoints"][endpoint_name] = endpoint_result
-
-                if endpoint_result.get("success"):
-                    overall_success = True
-                else:
-                    result["failed_endpoints"].append({
-                        "endpoint": endpoint_name,
-                        "error": endpoint_result.get("error", "Unknown error")
-                    })
-
-            except Exception as e:
-                result["failed_endpoints"].append({
-                    "endpoint": endpoint_name,
-                    "error": str(e)
-                })
-
-        result["success"] = overall_success
-        return result
-
-    def get_country_list(self) -> Dict[str, Any]:
-        """Get list of available countries"""
-        try:
-            return {
-                "success": True,
-                "endpoint": "country_list",
-                "available_countries": {
-                    "gdp": list(COUNTRY_TO_CODE_GDP.keys()),
-                    "cpi": list(COUNTRY_TO_CODE_CPI.keys())
-                },
-                "country_codes": {
-                    "gdp": COUNTRY_TO_CODE_GDP,
-                    "cpi": COUNTRY_TO_CODE_CPI
-                },
-                "expenditure_categories": list(EXPENDITURE_DICT.keys()),
-                "timestamp": int(datetime.now().timestamp())
-            }
-        except Exception as e:
-            return OECDError('country_list', str(e)).to_dict()
-
     # ===== ADDITIONAL OECD DATA ENDPOINTS =====
 
     def _sdmx_series(self, endpoint: str, url: str, start_period: str, end_period: str,
@@ -697,8 +631,6 @@ def main(args=None):
                 "unemployment [countries] [frequency] [start_date] [end_date]",
                 "interest_rates [countries] [frequency] [start_date] [end_date]",
                 "trade_balance [countries] [frequency] [start_date] [end_date]",
-                "economic_summary [country] [start_date] [end_date]",
-                "country_list"
             ],
             "examples": [
                 "python oecd_data.py gdp_real united_states quarter 2020-01-01 2024-12-31",
@@ -780,18 +712,6 @@ def main(args=None):
             )
             print(json.dumps(result, indent=2))
 
-        elif command == "economic_summary":
-            country = args[1] if len(args) + 1 > 2 else "united_states"
-            start_date = args[2] if len(args) + 1 > 3 else None
-            end_date = args[3] if len(args) + 1 > 4 else None
-
-            result = wrapper.get_economic_summary(
-                country=country,
-                start_date=start_date,
-                end_date=end_date
-            )
-            print(json.dumps(result, indent=2))
-
         elif command == "interest_rates":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
             frequency = _norm_freq(args[2] if len(args) + 1 > 3 else None, "monthly")
@@ -820,10 +740,6 @@ def main(args=None):
             )
             print(json.dumps(result, indent=2))
 
-        elif command == "country_list":
-            result = wrapper.get_country_list()
-            print(json.dumps(result, indent=2))
-
         else:
             print(json.dumps({
                 "success": False,
@@ -835,8 +751,6 @@ def main(args=None):
                     "unemployment [countries] [frequency] [start_date] [end_date]",
                     "interest_rates [countries] [frequency] [start_date] [end_date]",
                     "trade_balance [countries] [frequency] [start_date] [end_date]",
-                    "economic_summary [country] [start_date] [end_date]",
-                    "country_list"
                 ]
             }))
             sys.exit(1)

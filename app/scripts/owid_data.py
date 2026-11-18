@@ -143,21 +143,6 @@ def get_health_data(country: str = None) -> Any:
     }
 
 
-def get_democracy_data(country: str = None) -> Any:
-    """Get democracy and governance indices (V-Dem, Freedom House, Polity)."""
-    params = {}
-    if country:
-        params["entityName"] = country
-    data = _make_request("indicators/electoral-democracy", params=params)
-    if isinstance(data, dict) and "error" not in data:
-        return {"category": "democracy", "country": country, "data": data}
-    return {
-        "category": "democracy",
-        "note": "Use search command to find democracy/governance indicators",
-        "suggested_searches": ["v-dem", "democracy index", "freedom house", "polity"],
-    }
-
-
 # ── Grapher-chart series (single indicator, one country) ───────────────────
 # command: (grapher slug, value column or prefix)
 GRAPHER_SERIES = {
@@ -266,9 +251,6 @@ def main(args=None):
     elif command == "health":
         country = args[1] if len(args) > 1 else None
         result = get_health_data(country)
-    elif command == "democracy":
-        country = args[1] if len(args) > 1 else None
-        result = get_democracy_data(country)
     elif command == "indicator":
         if len(args) < 2:
             result = {"error": "Usage: indicator <indicator_id>"}

@@ -247,25 +247,10 @@ class BCBWrapper:
         """Selic target rate — monetary policy rate."""
         return self._get_series("selic_target", start_date, end_date)
 
-    def get_selic_daily(self, start_date: Optional[str] = None,
-                        end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Selic daily effective rate."""
-        return self._get_series("selic_daily", start_date, end_date)
-
     def get_ipca(self, start_date: Optional[str] = None,
                  end_date: Optional[str] = None) -> Dict[str, Any]:
         """IPCA monthly consumer price inflation."""
         return self._get_series("ipca", start_date, end_date)
-
-    def get_igpm(self, start_date: Optional[str] = None,
-                 end_date: Optional[str] = None) -> Dict[str, Any]:
-        """IGP-M monthly inflation index."""
-        return self._get_series("igpm", start_date, end_date)
-
-    def get_usd_brl(self, start_date: Optional[str] = None,
-                    end_date: Optional[str] = None) -> Dict[str, Any]:
-        """USD/BRL PTAX selling rate (daily)."""
-        return self._get_series("usd_brl", start_date, end_date)
 
     def get_exchange_rates(self, start_date: Optional[str] = None,
                            end_date: Optional[str] = None) -> Dict[str, Any]:
@@ -408,10 +393,7 @@ class BCBWrapper:
 
 COMMANDS = {
     "selic":          "[start DD/MM/YYYY] [end DD/MM/YYYY]  — Selic target rate",
-    "selic_daily":    "[start] [end]                         — Selic daily rate",
     "ipca":           "[start] [end]                         — IPCA monthly inflation",
-    "igpm":           "[start] [end]                         — IGP-M inflation",
-    "usd_brl":        "[start] [end]                         — USD/BRL PTAX rate",
     "exchange_rates": "[start] [end]                         — USD/BRL + EUR/BRL merged",
     "monetary":       "[start] [end]                         — M1/M2/M3 aggregates",
     "gdp":            "[start] [end]                         — GDP annual growth",
@@ -446,14 +428,8 @@ def main() -> None:
     try:
         if cmd == "selic":
             result = wrapper.get_selic(_a(2), _a(3))
-        elif cmd == "selic_daily":
-            result = wrapper.get_selic_daily(_a(2), _a(3))
         elif cmd == "ipca":
             result = wrapper.get_ipca(_a(2), _a(3))
-        elif cmd == "igpm":
-            result = wrapper.get_igpm(_a(2), _a(3))
-        elif cmd == "usd_brl":
-            result = wrapper.get_usd_brl(_a(2), _a(3))
         elif cmd == "exchange_rates":
             result = wrapper.get_exchange_rates(_a(2), _a(3))
         elif cmd in ("monetary", "monetary_aggregates"):

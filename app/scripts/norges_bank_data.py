@@ -243,11 +243,6 @@ class NorgesBankWrapper:
         """NIBOR rates and other interest rates (flow: IR)."""
         return self._get("IR", start=start, end=end)
 
-    def get_nowa(self, start: Optional[str] = None,
-                 end: Optional[str] = None) -> Dict[str, Any]:
-        """NOWA overnight rate and compounded averages (flow: SHORT_RATES)."""
-        return self._get("SHORT_RATES", start=start, end=end)
-
     def get_govt_bond_yields(self, tenors: str = "3Y+5Y+10Y",
                              start: Optional[str] = None,
                              end: Optional[str] = None) -> Dict[str, Any]:
@@ -325,9 +320,7 @@ class NorgesBankWrapper:
 COMMANDS = {
     "policy_rate":    "[start] [end]                    — Policy rate announcements",
     "exchange_rates": "[currencies] [start] [end]        — Daily NOK FX rates",
-    "fx_monthly":     "[currencies] [start] [end]        — Monthly avg NOK FX rates",
     "interest_rates": "[start] [end]                    — NIBOR & interest rates",
-    "nowa":           "[start] [end]                    — NOWA overnight rate",
     "bond_yields":    "[tenors] [start] [end]            — Govt bond yields (monthly)",
     "bond_yields_d":  "[tenors] [start] [end]            — Govt bond yields (daily)",
     "financial":      "[start] [end]                    — Financial Conditions Index",
@@ -359,12 +352,8 @@ def main() -> None:
             result = wrapper.get_policy_rate(_a(2), _a(3))
         elif cmd in ("exchange_rates", "fx"):
             result = wrapper.get_exchange_rates(_a(2, "USD+EUR+GBP+JPY+SEK+DKK+CHF+CNY"), _a(3), _a(4))
-        elif cmd in ("fx_monthly", "exchange_rates_m"):
-            result = wrapper.get_exchange_rates_monthly(_a(2, "USD+EUR+GBP+JPY+SEK+DKK+CHF"), _a(3), _a(4))
         elif cmd == "interest_rates":
             result = wrapper.get_interest_rates(_a(2), _a(3))
-        elif cmd == "nowa":
-            result = wrapper.get_nowa(_a(2), _a(3))
         elif cmd == "bond_yields":
             result = wrapper.get_govt_bond_yields(_a(2, "3Y+5Y+10Y"), _a(3), _a(4))
         elif cmd == "bond_yields_d":
@@ -380,7 +369,7 @@ def main() -> None:
                 result = {"error": "flow requires <flow_id>"}
             else:
                 result = wrapper.get_flow(sys.argv[2], _a(3, ""), _a(4), _a(5))
-        elif cmd in ("available", "flows"):
+        elif cmd == "available":
             result = wrapper.available_flows()
         else:
             result = {"error": f"Unknown command: {cmd}", "commands": COMMANDS}

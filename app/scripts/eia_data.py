@@ -354,15 +354,6 @@ class EIADataFetcher:
             "file_urls": WPSR_FILE_MAP
         }
 
-    def get_available_steo_tables(self) -> Dict[str, Any]:
-        """Get available STEO tables"""
-        return {
-            "success": True,
-            "tables": STEO_TABLE_NAMES,
-            "symbols_map": STEO_SYMBOLS_MAP,
-            "total_tables": len(STEO_TABLE_NAMES)
-        }
-
     def get_energy_overview(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """Get comprehensive energy overview"""
         results = []
@@ -457,51 +448,15 @@ def main(args=None):
             result = fetcher.get_available_categories()
             print(json.dumps(result, indent=2))
 
-        elif command == "available_steo_tables":
-            result = fetcher.get_available_steo_tables()
-            print(json.dumps(result, indent=2))
-
         elif command == "energy_overview":
             limit = int(args[1]) if len(args) + 1 > 2 else None
             result = fetcher.get_energy_overview(limit)
             print(json.dumps(result, indent=2))
 
-        elif command == "get_crude_stocks":
-            # Convenience method for crude stocks
-            result = fetcher.get_petroleum_status_report("crude_petroleum_stocks", ["stocks"])
-            print(json.dumps(result, indent=2))
-
-        elif command == "get_gasoline_stocks":
-            # Convenience method for gasoline stocks
-            result = fetcher.get_petroleum_status_report("gasoline_fuel_stocks", ["stocks"])
-            print(json.dumps(result, indent=2))
-
-        elif command == "get_petroleum_imports":
-            # Convenience method for petroleum imports
-            start_date = args[1] if len(args) + 1 > 2 else None
-            end_date = args[2] if len(args) + 1 > 3 else None
-            result = fetcher.get_petroleum_status_report("imports", ["imports"], start_date, end_date)
-            print(json.dumps(result, indent=2))
-
-        elif command == "get_spot_prices":
-            # Convenience method for spot prices
-            result = fetcher.get_petroleum_status_report("spot_prices_crude_gas_heating", ["crude", "conventional_gas"])
-            print(json.dumps(result, indent=2))
-
-        elif command == "get_energy_markets_summary":
-            # Convenience method for energy markets summary
-            result = fetcher.get_short_term_energy_outlook("01", frequency="month")
-            print(json.dumps(result, indent=2))
-
-        elif command == "get_natural_gas_summary":
-            # Convenience method for natural gas summary
-            result = fetcher.get_short_term_energy_outlook("05a", frequency="month")
-            print(json.dumps(result, indent=2))
-
         else:
             print(json.dumps({
                 "success": False,
-                "error": f"Unknown command: {command}. Available commands: get_petroleum, get_steo, available_categories, available_steo_tables, energy_overview, get_crude_stocks, get_gasoline_stocks, get_petroleum_imports, get_spot_prices, get_energy_markets_summary, get_natural_gas_summary"
+                "error": f"Unknown command: {command}. Available commands: get_petroleum, get_steo, available_categories, energy_overview"
             }))
             sys.exit(1)
 

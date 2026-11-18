@@ -284,24 +284,6 @@ def get_all_codelists() -> Dict[str, Any]:
 
     return result
 
-def get_dataflow_details(dataflow_code: str) -> Dict[str, Any]:
-    """
-    Get detailed information for a specific dataflow
-    Args:
-        dataflow_code: Dataflow code (e.g., 'EO_NA', 'PPL_POP')
-    Returns: {"data": [...], "metadata": {...}, "error": None/error_msg}
-    """
-    endpoint = f"dataflow/ADB/{dataflow_code}/latest"
-    result = _make_request(endpoint)
-
-    # Enhance metadata
-    if result['metadata']:
-        result['metadata']['dataflow_code'] = dataflow_code
-        result['metadata']['dataflow_name'] = DATAFLOWS.get(dataflow_code, 'Unknown')
-        result['metadata']['description'] = f"Details for dataflow {dataflow_code} ({DATAFLOWS.get(dataflow_code, 'Unknown')})"
-
-    return result
-
 def get_population_data(economy: str = "all", indicator: Optional[str] = None, start_period: Optional[str] = None, end_period: Optional[str] = None) -> Dict[str, Any]:
     """
     Get population data for specified economy/economies
@@ -379,102 +361,6 @@ def get_gdp_data(economy: str, indicator: str = "NGDP_XDC", start_period: Option
         result['metadata']['end_period'] = end_period
         result['metadata']['dataflow'] = 'EO_NA'
         result['metadata']['description'] = f"GDP data for {ECONOMIES.get(economy, economy)} - {indicator}"
-        result['metadata']['total_records'] = len(result['data']) if isinstance(result['data'], list) else 0
-
-    return result
-
-def get_multiple_indicators(economy: str, indicators: List[str], start_period: Optional[str] = None, end_period: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get multiple indicators for specified economy
-    Args:
-        economy: Economy code (e.g., 'PHI', 'SGP')
-        indicators: List of indicator codes (e.g., ['NGDP_XDC', 'NGDPVA_XDC'])
-        start_period: Start year (e.g., '2010')
-        end_period: End year (e.g., '2020')
-    Returns: {"data": [...], "metadata": {...}, "error": None/error_msg}
-    """
-    if not indicators:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": "At least one indicator must be specified"
-        }
-
-    # Build SDMX key: A.EO_NA.INDICATOR1+INDICATOR2.ECONOMY
-    indicators_str = "+".join(indicators)
-    sdmx_key = f"A.{indicators_str}.{economy}"
-    endpoint = f"data/ADB,EO_NA/{sdmx_key}"
-
-    params = {}
-    if start_period:
-        params['startPeriod'] = start_period
-    if end_period:
-        params['endPeriod'] = end_period
-
-    result = _make_request(endpoint, params)
-
-    # Parse and enhance data
-    if result['data'] and not result['error']:
-        parsed_data = _parse_sdmx_data(result['data'])
-        result['data'] = parsed_data
-
-    if result['metadata']:
-        result['metadata']['economy'] = economy
-        result['metadata']['economy_name'] = ECONOMIES.get(economy, 'Unknown')
-        result['metadata']['indicators'] = indicators
-        result['metadata']['indicators_count'] = len(indicators)
-        result['metadata']['start_period'] = start_period
-        result['metadata']['end_period'] = end_period
-        result['metadata']['dataflow'] = 'EO_NA'
-        result['metadata']['description'] = f"Multiple indicators for {ECONOMIES.get(economy, economy)}: {', '.join(indicators)}"
-        result['metadata']['total_records'] = len(result['data']) if isinstance(result['data'], list) else 0
-
-    return result
-
-def get_multiple_economies_data(indicator: str, economies: List[str], start_period: Optional[str] = None, end_period: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get specific indicator for multiple economies
-    Args:
-        indicator: Indicator code (e.g., 'NGDP_XDC')
-        economies: List of economy codes (e.g., ['PHI', 'SGP', 'JPN'])
-        start_period: Start year (e.g., '2010')
-        end_period: End year (e.g., '2020')
-    Returns: {"data": [...], "metadata": {...}, "error": None/error_msg}
-    """
-    if not economies:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": "At least one economy must be specified"
-        }
-
-    # Build SDMX key: A.EO_NA.INDICATOR.ECONOMY1+ECONOMY2
-    economies_str = "+".join(economies)
-    sdmx_key = f"A.{indicator}.{economies_str}"
-    endpoint = f"data/ADB,EO_NA/{sdmx_key}"
-
-    params = {}
-    if start_period:
-        params['startPeriod'] = start_period
-    if end_period:
-        params['endPeriod'] = end_period
-
-    result = _make_request(endpoint, params)
-
-    # Parse and enhance data
-    if result['data'] and not result['error']:
-        parsed_data = _parse_sdmx_data(result['data'])
-        result['data'] = parsed_data
-
-    if result['metadata']:
-        result['metadata']['indicator'] = indicator
-        result['metadata']['economies'] = economies
-        result['metadata']['economies_count'] = len(economies)
-        result['metadata']['economy_names'] = [ECONOMIES.get(econ, econ) for econ in economies]
-        result['metadata']['start_period'] = start_period
-        result['metadata']['end_period'] = end_period
-        result['metadata']['dataflow'] = 'EO_NA'
-        result['metadata']['description'] = f"Indicator {indicator} for economies: {', '.join([ECONOMIES.get(econ, econ) for econ in economies])}"
         result['metadata']['total_records'] = len(result['data']) if isinstance(result['data'], list) else 0
 
     return result
@@ -603,11 +489,8 @@ def main(args=None):
             "available_commands": [
                 "get_dataflows",
                 "get_codelists",
-                "get_dataflow_details <dataflow_code>",
                 "get_population <economy_code> [indicator] [start_year] [end_year]",
                 "get_gdp <economy_code> [indicator] [start_year] [end_year]",
-                "get_multiple_indicators <economy_code> <indicator1,indicator2,...> [start_year] [end_year]",
-                "get_multiple_economies <indicator> <economy1,economy2,...> [start_year] [end_year]",
                 "get_financial <economy_code> [start_year] [end_year]",
                 "get_trade <economy_code> [start_year] [end_year]",
                 "search <keyword>"
@@ -616,8 +499,6 @@ def main(args=None):
                 "python adb_data.py get_dataflows",
                 "python adb_data.py get_population PHI LP_PE_NUM_MOP 2010 2020",
                 "python adb_data.py get_gdp SGP NGDP_XDC 2015 2020",
-                "python adb_data.py get_multiple_indicators PHI NGDP_XDC,NGDPVA_XDC 2010 2020",
-                "python adb_data.py get_multiple_economies NGDP_XDC PHI,SGP,JPN 2015 2020",
                 "python adb_data.py search population"
             ]
         }))
@@ -631,13 +512,6 @@ def main(args=None):
 
         elif command == "get_codelists":
             result = get_all_codelists()
-
-        elif command == "get_dataflow_details":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python adb_data.py get_dataflow_details <dataflow_code>"}))
-                sys.exit(1)
-            dataflow_code = args[1]
-            result = get_dataflow_details(dataflow_code)
 
         elif command == "get_population":
             economy = args[1] if len(args) + 1 > 2 else "all"
@@ -655,28 +529,6 @@ def main(args=None):
                 print(json.dumps({"error": "Economy code is required for GDP data"}))
                 sys.exit(1)
             result = get_gdp_data(economy, indicator, start_period, end_period)
-
-        elif command == "get_multiple_indicators":
-            economy = args[1] if len(args) + 1 > 2 else None
-            indicators_str = args[2] if len(args) + 1 > 3 else None
-            start_period = args[3] if len(args) + 1 > 4 else None
-            end_period = args[4] if len(args) + 1 > 5 else None
-            if not economy or not indicators_str:
-                print(json.dumps({"error": "Economy code and indicators are required"}))
-                sys.exit(1)
-            indicators = [ind.strip() for ind in indicators_str.split(',')]
-            result = get_multiple_indicators(economy, indicators, start_period, end_period)
-
-        elif command == "get_multiple_economies":
-            indicator = args[1] if len(args) + 1 > 2 else None
-            economies_str = args[2] if len(args) + 1 > 3 else None
-            start_period = args[3] if len(args) + 1 > 4 else None
-            end_period = args[4] if len(args) + 1 > 5 else None
-            if not indicator or not economies_str:
-                print(json.dumps({"error": "Indicator and economies are required"}))
-                sys.exit(1)
-            economies = [econ.strip() for econ in economies_str.split(',')]
-            result = get_multiple_economies_data(indicator, economies, start_period, end_period)
 
         elif command == "get_financial":
             economy = args[1] if len(args) + 1 > 2 else None
@@ -707,9 +559,9 @@ def main(args=None):
             print(json.dumps({
                 "error": f"Unknown command: {command}",
                 "available_commands": [
-                    "get_dataflows", "get_codelists", "get_dataflow_details",
-                    "get_population", "get_gdp", "get_multiple_indicators",
-                    "get_multiple_economies", "get_financial", "get_trade", "search"
+                    "get_dataflows", "get_codelists",
+                    "get_population", "get_gdp",
+                    "get_financial", "get_trade", "search"
                 ]
             }))
             sys.exit(1)

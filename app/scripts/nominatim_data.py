@@ -103,9 +103,6 @@ def main(args=None):
         lon = float(args[2]) if len(args) > 2 else -74.0060
         zoom = int(args[3]) if len(args) > 3 else 18
         result = reverse(lat, lon, zoom)
-    elif command == "lookup":
-        osm_ids = args[1] if len(args) > 1 else "N240109189"
-        result = lookup(osm_ids)
     elif command == "details":
         place_id = args[1] if len(args) > 1 else "240109189"
         result = get_details(place_id)

@@ -320,11 +320,6 @@ class RBAWrapper:
         """Indicator lending rates for housing and business (Tables F5 + F6)."""
         return self._fetch_group(["f5", "f6"], start_date, end_date)
 
-    def get_deposit_rates(self, start_date: Optional[str] = None,
-                          end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Retail deposit and investment rates (Table F4)."""
-        return self._fetch_table("f4", start_date, end_date)
-
     def get_monetary_aggregates(self, start_date: Optional[str] = None,
                                 end_date: Optional[str] = None) -> Dict[str, Any]:
         """M1, M3, broad money aggregates (Table D3)."""
@@ -404,7 +399,6 @@ COMMANDS = {
     "bond_yields":       "[start_date] [end_date]  — Govt bond yields (Table F2)",
     "exchange_rates":    "[start_date] [end_date]  — AUD exchange rates (Table F11)",
     "lending_rates":     "[start_date] [end_date]  — Lending rates (F5+F6)",
-    "deposit_rates":     "[start_date] [end_date]  — Deposit rates (Table F4)",
     "monetary":          "[start_date] [end_date]  — Monetary aggregates (Table D3)",
     "credit":            "[start_date] [end_date]  — Credit aggregates (Table D2)",
     "inflation":         "[start_date] [end_date]  — CPI inflation (Table G1)",
@@ -444,11 +438,9 @@ def main() -> None:
             result = wrapper.get_exchange_rates(_a(2), _a(3))
         elif cmd == "lending_rates":
             result = wrapper.get_lending_rates(_a(2), _a(3))
-        elif cmd == "deposit_rates":
-            result = wrapper.get_deposit_rates(_a(2), _a(3))
         elif cmd in ("monetary", "monetary_aggregates"):
             result = wrapper.get_monetary_aggregates(_a(2), _a(3))
-        elif cmd in ("credit", "credit_aggregates"):
+        elif cmd == "credit":
             result = wrapper.get_credit_aggregates(_a(2), _a(3))
         elif cmd == "inflation":
             result = wrapper.get_inflation(_a(2), _a(3))

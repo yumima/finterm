@@ -48,16 +48,6 @@ def get_indicator_data(indicator: str, countries: str = None) -> Any:
     return _make_request(endpoint)
 
 
-def get_weo_data(indicator: str, country: str, start_year: str = None, end_year: str = None) -> Any:
-    endpoint = f"{indicator}/{country}"
-    params = {}
-    if start_year:
-        params["startYear"] = start_year
-    if end_year:
-        params["endYear"] = end_year
-    return _make_request(endpoint, params if params else None)
-
-
 def get_fiscal_data(indicator: str, country: str) -> Any:
     fiscal_indicators = {
         "overall_balance": "GGXCNL_NGDP",
@@ -69,14 +59,6 @@ def get_fiscal_data(indicator: str, country: str) -> Any:
     }
     imf_indicator = fiscal_indicators.get(indicator, indicator)
     return _make_request(f"{imf_indicator}/{country.upper()}")
-
-
-def get_financial_soundness(country: str) -> Any:
-    fsi_indicators = ["FSI_NIBT_MCA", "FSI_CAR_MCA", "FSI_NPL_NLSS", "FSI_ROA_MCA"]
-    results = {}
-    for ind in fsi_indicators:
-        results[ind] = _make_request(f"{ind}/{country.upper()}")
-    return results
 
 
 def main(args=None):
@@ -96,19 +78,10 @@ def main(args=None):
         indicator = args[1] if len(args) > 1 else "NGDP_RPCH"
         countries = args[2] if len(args) > 2 else None
         result = get_indicator_data(indicator, countries)
-    elif command == "weo":
-        indicator = args[1] if len(args) > 1 else "NGDP_RPCH"
-        country = args[2] if len(args) > 2 else "US"
-        start_year = args[3] if len(args) > 3 else None
-        end_year = args[4] if len(args) > 4 else None
-        result = get_weo_data(indicator, country, start_year, end_year)
     elif command == "fiscal":
         indicator = args[1] if len(args) > 1 else "gross_debt"
         country = args[2] if len(args) > 2 else "US"
         result = get_fiscal_data(indicator, country)
-    elif command == "fsi":
-        country = args[1] if len(args) > 1 else "US"
-        result = get_financial_soundness(country)
 
     print(json.dumps(result))
 

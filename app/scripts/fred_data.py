@@ -185,69 +185,6 @@ def get_categories(category_id: int = 0) -> Dict:
         return {"error": str(e), "category_id": category_id}
 
 
-def get_category_series(category_id: int, limit: int = 50) -> Dict:
-    """Get series in a category"""
-    try:
-        params = {
-            'category_id': category_id,
-            'limit': limit,
-            'order_by': 'popularity',
-            'sort_order': 'desc'
-        }
-        result = make_fred_request('category/series', params)
-
-        if 'error' in result:
-            return result
-
-        series_list = []
-        for series in result.get('seriess', []):
-            series_list.append({
-                'id': series.get('id'),
-                'title': series.get('title'),
-                'frequency': series.get('frequency'),
-                'units': series.get('units'),
-                'seasonal_adjustment': series.get('seasonal_adjustment'),
-                'last_updated': series.get('last_updated'),
-                'popularity': series.get('popularity', 0)
-            })
-
-        return {
-            'category_id': category_id,
-            'count': len(series_list),
-            'series': series_list
-        }
-    except Exception as e:
-        return {"error": str(e), "category_id": category_id}
-
-
-def get_release_dates(release_id: int, limit: int = 10) -> Dict:
-    """Get FRED release dates"""
-    try:
-        params = {
-            'release_id': release_id,
-            'limit': limit
-        }
-
-        result = make_fred_request('release/dates', params)
-
-        if 'error' in result:
-            return result
-
-        dates = []
-        for date in result.get('release_dates', []):
-            dates.append({
-                'release_id': date.get('release_id'),
-                'date': date.get('date')
-            })
-
-        return {
-            'release_id': release_id,
-            'dates': dates
-        }
-    except Exception as e:
-        return {"error": str(e), "release_id": release_id}
-
-
 def get_multiple_series(series_ids: List[str], start_date: Optional[str] = None,
                         end_date: Optional[str] = None) -> List[Dict]:
     """Fetch multiple FRED series concurrently for better performance"""
@@ -343,28 +280,6 @@ def main(args=None):
     elif command == "categories":
         category_id = int(args[1]) if len(args) > 1 else 0
         result = get_categories(category_id)
-        print(json.dumps(result, indent=2))
-
-    elif command == "category_series":
-        if len(args) < 2:
-            print(json.dumps({"error": "Usage: python fred_data.py category_series <category_id> [limit]"}))
-            sys.exit(1)
-
-        category_id = int(args[1])
-        limit = int(args[2]) if len(args) > 2 else 50
-
-        result = get_category_series(category_id, limit)
-        print(json.dumps(result, indent=2))
-
-    elif command == "releases":
-        if len(args) < 2:
-            print(json.dumps({"error": "Usage: python fred_data.py releases <release_id> [limit]"}))
-            sys.exit(1)
-
-        release_id = int(args[1])
-        limit = int(args[2]) if len(args) > 2 else 10
-
-        result = get_release_dates(release_id, limit)
         print(json.dumps(result, indent=2))
 
     else:

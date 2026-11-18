@@ -446,168 +446,9 @@ class FederalReserveWrapper:
 
     # ===== CENTRAL BANK HOLDINGS ENDPOINT =====
 
-    def get_central_bank_holdings(self, holding_type: str = "all_treasury", summary: bool = False,
-                                 date: Optional[str] = None) -> Dict[str, Any]:
-        """Get Federal Reserve Central Bank Holdings (SOMA) data"""
-        try:
-            if holding_type not in HOLDING_TYPES:
-                return FederalReserveError('central_bank_holdings', f'Invalid holding type: {holding_type}').to_dict()
-
-            # For now, return a simplified implementation
-            # Full implementation would require the complex NY Fed API from OpenBB
-            if summary:
-                # Return summary data structure
-                return {
-                    "success": True,
-                    "endpoint": "central_bank_holdings",
-                    "data": {
-                        "message": "Central bank holdings summary - requires NY Fed API implementation",
-                        "holding_type": holding_type,
-                        "note": "This endpoint requires the full NY Fed SOMA API implementation"
-                    },
-                    "parameters": {
-                        "holding_type": holding_type,
-                        "summary": summary,
-                        "date": date
-                    },
-                    "timestamp": int(datetime.now().timestamp())
-                }
-            else:
-                return {
-                    "success": True,
-                    "endpoint": "central_bank_holdings",
-                    "data": {
-                        "message": "Central bank holdings detailed data - requires NY Fed API implementation",
-                        "holding_type": holding_type,
-                        "note": "This endpoint requires the full NY Fed SOMA API implementation"
-                    },
-                    "parameters": {
-                        "holding_type": holding_type,
-                        "summary": summary,
-                        "date": date
-                    },
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-        except Exception as e:
-            return FederalReserveError('central_bank_holdings', str(e)).to_dict()
-
     # ===== OVERNIGHT BANK FUNDING RATE ENDPOINT =====
 
-    def get_overnight_bank_funding_rate(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get Overnight Bank Funding Rate data"""
-        try:
-            # Set default dates
-            if not start_date:
-                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            if not end_date:
-                end_date = datetime.now().strftime("%Y-%m-%d")
-
-            # This would use the NY Fed API - simplified implementation for now
-            return {
-                "success": True,
-                "endpoint": "overnight_bank_funding_rate",
-                "data": {
-                    "message": "Overnight Bank Funding Rate - requires NY Fed API implementation",
-                    "note": "This endpoint requires the full NY Fed API implementation"
-                },
-                "parameters": {
-                    "start_date": start_date,
-                    "end_date": end_date
-                },
-                "timestamp": int(datetime.now().timestamp())
-            }
-
-        except Exception as e:
-            return FederalReserveError('overnight_bank_funding_rate', str(e)).to_dict()
-
     # ===== COMPOSITE METHODS =====
-
-    def get_comprehensive_monetary_data(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get comprehensive monetary data from multiple endpoints"""
-        result = {
-            "success": True,
-            "start_date": start_date,
-            "end_date": end_date,
-            "timestamp": int(datetime.now().timestamp()),
-            "endpoints": {},
-            "failed_endpoints": []
-        }
-
-        # Define endpoints to try
-        endpoints = [
-            ('federal_funds_rate', lambda: self.get_federal_funds_rate(start_date, end_date)),
-            ('sofr_rate', lambda: self.get_sofr_rate(start_date, end_date)),
-            ('treasury_rates', lambda: self.get_treasury_rates(start_date, end_date)),
-            ('money_measures', lambda: self.get_money_measures(start_date, end_date))
-        ]
-
-        overall_success = False
-
-        for endpoint_name, endpoint_func in endpoints:
-            try:
-                endpoint_result = endpoint_func()
-                result["endpoints"][endpoint_name] = endpoint_result
-
-                if endpoint_result.get("success"):
-                    overall_success = True
-                else:
-                    result["failed_endpoints"].append({
-                        "endpoint": endpoint_name,
-                        "error": endpoint_result.get("error", "Unknown error")
-                    })
-
-            except Exception as e:
-                result["failed_endpoints"].append({
-                    "endpoint": endpoint_name,
-                    "error": str(e)
-                })
-
-        result["success"] = overall_success
-        return result
-
-    def get_market_overview(self) -> Dict[str, Any]:
-        """Get current market overview with key rates"""
-        result = {
-            "success": True,
-            "timestamp": int(datetime.now().timestamp()),
-            "endpoints": {},
-            "failed_endpoints": []
-        }
-
-        # Get recent data for key rates
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-
-        endpoints = [
-            ('federal_funds_rate', lambda: self.get_federal_funds_rate(start_date, end_date)),
-            ('sofr_rate', lambda: self.get_sofr_rate(start_date, end_date)),
-            ('treasury_rates', lambda: self.get_treasury_rates(start_date, end_date))
-        ]
-
-        overall_success = False
-
-        for endpoint_name, endpoint_func in endpoints:
-            try:
-                endpoint_result = endpoint_func()
-                result["endpoints"][endpoint_name] = endpoint_result
-
-                if endpoint_result.get("success"):
-                    overall_success = True
-                else:
-                    result["failed_endpoints"].append({
-                        "endpoint": endpoint_name,
-                        "error": endpoint_result.get("error", "Unknown error")
-                    })
-
-            except Exception as e:
-                result["failed_endpoints"].append({
-                    "endpoint": endpoint_name,
-                    "error": str(e)
-                })
-
-        result["success"] = overall_success
-        return result
 
 # ===== CLI INTERFACE =====
 
@@ -644,10 +485,6 @@ def main():
                 "treasury_rates [start_date] [end_date]",
                 "yield_curve [date]",
                 "money_measures [start_date] [end_date] [adjusted]",
-                "central_bank_holdings [holding_type] [summary] [date]",
-                "overnight_bank_funding_rate [start_date] [end_date]",
-                "comprehensive_monetary_data [start_date] [end_date]",
-                "market_overview"
             ],
             "note": "No API key required - Federal Reserve data is publicly available"
         }))
@@ -687,29 +524,6 @@ def main():
             result = wrapper.get_money_measures(start_date, end_date, adjusted)
             print(json.dumps(_json_safe(result), indent=2, allow_nan=False))
 
-        elif command == "central_bank_holdings":
-            holding_type = sys.argv[2] if len(sys.argv) > 2 else "all_treasury"
-            summary = sys.argv[3].lower() == "true" if len(sys.argv) > 3 else False
-            date = sys.argv[4] if len(sys.argv) > 4 else None
-            result = wrapper.get_central_bank_holdings(holding_type, summary, date)
-            print(json.dumps(_json_safe(result), indent=2, allow_nan=False))
-
-        elif command == "overnight_bank_funding_rate":
-            start_date = sys.argv[2] if len(sys.argv) > 2 else None
-            end_date = sys.argv[3] if len(sys.argv) > 3 else None
-            result = wrapper.get_overnight_bank_funding_rate(start_date, end_date)
-            print(json.dumps(_json_safe(result), indent=2, allow_nan=False))
-
-        elif command == "comprehensive_monetary_data":
-            start_date = sys.argv[2] if len(sys.argv) > 2 else None
-            end_date = sys.argv[3] if len(sys.argv) > 3 else None
-            result = wrapper.get_comprehensive_monetary_data(start_date, end_date)
-            print(json.dumps(_json_safe(result), indent=2, allow_nan=False))
-
-        elif command == "market_overview":
-            result = wrapper.get_market_overview()
-            print(json.dumps(_json_safe(result), indent=2, allow_nan=False))
-
         else:
             print(json.dumps({
                 "error": f"Unknown command: {command}",
@@ -719,10 +533,6 @@ def main():
                     "treasury_rates [start_date] [end_date]",
                     "yield_curve [date]",
                     "money_measures [start_date] [end_date] [adjusted]",
-                    "central_bank_holdings [holding_type] [summary] [date]",
-                    "overnight_bank_funding_rate [start_date] [end_date]",
-                    "comprehensive_monetary_data [start_date] [end_date]",
-                    "market_overview"
                 ]
             }))
             sys.exit(1)

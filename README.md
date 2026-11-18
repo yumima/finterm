@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`bc9b9f89e`](https://github.com/yumima/finterm/commit/bc9b9f89e) agno_trading: import what exists; Alpha Arena gets its technical features
 - [`5f18576fd`](https://github.com/yumima/finterm/commit/5f18576fd) credentials: regenerate the catalogue; list the keys libraries read
 - [`9d3a4bca9`](https://github.com/yumima/finterm/commit/9d3a4bca9) eia, wto: read the API key the panels say they need
 - [`0e9c9b871`](https://github.com/yumima/finterm/commit/0e9c9b871) economic calendar: a failed scrape answers as JSON; a late reply is dropped

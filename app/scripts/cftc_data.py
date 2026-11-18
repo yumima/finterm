@@ -6,7 +6,7 @@ import sys
 import json
 import requests
 import pandas as pd
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, Optional, Union
 from datetime import datetime, timedelta
 import traceback
 import os
@@ -362,74 +362,6 @@ class CFTCDataWrapper:
         except Exception as e:
             return {"error": CFTCError("cot_data", str(e)).to_dict()}
 
-    def search_cot_markets(self, query: str) -> Dict[str, Any]:
-        """Search for available COT markets"""
-        try:
-            if not query:
-                return {"error": CFTCError("cot_search", "Search query is required").to_dict()}
-
-            query_lower = query.lower()
-            results = []
-
-            # Search through our market mappings
-            for key, (name, code) in self.market_mappings.items():
-                if (query_lower in key.lower() or
-                    query_lower in name.lower() or
-                    query_lower == code.lower() or
-                    name.lower().startswith(query_lower) or
-                    key.lower().startswith(query_lower)):
-
-                    # Try to categorize the market
-                    category = "other"
-                    if code.startswith("0"):
-                        category = "commodities"
-                    elif code.startswith("1"):
-                        category = "financial"
-                    elif code.startswith("2"):
-                        category = "energy"
-                    elif code.startswith("3"):
-                        category = "metals"
-
-                    results.append({
-                        "search_key": key,
-                        "cftc_code": code,
-                        "market_name": name,
-                        "category": category,
-                        "description": f"{name} ({code})"
-                    })
-
-            if not results:
-                return {"error": CFTCError("cot_search", f"No markets found for query: {query}").to_dict()}
-
-            return {
-                "success": True,
-                "data": results,
-                "parameters": {"query": query}
-            }
-
-        except Exception as e:
-            return {"error": CFTCError("cot_search", str(e)).to_dict()}
-
-    def get_available_report_types(self) -> Dict[str, Any]:
-        """Get information about available COT report types"""
-        try:
-            report_info = {}
-
-            for report_type, description in self.report_descriptions.items():
-                report_info[report_type] = {
-                    "description": description,
-                    "has_futures_only_option": report_type != "supplemental"
-                }
-
-            return {
-                "success": True,
-                "data": report_info,
-                "parameters": {}
-            }
-
-        except Exception as e:
-            return {"error": CFTCError("available_report_types", str(e)).to_dict()}
-
     # MARKET SENTIMENT ANALYSIS ENDPOINTS
 
     def analyze_market_sentiment(self, identifier: str, report_type: str = "disaggregated") -> Dict[str, Any]:
@@ -529,102 +461,7 @@ class CFTCDataWrapper:
         except Exception as e:
             return {"error": CFTCError("market_sentiment", str(e)).to_dict()}
 
-    def get_position_summary(self, identifier: str, report_type: str = "disaggregated") -> Dict[str, Any]:
-        """Get summary of current positions for a market"""
-        try:
-            # Get latest COT data
-            cot_result = self.get_cot_data(
-                identifier=identifier,
-                report_type=report_type,
-                start_date=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
-                limit=5
-            )
-
-            if not cot_result.get("success"):
-                return cot_result
-
-            cot_data = cot_result["data"]
-            if not cot_data:
-                return {"error": CFTCError("position_summary", f"No position data available: {identifier}").to_dict()}
-
-            # Get most recent data
-            latest = cot_data[0]
-
-            # Build position summary (None where the report lacks a field)
-            P = lambda name: self._pos(latest, name)
-            oi = P("oi")
-
-            def side(long_key, short_key, with_net=True):
-                lo, sh = P(long_key), P(short_key)
-                out = {"long": lo, "short": sh}
-                if with_net:
-                    out["net"] = self._sub(lo, sh)
-                out["pct_of_oi"] = {"long": self._pct(lo, oi), "short": self._pct(sh, oi)}
-                return out
-
-            summary = {
-                "report_date": latest.get("report_date_as_yyyy_mm_dd"),
-                "market_name": latest.get("market_and_exchange_names", ""),
-                "open_interest": oi,
-                "positions": {
-                    "commercial": side("comm_long", "comm_short"),
-                    "non_commercial": side("noncomm_long", "noncomm_short"),
-                    "non_reportable": side("nonrept_long", "nonrept_short", with_net=False)
-                }
-            }
-
-            return {
-                "success": True,
-                "data": summary,
-                "parameters": {
-                    "identifier": identifier,
-                    "report_type": report_type
-                }
-            }
-
-        except Exception as e:
-            return {"error": CFTCError("position_summary", str(e)).to_dict()}
-
     # COMPREHENSIVE DATA ENDPOINTS
-
-    def get_comprehensive_cot_overview(self, identifiers: List[str] = None, report_type: str = "disaggregated") -> Dict[str, Any]:
-        """Get comprehensive COT overview for multiple markets"""
-        try:
-            if not identifiers:
-                # Default to major markets
-                identifiers = ["gold", "crude_oil", "euro", "s&p_500", "bitcoin"]
-
-            results = {}
-
-            for identifier in identifiers:
-                # Get position summary
-                summary_result = self.get_position_summary(identifier, report_type)
-                results[identifier] = summary_result
-
-                # Get sentiment analysis
-                sentiment_result = self.analyze_market_sentiment(identifier, report_type)
-                results[f"{identifier}_sentiment"] = sentiment_result
-
-            # Check if we have any successful data
-            has_data = any(
-                result.get("success") and result.get("data")
-                for result in results.values()
-            )
-
-            if not has_data:
-                return {"error": CFTCError("comprehensive_cot_overview", "No COT data found for any markets").to_dict()}
-
-            return {
-                "success": True,
-                "data": results,
-                "parameters": {
-                    "identifiers": identifiers,
-                    "report_type": report_type
-                }
-            }
-
-        except Exception as e:
-            return {"error": CFTCError("comprehensive_cot_overview", str(e)).to_dict()}
 
     def get_cot_historical_trend(self, identifier: str, report_type: str = "disaggregated",
                                 period: int = 52) -> Dict[str, Any]:
@@ -702,11 +539,7 @@ def main(args=None):
             "error": "Usage: python cftc_data.py <command> [args...]",
             "commands": [
                 "cot_data [identifier] [report_type] [futures_only] [start_date] [end_date] [limit]",
-                "search_cot_markets [query]",
-                "available_report_types",
                 "market_sentiment [identifier] [report_type]",
-                "position_summary [identifier] [report_type]",
-                "comprehensive_cot_overview [identifiers] [report_type]",
                 "cot_historical_trend [identifier] [report_type] [period]"
             ],
             "note": "CFTC app token optional but recommended for rate limiting. Set CFTC_APP_TOKEN environment variable.",
@@ -727,28 +560,10 @@ def main(args=None):
             limit = int(sys.argv[7]) if len(args) + 1 > 7 else 1000
             result = wrapper.get_cot_data(identifier, report_type, futures_only, start_date, end_date, limit)
 
-        elif command == "search_cot_markets":
-            query = args[1] if len(args) + 1 > 2 else None
-            result = wrapper.search_cot_markets(query)
-
-        elif command == "available_report_types":
-            result = wrapper.get_available_report_types()
-
         elif command == "market_sentiment":
             identifier = args[1] if len(args) + 1 > 2 else None
             report_type = args[2] if len(args) + 1 > 3 else "disaggregated"
             result = wrapper.analyze_market_sentiment(identifier, report_type)
-
-        elif command == "position_summary":
-            identifier = args[1] if len(args) + 1 > 2 else None
-            report_type = args[2] if len(args) + 1 > 3 else "disaggregated"
-            result = wrapper.get_position_summary(identifier, report_type)
-
-        elif command == "comprehensive_cot_overview":
-            identifiers_str = args[1] if len(args) + 1 > 2 else None
-            identifiers = identifiers_str.split(',') if identifiers_str else None
-            report_type = args[2] if len(args) + 1 > 3 else "disaggregated"
-            result = wrapper.get_comprehensive_cot_overview(identifiers, report_type)
 
         elif command == "cot_historical_trend":
             identifier = args[1] if len(args) + 1 > 2 else None

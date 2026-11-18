@@ -83,38 +83,6 @@ def get_credit_ratings_by_agency(agency: str) -> Dict[str, Any]:
         }
     return data
 
-def get_historical_credit_ratings(country: str, start_date: str = None, end_date: str = None) -> Dict[str, Any]:
-    """3. Get historical credit ratings for a country."""
-    params = {}
-    if start_date:
-        params['startDate'] = start_date
-    if end_date:
-        params['endDate'] = end_date
-
-    endpoint = f"credit-ratings/country/{country}/historical"
-    data = _make_request(endpoint, params)
-
-    if data and "error" not in data:
-        return {
-            "data": data,
-            "country": country,
-            "period": {"start": start_date, "end": end_date},
-            "timestamp": datetime.now().isoformat()
-        }
-    return data
-
-def get_rating_changes() -> Dict[str, Any]:
-    """4. Get recent credit rating changes (upgrades/downgrades)."""
-    # Note: This endpoint might need adjustment based on actual API
-    data = _make_request("credit-ratings/changes")
-
-    if data and "error" not in data:
-        return {
-            "data": data,
-            "timestamp": datetime.now().isoformat()
-        }
-    return data
-
 # 3. CORE FUNCTIONS - GOVERNMENT BONDS
 
 def get_government_bond_yields(country: str = None) -> Dict[str, Any]:
@@ -175,26 +143,6 @@ def get_european_bond_yields() -> Dict[str, Any]:
         }
     return data
 
-def get_historical_bond_yields(symbol: str, start_date: str = None, end_date: str = None) -> Dict[str, Any]:
-    """9. Get historical bond yields for a specific symbol."""
-    params = {}
-    if start_date:
-        params['startDate'] = start_date
-    if end_date:
-        params['endDate'] = end_date
-
-    endpoint = f"markets/symbol/{symbol}/historical"
-    data = _make_request(endpoint, params)
-
-    if data and "error" not in data:
-        return {
-            "data": data,
-            "symbol": symbol,
-            "period": {"start": start_date, "end": end_date},
-            "timestamp": datetime.now().isoformat()
-        }
-    return data
-
 def get_yield_curve(country: str) -> Dict[str, Any]:
     """10. Get yield curve data for a country."""
     data = _make_request(f"country/{country}/yield-curve")
@@ -237,62 +185,7 @@ def get_country_financial_data(country: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": f"Failed to get comprehensive data for {country}: {str(e)}"}
 
-def get_global_summary() -> Dict[str, Any]:
-    """12. Get global summary of credit ratings and bond markets."""
-    try:
-        # Get global ratings data
-        ratings_data = _make_request("credit-ratings")
-
-        if ratings_data and "error" not in ratings_data and isinstance(ratings_data, list):
-            # Process ratings summary
-            agencies = list(set(rating.get('Agency', 'Unknown') for rating in ratings_data))
-            countries = list(set(rating.get('Country', 'Unknown') for rating in ratings_data))
-
-            # Rating distribution
-            rating_distribution = {}
-            for rating in ratings_data:
-                rating_val = rating.get('Rating', 'Unknown')
-                rating_distribution[rating_val] = rating_distribution.get(rating_val, 0) + 1
-
-            ratings_summary = {
-                "total_ratings": len(ratings_data),
-                "agencies": agencies,
-                "countries_count": len(countries),
-                "rating_distribution": rating_distribution
-            }
-        else:
-            ratings_summary = {"error": "Failed to fetch ratings data"}
-
-        # Get bond markets overview
-        bond_data = _make_request("markets/bond-overview")
-
-        if bond_data and "error" not in bond_data:
-            bond_summary = bond_data
-        else:
-            bond_summary = {"error": "Failed to fetch bond overview"}
-
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "credit_ratings_summary": ratings_summary,
-            "bond_markets_summary": bond_summary,
-            "data_source": "Trading Economics"
-        }
-    except Exception as e:
-        return {"error": f"Failed to generate global summary: {str(e)}"}
-
 # 5. UTILITY FUNCTIONS
-
-def search_bonds(query: str) -> Dict[str, Any]:
-    """13. Search for bond symbols and instruments."""
-    data = _make_request("search/bond", {"q": query})
-
-    if data and "error" not in data:
-        return {
-            "data": data,
-            "query": query,
-            "timestamp": datetime.now().isoformat()
-        }
-    return data
 
 def get_supported_countries() -> Dict[str, Any]:
     """14. Get list of supported countries for credit ratings and bonds."""
@@ -330,17 +223,12 @@ def main():
                 "test - Test API connection",
                 "ratings [country] - Get credit ratings (optional country)",
                 "ratings_by_agency <agency> - Get ratings by agency (S&P, Moody's, Fitch)",
-                "ratings_history <country> [start_date] [end_date] - Historical ratings",
-                "rating_changes - Get recent rating changes",
                 "bonds [country] - Get bond yields (optional country)",
                 "bond <symbol> - Get specific bond data (e.g., US10Y)",
                 "us_treasuries - Get US Treasury yields",
                 "european_bonds - Get European bond yields",
-                "bond_history <symbol> [start_date] [end_date] - Historical bond yields",
                 "yield_curve <country> - Get yield curve data",
                 "country_data <country> - Get comprehensive country data",
-                "global_summary - Get global market summary",
-                "search_bonds <query> - Search for bonds",
                 "countries - Get supported countries",
                 "calendar - Get rating calendar"
             ],
@@ -366,13 +254,6 @@ def main():
         elif command == "ratings_by_agency":
             agency = sys.argv[2]
             result = get_credit_ratings_by_agency(agency)
-        elif command == "ratings_history":
-            country = sys.argv[2]
-            start_date = sys.argv[3] if len(sys.argv) > 3 else None
-            end_date = sys.argv[4] if len(sys.argv) > 4 else None
-            result = get_historical_credit_ratings(country, start_date, end_date)
-        elif command == "rating_changes":
-            result = get_rating_changes()
         elif command == "bonds":
             country = sys.argv[2] if len(sys.argv) > 2 else None
             result = get_government_bond_yields(country)
@@ -383,22 +264,12 @@ def main():
             result = get_us_treasury_yields()
         elif command == "european_bonds":
             result = get_european_bond_yields()
-        elif command == "bond_history":
-            symbol = sys.argv[2]
-            start_date = sys.argv[3] if len(sys.argv) > 3 else None
-            end_date = sys.argv[4] if len(sys.argv) > 4 else None
-            result = get_historical_bond_yields(symbol, start_date, end_date)
         elif command == "yield_curve":
             country = sys.argv[2]
             result = get_yield_curve(country)
         elif command == "country_data":
             country = " ".join(sys.argv[2:])
             result = get_country_financial_data(country)
-        elif command == "global_summary":
-            result = get_global_summary()
-        elif command == "search_bonds":
-            query = " ".join(sys.argv[2:])
-            result = search_bonds(query)
         elif command == "countries":
             result = get_supported_countries()
         elif command == "calendar":

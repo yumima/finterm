@@ -265,52 +265,6 @@ def get_organizations() -> Dict[str, Any]:
             "error": f"Error fetching organizations: {str(e)}"
         }
 
-def get_organization_details(organization_id: str) -> Dict[str, Any]:
-    """
-    Get detailed information about a specific organization
-
-    Args:
-        organization_id: The ID or name of the organization
-
-    Returns:
-        Detailed organization information with datasets
-    """
-    try:
-        # Get organization details
-        result = _make_request('organization_show', {'id': organization_id, 'include_datasets': True})
-
-        if result["error"]:
-            return result
-
-        # Enhance organization data
-        org_data = result.get("data", {})
-        enhanced_org = {
-            "id": org_data.get("id", ""),
-            "name": org_data.get("name", ""),
-            "title": org_data.get("title", org_data.get("display_name", "")),
-            "description": org_data.get("description", ""),
-            "image_url": org_data.get("image_display_url", ""),
-            "created": org_data.get("created", ""),
-            "users": org_data.get("users", []),
-            "dataset_count": len(org_data.get("packages", [])),
-            "state": org_data.get("state", "active"),
-            "tags": [tag.get("display_name", "") for tag in org_data.get("tags", [])],
-            "datasets": org_data.get("packages", [])
-        }
-
-        result["data"] = enhanced_org
-        result["metadata"]["organization_id"] = organization_id
-        result["metadata"]["description"] = f"Detailed information for organization: {organization_id}"
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": {},
-            "metadata": {"organization_id": organization_id},
-            "error": f"Error fetching organization details: {str(e)}"
-        }
-
 # DATASET LEVEL FUNCTIONS
 
 def search_datasets(query: str = "", rows: int = 50, start: int = 0,
@@ -607,96 +561,7 @@ def get_recent_datasets(limit: int = 50) -> Dict[str, Any]:
             "error": f"Error fetching recent datasets: {str(e)}"
         }
 
-def get_popular_organizations(limit: int = 20) -> Dict[str, Any]:
-    """
-    Get organizations with the most datasets (most popular by data volume)
-
-    Args:
-        limit: Maximum number of organizations to return
-
-    Returns:
-        List of popular organizations
-    """
-    try:
-        # Get all organizations
-        result = get_organizations()
-
-        if result["error"]:
-            return result
-
-        # Sort and limit
-        orgs = result.get("data", [])
-        orgs.sort(key=lambda x: x.get("dataset_count", 0), reverse=True)
-        popular_orgs = orgs[:limit]
-
-        result["data"] = popular_orgs
-        result["metadata"]["count"] = len(popular_orgs)
-        result["metadata"]["description"] = f"Popular organizations by dataset count (limit: {limit})"
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": [],
-            "metadata": {"limit": limit},
-            "error": f"Error fetching popular organizations: {str(e)}"
-        }
-
 # UTILITY FUNCTIONS
-
-def get_all_datasets(rows: int = 100) -> Dict[str, Any]:
-    """
-    Get a comprehensive list of datasets across all organizations
-
-    Args:
-        rows: Maximum number of datasets to return
-
-    Returns:
-        List of datasets from all organizations
-    """
-    try:
-        result = search_datasets(rows=rows)
-
-        if result["error"]:
-            return result
-
-        result["metadata"]["description"] = f"List of datasets from all organizations (limit: {rows})"
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": {},
-            "metadata": {"rows": rows},
-            "error": f"Error fetching all datasets: {str(e)}"
-        }
-
-def list_all_dataset_names() -> Dict[str, Any]:
-    """
-    Get a simple list of all dataset names available on the portal
-
-    Returns:
-        Simple list of dataset names/IDs
-    """
-    try:
-        result = _make_request('package_list')
-
-        if result["error"]:
-            return result
-
-        dataset_names = result.get("data", [])
-
-        result["metadata"]["count"] = len(dataset_names)
-        result["metadata"]["description"] = "Simple list of all dataset names on data.gov.au"
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": f"Error listing dataset names: {str(e)}"
-        }
 
 # --- 4. CLI INTERFACE ---
 
@@ -709,15 +574,11 @@ def main():
 
     Available Commands:
         organizations - List all data publishing organizations
-        org-details <id> - Get details for a specific organization
         search <query> [rows] - Search datasets with optional result limit
         dataset-details <id> - Get detailed information about a specific dataset
         org-datasets <org_id> [rows] - Get datasets from a specific organization
         resource-details <id> - Get details for a specific resource
         recent [limit] - Get recently updated datasets
-        popular-orgs [limit] - Get popular organizations by dataset count
-        all-datasets [rows] - Get datasets from all organizations
-        list-names - Get simple list of all dataset names
     """
 
     if len(sys.argv) < 2:
@@ -725,15 +586,11 @@ def main():
             "error": "Usage: python datagov_au_api.py <command> [arguments]",
             "available_commands": [
                 "organizations - List all data publishing organizations",
-                "org-details <id> - Get details for a specific organization",
                 "search <query> [rows] - Search datasets with optional result limit",
                 "dataset-details <id> - Get detailed information about a specific dataset",
                 "org-datasets <org_id> [rows] - Get datasets from a specific organization",
                 "resource-details <id> - Get details for a specific resource",
                 "recent [limit] - Get recently updated datasets",
-                "popular-orgs [limit] - Get popular organizations by dataset count",
-                "all-datasets [rows] - Get datasets from all organizations",
-                "list-names - Get simple list of all dataset names"
             ],
             "examples": [
                 "python datagov_au_api.py organizations",
@@ -761,15 +618,6 @@ def main():
     try:
         if command == "organizations":
             result = get_organizations()
-
-        elif command == "org-details":
-            if len(sys.argv) < 3:
-                print(json.dumps({
-                    "error": "Organization ID required",
-                    "usage": "python datagov_au_api.py org-details <organization_id>"
-                }))
-                sys.exit(1)
-            result = get_organization_details(sys.argv[2])
 
         elif command == "search":
             if len(sys.argv) < 3:
@@ -815,24 +663,12 @@ def main():
             limit = int(sys.argv[2]) if len(sys.argv) > 2 else 50
             result = get_recent_datasets(limit)
 
-        elif command == "popular-orgs":
-            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
-            result = get_popular_organizations(limit)
-
-        elif command == "all-datasets":
-            rows = int(sys.argv[2]) if len(sys.argv) > 2 else 100
-            result = get_all_datasets(rows)
-
-        elif command == "list-names":
-            result = list_all_dataset_names()
-
         else:
             print(json.dumps({
                 "error": f"Unknown command: {command}",
                 "available_commands": [
-                    "organizations", "org-details", "search", "dataset-details",
-                    "org-datasets", "resource-details", "recent", "popular-orgs",
-                    "all-datasets", "list-names"
+                    "organizations", "search", "dataset-details",
+                    "org-datasets", "resource-details", "recent",
                 ]
             }))
             sys.exit(1)

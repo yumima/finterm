@@ -369,109 +369,6 @@ class BLSDataAPI:
             }
         }
 
-    def search_bls_series(self, query: str, category: str = "cpi",
-                         include_extras: bool = False,
-                         include_code_map: bool = False) -> Dict[str, Any]:
-        """Search for BLS series by category and query"""
-        try:
-            if category not in SURVEY_CATEGORIES:
-                available_categories = ", ".join(SURVEY_CATEGORY_NAMES.keys())
-                return BLSError("bls_search", f"Invalid category. Available: {available_categories}").to_dict()
-
-            # Use cached data if available
-            cache_key = f"{category}_series"
-            series_df = self._get_cached_data(cache_key)
-
-            if series_df is None:
-                # Try to get from local cache or download
-                series_df = self._get_local_category_data(category)
-                if series_df is None:
-                    return BLSError("bls_search", f"Series data for category '{category}' not available locally").to_dict()
-
-                self._set_cache_data(cache_key, series_df)
-
-            if series_df.empty:
-                return BLSError("bls_search", f"No series data found for category '{category}'").to_dict()
-
-            # Search for matching series
-            if not query.strip():
-                # Return all series in category
-                results_df = series_df
-            else:
-                # Search within series title and ID
-                search_terms = [term.strip() for term in query.split(";")]
-                combined_mask = pd.Series([True] * len(series_df))
-
-                for term in search_terms:
-                    term_mask = series_df.apply(
-                        lambda row, term=term: row.astype(str).str.contains(
-                            term, case=False, regex=False, na=False
-                        )
-                    ).any(axis=1)
-                    combined_mask &= term_mask
-
-                results_df = series_df[combined_mask]
-
-            if results_df.empty:
-                return BLSError("bls_search", f"No results found for query: '{query}' in category '{category}'").to_dict()
-
-            # Format results
-            if include_extras:
-                # Return all columns
-                results = results_df.to_dict("records")
-            else:
-                # Return only essential columns
-                essential_cols = ["series_id", "series_title", "survey_name"]
-                available_cols = [col for col in essential_cols if col in results_df.columns]
-                results = results_df[available_cols].to_dict("records")
-
-            # Add code map if requested
-            metadata = {}
-            if include_code_map:
-                metadata = self._get_local_code_map(category)
-
-            return {
-                "success": True,
-                "data": {
-                    "query": query,
-                    "category": category,
-                    "results": results,
-                    "metadata": metadata if metadata else None
-                }
-            }
-
-        except Exception as e:
-            return BLSError("bls_search", str(e)).to_dict()
-
-    def _get_local_category_data(self, category: str) -> Optional[pd.DataFrame]:
-        """Curated catalog of real BLS series IDs for popular categories.
-
-        These are genuine BLS identifiers (queryable via the BLS API), not
-        FRED mnemonics. Categories without a curated list return None so the
-        caller reports "not available locally" instead of inventing entries.
-        """
-        if category == "cpi":
-            data = [
-                {"series_id": "CUUR0000SA0", "series_title": "All items in U.S. city average, all urban consumers, not seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"},
-                {"series_id": "CUSR0000SA0", "series_title": "All items in U.S. city average, all urban consumers, seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"},
-                {"series_id": "CUSR0000SA0L1E", "series_title": "All items less food and energy in U.S. city average, all urban consumers, seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"}
-            ]
-        elif category == "employment":
-            data = [
-                {"series_id": "LNS14000000", "series_title": "Unemployment Rate (Seasonally Adjusted)", "survey_name": "Labor Force Statistics from the Current Population Survey"},
-                {"series_id": "CES0000000001", "series_title": "All employees, thousands, total nonfarm, seasonally adjusted", "survey_name": "Employment, Hours, and Earnings from the CES survey (National)"},
-                {"series_id": "LNS11300000", "series_title": "Labor Force Participation Rate (Seasonally Adjusted)", "survey_name": "Labor Force Statistics from the Current Population Survey"}
-            ]
-        else:
-            return None
-
-        return pd.DataFrame(data)
-
-    def _get_local_code_map(self, category: str) -> Dict:
-        """Get code map for category (simplified version)"""
-        # In a real implementation, this would read from local cached files
-        return {}
-
     async def get_series_data(self, series_ids: Union[str, List[str]],
                             start_date: Optional[str] = None,
                             end_date: Optional[str] = None,
@@ -510,42 +407,6 @@ class BLSDataAPI:
 
         except Exception as e:
             return BLSError("get_series_data", str(e)).to_dict()
-
-    async def get_popular_series(self) -> Dict[str, Any]:
-        """Get data for popular economic series"""
-        try:
-            popular_series_ids = list(POPULAR_SERIES.keys())
-
-            result = await self.get_bls_timeseries(
-                series_ids=popular_series_ids,
-                start_year=datetime.now().year - 2,  # 2 years of data
-                calculations=True,
-                catalog=True
-            )
-
-            if "error" in result:
-                return result
-
-            # Add series descriptions
-            data = result.get("data", {})
-            series_data = data.get("series_data", [])
-
-            # Add descriptions to each series
-            for record in series_data:
-                series_id = record.get("symbol")
-                if series_id in POPULAR_SERIES:
-                    record["description"] = POPULAR_SERIES[series_id]
-
-            return {
-                "success": True,
-                "data": {
-                    "popular_series": series_data,
-                    "available_series": POPULAR_SERIES
-                }
-            }
-
-        except Exception as e:
-            return BLSError("get_popular_series", str(e)).to_dict()
 
     async def get_labor_market_overview(self) -> Dict[str, Any]:
         """Get comprehensive labor market overview"""
@@ -774,14 +635,7 @@ def main(args=None):
 
     # Map commands to async methods
     async def run_command():
-        if command == "search_series":
-            query = args[1] if len(args) + 1 > 2 else ""
-            category = args[2] if len(args) + 1 > 3 else "cpi"
-            include_extras = args[3].lower() == "true" if len(args) + 1 > 4 else False
-            include_code_map = args[4].lower() == "true" if len(args) + 1 > 5 else False
-            return api.search_bls_series(query, category, include_extras, include_code_map)
-
-        elif command == "get_series":
+        if command == "get_series":
             series_ids = args[1] if len(args) + 1 > 2 else ""
             start_date = args[2] if len(args) + 1 > 3 else None
             end_date = args[3] if len(args) + 1 > 4 else None
@@ -789,9 +643,6 @@ def main(args=None):
             annual_average = sys.argv[6].lower() == "true" if len(args) + 1 > 6 else False
             aspects = sys.argv[7].lower() == "true" if len(args) + 1 > 7 else False
             return await api.get_series_data(series_ids, start_date, end_date, calculations, annual_average, aspects)
-
-        elif command == "get_popular":
-            return await api.get_popular_series()
 
         elif command == "get_labor_overview":
             return await api.get_labor_market_overview()
