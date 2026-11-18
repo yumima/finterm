@@ -6,12 +6,14 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
-- [`f8d8f96db`](https://github.com/yumima/finterm/commit/f8d8f96db) scripts: delete script actions and CLI commands no caller sends
-- [`f2a03fd73`](https://github.com/yumima/finterm/commit/f2a03fd73) scripts: delete functions, classes and imports nothing calls
-- [`780ee79c8`](https://github.com/yumima/finterm/commit/780ee79c8) economic calendar: fetch the day the panel asks for, not a fixed Oct 16
-- [`bf5853cb9`](https://github.com/yumima/finterm/commit/bf5853cb9) analytics: delete the packages and modules that only a docstring mentions
-- [`c059eaa12`](https://github.com/yumima/finterm/commit/c059eaa12) scripts: delete committed debug output and scratch text files
-- [`7a5125703`](https://github.com/yumima/finterm/commit/7a5125703) scripts: delete 278 Python scripts that nothing runs or imports
+- [`3fc9e5fe9`](https://github.com/yumima/finterm/commit/3fc9e5fe9) economics: delete the unreachable trend block after analytics_engine's return
+- [`8a7cff138`](https://github.com/yumima/finterm/commit/8a7cff138) scripts: delete script actions and CLI commands no caller sends
+- [`f87ba8875`](https://github.com/yumima/finterm/commit/f87ba8875) scripts: delete functions, classes and imports nothing calls
+- [`ac7495159`](https://github.com/yumima/finterm/commit/ac7495159) economic calendar: fetch the day the panel asks for, not a fixed Oct 16
+- [`06a056cc2`](https://github.com/yumima/finterm/commit/06a056cc2) analytics: delete the packages and modules that only a docstring mentions
+- [`8e8a5f85c`](https://github.com/yumima/finterm/commit/8e8a5f85c) scripts: delete committed debug output and scratch text files
+- [`50c59215b`](https://github.com/yumima/finterm/commit/50c59215b) scripts: delete 278 Python scripts that nothing runs or imports
+- [`c30433ca3`](https://github.com/yumima/finterm/commit/c30433ca3) credentials: EDGAR_IDENTITY reaches the scripts (sec_http honours a user-set identity)
 - [`dff029d5e`](https://github.com/yumima/finterm/commit/dff029d5e) sec http: every edgartools user gets the contact identity from one helper
 - [`738690969`](https://github.com/yumima/finterm/commit/738690969) sec http: one retry policy, a deadline, a byte cap; edgartools paced by the gate
 - [`7bb40ed94`](https://github.com/yumima/finterm/commit/7bb40ed94) sec directory: the C++ ticker -> CIK map reads the app's one copy

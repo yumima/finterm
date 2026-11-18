@@ -1305,6 +1305,13 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_treasury_par_curve.py
     )
     set_tests_properties(treasury_par_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # Economics analytics engine: each analyzer dispatches its own analyses
+    # (the file was spliced out of order once; time_series_analysis crashed).
+    add_test(
+        NAME economics_analytics_engine
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_economics_analytics_engine.py
+    )
+    set_tests_properties(economics_analytics_engine PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
     # Futures / FX day change: the settle BEFORE the last reopen (a Saturday
     # ES=F read +0.11% against Friday's own settle while it was down 0.42%),
     # and Columbus / Veterans Day are trading days. 77 without pandas.
