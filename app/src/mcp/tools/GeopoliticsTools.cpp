@@ -384,7 +384,9 @@ std::vector<ToolDef> get_geopolitics_tools() {
                                      h->deleteLater();
                                  });
                 QObject::connect(svc, &services::geo::GeopoliticsService::error_occurred, h,
-                                 [resolve, h](QString, QString m) {
+                                 [resolve, h](QString context, QString m) {
+                                     if (context != QLatin1String("geolocation"))
+                                         return; // another panel's HDX / trade failure
                                      resolve(ToolResult::fail(m));
                                      h->deleteLater();
                                  });

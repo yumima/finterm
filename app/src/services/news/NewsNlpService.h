@@ -51,12 +51,10 @@ struct ArticleGeo {
     double primary_lon = 0;
 };
 
-struct InfrastructureItem {
-    QString name;
-    QString type; // "airport", "military", "power_plant", "port"
-    double lat = 0;
-    double lon = 0;
-    double distance_km = 0;
+/// One answer of news_geolocation.py extract_and_geocode.
+struct GeoResult {
+    QVector<ArticleGeo> articles; // only the articles a location was found in
+    QJsonObject raw;              // the script's whole answer (also unique_locations, coverage)
 };
 
 // ── Service ─────────────────────────────────────────────────────────────────
@@ -65,8 +63,8 @@ class NewsNlpService : public QObject {
     Q_OBJECT
   public:
     using EntitiesCallback = std::function<void(bool, NerResult)>;
-    using GeoCallback = std::function<void(bool, QVector<ArticleGeo>)>;
-    using InfraCallback = std::function<void(bool, QVector<InfrastructureItem>)>;
+    /// On failure `error` carries the script's own message (or stderr / exit code).
+    using GeoCallback = std::function<void(bool ok, GeoResult result, QString error)>;
     using TranslateCallback = std::function<void(bool, QString translated, QString detected_lang)>;
     using SemanticClustersCallback = std::function<void(bool, QJsonArray clusters)>;
 
@@ -78,18 +76,16 @@ class NewsNlpService : public QObject {
     /// Semantic clustering via TF-IDF cosine similarity.
     void cluster_semantic(const QVector<NewsArticle>& articles, SemanticClustersCallback cb);
 
-    /// Geolocate articles — extract locations and return coordinates.
+    /// Geolocate articles — extract locations and return coordinates. The one
+    /// runner of news_geolocation.py; an article needs an id and a headline
+    /// (summary optional). GeopoliticsService geolocates headlines through it.
     void geolocate_articles(const QVector<NewsArticle>& articles, GeoCallback cb);
-
-    /// Find nearby infrastructure for a coordinate.
-    void nearby_infrastructure(double lat, double lon, int radius_km, InfraCallback cb);
 
     /// Translate text to target language.
     void translate_text(const QString& text, const QString& target_lang, TranslateCallback cb);
 
     /// Cached NER results (populated after extract_entities completes).
     const NerResult& cached_ner() const { return ner_cache_; }
-    const QVector<ArticleGeo>& cached_geo() const { return geo_cache_; }
 
   private:
     NewsNlpService();
@@ -97,7 +93,6 @@ class NewsNlpService : public QObject {
     QJsonArray articles_to_json(const QVector<NewsArticle>& articles) const;
 
     NerResult ner_cache_;
-    QVector<ArticleGeo> geo_cache_;
 };
 
 } // namespace finterm::services

@@ -1,15 +1,12 @@
 """
 News Geolocation — Extract locations from headlines and geocode them.
-Also queries nearby infrastructure via OpenStreetMap Overpass API.
+Run only by NewsNlpService::geolocate_articles (GeopoliticsService goes through it).
 
 Commands:
   extract_and_geocode <json_articles>
-  nearby_infrastructure <lat> <lon> <radius_km>
 """
 import sys
 import json
-import re
-import time
 
 # ── Location extraction patterns ─────────────────────────────────────────────
 
@@ -121,93 +118,6 @@ def extract_and_geocode(articles_json):
     }
 
 
-def nearby_infrastructure(lat, lon, radius_km):
-    """Query OpenStreetMap Overpass API for nearby infrastructure."""
-    try:
-        lat = float(lat)
-        lon = float(lon)
-        radius_km = int(radius_km)
-    except (ValueError, TypeError):
-        return {"success": False, "error": "Invalid coordinates or radius"}
-
-    radius_m = radius_km * 1000
-
-    # Overpass query for airports, military bases, power plants, ports
-    query = f"""
-    [out:json][timeout:10];
-    (
-      node["aeroway"="aerodrome"](around:{radius_m},{lat},{lon});
-      node["military"](around:{radius_m},{lat},{lon});
-      node["power"="plant"](around:{radius_m},{lat},{lon});
-      node["harbour"](around:{radius_m},{lat},{lon});
-      way["aeroway"="aerodrome"](around:{radius_m},{lat},{lon});
-      way["military"](around:{radius_m},{lat},{lon});
-    );
-    out center 20;
-    """
-
-    try:
-        import urllib.request
-        import urllib.parse
-
-        url = "https://overpass-api.de/api/interpreter"
-        data = urllib.parse.urlencode({"data": query}).encode()
-        req = urllib.request.Request(url, data=data)
-        req.add_header("User-Agent", "finterm/4.0")
-
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read().decode())
-
-        infrastructure = []
-        for elem in result.get("elements", []):
-            tags = elem.get("tags", {})
-            e_lat = elem.get("lat") or elem.get("center", {}).get("lat")
-            e_lon = elem.get("lon") or elem.get("center", {}).get("lon")
-
-            if not e_lat or not e_lon:
-                continue
-
-            name = tags.get("name", "Unknown")
-            infra_type = "unknown"
-            if "aeroway" in tags:
-                infra_type = "airport"
-            elif "military" in tags:
-                infra_type = "military"
-            elif "power" in tags:
-                infra_type = "power_plant"
-            elif "harbour" in tags:
-                infra_type = "port"
-
-            # Calculate approximate distance
-            from math import radians, cos, sin, sqrt, atan2
-            R = 6371
-            dlat = radians(float(e_lat) - lat)
-            dlon = radians(float(e_lon) - lon)
-            a = sin(dlat/2)**2 + cos(radians(lat)) * cos(radians(float(e_lat))) * sin(dlon/2)**2
-            distance_km = R * 2 * atan2(sqrt(a), sqrt(1-a))
-
-            infrastructure.append({
-                "name": name,
-                "type": infra_type,
-                "lat": float(e_lat),
-                "lon": float(e_lon),
-                "distance_km": round(distance_km, 1),
-            })
-
-        infrastructure.sort(key=lambda x: x["distance_km"])
-
-        return {
-            "success": True,
-            "infrastructure": infrastructure[:15],
-            "center": {"lat": lat, "lon": lon},
-            "radius_km": radius_km,
-            "count": len(infrastructure),
-        }
-
-    except Exception as e:
-        return {"success": False, "error": f"Overpass API error: {str(e)}"}
-
-
 def resolve_arg(arg):
     """If arg starts with '@', read content from that file path and delete it."""
     if arg and arg.startswith("@"):
@@ -238,11 +148,6 @@ def main(args=None):
 
     if command == "extract_and_geocode":
         result = extract_and_geocode(resolve_arg(args[1]))
-    elif command == "nearby_infrastructure":
-        if len(args) < 4:
-            result = {"success": False, "error": "Usage: nearby_infrastructure <lat> <lon> <radius_km>"}
-        else:
-            result = nearby_infrastructure(args[1], args[2], args[3])
     else:
         result = {"success": False, "error": f"Unknown command: {command}"}
 

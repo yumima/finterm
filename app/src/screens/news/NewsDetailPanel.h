@@ -34,7 +34,6 @@ class NewsDetailPanel : public QWidget {
     void show_related(const QVector<services::NewsArticle>& related);
     void show_monitor_matches(const QVector<QPair<services::NewsMonitor, QStringList>>& matches);
     void show_entities(const services::EntityResult& entities);
-    void show_infrastructure(const QVector<services::InfrastructureItem>& items);
     void clear();
 
     /// TL;DR — show a transient "loading…" placeholder while the
@@ -79,7 +78,7 @@ class NewsDetailPanel : public QWidget {
     void sync_article_block();
     /// Show or hide everything that belongs to the open story — headline,
     /// meta row, summary, action buttons, body, and every per-story section
-    /// (AI ANALYSIS, RELATED, MONITORS, ENTITIES, INFRASTRUCTURE).
+    /// (AI ANALYSIS, RELATED, MONITORS, ENTITIES).
     ///
     /// The reading pane shows one thing at a time. A brief is a read of the
     /// feed, not of whichever story happened to be open when the user asked
@@ -196,10 +195,6 @@ class NewsDetailPanel : public QWidget {
     // Entities section
     QWidget* entities_section_ = nullptr;
     QVBoxLayout* entities_detail_layout_ = nullptr;
-
-    // Infrastructure section
-    QWidget* infra_section_ = nullptr;
-    QVBoxLayout* infra_layout_ = nullptr;
 
     // Action buttons
     QPushButton* open_btn_ = nullptr;
