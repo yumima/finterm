@@ -92,6 +92,36 @@ def test_earnings_days_names_what_it_answered():
     assert out["days_total"] == 5
 
 
+def test_fetch_days_calls_the_real_nasdaq_client():
+    """_fetch_days through ipo_calendar's REAL _http_json (only the network
+    stubbed): a signature change there must fail here, not on every uncached
+    day of the earnings feed."""
+    import ipo_calendar as ic
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return day_doc([ROW_PANW])
+
+    asked = []
+
+    def fake_get(url, headers=None, timeout=None):
+        asked.append(url)
+        return Resp()
+
+    real_get = ic.requests.get
+    ic.requests.get = fake_get
+    try:
+        cache = ic.Cache(os.path.join(tempfile.mkdtemp(), "c.sqlite"))
+        got, failed = w._fetch_days(cache, w.EARN_KIND, w.EARN_URL, w.parse_earnings_day, [D], D)
+    finally:
+        ic.requests.get = real_get
+    assert asked == [w.EARN_URL.format(D.isoformat())], asked
+    assert not failed and [r["symbol"] for r in got[D]] == ["PANW"], (got, failed)
+
+
 def test_dividends_day():
     doc = {"data": {"calendar": {"asOf": "Mon, Nov 16, 2026", "rows": [
         {"companyName": "Apple Inc.", "symbol": "AAPL", "dividend_Ex_Date": "11/16/2026",
