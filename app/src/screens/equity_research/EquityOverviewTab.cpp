@@ -967,21 +967,22 @@ QWidget* EquityOverviewTab::build_col1() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(6);
     vl->addWidget(build_trading_panel());
-    auto* ext = build_extended_panel();
-    // The stretch of the column: three sessions (pre-market, after-hours,
-    // overnight) need the room; the other panels keep their own height.
-    vl->addWidget(ext, 1);
-    // Its own overlay, not one of the info overlays: it loads on its own fetch.
-    // Tall enough for the loading box while there is only a note in it.
-    ext->setMinimumHeight(150);
-    ext_loading_ = new ui::LoadingOverlay(ext);
-    ext_loading_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     // Today's Trading is quote-driven and Extended Hours has its own fetch;
     // these two are info-driven.
     for (QWidget* p : {build_valuation_panel(), build_share_stats_panel()}) {
         vl->addWidget(p);
         add_info_overlay(p);
     }
+    auto* ext = build_extended_panel();
+    // Last, and the stretch of the column: three sessions (pre-market,
+    // after-hours, overnight) need the room; the other panels keep their own
+    // height.
+    vl->addWidget(ext, 1);
+    // Its own overlay, not one of the info overlays: it loads on its own fetch.
+    // Tall enough for the loading box while there is only a note in it.
+    ext->setMinimumHeight(150);
+    ext_loading_ = new ui::LoadingOverlay(ext);
+    ext_loading_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     return w;
 }
 
@@ -1053,10 +1054,11 @@ QWidget* EquityOverviewTab::build_extended_panel() {
     // Overnight prints reach finterm only as they happen (Yahoo's quote and
     // bars carry none): with none seen since the last close, say why the
     // block is missing rather than leave it to look like an omission.
-    ext_on_note_ = new QLabel(QStringLiteral(
-        "OVERNIGHT 20:00–04:00 — none received since the last close. Yahoo sends overnight trades only "
-        "live, while a finterm screen showing this symbol is open."));
-    ext_on_note_->setWordWrap(true);
+    ext_on_note_ = new QLabel(QStringLiteral("OVERNIGHT — none received"));
+    ext_on_note_->setToolTip(QStringLiteral(
+        "Overnight session 20:00–04:00 ET: no print received since the last close.\n"
+        "Yahoo's quote and minute bars carry no overnight trades; they arrive only live,\n"
+        "while a finterm screen showing this symbol is open."));
     ext_on_note_->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;border:0;")
                                     .arg(ui::colors::TEXT_SECONDARY()));
     ext_on_note_->hide();

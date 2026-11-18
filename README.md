@@ -6,7 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
-- [`f570fa663`](https://github.com/yumima/finterm/commit/f570fa663) extended hours: keep overnight prints across a restart; say why there is no Overnight block
+- [`efb44e1fc`](https://github.com/yumima/finterm/commit/efb44e1fc) extended hours: keep overnight prints across a restart; say why there is no Overnight block
 - [`3fde609e5`](https://github.com/yumima/finterm/commit/3fde609e5) **chore(release):** update README download links and updates.json for v4.0.9
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
