@@ -6,6 +6,10 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`18796b452`](https://github.com/yumima/finterm/commit/18796b452) sec http: every EDGAR request in the scripts goes through sec_http
+- [`428c6ac81`](https://github.com/yumima/finterm/commit/428c6ac81) geolocation, whats on: per-call answers, one failure text, narrow yields window
+- [`8a45bce42`](https://github.com/yumima/finterm/commit/8a45bce42) data owners: review fixes — real ages, refusals not cached, one fan-out, one bridge
+- [`ad32e62a2`](https://github.com/yumima/finterm/commit/ad32e62a2) ownership: alert reads cannot wedge, refusals are failures, one insider-buy type
 - [`5f621d89f`](https://github.com/yumima/finterm/commit/5f621d89f) sec directory: one copy of SEC's ticker list; one SEC HTTP client begins
 - [`2b68642f4`](https://github.com/yumima/finterm/commit/2b68642f4) extended hours: review fixes — per-row labels, strict close order, closures from data
 - [`2e20e3788`](https://github.com/yumima/finterm/commit/2e20e3788) workflow nodes: read every dataset through the service that owns it

@@ -21,7 +21,7 @@
 
 Source: Nasdaq's public calendar API (api.nasdaq.com/api/calendar/earnings,
 /dividends?date=YYYY-MM-DD) — the same host IPO Watch reads, through the
-same paced client (ipo_calendar._http_json). Each day is cached in
+same paced Nasdaq client (ipo_calendar._http_json). Each day is cached in
 market_data/whats_on_calendar.sqlite: a closed day for a week, today and later
 for 4 h; a failed refresh falls back to the last copy.
 
@@ -200,7 +200,7 @@ def _fetch_days(cache, kind, url, parse, days, today):
             todo.append(d)
 
     def one(d):
-        return d, parse(ic._http_json("nasdaq", url.format(d.isoformat()), ic.NASDAQ_HEADERS), d)
+        return d, parse(ic._http_json(url.format(d.isoformat()), ic.NASDAQ_HEADERS), d)
 
     failed = []
     if todo:
