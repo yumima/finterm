@@ -3,7 +3,6 @@
 #include "core/config/AppPaths.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "python/PythonWorker.h"
 #include "services/markets/ExtendedHoursService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"

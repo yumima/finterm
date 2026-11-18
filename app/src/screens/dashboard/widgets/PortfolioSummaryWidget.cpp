@@ -3,7 +3,6 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/ExtendedHoursMath.h"
 #include "services/markets/ExtendedHoursService.h"
 #include "services/markets/MarketDataService.h"
