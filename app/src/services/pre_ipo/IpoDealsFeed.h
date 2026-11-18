@@ -5,10 +5,12 @@
 // Private Market widgets that live outside the screen (a dashboard tile) and
 // for the private-company ↔ deal join.
 //
-// The PRIVATE MARKET screen loads the calendar itself and hands every answer
-// to ingest(), so the feed costs nothing while the screen is open; a widget on
-// another screen calls load(), which reads the (script-cached) calendar only
-// when nothing fresher has been ingested.
+// The ONLY runner of ipo_calendar.py. The PRIVATE MARKET screen, the News
+// "What's On" panel and the dashboard IPO tile all read it: one fast pass and
+// one EDGAR enrich at a time, whoever asks, every answer broadcast to all.
+// (They used to run the script — or call Nasdaq directly — each on their own,
+// two enrich passes could hit SEC at once, and the tile parsed raw Nasdaq rows
+// differently from everyone else.)
 
 #include "screens/pre_ipo/PreIpoTypes.h"
 
@@ -58,16 +60,28 @@ class IpoDealsFeed : public QObject {
   public:
     static IpoDealsFeed& instance();
 
-    /// Read the calendar (enriched) unless an answer under 30 min old is held.
-    void load();
-    /// An ipo_calendar.py answer obtained elsewhere (the screen's own load).
-    /// Only an ENRICHED answer is taken (from EDGAR, or the fast pass when the
-    /// script's cache holds the whole EDGAR picture): a plain fast pass has
-    /// no EDGAR stages, and taking it would wipe every stage-based date.
-    void ingest(const QJsonObject& root);
+    /// Read the calendar unless an answer under 30 min old is held (`force`
+    /// = a user's refresh). The fast pass is followed by an EDGAR enrich only
+    /// when the EDGAR picture is over 30 min old — a reader that just wants
+    /// the rows must not start minutes of SEC reads in the shared queue.
+    void load(bool force = false);
+    /// Run one pass now unless that pass is already out (its answer will be
+    /// broadcast to everyone). `chain_enrich`: follow a fast pass with an
+    /// enrich regardless (the PRIVATE MARKET screen, which shows the stages).
+    void request(bool enrich, bool chain_enrich = false);
+    bool inflight(bool enrich) const { return enrich ? enrich_inflight_ : fast_inflight_; }
+
+    /// The last calendar answer held — enriched if one has landed (a later
+    /// plain fast pass never replaces it: it has no EDGAR stages), else the
+    /// fast pass. Empty until the first answer.
+    const QJsonObject& root() const { return root_; }
+    bool enriched() const { return root_.value("enriched").toBool(); }
+    /// The newest answer of either kind — what a list of rows wants (a plain
+    /// fast pass carries today's Nasdaq pricings even while EDGAR is failing).
+    const QJsonObject& latest_root() const { return latest_.isEmpty() ? root_ : latest_; }
 
     const QVector<IpoDeal>& deals() const { return deals_; }
-    bool loaded() const { return at_.isValid(); }
+    bool loaded() const { return !root_.isEmpty(); }
     const IpoDealIndex& index() const { return index_; }
     const IpoDeal* deal_for(const pre_ipo::PrivateCompany& c, bool* strong = nullptr) const {
         return index_.deal_for(c, strong);
@@ -76,16 +90,24 @@ class IpoDealsFeed : public QObject {
     static IpoDeal parse_deal(const QJsonObject& o);
 
   signals:
+    /// root()/deals() changed.
     void updated();
+    /// Every pass's outcome, for a surface that reports its own status: the
+    /// raw answer when ok, else `why`.
+    void answered(bool enrich, bool ok, const QJsonObject& root, const QString& why);
 
   private:
     explicit IpoDealsFeed(QObject* parent = nullptr);
-    void read(bool enrich);
+    void take(const QJsonObject& root, bool persist = true);
+    QJsonObject root_;
+    QJsonObject latest_;
     QVector<IpoDeal> deals_;
     IpoDealIndex index_;
-    QDateTime at_;
+    QDateTime enriched_at_; // when EDGAR was actually read (the answer's own stamp)
+    QDateTime answered_at_; // the last answer of any kind
     QDateTime failed_at_; // a failed read is retried after a cool-off, not on every show
-    bool inflight_ = false;
+    bool fast_inflight_ = false;
+    bool enrich_inflight_ = false;
 };
 
 } // namespace finterm::services

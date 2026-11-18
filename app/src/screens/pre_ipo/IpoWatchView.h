@@ -258,6 +258,8 @@ class IpoWatchView : public QWidget {
     /// first; `enrich` (EDGAR stage + projections + lock-ups; minutes cold,
     /// seconds warm) replaces it when it lands.
     void load_calendar(bool enrich);
+    /// Every ipo_calendar.py pass the shared feed runs, whoever asked.
+    void on_calendar_answer(bool enrich, bool ok, const QJsonObject& root, const QString& why);
     void apply_calendar(const QJsonObject& root, bool enriched);
     static Entry entry_from_json(const QJsonObject& o);
     void on_fetch_done();
@@ -439,13 +441,9 @@ class IpoWatchView : public QWidget {
     // ── State ───────────────────────────────────────────────────────────────
     QVector<Entry> entries_;
     QVector<Lockup> lockups_;
-    bool calendar_inflight_ = false;
-    bool enrich_inflight_ = false;
     bool enriched_ = false;          // EDGAR stage present in entries_
     bool enriched_from_cache_ = false; // ...from the script's cache: the last enrich's picture
     QDateTime enriched_at_;            // when that EDGAR picture was read
-    quint64 calendar_gen_ = 0;       // bumped per refresh; stale fast replies dropped
-    quint64 enrich_applied_gen_ = 0; // gen at which the last enrich reply was applied
     ChunkPump quote_pump_, profile_pump_;
     QStringList calendar_errors_;
     QString status_text() const;

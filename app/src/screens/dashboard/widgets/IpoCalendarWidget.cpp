@@ -2,7 +2,7 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 
-#include "network/http/HttpClient.h"
+#include "services/pre_ipo/IpoDealsFeed.h"
 #include "ui/theme/Theme.h"
 
 #include <QDate>
@@ -66,6 +66,20 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR
     // so it runs when someone comes back to the tile, never under a reader.
     ui::refresh_on_return(this, 30 * 60, [this] { refresh_data(); });
 
+    auto& feed = services::IpoDealsFeed::instance();
+    connect(&feed, &services::IpoDealsFeed::updated, this, &IpoCalendarWidget::rebuild_entries);
+    connect(&feed, &services::IpoDealsFeed::answered, this,
+            [this](bool enrich, bool ok, const QJsonObject&, const QString&) {
+                // Nothing held and the calendar couldn't be read: say so,
+                // rather than "No IPO data", which reads as a quiet calendar.
+                if (ok || enrich || services::IpoDealsFeed::instance().loaded())
+                    return;
+                set_loading(false);
+                scroll_area_->setVisible(false);
+                status_label_->setText("Couldn't load IPO calendar");
+                status_label_->setVisible(true);
+            });
+
     apply_styles();
     set_loading(true);
     refresh_data();
@@ -96,99 +110,58 @@ void IpoCalendarWidget::on_theme_changed() {
 }
 
 void IpoCalendarWidget::refresh_data() {
-    if (pending_fetches_ > 0)
-        return; // prior fetch still in flight — callbacks will populate
     ui::mark_refreshed(this);
-    set_loading(true);
-    entries_.clear();
-    pending_fetches_ = 2;
-    ok_fetches_ = 0;
-
-    const QDate today = QDate::currentDate();
-    fetch_month(today.toString("yyyy-MM"));
-    fetch_month(today.addMonths(1).toString("yyyy-MM"));
-}
-
-void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
-    const QString url = QString("https://api.nasdaq.com/api/ipo/calendar?date=%1").arg(yyyymm);
-
-    QPointer<IpoCalendarWidget> self = this;
-    HttpClient::instance().get(url, [self](Result<QJsonDocument> res) {
-        if (!self)
-            return;
-
-        if (res.is_ok() && res.value().isObject()) {
-            ++self->ok_fetches_;
-            const auto root = res.value().object();
-            const auto data = root["data"].toObject();
-
-            // Nasdaq API returns M/d/yyyy (e.g. "5/27/2026"), not yyyy/MM/dd.
-            // Invalid parses leave entry.date invalid → sort falls apart.
-            auto parse_date = [](const QString& s) -> QDate {
-                QDate d = QDate::fromString(s, "M/d/yyyy");
-                if (!d.isValid())
-                    d = QDate::fromString(s, "MM/dd/yyyy");
-                if (!d.isValid())
-                    d = QDate::fromString(s.left(10), "yyyy/MM/dd");
-                return d;
-            };
-
-            // ── Upcoming ──────────────────────────────────────────────────
-            const auto upcoming_rows = data["upcoming"].toObject()["upcomingTable"].toObject()["rows"].toArray();
-            for (const auto& v : upcoming_rows) {
-                const auto e = v.toObject();
-                const QString date_raw = e["expectedPriceDate"].toString();
-                IpoEntry entry;
-                entry.company = e["companyName"].toString();
-                entry.ticker = e["proposedTickerSymbol"].toString();
-                entry.exchange = e["proposedExchange"].toString();
-                entry.date = parse_date(date_raw);
-                entry.date_str = date_raw; // keep M/D/YYYY as returned by API
-                entry.price_range = e["proposedSharePrice"].toString();
-                entry.status = "upcoming";
-                if (!entry.company.isEmpty())
-                    self->entries_.append(entry);
-            }
-
-            // ── Priced ────────────────────────────────────────────────────
-            // Nasdaq API returns priced rows directly under data.priced.rows
-            // (NOT under a nested "pricedTable" object — that was a parser bug
-            // that hid every priced IPO including today's). Fields also differ
-            // from the upcoming table: pricedDate / proposedSharePrice / proposedExchange.
-            const auto priced_rows = data["priced"].toObject()["rows"].toArray();
-            for (const auto& v : priced_rows) {
-                const auto e = v.toObject();
-                const QString date_raw = e["pricedDate"].toString();
-                IpoEntry entry;
-                entry.company = e["companyName"].toString();
-                entry.ticker = e["proposedTickerSymbol"].toString();
-                entry.exchange = e["proposedExchange"].toString();
-                entry.date = parse_date(date_raw);
-                entry.date_str = entry.date.isValid() ? entry.date.toString("MMM d") : date_raw.left(10);
-                entry.price_range = e["proposedSharePrice"].toString();
-                entry.status = "priced";
-                if (!entry.company.isEmpty())
-                    self->entries_.append(entry);
-            }
-        }
-
-        self->on_fetch_done();
-    });
-}
-
-void IpoCalendarWidget::on_fetch_done() {
-    if (--pending_fetches_ > 0)
-        return;
-
-    // Both month requests failed (Nasdaq API down / offline). Surface an error
-    // via the persistent status label rather than populate()'s "No IPO data
-    // available", which would wrongly read as "feed loaded, no IPOs scheduled".
-    if (ok_fetches_ == 0) {
+    auto& feed = services::IpoDealsFeed::instance();
+    // The same calendar the PRIVATE MARKET screen and What's On show, read by
+    // the one feed (no request while a fresh answer is held).
+    feed.load();
+    if (feed.loaded()) {
+        rebuild_entries();
+    } else if (feed.inflight(false)) {
+        set_loading(true); // its answer (or failure) ends this
+    } else {
+        // Nothing held and nothing running (a failure's cool-off).
         set_loading(false);
         scroll_area_->setVisible(false);
         status_label_->setText("Couldn't load IPO calendar");
         status_label_->setVisible(true);
-        return;
+    }
+}
+
+void IpoCalendarWidget::rebuild_entries() {
+    const auto& feed = services::IpoDealsFeed::instance();
+    if (!feed.loaded())
+        return; // still loading, or the failure is shown
+    const QDate today = QDate::currentDate();
+    entries_.clear();
+    // The newest rows (a plain fast pass carries today's pricings even while
+    // EDGAR is failing); dates as the feed parses them for every surface.
+    const QJsonArray rows = feed.latest_root().value("deals").toArray();
+    for (const auto& v : rows) {
+        const services::IpoDeal d = services::IpoDealsFeed::parse_deal(v.toObject());
+        IpoEntry entry;
+        entry.company = d.company;
+        entry.ticker = d.ticker;
+        entry.exchange = d.exchange;
+        entry.price_range = d.price_range;
+        if (d.status == QLatin1String("upcoming")) {
+            // Scheduled on the exchange calendar. No date = its date slipped
+            // (overdue / late): not "upcoming" in any sense a reader can use.
+            if (!d.when.isValid() || today.daysTo(d.when) < -3 || today.daysTo(d.when) > 60)
+                continue;
+            entry.status = QStringLiteral("upcoming");
+            entry.date = d.when;
+        } else if (d.status == QLatin1String("priced")) {
+            if (!d.priced.isValid() || d.priced.daysTo(today) > 31)
+                continue;
+            entry.status = QStringLiteral("priced");
+            entry.date = d.priced;
+        } else {
+            continue;
+        }
+        entry.date_str = entry.date.isValid() ? entry.date.toString("MMM d") : QString();
+        if (!entry.company.isEmpty())
+            entries_.append(entry);
     }
 
     // Sort: upcoming closest-date first (e.g. May 14 before May 15),

@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "storage/cache/CacheManager.h"
 #include "screens/pre_ipo/IpoFormat.h"
 #include "screens/pre_ipo/PrivateMarketFormat.h"
 
@@ -17,12 +18,27 @@ namespace pm = finterm::pre_ipo::pm;
 using pre_ipo::pmfmt::name_key;
 using pre_ipo::pmfmt::strip_digits_cik;
 
+namespace {
+// The last answer, so a restart paints at once (before Python is up).
+constexpr auto kSnapshotKey = "ipo_feed:latest:v1";
+constexpr int kSnapshotSecs = 30 * 60;
+constexpr qint64 kFreshSecs = 30 * 60;
+} // namespace
+
 IpoDealsFeed& IpoDealsFeed::instance() {
     static IpoDealsFeed inst;
     return inst;
 }
 
-IpoDealsFeed::IpoDealsFeed(QObject* parent) : QObject(parent) {}
+IpoDealsFeed::IpoDealsFeed(QObject* parent) : QObject(parent) {
+    if (const auto hit = CacheManager::instance().try_get(QString::fromLatin1(kSnapshotKey))) {
+        const QJsonObject root = QJsonDocument::fromJson(hit->toUtf8()).object();
+        if (!root.isEmpty()) {
+            take(root, /*persist=*/false);
+            answered_at_ = QDateTime(); // a snapshot is shown, not trusted as fresh
+        }
+    }
+}
 
 IpoDeal IpoDealsFeed::parse_deal(const QJsonObject& o) {
     auto d = [&](const char* k) { return QDate::fromString(o.value(k).toString(), Qt::ISODate); };
@@ -92,63 +108,92 @@ void IpoDealIndex::build(const QVector<IpoDeal>& deals) {
     }
 }
 
-void IpoDealsFeed::ingest(const QJsonObject& root) {
-    if (!root.value("enriched").toBool())
-        return;
-    const QJsonArray arr = root.value("deals").toArray();
-    if (arr.isEmpty())
-        return;
-    deals_.clear();
-    deals_.reserve(arr.size());
-    for (const auto& v : arr)
-        deals_.append(parse_deal(v.toObject()));
-    index_.build(deals_);
-    at_ = QDateTime::currentDateTime();
+void IpoDealsFeed::take(const QJsonObject& root, bool persist) {
+    const bool enriched = root.value("enriched").toBool();
+    latest_ = root;
+    answered_at_ = QDateTime::currentDateTime();
+    if (persist)
+        CacheManager::instance().put(QString::fromLatin1(kSnapshotKey),
+                                 QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                                 kSnapshotSecs, QStringLiteral("ipo"));
+    // A plain fast pass carries no EDGAR stages: taking it as root() over an
+    // enriched answer would wipe every stage-based date until the enrich
+    // lands. It still becomes latest_root() for the plain row lists.
+    if (enriched || !this->enriched()) {
+        root_ = root;
+        deals_.clear();
+        const QJsonArray arr = root.value("deals").toArray();
+        deals_.reserve(arr.size());
+        for (const auto& v : arr)
+            deals_.append(parse_deal(v.toObject()));
+        index_.build(deals_);
+        if (enriched) {
+            // The EDGAR picture's own read time — a fast pass served from the
+            // script's cache may hand back one that is days old.
+            const QDateTime at = QDateTime::fromString(root.value("enriched_at").toString(), Qt::ISODate);
+            enriched_at_ = at.isValid() ? at : QDateTime::currentDateTime();
+        }
+    }
     emit updated();
 }
 
-void IpoDealsFeed::load() {
-    if (inflight_ || (at_.isValid() && at_.secsTo(QDateTime::currentDateTime()) < 30 * 60))
-        return;
-    if (failed_at_.isValid() && failed_at_.secsTo(QDateTime::currentDateTime()) < 5 * 60)
-        return;
-    if (!python::PythonRunner::instance().is_available())
-        return;
-    inflight_ = true;
-    read(/*enrich=*/false);
+void IpoDealsFeed::load(bool force) {
+    const QDateTime now = QDateTime::currentDateTime();
+    if (!force) {
+        const bool rows_fresh = answered_at_.isValid() && answered_at_.secsTo(now) < kFreshSecs;
+        const bool edgar_fresh = (enriched_at_.isValid() && enriched_at_.secsTo(now) < kFreshSecs) || enrich_inflight_;
+        if (rows_fresh && edgar_fresh)
+            return;
+        if (failed_at_.isValid() && failed_at_.secsTo(now) < 5 * 60 && answered_at_.isValid())
+            return;
+    }
+    request(/*enrich=*/false);
 }
 
-void IpoDealsFeed::read(bool enrich) {
-    // First the fast pass, in the interactive lane: when the script's cache
-    // can give the last enrich's answer it does, in well under a second, and
-    // is shown at once. The enrich then runs anyway, in the ordinary queue
-    // (minutes, behind the SEC scrapers), so a cached picture is refreshed
-    // rather than kept: the fast pass alone never re-reads EDGAR.
+void IpoDealsFeed::request(bool enrich, bool chain_enrich) {
+    bool& inflight = enrich ? enrich_inflight_ : fast_inflight_;
+    if (inflight)
+        return;
+    inflight = true;
+    // The fast pass takes the interactive lane: when the script's cache holds
+    // the last enrich's answer it returns it in well under a second. The
+    // enrich (minutes cold, SEC at 2.5 req/s) runs in the ordinary queue.
+    // PythonRunner queues a call made before Python is located and answers a
+    // failure when there is none, so every request ends in `answered`.
     QPointer<IpoDealsFeed> self = this;
-    auto on_done = [self, enrich](python::PythonResult r) {
+    auto on_done = [self, enrich, chain_enrich](python::PythonResult r) {
         if (!self)
             return;
+        (enrich ? self->enrich_inflight_ : self->fast_inflight_) = false;
         const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
         const bool ok = r.success && !root.isEmpty() && !root.contains("error");
-        if (!enrich) {
-            if (ok)
-                self->ingest(root); // takes it only when enriched (from the cache)
-            self->read(/*enrich=*/true);
-            return;
-        }
-        self->inflight_ = false;
-        if (!ok) {
-            LOG_WARN("IpoDealsFeed", "calendar read failed: " + root.value("error").toString(r.error).left(200));
+        const QString why = ok ? QString()
+                               : root.value("error").toString(r.success ? QStringLiteral("unreadable output")
+                                                                        : r.error.isEmpty()
+                                                                              ? QStringLiteral("script failed")
+                                                                              : r.error.left(200));
+        if (ok) {
+            self->failed_at_ = QDateTime();
+            self->take(root);
+        } else {
+            LOG_WARN("IpoDealsFeed", QString("ipo_calendar %1 failed: %2")
+                                         .arg(enrich ? "enrich" : "calendar", why.left(200)));
             self->failed_at_ = QDateTime::currentDateTime();
-            return;
         }
-        self->ingest(root);
+        // Start the enrich BEFORE telling anyone, so a listener reading
+        // inflight(true) for its status line sees it running.
+        if (!enrich) {
+            const QDateTime at = self->enriched_at_;
+            if (chain_enrich || !at.isValid() || at.secsTo(QDateTime::currentDateTime()) >= kFreshSecs)
+                self->request(/*enrich=*/true);
+        }
+        emit self->answered(enrich, ok, root, why);
     };
     if (enrich)
-        python::PythonRunner::instance().run( // D1-exempt: shared read of the cached calendar
+        python::PythonRunner::instance().run( // D1-exempt: the one runner of the calendar (this feed)
             QStringLiteral("ipo_calendar.py"), {QStringLiteral("enrich")}, std::move(on_done), {}, 600'000);
     else
-        python::PythonRunner::instance().run_interactive( // D1-exempt: shared read of the cached calendar
+        python::PythonRunner::instance().run_interactive( // D1-exempt: the one runner of the calendar
             QStringLiteral("ipo_calendar.py"), {QStringLiteral("calendar")}, std::move(on_done), 90'000);
 }
 

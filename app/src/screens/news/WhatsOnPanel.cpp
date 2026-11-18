@@ -5,6 +5,7 @@
 #include "python/PythonRunner.h"
 #include "services/calendar/MacroCalendarFeed.h"
 #include "services/news/NewsPromo.h"
+#include "services/pre_ipo/IpoDealsFeed.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/WatchlistRepository.h"
@@ -157,6 +158,19 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
     refresh_btn->setCursor(Qt::PointingHandCursor);
     refresh_btn->setToolTip(QStringLiteral("Refresh calendar, earnings, auctions, rates and IPOs"));
     connect(refresh_btn, &QPushButton::clicked, this, [this]() { refresh(true); });
+    // IPOs come from the one calendar feed PRIVATE MARKET and the dashboard
+    // tile read too.
+    auto& ipo_feed = services::IpoDealsFeed::instance();
+    connect(&ipo_feed, &services::IpoDealsFeed::updated, this, [this]() {
+        ipo_deals_ = services::IpoDealsFeed::instance().latest_root().value("deals").toArray();
+        clear_error(QStringLiteral("IPOs"));
+        render();
+    });
+    connect(&ipo_feed, &services::IpoDealsFeed::answered, this,
+            [this](bool enrich, bool ok, const QJsonObject&, const QString& why) {
+                if (!ok && !enrich && !services::IpoDealsFeed::instance().loaded())
+                    set_error(QStringLiteral("IPOs"), why.isEmpty() ? QStringLiteral("IPO calendar unavailable") : why);
+            });
     bar->addWidget(refresh_btn);
     root->addLayout(bar);
 
@@ -315,7 +329,6 @@ namespace {
 constexpr const char* kFomcKey = "whatson:fomc:v1";
 constexpr const char* kEffrKey = "whatson:effr:v1";
 constexpr const char* kYieldsKey = "whatson:yields:v1";
-constexpr const char* kIpoKey = "whatson:ipos:v2"; // v2: deals carry proposed_amount + projection
 constexpr const char* kEventsKey = "whatson:events:v1:"; // + window + symbol-set hash
 constexpr const char* kTdUpKey = "whatson:td:upcoming:v1";
 constexpr const char* kTdDoneKey = "whatson:td:auctioned:v1";
@@ -323,7 +336,6 @@ constexpr const char* kFredKey = "whatson:fred:v1:"; // + series id
 constexpr int kFomcSec = 12 * 3600; // a published calendar
 constexpr int kEffrSec = 3600;      // one print a day
 constexpr int kYieldsSec = 3 * 3600;
-constexpr int kIpoSec = 30 * 60;
 constexpr int kEventsSec = 60 * 60;  // the script caches each day itself (4 h / 7 d)
 constexpr int kTdSec = 60 * 60;      // announcements land a few days ahead; results at the close
 constexpr int kFredSec = 20 * 60;    // short: an actual appears within the hour after 08:30
@@ -460,32 +472,13 @@ void WhatsOnPanel::fetch_rates(bool force) {
 }
 
 void WhatsOnPanel::fetch_ipos(bool force) {
-    if (!force) {
-        if (const auto d = cached_doc(kIpoKey); d && d->isArray()) {
-            ipo_deals_ = d->array();
-            clear_error(QStringLiteral("IPOs"));
-            render();
-            return;
-        }
+    auto& feed = services::IpoDealsFeed::instance();
+    if (feed.loaded()) {
+        ipo_deals_ = feed.latest_root().value("deals").toArray();
+        clear_error(QStringLiteral("IPOs"));
+        render();
     }
-    QPointer<WhatsOnPanel> self = this;
-    // The same calendar IPO Watch shows (fast pass: Nasdaq calendar plus the
-    // cached EDGAR picture when there is one).
-    python::PythonRunner::instance().run( // D1-exempt: one-shot calendar read, no producer
-        QStringLiteral("ipo_calendar.py"), {QStringLiteral("calendar")}, [self](python::PythonResult r) {
-            if (!self)
-                return;
-            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            if (!r.success || root.isEmpty() || root.contains("error")) {
-                self->set_error(QStringLiteral("IPOs"),
-                                root.value("error").toString(QStringLiteral("IPO calendar unavailable")));
-                return;
-            }
-            self->ipo_deals_ = root.value("deals").toArray();
-            put_doc(kIpoKey, QJsonDocument(self->ipo_deals_), kIpoSec);
-            self->clear_error(QStringLiteral("IPOs"));
-            self->render();
-        });
+    feed.load(force); // a no-op while a fresh answer is held
 }
 
 void WhatsOnPanel::apply_events(const QJsonObject& root) {

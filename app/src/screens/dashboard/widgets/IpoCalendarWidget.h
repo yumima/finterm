@@ -11,9 +11,9 @@
 
 namespace finterm::screens::widgets {
 
-/// IPO Calendar Widget — fetches upcoming and recently priced IPOs from
-/// the Nasdaq public calendar API (no API key required).
-/// Shows this month and next month; sections: UPCOMING then PRICED.
+/// IPO Calendar Widget — upcoming (next 60 days) and recently priced (last
+/// 31 days) IPOs from services::IpoDealsFeed, the same calendar PRIVATE
+/// MARKET and What's On show. Sections: UPCOMING then PRICED.
 class IpoCalendarWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -25,8 +25,8 @@ class IpoCalendarWidget : public BaseWidget {
   private:
     void apply_styles();
     void refresh_data();
-    void fetch_month(const QString& yyyymm);
-    void on_fetch_done();
+    /// The rows from the shared IPO feed (services::IpoDealsFeed).
+    void rebuild_entries();
     void populate();
 
     struct IpoEntry {
@@ -47,8 +47,6 @@ class IpoCalendarWidget : public BaseWidget {
     QVector<QLabel*> header_labels_;
 
     QVector<IpoEntry> entries_;
-    int pending_fetches_ = 0;
-    int ok_fetches_ = 0; // how many of this batch's HTTP calls succeeded
 };
 
 inline BaseWidget* create_ipo_calendar_widget() {

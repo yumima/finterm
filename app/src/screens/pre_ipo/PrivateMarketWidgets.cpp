@@ -198,8 +198,8 @@ PmTableWidget::PmTableWidget(const QString& title, const QStringList& headers, Q
 
 void PmTableWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
-    // Inside the PRIVATE MARKET screen the screen loads both sources (and
-    // hands the feed its calendar). On the Dashboard nothing else does: ask
+    // Inside the PRIVATE MARKET screen the screen loads both sources (its
+    // calendar through the same feed). On the Dashboard nothing else does: ask
     // once per session for the companies (load_data re-reads the whole cache
     // and broadcasts on every call) and let the feed decide for the calendar.
     if (!inside_private_market(this)) {
