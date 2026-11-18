@@ -28,7 +28,7 @@ permalink: /
 
 ## What's in it
 
-- **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history and after-hours moves, and each earnings call playable in the app.
+- **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history, extended-hours moves (pre-market, after-hours, overnight) and each earnings call playable in the app.
 - **Company report** — one investor report per company from filings, estimates, prices and news: what changed, segments, valuation against its own past, risks; export to PDF.
 - **Futures** — the forward curve for 57 contracts, calendar spreads, trader positioning, and a paper account with working stops and targets.
 - **Fund moves** — the largest stake changes by every 13F filer, corrected for splits and CUSIP changes and linked to the filing; 5% stakes (13D / 13G) as they are filed.

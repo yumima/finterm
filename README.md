@@ -6,13 +6,26 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`88446df7a`](https://github.com/yumima/finterm/commit/88446df7a) connectors: delete 201 CLI commands no caller sends, and what only they ran
 - [`e88a0a4f3`](https://github.com/yumima/finterm/commit/e88a0a4f3) cleanup: close the review's dead-code findings and the unread settings
 - [`2a829c612`](https://github.com/yumima/finterm/commit/2a829c612) extended hours: the fetch window follows the market calendar's early close
+- [`bc9b9f89e`](https://github.com/yumima/finterm/commit/bc9b9f89e) agno_trading: import what exists; Alpha Arena gets its technical features
 - [`3c480977c`](https://github.com/yumima/finterm/commit/3c480977c) extended hours: one reading per session, named everywhere, from the batch quote
+- [`5f18576fd`](https://github.com/yumima/finterm/commit/5f18576fd) credentials: regenerate the catalogue; list the keys libraries read
+- [`9d3a4bca9`](https://github.com/yumima/finterm/commit/9d3a4bca9) eia, wto: read the API key the panels say they need
 - [`952f4d948`](https://github.com/yumima/finterm/commit/952f4d948) python runner: drop the ffn_wrapper venv-routing keyword
 - [`5a4af00dc`](https://github.com/yumima/finterm/commit/5a4af00dc) cleanup: delete functions, members, types and constants nothing uses
 - [`f6ffcb21d`](https://github.com/yumima/finterm/commit/f6ffcb21d) cleanup: delete classes nothing in the app constructs or names
 - [`1c0cf4b2e`](https://github.com/yumima/finterm/commit/1c0cf4b2e) cleanup: delete source files no target compiles or includes
+- [`0e9c9b871`](https://github.com/yumima/finterm/commit/0e9c9b871) economic calendar: a failed scrape answers as JSON; a late reply is dropped
+- [`44d50943e`](https://github.com/yumima/finterm/commit/44d50943e) economics: restore the analytics engine's methods to their own classes
+- [`3fc9e5fe9`](https://github.com/yumima/finterm/commit/3fc9e5fe9) economics: delete the unreachable trend block after analytics_engine's return
+- [`8a7cff138`](https://github.com/yumima/finterm/commit/8a7cff138) scripts: delete script actions and CLI commands no caller sends
+- [`f87ba8875`](https://github.com/yumima/finterm/commit/f87ba8875) scripts: delete functions, classes and imports nothing calls
+- [`ac7495159`](https://github.com/yumima/finterm/commit/ac7495159) economic calendar: fetch the day the panel asks for, not a fixed Oct 16
+- [`06a056cc2`](https://github.com/yumima/finterm/commit/06a056cc2) analytics: delete the packages and modules that only a docstring mentions
+- [`8e8a5f85c`](https://github.com/yumima/finterm/commit/8e8a5f85c) scripts: delete committed debug output and scratch text files
+- [`50c59215b`](https://github.com/yumima/finterm/commit/50c59215b) scripts: delete 278 Python scripts that nothing runs or imports
 - [`c30433ca3`](https://github.com/yumima/finterm/commit/c30433ca3) credentials: EDGAR_IDENTITY reaches the scripts (sec_http honours a user-set identity)
 - [`dff029d5e`](https://github.com/yumima/finterm/commit/dff029d5e) sec http: every edgartools user gets the contact identity from one helper
 - [`738690969`](https://github.com/yumima/finterm/commit/738690969) sec http: one retry policy, a deadline, a byte cap; edgartools paced by the gate
