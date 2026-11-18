@@ -77,8 +77,8 @@ void FredAnalyticsPanel::on_fetch() {
 
     show_loading("Fetching FRED Analytics: " + dataset.label + "…");
 
-    QStringList args = {dataset.command};
-    args << dataset.args;
+    // EconomicsService prepends the command itself; the args are what follows it.
+    const QStringList args = dataset.args;
 
     const QString arg_suffix = dataset.args.isEmpty() ? "" : "_" + dataset.args.join("_");
     services::EconomicsService::instance().execute(kFredAnalyticsSourceId, kFredAnalyticsScript, dataset.command, args,

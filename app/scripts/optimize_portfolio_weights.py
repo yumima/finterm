@@ -187,9 +187,8 @@ def run_strategy(strategy, mean_ret, cov, n, extra=None):
                            options={"ftol": 1e-9, "maxiter": 1000})
 
         else:
-            # Fallback: equal weight
-            w = np.ones(n) / n
-            return _build_result(w, mean_ret, cov, strategy)
+            # Never an equal-weight answer labelled as the method asked for.
+            return {"error": f"Unknown optimization method: {strategy}"}
 
         if not getattr(res, "success", False):
             # Still use best-found weights

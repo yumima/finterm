@@ -10,6 +10,9 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVector>
+
+#include <functional>
 
 namespace finterm::services {
 
@@ -40,6 +43,13 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     void execute(const QString& source_id, const QString& script, const QString& command, const QStringList& args,
                  const QString& request_id);
 
+    /// The same run answered to ONE caller: the cache and the in-flight
+    /// request execute() uses (a panel and a workflow asking for the same
+    /// series share one script run), never a second copy. Always answers
+    /// after the call returns, cache hit included. `source_id` is empty.
+    using ResultCallback = std::function<void(const EconomicsResult&)>;
+    void fetch(const QString& script, const QString& command, const QStringList& args, ResultCallback cb);
+
     /// Invalidate cache for a given request key (force re-fetch).
     void invalidate(const QString& request_id);
 
@@ -68,6 +78,14 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     static constexpr int kCacheTtlSec = 10 * 60; // 10 min — passed to CacheManager
 
     QString cache_key(const QString& script, const QString& command, const QStringList& args) const;
+
+    /// Core of execute() and fetch(): a cache hit answers inside the call
+    /// (`fresh` = false); otherwise the script runs once per cache key, every
+    /// caller waiting on it is answered from that run (`fresh` = true), and a
+    /// success is cached.
+    using RunDone = std::function<void(const EconomicsResult&, bool fresh)>;
+    void run(const QString& script, const QString& command, const QStringList& args, RunDone done);
+    QHash<QString, QVector<RunDone>> in_flight_; // cache key -> callers waiting on the one run
 
     /// Compose hub topic: `econ:<source>:<request_id>`.
     static QString hub_topic(const QString& source_id, const QString& request_id);

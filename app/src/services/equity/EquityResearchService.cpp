@@ -910,54 +910,39 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     QPointer<EquityResearchService> self = this;
 
     // ── Stage 2: compute via daemon, given a candles array ───────────────────
-    auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& raw) {
+    auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& candles) {
         if (!self) {
             return;
         } // (key remains held — process is exiting anyway)
         // Priced rows only (fetch_bars hands over bars::priced_rows): the
         // compute drops on CLOSE alone, so a null high/low would otherwise
         // reach ATR, Bollinger, Stochastic and Aroon as NaN.
-        const QJsonArray& candles = raw;
-        QJsonObject payload;
-        payload["candles"] = candles;
-        python::PythonWorker::instance().submit(
-            "compute_technicals", payload,
-            [self, symbol, period, interval, tech_key, inflight_key](bool ok, QJsonObject result, QString err) {
-                if (!self)
-                    return;
-                self->release_inflight(inflight_key);
-                if (!ok || !result.value("success").toBool(false)) {
-                    emit self->error_occurred(
-                        symbol, "Technicals",
-                        ok ? QString("compute_technicals returned failure: %1").arg(result.value("error").toString())
-                           : QString("Indicator computation failed: %1").arg(err));
-                    return;
-                }
-                const QJsonArray data = result.value("data").toArray();
-                // Same poisoning class the stage-1 guard stops, one stage
-                // below it: a success-with-empty-rows result must not be
-                // pinned under the shared tech key nor written to disk.
-                if (data.isEmpty()) {
-                    emit self->error_occurred(symbol, "Technicals",
-                                              QStringLiteral("Indicator computation returned no rows"));
-                    return;
-                }
-                // Cache the computed series so re-opens are <100ms.
-                const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
-                finterm::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
-                {
-                    const QString fname = symbol_filename(symbol);
-                    QJsonObject root = disk_cache().load(fname).object();
-                    root.insert("symbol", symbol);
-                    QJsonObject by_period = root.value("technicals").toObject();
-                    by_period.insert(interval + ":" + period, data);
-                    root.insert("technicals", by_period);
-                    stamp_section(root, QStringLiteral("technicals/") + interval + ":" + period);
-                    disk_cache().save(fname, QJsonDocument(root));
-                }
-                emit self->technicals_loaded(self->parse_technicals(symbol, period, interval, data));
-            },
-            python::PythonWorker::kComputeActionTimeoutMs);
+        self->compute_technicals_rows(candles, [self, symbol, period, interval, tech_key,
+                                                inflight_key](bool ok, const QJsonArray& data, const QString& err) {
+            if (!self)
+                return;
+            self->release_inflight(inflight_key);
+            // A failure, or a success with no rows, must not be pinned under
+            // the shared tech key nor written to disk.
+            if (!ok) {
+                emit self->error_occurred(symbol, "Technicals", err);
+                return;
+            }
+            // Cache the computed series so re-opens are <100ms.
+            const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+            finterm::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
+            {
+                const QString fname = symbol_filename(symbol);
+                QJsonObject root = disk_cache().load(fname).object();
+                root.insert("symbol", symbol);
+                QJsonObject by_period = root.value("technicals").toObject();
+                by_period.insert(interval + ":" + period, data);
+                root.insert("technicals", by_period);
+                stamp_section(root, QStringLiteral("technicals/") + interval + ":" + period);
+                disk_cache().save(fname, QJsonDocument(root));
+            }
+            emit self->technicals_loaded(self->parse_technicals(symbol, period, interval, data));
+        });
     };
 
     // ── Stage 1: the series, through the app's one price-history read ────────
@@ -1071,6 +1056,128 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
         update_symbol_cache(symbol, "symbol", symbol);
         emit news_loaded(symbol, parse_news(arr));
     });
+}
+
+// ── Callback reads ────────────────────────────────────────────────────────────
+//
+// Each one bridges to the broadcast fetch_* path with a one-shot watcher (the
+// subscribe_* template), so the cache, the in-flight dedupe and the disk copy
+// stay fetch_*'s alone. The fetch starts on the next event-loop turn: a cache
+// hit inside fetch_* emits synchronously, and these answer after the call.
+
+void EquityResearchService::read_financials(const QString& symbol, FinancialsCallback cb) {
+    const QString sym = symbol.trimmed().toUpper();
+    QPointer<EquityResearchService> self = this;
+    QTimer::singleShot(0, this, [self, sym, cb = std::move(cb)]() {
+        if (!self)
+            return;
+        if (sym.isEmpty()) {
+            cb(false, {}, QStringLiteral("Financials: no symbol"));
+            return;
+        }
+        // Deleting the watcher disconnects both lambdas, so the caller is
+        // answered once even when both signals fire.
+        auto* watcher = new QObject(self);
+        connect(self, &EquityResearchService::financials_loaded, watcher, [sym, cb, watcher](FinancialsData d) {
+            if (d.symbol.compare(sym, Qt::CaseInsensitive) != 0)
+                return;
+            const auto done = cb; // deleting the watcher destroys this lambda
+            delete watcher;
+            done(true, d, {});
+        });
+        connect(self, &EquityResearchService::error_occurred, watcher,
+                [sym, cb, watcher](const QString& s, const QString& ctx, const QString& msg) {
+                    if (s != sym || ctx != QLatin1String("Financials"))
+                        return;
+                    const auto done = cb; // deleting the watcher destroys this lambda
+                    delete watcher;
+                    done(false, {}, msg);
+                });
+        self->fetch_financials(sym);
+    });
+}
+
+void EquityResearchService::read_news(const QString& symbol, int count, NewsCallback cb) {
+    const QString sym = symbol.trimmed().toUpper();
+    QPointer<EquityResearchService> self = this;
+    QTimer::singleShot(0, this, [self, sym, count, cb = std::move(cb)]() {
+        if (!self)
+            return;
+        if (sym.isEmpty()) {
+            cb(false, {}, QStringLiteral("News: no symbol"));
+            return;
+        }
+        auto* watcher = new QObject(self);
+        connect(self, &EquityResearchService::news_loaded, watcher,
+                [sym, cb, watcher](const QString& s, const QVector<NewsArticle>& articles) {
+                    if (s != sym)
+                        return;
+                    const auto done = cb; // deleting the watcher destroys this lambda
+                    delete watcher;
+                    done(true, articles, {});
+                });
+        connect(self, &EquityResearchService::error_occurred, watcher,
+                [sym, cb, watcher](const QString& s, const QString& ctx, const QString& msg) {
+                    if (s != sym || ctx != QLatin1String("News"))
+                        return;
+                    const auto done = cb; // deleting the watcher destroys this lambda
+                    delete watcher;
+                    done(false, {}, msg);
+                });
+        self->fetch_news(sym, count);
+    });
+}
+
+void EquityResearchService::compute_technicals_rows(const QJsonArray& candles, RowsCallback cb) {
+    if (candles.isEmpty()) {
+        QTimer::singleShot(0, this, [cb = std::move(cb)]() {
+            cb(false, {}, QStringLiteral("Indicator computation: no price rows to compute from"));
+        });
+        return;
+    }
+    QPointer<EquityResearchService> self = this;
+    QJsonObject payload;
+    payload["candles"] = candles;
+    python::PythonWorker::instance().submit(
+        "compute_technicals", payload,
+        [self, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
+            if (!self)
+                return;
+            if (!ok || !result.value("success").toBool(false)) {
+                cb(false, {},
+                   ok ? QString("compute_technicals returned failure: %1").arg(result.value("error").toString())
+                      : QString("Indicator computation failed: %1").arg(err));
+                return;
+            }
+            const QJsonArray data = result.value("data").toArray();
+            if (data.isEmpty()) {
+                cb(false, {}, QStringLiteral("Indicator computation returned no rows"));
+                return;
+            }
+            cb(true, data, {});
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
+}
+
+QJsonArray EquityResearchService::statement_json(const QVector<QPair<QString, QJsonObject>>& statement) {
+    QJsonArray arr;
+    for (const auto& kv : statement)
+        arr.append(QJsonObject{{"period", kv.first}, {"items", kv.second}});
+    return arr;
+}
+
+QJsonArray EquityResearchService::news_json(const QVector<NewsArticle>& articles) {
+    QJsonArray arr;
+    for (const auto& a : articles) {
+        arr.append(QJsonObject{
+            {"title", a.title},
+            {"description", a.description},
+            {"url", a.url},
+            {"publisher", a.publisher},
+            {"published_date", a.published_date},
+        });
+    }
+    return arr;
 }
 
 // ── TALIpp ────────────────────────────────────────────────────────────────────

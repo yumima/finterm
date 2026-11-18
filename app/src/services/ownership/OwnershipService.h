@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QString>
 
+#include <functional>
 #include <optional>
 
 class QTimer;
@@ -47,6 +48,13 @@ class OwnershipService : public QObject {
     ownership::OwnershipSnapshot snapshot(const QString& symbol) const;
     /// True while any source for @p symbol is still outstanding.
     bool is_loading(const QString& symbol) const;
+
+    /// The register for @p symbol answered to ONE caller once its EDGAR half
+    /// (Form 4 transactions, insider profiles, 13D/G stakes) has landed —
+    /// through load(), so the cache and the in-flight fetch are the screen's.
+    /// Always answers after the call returns; edgar_ok / edgar_error say
+    /// whether EDGAR answered (a refusal is never an empty register).
+    void read_edgar(const QString& symbol, std::function<void(const ownership::OwnershipSnapshot&)> cb);
 
     /// Fetch the 13F holders for a symbol whose snapshot lacks them — the
     /// case where the register loaded while the index probe was still in

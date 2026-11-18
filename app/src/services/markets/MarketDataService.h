@@ -315,6 +315,35 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     using SecFilingsCallback = std::function<void(bool, QVector<SecFiling>)>;
     void fetch_sec_filings(const QString& ticker, SecFilingsCallback cb);
 
+    /// The same submissions read, filtered: the newest `limit` filings whose
+    /// form is exactly `form` ("" = any) from EDGAR's recent-filings block
+    /// (the last thousand filings or year, whichever is more). One cache entry
+    /// and one CIK map with fetch_sec_filings, concurrent asks coalesced.
+    /// `error` says why when !ok — a refusal (HTTP 403: no contact sent) and a
+    /// ticker EDGAR does not map are failures, never an empty filings list.
+    struct SecFilingsReply {
+        bool ok = false;
+        QVector<SecFiling> filings;
+        QString error;
+    };
+    using SecFilingsReplyCallback = std::function<void(const SecFilingsReply&)>;
+    void fetch_sec_filings_of_form(const QString& ticker, const QString& form, int limit, SecFilingsReplyCallback cb);
+
+    /// CBOE's delayed option chain — every listed contract with its greeks
+    /// (cboe_data.py options_chains). The app's one full-chain read; the
+    /// Equity Research Options tab reads a different dataset (Yahoo's
+    /// out-of-the-money IV surface, no greeks). Cached kOptionsChainTtlSec,
+    /// concurrent asks coalesced, a failure never cached. Answers later.
+    struct OptionsChainReply {
+        bool ok = false;
+        QJsonObject chain; ///< {metadata, options: [{option, expiration (yymmdd), option_type, strike, …}]}
+        QDateTime as_of;   ///< when fetched (a cache hit keeps its original time)
+        QString error;     ///< CBOE's own reason when !ok
+    };
+    using OptionsChainCallback = std::function<void(const OptionsChainReply&)>;
+    void fetch_options_chain(const QString& symbol, OptionsChainCallback cb);
+    static constexpr int kOptionsChainTtlSec = 300; // CBOE's quotes are 15 min delayed
+
     /// Wikipedia summary lookup — used by IPO Watch as a description fallback
     /// when yfinance's `longBusinessSummary` is empty (common for pre-IPO
     /// filings and freshly-listed deals). The REST `summary` endpoint returns
@@ -629,7 +658,15 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     QHash<QString, int> sec_cik_map_; // upper-case ticker → CIK
     bool sec_cik_loaded_ = false;
     bool sec_cik_loading_ = false;
-    QVector<std::function<void(bool)>> sec_cik_waiters_;
+    /// Answered with whether the map loaded and, when not, why.
+    QVector<std::function<void(bool, const QString&)>> sec_cik_waiters_;
+    /// Every recent filing for an upper-case ticker (no cap), from the one
+    /// submissions cache entry; concurrent asks share one request.
+    /// `mapped` = false when EDGAR's ticker map has no CIK for it.
+    using SecSubmissionsDone = std::function<void(const SecFilingsReply&, bool mapped)>;
+    void read_sec_submissions(const QString& tkr, SecSubmissionsDone done);
+    QHash<QString, QVector<SecSubmissionsDone>> sec_submissions_waiters_; // ticker → callers
+    QHash<QString, QVector<OptionsChainCallback>> options_chain_waiters_; // symbol → callers
 };
 
 } // namespace finterm::services

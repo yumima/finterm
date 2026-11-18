@@ -1836,21 +1836,62 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         cb(false, {});
         return;
     }
-    const QString tkr = ticker.toUpper();
+    read_sec_submissions(ticker.toUpper(), [cb](const SecFilingsReply& r, bool mapped) {
+        if (!mapped) {
+            cb(true, {}); // no CIK yet (a fresh IPO): nothing filed under this ticker
+            return;
+        }
+        if (!r.ok) {
+            cb(false, {});
+            return;
+        }
+        cb(true, r.filings.mid(0, 25));
+    });
+}
 
+void MarketDataService::fetch_sec_filings_of_form(const QString& ticker, const QString& form, int limit,
+                                                  SecFilingsReplyCallback cb) {
+    const QString tkr = ticker.trimmed().toUpper();
+    if (tkr.isEmpty()) {
+        later([cb]() { cb({false, {}, QStringLiteral("SEC filings: no ticker")}); });
+        return;
+    }
+    QPointer<MarketDataService> self = this;
+    read_sec_submissions(tkr, [self, cb, tkr, form, limit](const SecFilingsReply& r, bool mapped) {
+        if (!self)
+            return;
+        SecFilingsReply out;
+        if (!mapped) {
+            out.error = QStringLiteral("EDGAR's ticker map has no CIK for %1").arg(tkr);
+        } else if (!r.ok) {
+            out.error = r.error;
+        } else {
+            out.ok = true;
+            for (const auto& f : r.filings) {
+                if (out.filings.size() >= limit)
+                    break;
+                if (form.isEmpty() || f.form == form)
+                    out.filings.append(f);
+            }
+        }
+        // read_sec_submissions can answer inside the call (cache hit).
+        self->later([cb, out]() { cb(out); });
+    });
+}
+
+void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsDone done) {
     // Inner closure runs once the CIK map is loaded — looks up the ticker,
     // builds the submissions URL, returns the list of recent filings.
-    auto with_cik_map = [this, tkr, cb]() {
+    auto with_cik_map = [this, tkr, done]() {
         auto it = sec_cik_map_.constFind(tkr);
         if (it == sec_cik_map_.constEnd()) {
             LOG_INFO("MarketData", "SEC: no CIK for ticker " + tkr);
-            cb(true, {});
+            done({}, false);
             return;
         }
         const int cik = it.value();
         const QString cik_padded = QString("%1").arg(cik, 10, 10, QChar('0'));
         const QString cache_key = "sec_filings:" + tkr;
-        auto cached = finterm::CacheManager::instance().try_get(cache_key);
         auto parse = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
             QVector<SecFiling> out;
             const auto recent = root["filings"].toObject()["recent"].toObject();
@@ -1859,7 +1900,8 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
             const auto accessions = recent["accessionNumber"].toArray();
             const auto primary = recent["primaryDocument"].toArray();
             const int n = std::min({forms.size(), dates.size(), accessions.size(), primary.size()});
-            for (int i = 0; i < std::min(n, 25); ++i) {
+            out.reserve(n);
+            for (int i = 0; i < n; ++i) {
                 SecFiling f;
                 f.form = forms.at(i).toString();
                 f.filing_date = dates.at(i).toString();
@@ -1875,11 +1917,16 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
             }
             return out;
         };
-        if (cached.has_value()) {
+        if (auto cached = finterm::CacheManager::instance().try_get(cache_key); cached.has_value()) {
             const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
-            cb(true, parse(obj));
+            done({true, parse(obj), {}}, true);
             return;
         }
+
+        auto& waiters = sec_submissions_waiters_[tkr];
+        waiters.append(done);
+        if (waiters.size() > 1)
+            return; // the request already out answers this caller too
 
         const QString url = QString("https://data.sec.gov/submissions/CIK%1.json").arg(cik_padded);
         QPointer<MarketDataService> self_ptr = this;
@@ -1887,21 +1934,26 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         const SecContact contact = sec_contact();
         headers["User-Agent"] = sec_user_agent(contact);
         finterm::HttpClient::instance().get(
-            url, headers, [cb, parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
+            url, headers, [parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
                 if (!self_ptr)
                     return;
+                SecFilingsReply reply;
                 if (!res.is_ok() || !res.value().isObject()) {
                     const QString err =
                         res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
                     sec_refused(contact, err);
-                    LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr + sec_failure(contact, err));
-                    cb(false, {});
-                    return;
+                    const QString why = sec_failure(contact, err);
+                    LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr + why);
+                    reply.error = QStringLiteral("SEC submissions fetch failed for %1%2").arg(tkr, why);
+                } else {
+                    const auto obj = res.value().object();
+                    const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+                    finterm::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
+                    reply = {true, parse(obj), {}};
                 }
-                const auto obj = res.value().object();
-                const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-                finterm::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
-                cb(true, parse(obj));
+                const auto waiters = self_ptr->sec_submissions_waiters_.take(tkr);
+                for (const auto& w : waiters)
+                    w(reply, true);
             });
     };
 
@@ -1911,9 +1963,9 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
     }
     // A failed ticker map is a FAILED fetch, not "this company has no CIK": the
     // reader must see an error, not an empty filings list read as fact.
-    sec_cik_waiters_.append([with_cik_map, cb](bool loaded) {
+    sec_cik_waiters_.append([with_cik_map, done](bool loaded, const QString& why) {
         if (!loaded) {
-            cb(false, {});
+            done({false, {}, QStringLiteral("SEC ticker map unavailable%1").arg(why)}, true);
             return;
         }
         with_cik_map();
@@ -1924,12 +1976,12 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
 
     // Try CacheManager first — the company_tickers.json mapping has a 7-day
     // TTL since SEC refreshes weekly. Falls through to a live fetch if missing.
-    auto fire_waiters = [this](bool ok) {
+    auto fire_waiters = [this](bool ok, const QString& why) {
         sec_cik_loaded_ = ok;
         sec_cik_loading_ = false;
         auto waiters = std::move(sec_cik_waiters_);
         for (auto& w : waiters)
-            w(ok);
+            w(ok, why);
     };
     auto populate_from_json = [this](const QJsonDocument& doc) {
         // company_tickers.json is keyed by row index (strings "0","1",…); each
@@ -1949,7 +2001,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         const auto doc = QJsonDocument::fromJson(cached_map->toUtf8());
         if (doc.isObject()) {
             populate_from_json(doc);
-            fire_waiters(true);
+            fire_waiters(true, {});
             return;
         }
     }
@@ -1966,14 +2018,80 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
                 const QString err =
                     res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
                 sec_refused(contact, err);
-                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed" + sec_failure(contact, err));
-                fire_waiters(false);
+                const QString why = sec_failure(contact, err);
+                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed" + why);
+                fire_waiters(false, why);
                 return;
             }
             populate_from_json(res.value());
             const QString raw = QString::fromUtf8(res.value().toJson(QJsonDocument::Compact));
             finterm::CacheManager::instance().put("sec_cik_map", raw, kSecCikMapTtlSec, "sec");
-            fire_waiters(true);
+            fire_waiters(true, {});
+        });
+}
+
+// ── Option chain (CBOE) ────────────────────────────────────────────────────
+void MarketDataService::fetch_options_chain(const QString& symbol, OptionsChainCallback cb) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty()) {
+        later([cb]() { cb({false, {}, {}, QStringLiteral("Options chain: no symbol")}); });
+        return;
+    }
+    const QString cache_key = QStringLiteral("options_chain:cboe:") + sym;
+    if (const auto aged = finterm::CacheManager::instance().try_get_aged(cache_key)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(aged->value.toUtf8());
+        if (doc.isObject()) {
+            OptionsChainReply r{true, doc.object(), aged->written_at, {}};
+            later([cb, r]() { cb(r); });
+            return;
+        }
+    }
+    auto& waiters = options_chain_waiters_[sym];
+    waiters.append(std::move(cb));
+    if (waiters.size() > 1)
+        return; // the request already out answers this caller too
+
+    QPointer<MarketDataService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("cboe_data.py"), {QStringLiteral("options_chains"), sym},
+        [self, sym, cache_key](const python::PythonResult& res) {
+            if (!self)
+                return;
+            OptionsChainReply reply;
+            if (!res.success) {
+                reply.error = res.error.isEmpty() ? QStringLiteral("cboe_data.py failed") : res.error;
+            } else {
+                const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(res.output).trimmed().toUtf8());
+                const QJsonObject root = doc.object();
+                // CBOE's errors: {"error": true, "message": "...", "status_code": N}.
+                if (!doc.isObject()) {
+                    reply.error = QStringLiteral("cboe_data.py returned no JSON object");
+                } else if (!root.value("success").toBool(false)) {
+                    QString msg = root.value("message").toString();
+                    if (msg.isEmpty())
+                        msg = root.value("error").toString();
+                    if (msg.isEmpty())
+                        msg = QStringLiteral("CBOE returned no chain");
+                    if (root.value("status_code").isDouble())
+                        msg += QStringLiteral(" (HTTP %1)").arg(root.value("status_code").toInt());
+                    reply.error = msg;
+                } else {
+                    reply.ok = true;
+                    reply.chain = root.value("data").toObject();
+                    reply.as_of = QDateTime::currentDateTimeUtc();
+                    finterm::CacheManager::instance().put(
+                        cache_key, QString::fromUtf8(QJsonDocument(reply.chain).toJson(QJsonDocument::Compact)),
+                        kOptionsChainTtlSec, "options");
+                }
+            }
+            if (!reply.ok)
+                LOG_WARN("MarketData", "options chain " + sym + " failed: " + reply.error);
+            const auto waiters = self->options_chain_waiters_.take(sym);
+            // PythonRunner answers a missing script inside run(): keep the rule.
+            self->later([waiters, reply]() {
+                for (const auto& w : waiters)
+                    w(reply);
+            });
         });
 }
 
