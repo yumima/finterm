@@ -226,11 +226,20 @@ class OwnershipService : public QObject {
 
     /// One script read behind the query_* calls: deduplicated while in flight,
     /// answered on a later event-loop turn with the parsed object, or the
-    /// error text when the run failed, answered nothing, or refused.
+    /// error text when the run failed, answered nothing, refused, or did not
+    /// answer by its deadline (a lost callback must not wedge later reads).
     using QueryDone = std::function<void(const QJsonObject& answer, const QString& error)>;
     void run_query(const QString& script, const QString& action, const QJsonObject& payload, int timeout_ms,
                    QueryDone done);
-    QHash<QString, QVector<QueryDone>> queries_in_flight_;
+    /// Settle the in-flight read @p key if it is still run @p id: every waiter
+    /// is answered once, later; a stale run (superseded by a deadline) is ignored.
+    void settle_query(const QString& key, quint64 id, const QJsonObject& answer, const QString& error);
+    struct InFlightQuery {
+        quint64 id = 0;
+        QVector<QueryDone> waiters;
+    };
+    QHash<QString, InFlightQuery> queries_in_flight_;
+    quint64 next_query_id_ = 0;
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;

@@ -14,6 +14,7 @@
 #include <cmath>
 
 using namespace finterm::alerts;
+using finterm::ownership::ClusterBuy;
 
 namespace {
 Rule price_rule(Kind k, double level, Session s = Session::Regular) {
@@ -33,9 +34,9 @@ Rule move_rule(double pct) {
     r.pct = pct;
     return r;
 }
-InsiderBuy buy(const QString& sym, const QString& acc, const QString& who, const QDate& filed, const QDate& traded,
+ClusterBuy buy(const QString& sym, const QString& acc, const QString& who, const QDate& filed, const QDate& traded,
                double value = 1000.0) {
-    InsiderBuy b;
+    ClusterBuy b;
     b.symbol = sym;
     b.accession = acc;
     b.insider = who;
@@ -217,7 +218,7 @@ class TestAlertRules : public QObject {
         const QDate today(2026, 11, 13);
         const QSet<QString> covered{QStringLiteral("WDGT")};
         QHash<QString, QDate> seen;
-        QVector<InsiderBuy> rows{
+        QVector<ClusterBuy> rows{
             buy("WDGT", "a1", "ann", today.addDays(-3), today.addDays(-5)),
             buy("WDGT", "a2", "bob", today.addDays(-2), today.addDays(-4), 2500.0),
         };
@@ -245,7 +246,7 @@ class TestAlertRules : public QObject {
     void one_buyer_is_not_a_cluster() {
         const QDate today(2026, 11, 13);
         QHash<QString, QDate> seen;
-        const QVector<InsiderBuy> rows{
+        const QVector<ClusterBuy> rows{
             buy("WDGT", "a1", "ann", today.addDays(-3), today.addDays(-5)),
             buy("WDGT", "a2", "ann", today.addDays(-2), today.addDays(-4)),
         };
@@ -256,7 +257,7 @@ class TestAlertRules : public QObject {
     void buys_more_than_the_window_apart_are_not_a_cluster() {
         const QDate today(2026, 11, 13);
         QHash<QString, QDate> seen;
-        const QVector<InsiderBuy> rows{
+        const QVector<ClusterBuy> rows{
             buy("WDGT", "a1", "ann", today.addDays(-1), today.addDays(-40)),
             buy("WDGT", "a2", "bob", today.addDays(-1), today.addDays(-40 + finterm::ownership::kClusterWindowDays + 1)),
         };
@@ -266,7 +267,7 @@ class TestAlertRules : public QObject {
     void stale_filings_never_fire() {
         const QDate today(2026, 11, 13);
         QHash<QString, QDate> seen;
-        const QVector<InsiderBuy> rows{
+        const QVector<ClusterBuy> rows{
             buy("WDGT", "a1", "ann", today.addDays(-kInsiderFreshDays - 1), today.addDays(-12)),
             buy("WDGT", "a2", "bob", today.addDays(-kInsiderFreshDays - 2), today.addDays(-12)),
         };
@@ -277,7 +278,7 @@ class TestAlertRules : public QObject {
     void uncovered_and_undated_rows_are_ignored() {
         const QDate today(2026, 11, 13);
         QHash<QString, QDate> seen;
-        QVector<InsiderBuy> rows{
+        QVector<ClusterBuy> rows{
             buy("OTHR", "a1", "ann", today, today),
             buy("OTHR", "a2", "bob", today, today),
             buy("WDGT", "b1", "ann", today, QDate()),
@@ -290,7 +291,7 @@ class TestAlertRules : public QObject {
     void cluster_value_is_unknown_when_none_was_reported() {
         const QDate today(2026, 11, 13);
         QHash<QString, QDate> seen;
-        const QVector<InsiderBuy> rows{
+        const QVector<ClusterBuy> rows{
             buy("WDGT", "a1", "ann", today, today, kNaN),
             buy("WDGT", "a2", "bob", today, today, kNaN),
         };

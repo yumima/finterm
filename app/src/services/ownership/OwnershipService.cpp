@@ -64,6 +64,9 @@ constexpr int kSyncRefusedMs = 10 * 60'000; // SEC's throttle lifts within minut
 constexpr int kSyncFilingsPerPass = 3000;
 constexpr int kSyncTimeoutMs = 3600'000;
 constexpr int kScanRecheckMs = 6 * 60 * 60 * 1000;
+/// How long an alert read may wait in PythonRunner's queue (behind a sync or a
+/// scan) on top of its own run timeout before it is answered as failed.
+constexpr int kQueryQueueGraceMs = 20 * 60'000;
 /// After a failed pass — a lock, a network fault — try again soon, not in
 /// six hours: the tab says "scan failed" until then.
 constexpr int kScanRetryMs = 15 * 60 * 1000;
@@ -113,8 +116,40 @@ QString payload_of(const QJsonObject& o) {
     return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
 }
 
-// One parser per row shape, shared by the screens' loads and the alert reads,
-// so the two can never read the same store differently.
+/// The refusal a script answered with, or "" when it answered. The KEY is the
+/// signal: {"error": null}, {"error": ""} and {"error": {...}} are refusals
+/// too, never an empty success.
+QString refusal_of(const QJsonObject& o) {
+    if (!o.contains(QStringLiteral("error")))
+        return {};
+    const QJsonValue e = o.value(QStringLiteral("error"));
+    if (e.isString() && !e.toString().trimmed().isEmpty())
+        return e.toString().trimmed();
+    if (e.isObject())
+        return QString::fromUtf8(QJsonDocument(e.toObject()).toJson(QJsonDocument::Compact));
+    if (e.isArray())
+        return QString::fromUtf8(QJsonDocument(e.toArray()).toJson(QJsonDocument::Compact));
+    return QStringLiteral("refused without a reason");
+}
+
+/// What a failed run said, for a log line: the last stderr line that is not a
+/// Python warning (the exception line of a traceback), else stderr's tail.
+QString failure_text(const python::PythonResult& r, const QString& fallback) {
+    const QString e = r.error.trimmed();
+    if (e.isEmpty())
+        return fallback;
+    const QStringList lines = e.split(QLatin1Char('\n'));
+    for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
+        const QString l = it->trimmed();
+        if (l.isEmpty() || l.contains(QLatin1String("Warning")) || l.startsWith(QLatin1String("warnings.warn")))
+            continue;
+        return l.right(200);
+    }
+    return e.right(200);
+}
+
+// One parser per row and container shape, shared by the screens' loads and
+// the alert reads, so the two can never read the same store differently.
 
 Stake parse_stake(const QJsonObject& r) {
     Stake s;
@@ -159,12 +194,66 @@ BigMove parse_big_move(const QJsonObject& r) {
     return m;
 }
 
+/// A biggest buy / sell. Null, {} or a move without a dollar value is no
+/// move: shown as such, never as "+$0".
 std::optional<FirmMoveTop> parse_top_move(const QJsonValue& v) {
-    if (!v.isObject())
-        return std::nullopt;
     const auto m = v.toObject();
+    if (!m.value(QStringLiteral("value")).isDouble())
+        return std::nullopt;
     return FirmMoveTop{m.value(QStringLiteral("issuer")).toString(), m.value(QStringLiteral("ticker")).toString(),
                        m.value(QStringLiteral("value")).toDouble()};
+}
+
+/// sec_stakes_market.py `recent`, minus its error (the caller's to judge).
+Stakes parse_stakes(const QJsonObject& o) {
+    Stakes st;
+    st.loaded = true;
+    st.read_through = iso_date(o, "read_through");
+    for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+        st.rows.push_back(parse_stake(v.toObject()));
+    return st;
+}
+
+/// sec_13f_bulk.py `big_moves`, minus its error.
+BigMoves parse_big_moves(const QJsonObject& o) {
+    BigMoves b;
+    b.loaded = true;
+    b.side = o.value(QStringLiteral("side")).toString();
+    b.sort = o.value(QStringLiteral("sort")).toString();
+    b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
+    b.filed_within = o.value(QStringLiteral("filed_within")).toInt();
+    b.floor = o.value(QStringLiteral("floor")).toDouble();
+    b.max_positions = o.value(QStringLiteral("max_positions")).toInt();
+    for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
+        b.partial_quarters << v.toString();
+    for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+        b.rows.push_back(parse_big_move(v.toObject()));
+    return b;
+}
+
+/// One row of ownership_watch.py `cluster_rows`.
+ClusterBuy parse_cluster_buy(const QJsonObject& r) {
+    ClusterBuy b;
+    b.symbol = r.value(QStringLiteral("symbol")).toString().toUpper();
+    b.accession = r.value(QStringLiteral("accession")).toString();
+    b.insider = r.value(QStringLiteral("insider")).toString();
+    b.filed = iso_date(r, "filed");
+    b.traded = iso_date(r, "traded");
+    b.value = opt_num(r, "value").value_or(b.value); // null stays NaN, never 0
+    return b;
+}
+
+/// One fund of sec_13f_bulk.py `fund_filings`.
+FundFiling parse_fund_filing(const QJsonObject& r) {
+    FundFiling f;
+    f.cik = r.value(QStringLiteral("cik")).toString().toUpper();
+    f.accession = r.value(QStringLiteral("accession")).toString();
+    f.manager = r.value(QStringLiteral("manager")).toString();
+    f.quarter = iso_date(r, "quarter");
+    f.filed = iso_date(r, "filed");
+    f.top_buy = parse_top_move(r.value(QStringLiteral("top_buy")));
+    f.top_sell = parse_top_move(r.value(QStringLiteral("top_sell")));
+    return f;
 }
 
 QJsonArray sorted_upper(const QStringList& in) {
@@ -1349,36 +1438,57 @@ void OwnershipService::run_query(const QString& script, const QString& action, c
                                  int timeout_ms, QueryDone done) {
     const QString args = payload_of(payload);
     const QString key = script + QLatin1Char('|') + action + QLatin1Char('|') + args;
-    auto& waiters = queries_in_flight_[key];
-    waiters.push_back(std::move(done));
-    if (waiters.size() > 1)
-        return; // the same read is already running: its answer is ours too
+    if (auto it = queries_in_flight_.find(key); it != queries_in_flight_.end()) {
+        it->waiters.push_back(std::move(done)); // the same read is already running: its answer is ours too
+        return;
+    }
+    const quint64 id = ++next_query_id_;
+    queries_in_flight_.insert(key, InFlightQuery{id, {std::move(done)}});
+
+    // PythonRunner kills a hung process and calls back at `timeout_ms`, but
+    // that clock starts when the process does: a request can wait behind
+    // hour-long syncs in its queue. Past this deadline the read is answered
+    // as failed and the key freed, so a lost callback cannot block every
+    // identical read after it; a late answer from this run is then ignored.
+    const int deadline_ms = timeout_ms + kQueryQueueGraceMs;
+    QTimer::singleShot(deadline_ms, this, [this, key, id, deadline_ms]() {
+        settle_query(key, id, {},
+                     QStringLiteral("no answer within %1 min (Python queue busy, or the run was lost)")
+                         .arg(deadline_ms / 60'000));
+    });
+
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
         script, {action, args},
-        [self, key, script, action](python::PythonResult result) {
+        [self, key, id, script, action](python::PythonResult result) {
             if (!self)
                 return;
-            const QVector<QueryDone> waiting = self->queries_in_flight_.take(key);
             QJsonObject o;
             QString error;
             if (!result.success) {
-                const QString e = result.error.trimmed();
-                error = e.isEmpty() ? QStringLiteral("%1 %2 failed").arg(script, action)
-                                    : e.section(QLatin1Char('\n'), -1).left(200);
+                error = failure_text(result, QStringLiteral("%1 %2 failed").arg(script, action));
             } else {
                 o = parse_object(result);
-                error = o.isEmpty() ? QStringLiteral("%1 %2 gave no answer").arg(script, action)
-                                    : o.value(QStringLiteral("error")).toString();
+                error = o.isEmpty() ? QStringLiteral("%1 %2 gave no answer").arg(script, action) : refusal_of(o);
             }
-            // PythonRunner can answer inside run() (no interpreter, no
-            // script); the caller is promised a later turn either way.
-            QTimer::singleShot(0, self, [waiting, o, error]() {
-                for (const auto& w : waiting)
-                    w(o, error);
-            });
+            self->settle_query(key, id, o, error);
         },
         /*on_line=*/{}, timeout_ms);
+}
+
+void OwnershipService::settle_query(const QString& key, quint64 id, const QJsonObject& answer,
+                                    const QString& error) {
+    const auto it = queries_in_flight_.find(key);
+    if (it == queries_in_flight_.end() || it->id != id)
+        return; // already settled: answered, or its deadline passed
+    const QVector<QueryDone> waiting = std::move(it->waiters);
+    queries_in_flight_.erase(it);
+    // PythonRunner can answer inside run() (no interpreter, no script); the
+    // caller is promised a later turn either way.
+    QTimer::singleShot(0, this, [waiting, answer, error]() {
+        for (const auto& w : waiting)
+            w(answer, error);
+    });
 }
 
 void OwnershipService::query_cluster_buys(const QStringList& symbols, int days,
@@ -1390,17 +1500,8 @@ void OwnershipService::query_cluster_buys(const QStringList& symbols, int days,
                   c.error = error;
                   if (error.isEmpty()) {
                       c.scanned_to = iso_date(o, "scanned_to");
-                      for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                          const QJsonObject r = v.toObject();
-                          ClusterBuy b;
-                          b.symbol = r.value(QStringLiteral("symbol")).toString().toUpper();
-                          b.accession = r.value(QStringLiteral("accession")).toString();
-                          b.insider = r.value(QStringLiteral("insider")).toString();
-                          b.filed = iso_date(r, "filed");
-                          b.traded = iso_date(r, "traded");
-                          b.value = opt_num(r, "value"); // null stays unknown
-                          c.rows.push_back(b);
-                      }
+                      for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+                          c.rows.push_back(parse_cluster_buy(v.toObject()));
                   }
                   done(c);
               });
@@ -1410,14 +1511,9 @@ void OwnershipService::query_stakes(const QStringList& symbols, int days, std::f
     run_query(QStringLiteral("sec_stakes_market.py"), QStringLiteral("recent"),
               {{"symbols", sorted_upper(symbols)}, {"days", days}}, 120'000,
               [done](const QJsonObject& o, const QString& error) {
-                  Stakes st;
+                  Stakes st = error.isEmpty() ? parse_stakes(o) : Stakes{};
                   st.loaded = true;
                   st.error = error;
-                  if (error.isEmpty()) {
-                      st.read_through = iso_date(o, "read_through");
-                      for (const auto& v : o.value(QStringLiteral("rows")).toArray())
-                          st.rows.push_back(parse_stake(v.toObject()));
-                  }
                   done(st);
               });
 }
@@ -1433,17 +1529,9 @@ void OwnershipService::query_big_moves(const QStringList& symbols, int filed_wit
                {"active_only", true},
                {"readonly", true}},
               120'000, [done](const QJsonObject& o, const QString& error) {
-                  BigMoves b;
+                  BigMoves b = error.isEmpty() ? parse_big_moves(o) : BigMoves{};
                   b.loaded = true;
                   b.error = error;
-                  if (error.isEmpty()) {
-                      b.side = o.value(QStringLiteral("side")).toString();
-                      b.sort = o.value(QStringLiteral("sort")).toString();
-                      b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
-                      b.filed_within = o.value(QStringLiteral("filed_within")).toInt();
-                      for (const auto& v : o.value(QStringLiteral("rows")).toArray())
-                          b.rows.push_back(parse_big_move(v.toObject()));
-                  }
                   done(b);
               });
 }
@@ -1453,23 +1541,13 @@ void OwnershipService::query_fund_filings(const QStringList& ciks, std::function
               120'000, [done](const QJsonObject& o, const QString& error) {
                   FundFilings f;
                   f.error = error;
-                  if (error.isEmpty()) {
-                      for (const auto& v : o.value(QStringLiteral("funds")).toArray()) {
-                          const QJsonObject r = v.toObject();
-                          FundFiling ff;
-                          ff.cik = r.value(QStringLiteral("cik")).toString().toUpper();
-                          ff.accession = r.value(QStringLiteral("accession")).toString();
-                          ff.manager = r.value(QStringLiteral("manager")).toString();
-                          ff.quarter = iso_date(r, "quarter");
-                          ff.filed = iso_date(r, "filed");
-                          ff.top_buy = parse_top_move(r.value(QStringLiteral("top_buy")));
-                          ff.top_sell = parse_top_move(r.value(QStringLiteral("top_sell")));
-                          f.rows.push_back(ff);
-                      }
-                  }
+                  if (error.isEmpty())
+                      for (const auto& v : o.value(QStringLiteral("funds")).toArray())
+                          f.rows.push_back(parse_fund_filing(v.toObject()));
                   done(f);
               });
 }
+
 
 // ── Filers ───────────────────────────────────────────────────────────────────
 
@@ -1560,28 +1638,18 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                 return;
             self->big_moves_loading_ = false;
             BigMoves b;
-            b.loaded = true;
             if (!result.success) {
+                b.loaded = true;
                 b.error = result.error.isEmpty() ? QStringLiteral("big-moves query failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
-                b.error = o.value(QStringLiteral("error")).toString();
+                b = parse_big_moves(o);
+                b.error = refusal_of(o);
                 // Nothing stored yet: the scan is the sync's to run. Ask for a
                 // pass now rather than leaving the tab waiting for the next
                 // scheduled one (run_13f_sync ignores the call while one runs).
                 if (o.value(QStringLiteral("pending")).toBool())
                     self->ask_for_pending_pass();
-                b.side = o.value(QStringLiteral("side")).toString();
-                b.sort = o.value(QStringLiteral("sort")).toString();
-                b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
-                b.filed_within = o.value(QStringLiteral("filed_within")).toInt();
-                b.floor = o.value(QStringLiteral("floor")).toDouble();
-                b.max_positions = o.value(QStringLiteral("max_positions")).toInt();
-                for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
-                    b.partial_quarters << v.toString();
-                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                    b.rows.push_back(parse_big_move(v.toObject()));
-                }
             }
             self->big_moves_ = b;
             emit self->big_moves_updated();
@@ -1989,15 +2057,13 @@ void OwnershipService::load_stakes(int days, const QString& kind, bool new_only)
                 return;
             self->stakes_loading_ = false;
             Stakes st;
-            st.loaded = true;
             if (!result.success) {
+                st.loaded = true;
                 st.error = result.error.isEmpty() ? QStringLiteral("stakes query failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
-                st.error = o.value(QStringLiteral("error")).toString();
-                st.read_through = iso_date(o, "read_through");
-                for (const auto& v : o.value(QStringLiteral("rows")).toArray())
-                    st.rows.push_back(parse_stake(v.toObject()));
+                st = parse_stakes(o);
+                st.error = refusal_of(o);
             }
             self->stakes_ = st;
             emit self->stakes_updated();
