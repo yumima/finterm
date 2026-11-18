@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""News > WHAT'S ON: company events for a date window.
+"""Company events for a date window (Nasdaq public calendars).
 
-    whats_on_calendar.py events START END [SYM,SYM,...]
+    whats_on_calendar.py earnings START END
+        every company Nasdaq lists as reporting on each weekday in the window
+        (no size cut: each surface makes its own — the dashboard tile ranks
+        by market cap, What's On keeps large caps and the user's names in
+        WhatsOnModel.h). Read by the app's ONE earnings feed
+        (services/calendar/EarningsCalendarFeed) for every surface.
+        days_failed: weekdays Nasdaq did not answer (and no earlier copy
+        exists) — a refusal is NOT "no earnings that day", so the app says so.
 
-prints one JSON object:
-    earnings   every company Nasdaq lists as reporting on a weekday in the
-               window with a market cap >= PREFILTER_CAP, plus every listed
-               symbol (the user's watchlists/portfolios) whatever its size.
-               The app makes the final "matters" cut (WhatsOnModel.h).
-    dividends  ex-dividend dates in the window — listed symbols ONLY (the
-               full calendar is hundreds of rows a day and not news).
-    insiders   open-market insider cluster buys (>= 2 insiders) filed in the
-               last INSIDER_DAYS days on listed symbols, read from the
-               Ownership scan's LOCAL store (sec_form4_market) — no network;
-               absent when that scan has never run.
-    days_failed / div_days_failed
-               weekdays Nasdaq did not answer (and no earlier copy exists):
-               a refusal is NOT "no earnings that day", so the app says so.
+    whats_on_calendar.py company_events START END [SYM,SYM,...]
+        dividends  ex-dividend dates in the window — listed symbols ONLY (the
+                   full calendar is hundreds of rows a day and not news).
+        insiders   open-market insider cluster buys (>= 2 insiders) filed in
+                   the last INSIDER_DAYS days on listed symbols, read from the
+                   Ownership scan's LOCAL store (sec_form4_market) — no
+                   network; absent when that scan has never run.
+        div_days_failed  weekdays the dividend calendar did not answer.
 
 Source: Nasdaq's public calendar API (api.nasdaq.com/api/calendar/earnings,
 /dividends?date=YYYY-MM-DD) — the same host IPO Watch reads, through the
@@ -42,7 +43,6 @@ from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-PREFILTER_CAP = 10e9     # the app's own cut is higher; this only trims the payload
 INSIDER_DAYS = 10
 MAX_DAYS = 70            # guard against a runaway window
 
@@ -159,17 +159,6 @@ def parse_dividends_day(doc, day):
     return out
 
 
-def keep_earnings(rows, mine):
-    """Large caps and the user's own names; each row says which."""
-    out = []
-    for r in rows:
-        is_mine = r["symbol"] in mine
-        cap = r.get("market_cap")
-        if is_mine or (cap is not None and cap >= PREFILTER_CAP):
-            out.append(dict(r, mine=is_mine))
-    return out
-
-
 def weekdays(start, end):
     d, out = start, []
     while d <= end and len(out) < MAX_DAYS:
@@ -254,35 +243,37 @@ def insider_clusters(mine):
     return rows, r.get("last_scanned") or None
 
 
-def events(start, end, symbols):
+def company_events(start, end, symbols):
+    """The user's own names: ex-dividend dates and insider buying clusters.
+    (Earnings come from `earnings`, which the app's one earnings feed reads
+    for every surface.)"""
     import ipo_calendar as ic
     today = date.today()
     mine = {norm_symbol(s) for s in symbols if norm_symbol(s)}
     days = weekdays(start, end)
-    cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
-    # The same fetch the dashboard tile reads (earnings_days), then the cut.
-    every = earnings_days(start, end)
-    failed = every["days_failed"]
-    earnings = keep_earnings(every["earnings"], mine)
     dividends, div_failed = [], []
     if mine:
+        cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
         div, div_failed = _fetch_days(cache, "div", DIV_URL, parse_dividends_day, days, today)
         for d in sorted(div):
             dividends += [r for r in div[d] if r["symbol"] in mine]
     insiders, last_scanned = insider_clusters(mine)
     return {
         "start": start.isoformat(), "end": end.isoformat(),
-        "earnings": earnings, "dividends": dividends, "insiders": insiders,
+        "dividends": dividends, "insiders": insiders,
         "insider_last_scanned": last_scanned,
-        "days_total": len(days), "days_failed": failed, "div_days_failed": div_failed,
-        "prefilter_cap": PREFILTER_CAP,
+        "days_total": len(days), "div_days_failed": div_failed,
     }
 
 
 def earnings_days(start, end):
-    """Every company reporting on each weekday in [start, end] — no size
-    filter (the dashboard tile ranks them itself). Same parser, refusal rule
-    and per-day cache as `events`, so the two surfaces cannot disagree."""
+    """Every company reporting on each weekday in [start, end] (at most
+    MAX_DAYS weekdays) — no size cut; each surface makes its own.
+
+    days_answered lists the weekdays this answer covers (fresh, cached or the
+    last copy); days_failed the ones with no answer at all. A weekday in
+    neither (past the MAX_DAYS cap) was not asked: the caller must not read
+    it as a quiet day."""
     import ipo_calendar as ic
     today = date.today()
     days = weekdays(start, end)
@@ -292,7 +283,8 @@ def earnings_days(start, end):
     for d in sorted(earn):
         rows += earn[d]
     return {"start": start.isoformat(), "end": end.isoformat(), "earnings": rows,
-            "days_total": len(days), "days_failed": failed}
+            "days_total": len(days), "days_failed": failed,
+            "days_answered": [d.isoformat() for d in sorted(earn)]}
 
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
@@ -347,8 +339,8 @@ def main(argv):
         ids = [s.strip().upper() for s in argv[1].split(",") if s.strip()]
         print(json.dumps(fred(ids, start)))
         return 0
-    if len(argv) < 3 or argv[0] not in ("events", "earnings"):
-        print(json.dumps({"error": "usage: whats_on_calendar.py events|earnings START END [SYM,...]"}))
+    if len(argv) < 3 or argv[0] not in ("earnings", "company_events"):
+        print(json.dumps({"error": "usage: whats_on_calendar.py earnings|company_events START END [SYM,...]"}))
         return 2
     try:
         start = date.fromisoformat(argv[1])
@@ -363,12 +355,8 @@ def main(argv):
         print(json.dumps(out))
         return 0
     syms = [s for s in (argv[3].split(",") if len(argv) > 3 else []) if s.strip()]
-    out = events(start, end, syms)
-    if out["days_total"] and len(out["days_failed"]) == out["days_total"]:
-        out["error"] = "Nasdaq earnings calendar did not answer"
-    print(json.dumps(out))
+    print(json.dumps(company_events(start, end, syms)))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

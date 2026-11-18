@@ -73,7 +73,8 @@ class WhatsOnPanel : public QWidget {
     QVector<macro_calendar::MacroEvent> macro_;
     QVector<QDate> fomc_;
     QJsonArray ipo_deals_;
-    QJsonObject events_; ///< whats_on_calendar.py: earnings / dividends / insiders
+    QJsonObject events_;  ///< whats_on_calendar.py company_events: dividends / insiders
+    QJsonArray earnings_; ///< every reporting company, from the shared EarningsCalendarFeed
     QJsonArray td_upcoming_, td_auctioned_;
     QVector<treasury_auctions::Auction> auctions_;
     whats_on::FredSeries fred_;

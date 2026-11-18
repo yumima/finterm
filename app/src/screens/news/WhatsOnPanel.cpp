@@ -3,6 +3,7 @@
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
+#include "services/calendar/EarningsCalendarFeed.h"
 #include "services/calendar/MacroCalendarFeed.h"
 #include "services/news/NewsPromo.h"
 #include "services/pre_ipo/IpoDealsFeed.h"
@@ -329,7 +330,7 @@ namespace {
 constexpr const char* kFomcKey = "whatson:fomc:v1";
 constexpr const char* kEffrKey = "whatson:effr:v1";
 constexpr const char* kYieldsKey = "whatson:yields:v1";
-constexpr const char* kEventsKey = "whatson:events:v1:"; // + window + symbol-set hash
+constexpr const char* kEventsKey = "whatson:company_events:v2:"; // + window + symbol-set hash (v2: no earnings)
 constexpr const char* kTdUpKey = "whatson:td:upcoming:v1";
 constexpr const char* kTdDoneKey = "whatson:td:auctioned:v1";
 constexpr const char* kFredKey = "whatson:fred:v1:"; // + series id
@@ -482,18 +483,7 @@ void WhatsOnPanel::fetch_ipos(bool force) {
 }
 
 void WhatsOnPanel::apply_events(const QJsonObject& root) {
-    events_ = root;
-    const int total = root.value("days_total").toInt();
-    const int failed = root.value("days_failed").toArray().size();
-    // A day Nasdaq did not answer is NOT a day without earnings: say so
-    // instead of letting the gap read as a quiet day.
-    if (failed > 0)
-        set_error(QStringLiteral("Earnings"),
-                  QStringLiteral("Nasdaq did not answer for %1 of %2 days — those days may be missing")
-                      .arg(failed)
-                      .arg(total));
-    else
-        clear_error(QStringLiteral("Earnings"));
+    events_ = root; // dividends + insider clusters (earnings come from the feed)
     if (const int df = root.value("div_days_failed").toArray().size(); df > 0)
         set_error(QStringLiteral("Ex-dividend"), QStringLiteral("%1 days unanswered by Nasdaq").arg(df));
     else
@@ -505,6 +495,36 @@ void WhatsOnPanel::fetch_events(bool force) {
     const QDate today = QDate::currentDate();
     const QDate from = wo::week_start(today);
     const QDate to = today.addDays(kEventsAheadDays);
+
+    // Earnings: the one feed the dashboard's earnings tile reads too.
+    QPointer<WhatsOnPanel> self = this;
+    earnings_calendar::fetch_days(
+        this, from, to,
+        [self](const earnings_calendar::DaysResult& r) {
+            if (!self)
+                return;
+            if (!r.ok) {
+                // Nothing answered: keep what is shown and say why.
+                self->set_error(QStringLiteral("Earnings"), r.error);
+                return;
+            }
+            // Cut once, on arrival, to what this panel can show (large caps
+            // and the user's names) — the feed hands every company over.
+            self->earnings_ = wo::earnings_that_matter(r.rows, self->mine_);
+            // A day Nasdaq did not answer is NOT a day without earnings: say
+            // so instead of letting the gap read as a quiet day.
+            if (!r.failed_days.isEmpty())
+                self->set_error(QStringLiteral("Earnings"),
+                                QStringLiteral("Nasdaq did not answer for %1 of %2 days — those days may be missing")
+                                    .arg(r.failed_days.size())
+                                    .arg(r.days_total));
+            else
+                self->clear_error(QStringLiteral("Earnings"));
+            self->render();
+        },
+        force);
+
+    // Dividends and insider clusters: the user's own names only.
     QStringList syms(mine_.begin(), mine_.end());
     syms.sort();
     const QString sym_arg = syms.join(QLatin1Char(','));
@@ -517,30 +537,27 @@ void WhatsOnPanel::fetch_events(bool force) {
             return;
         }
     }
-    QPointer<WhatsOnPanel> self = this;
-    QStringList args = {QStringLiteral("events"), from.toString(Qt::ISODate), to.toString(Qt::ISODate)};
+    QStringList args = {QStringLiteral("company_events"), from.toString(Qt::ISODate), to.toString(Qt::ISODate)};
     if (!sym_arg.isEmpty())
         args << sym_arg;
-    // ~2 Nasdaq requests per weekday on a cold cache, paced: well over the
+    // ~1 Nasdaq request per weekday on a cold cache, paced: well over the
     // default 30 s process deadline the first time.
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run( // D1-exempt: this panel is the only reader of the user's company events
         QStringLiteral("whats_on_calendar.py"), args,
         [self, key](python::PythonResult r) {
             if (!self)
                 return;
             const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            if (!r.success || root.isEmpty() || !root.contains("earnings")) {
-                self->set_error(QStringLiteral("Earnings"),
+            if (!r.success || root.isEmpty() || root.contains("error")) {
+                // Dividends AND insider clusters come from this one call.
+                self->set_error(QStringLiteral("Company events"),
                                 root.value("error").toString(r.success ? QStringLiteral("calendar unreadable")
                                                                        : QStringLiteral("script failed")));
                 return;
             }
-            if (root.contains("error")) { // every day refused — keep what we had
-                self->set_error(QStringLiteral("Earnings"), root.value("error").toString());
-                return;
-            }
+            self->clear_error(QStringLiteral("Company events"));
             // A partial answer is cached briefly so the missing days are retried.
-            const bool partial = !root.value("days_failed").toArray().isEmpty();
+            const bool partial = !root.value("div_days_failed").toArray().isEmpty();
             put_doc(key, QJsonDocument(root), partial ? 10 * 60 : kEventsSec);
             self->apply_events(root);
         },
@@ -713,7 +730,7 @@ QVector<wo::Item> WhatsOnPanel::collect_items(const QDateTime& now) const {
     QVector<wo::Item> items = wo::items_from_macro(macro, now, min_impact_ > wo::Impact::Low, from, &fred_);
     items += wo::items_from_fomc(fomc_, today, items);
     items += wo::items_from_ipo_deals(ipo_deals_, today);
-    items += wo::items_from_earnings(events_.value("earnings").toArray(), from, mine_);
+    items += wo::items_from_earnings(earnings_, from, mine_);
     items += wo::items_from_dividends(events_.value("dividends").toArray(), from);
     items += wo::items_from_insiders(events_.value("insiders").toArray(), from,
                                      events_.value("insider_last_scanned").toString());

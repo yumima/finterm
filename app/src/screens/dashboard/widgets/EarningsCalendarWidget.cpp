@@ -4,7 +4,7 @@
 
 #include "core/logging/Logger.h"
 #include "core/util/BarTime.h"
-#include "python/PythonRunner.h"
+#include "services/calendar/EarningsCalendarFeed.h"
 #include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/EarningsMath.h"
 #include "services/portfolio/PortfolioService.h"
@@ -369,6 +369,7 @@ void EarningsCalendarWidget::refresh_data() {
     pending_symbols_ = 0;
     ok_days_ = 0;
     failed_days_ = 0;
+    week_script_failed_ = false;
     ok_symbols_ = 0;
     week_rows_ready_ = false;
     entries_.clear();
@@ -396,74 +397,55 @@ void EarningsCalendarWidget::load_week() {
         start = start.addDays(8 - start.dayOfWeek()); // Sat→Mon(+2), Sun→Mon(+1)
     const QDate end = start.addDays(5 - start.dayOfWeek());
 
-    // The same script, parser, wrong-day refusal and per-day cache News ›
-    // What's On reads its earnings from (whats_on_calendar.py). This used to
-    // be its own direct Nasdaq call with its own parser and no cache, so the
-    // two surfaces could disagree about the same week.
+    // The one earnings feed News › What's On reads too: same rows, same
+    // wrong-day refusal, same per-day cache, one run for both.
     const qint64 epoch = epoch_;
     QPointer<EarningsCalendarWidget> self = this;
-    python::PythonRunner::instance().run_interactive( // D1-exempt: one-shot calendar read (cached per day)
-        QStringLiteral("whats_on_calendar.py"),
-        {QStringLiteral("earnings"), start.toString(Qt::ISODate), end.toString(Qt::ISODate)},
-        [self, epoch](python::PythonResult r) {
-            if (!self || epoch != self->epoch_)
-                return;
-            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            if (!r.success || root.isEmpty()) {
-                // The script failed — not the same thing as Nasdaq refusing.
-                LOG_WARN("EarningsCalendar", "whats_on_calendar.py earnings failed: " + r.error.left(200));
-                self->set_loading(false);
-                self->show_status(QStringLiteral("Couldn't read the earnings calendar."));
-                return;
-            }
-            if (root.contains("error")) {
-                self->ok_days_ = 0;
-                self->week_fetches_done();
-                return;
-            }
-            const int total = root.value("days_total").toInt();
-            const int failed = root.value("days_failed").toArray().size();
-            self->ok_days_ = total - failed;
-            self->failed_days_ = failed;
-            auto num = [](const QJsonObject& o, const char* k, double* out) {
-                const QJsonValue v = o.value(QLatin1String(k));
-                if (!v.isDouble())
-                    return false; // absent = unknown, never 0
-                *out = v.toDouble();
-                return true;
-            };
-            for (const auto& v : root.value("earnings").toArray()) {
-                const auto o = v.toObject();
-                Entry e;
-                // The calendar writes class shares BRK.B; holdings and yfinance
-                // use Yahoo's BRK-B. Match the book's form, or a held name is
-                // never marked held and its surprise never merges.
-                e.symbol = o.value("symbol").toString().replace(QLatin1Char('.'), QLatin1Char('-'));
-                e.date = QDate::fromString(o.value("date").toString(), Qt::ISODate);
-                if (e.symbol.isEmpty() || !e.date.isValid())
-                    continue;
-                e.company = o.value("name").toString();
-                const QString sess = o.value("session").toString();
-                e.when = sess.isEmpty() ? QStringLiteral("—") : sess;
-                e.has_est = num(o, "eps_forecast", &e.eps_est);
-                e.has_ly = num(o, "eps_last_year", &e.eps_ly);
-                e.fiscal_quarter = o.value("fiscal_quarter").toString();
-                e.num_ests = o.value("estimates").toInt();
-                e.ly_report_date = o.value("last_year_report").toString();
-                double mc = 0;
-                if (num(o, "market_cap", &mc))
-                    e.rank = mc;
-                self->entries_.append(e);
-            }
-            self->week_fetches_done();
-        },
-        60'000);
+    earnings_calendar::fetch_days(this, start, end, [self, epoch](const earnings_calendar::DaysResult& r) {
+        if (!self || epoch != self->epoch_)
+            return;
+        self->ok_days_ = r.ok ? r.days_total - static_cast<int>(r.failed_days.size()) : 0;
+        self->failed_days_ = static_cast<int>(r.failed_days.size());
+        self->week_script_failed_ = r.failure == earnings_calendar::DaysResult::Failure::ScriptFailed;
+        auto num = [](const QJsonObject& o, const char* k, double* out) {
+            const QJsonValue v = o.value(QLatin1String(k));
+            if (!v.isDouble())
+                return false; // absent = unknown, never 0
+            *out = v.toDouble();
+            return true;
+        };
+        for (const auto& v : r.rows) {
+            const auto o = v.toObject();
+            Entry e;
+            // The calendar writes class shares BRK.B; holdings and yfinance
+            // use Yahoo's BRK-B. Match the book's form, or a held name is
+            // never marked held and its surprise never merges.
+            e.symbol = o.value("symbol").toString().replace(QLatin1Char('.'), QLatin1Char('-'));
+            e.date = QDate::fromString(o.value("date").toString(), Qt::ISODate);
+            if (e.symbol.isEmpty() || !e.date.isValid())
+                continue;
+            e.company = o.value("name").toString();
+            const QString sess = o.value("session").toString();
+            e.when = sess.isEmpty() ? QStringLiteral("—") : sess;
+            e.has_est = num(o, "eps_forecast", &e.eps_est);
+            e.has_ly = num(o, "eps_last_year", &e.eps_ly);
+            e.fiscal_quarter = o.value("fiscal_quarter").toString();
+            e.num_ests = o.value("estimates").toInt();
+            e.ly_report_date = o.value("last_year_report").toString();
+            double mc = 0;
+            if (num(o, "market_cap", &mc))
+                e.rank = mc;
+            self->entries_.append(e);
+        }
+        self->week_fetches_done();
+    });
 }
 
 void EarningsCalendarWidget::week_fetches_done() {
     if (ok_days_ == 0) {
         set_loading(false);
-        show_status(QStringLiteral("Couldn't reach the Nasdaq earnings calendar."));
+        show_status(week_script_failed_ ? QStringLiteral("Couldn't read the earnings calendar.")
+                        : QStringLiteral("Couldn't reach the Nasdaq earnings calendar."));
         return;
     }
 

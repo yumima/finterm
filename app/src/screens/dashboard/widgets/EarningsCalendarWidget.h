@@ -143,6 +143,7 @@ class EarningsCalendarWidget : public BaseWidget {
     int pending_symbols_ = 0;
     int ok_days_ = 0;
     int failed_days_ = 0; // days Nasdaq did not answer (named in the note)
+    bool week_script_failed_ = false; // the local script failed — not Nasdaq refusing
     int ok_symbols_ = 0;
     QStringList refused_symbols_; // refused / unanswered (not "no earnings")
     QString refused_note_;        // names them under the list; replaced per fetch

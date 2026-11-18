@@ -221,6 +221,26 @@ class TestWhatsOnModel : public QObject {
         QVERIFY(std::any_of(own.begin(), own.end(), [](const Item& i) { return i.symbol == "NOCAP" && i.mine; }));
     }
 
+    // The arrival cut and the items apply ONE rule: cutting first must not
+    // change what is listed (the feed hands every company over).
+    void arrival_cut_matches_the_items_rule() {
+        const QJsonArray rows = QJsonDocument::fromJson(R"([
+          {"symbol":"NVDA","name":"NVIDIA","date":"2026-11-17","session":"AMC","market_cap":4.0e12},
+          {"symbol":"MID","name":"Mid Co","date":"2026-11-17","session":"BMO","market_cap":2.0e10},
+          {"symbol":"MINE","name":"Small Mine","date":"2026-11-18","session":"","market_cap":9.0e8},
+          {"symbol":"NOCAP","name":"No Cap","date":"2026-11-18","session":"BMO","market_cap":null},
+          {"symbol":"BRK.B","name":"Berkshire","date":"2026-11-18","session":"BMO"}
+        ])").array();
+        const auto mine = norm_symbols({"mine", "brk-b"});
+        const QJsonArray cut = earnings_that_matter(rows, mine);
+        QStringList kept;
+        for (const auto& v : cut)
+            kept << v.toObject().value("symbol").toString();
+        QCOMPARE(kept, (QStringList{"NVDA", "MINE", "BRK.B"}));
+        QCOMPARE(items_from_earnings(cut, QDate(2026, 11, 9), mine).size(),
+                 items_from_earnings(rows, QDate(2026, 11, 9), mine).size());
+    }
+
     void impact_table_is_mechanical() {
         QCOMPARE(macro_impact("CPI m/m", 3), Impact::High);
         QCOMPARE(macro_impact("Core CPI m/m", 3), Impact::High);

@@ -67,14 +67,29 @@ def test_no_reports_is_an_answer_refusal_is_not():
     assert w.parse_earnings_day(day_doc([ROW_PANW], as_of="Thu, Nov 19, 2026"), D) is None
 
 
-def test_size_cut_keeps_own_names():
-    rows = w.parse_earnings_day(day_doc([ROW_PANW, ROW_SMALL, ROW_NOCAP]), D)
-    kept = w.keep_earnings(rows, {"TINY"})
-    assert [r["symbol"] for r in kept] == ["PANW", "TINY"], kept
-    assert kept[1]["mine"] and not kept[0]["mine"]
-    # Unknown market cap is not "large": dropped unless it is the user's.
-    assert "BRK.B" not in [r["symbol"] for r in kept]
-    assert "BRK.B" in [r["symbol"] for r in w.keep_earnings(rows, {"BRK.B"})]
+def test_earnings_days_names_what_it_answered():
+    """The feed stores only days the answer covers: answered, failed and
+    never-asked (past MAX_DAYS) must be told apart."""
+    calls = []
+
+    def fake_fetch(cache, kind, url, parse, days, today):
+        calls.append(days)
+        got = {d: [{"symbol": "X", "date": d.isoformat()}] for d in days[:-1]}
+        return got, [days[-1].isoformat()]
+
+    real_fetch, real_cache = w._fetch_days, None
+    import ipo_calendar as ic
+    real_cache = ic.Cache
+    w._fetch_days = fake_fetch
+    ic.Cache = lambda path: None
+    try:
+        out = w.earnings_days(date(2026, 11, 16), date(2026, 11, 20))
+    finally:
+        w._fetch_days = real_fetch
+        ic.Cache = real_cache
+    assert out["days_answered"] == ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19"], out
+    assert out["days_failed"] == ["2026-11-20"], out
+    assert out["days_total"] == 5
 
 
 def test_dividends_day():

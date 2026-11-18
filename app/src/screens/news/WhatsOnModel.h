@@ -598,6 +598,26 @@ inline QString eps(double v) {
     return std::isfinite(v) ? QString::number(v, 'f', 2) : QString();
 }
 
+/// The "earnings that matter" cut alone: market cap ≥ `major_cap` OR one of
+/// `mine` (an unknown cap is not large). One rule for the arrival cut and the
+/// items below.
+inline bool earnings_row_matters(const QJsonObject& o, const QSet<QString>& mine, double major_cap = kMajorCap) {
+    const double cap = jnum(o, "market_cap");
+    return mine.contains(norm_symbol(o.value(QLatin1String("symbol")).toString())) ||
+           (std::isfinite(cap) && cap >= major_cap);
+}
+
+/// The rows that can matter, from the feed's every-company answer — cut once
+/// on arrival rather than on every repaint.
+inline QJsonArray earnings_that_matter(const QJsonArray& rows, const QSet<QString>& mine,
+                                       double major_cap = kMajorCap) {
+    QJsonArray out;
+    for (const auto& v : rows)
+        if (earnings_row_matters(v.toObject(), mine, major_cap))
+            out.append(v);
+    return out;
+}
+
 /// Earnings that matter: market cap ≥ `major_cap` OR one of `mine`, dated
 /// `from` onward. The ET session decides the order within a day (BMO 07:00,
 /// unknown 12:00, AMC 16:05 — nominal, the row shows the session, not a
@@ -614,10 +634,10 @@ inline QVector<Item> items_from_earnings(const QJsonArray& rows, const QDate& fr
         const QDate d = QDate::fromString(o.value(QLatin1String("date")).toString(), Qt::ISODate);
         if (sym.isEmpty() || !d.isValid() || d < from)
             continue;
+        if (!earnings_row_matters(o, mine, major_cap))
+            continue;
         const double cap = jnum(o, "market_cap");
         const bool is_mine = mine.contains(sym);
-        if (!is_mine && !(std::isfinite(cap) && cap >= major_cap))
-            continue;
         const QString name = o.value(QLatin1String("name")).toString().trimmed();
         const QString dedupe = name.toLower() + QLatin1Char('|') + d.toString(Qt::ISODate);
         if (!name.isEmpty() && seen.contains(dedupe) && !is_mine)
