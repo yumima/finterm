@@ -69,7 +69,7 @@ QDateTime next_fast_slot(const Window& win, const QDateTime& when, const QDateTi
     if (win.timed)
         return t < win.start ? win.start : QDateTime();
     const QDate d = when.toTimeZone(et_zone()).date();
-    for (const QDateTime s : {et(d, QTime(6, 30)), et(d, QTime(15, 55))})
+    for (const QDateTime& s : {et(d, QTime(6, 30)), et(d, QTime(15, 55))})
         if (t < s)
             return s;
     return {};

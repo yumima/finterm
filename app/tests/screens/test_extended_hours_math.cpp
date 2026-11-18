@@ -226,6 +226,71 @@ class TestExtendedHoursMath : public QObject {
         QVERIFY(q.has_value());
         QVERIFY(pairing_is_sound(*q, kNow));
     }
+
+    // ── apply_row / apply_print: the one merge rule every AFT surface uses ──
+
+    // 2026-11-17: Yahoo 429'd the app's first minute, the rows came back
+    // empty, and the heatmap read "empty" as "declined" — tiles blank for
+    // good, live prints shut out. A refused row keeps what is shown and
+    // leaves the symbol open to a print.
+    void a_refused_row_keeps_what_is_shown_and_admits_prints() {
+        QHash<QString, HeldQuote> quotes;
+        QSet<QString> declined;
+        QCOMPARE(apply_row(quotes, declined, aapl(), false, kNow), RowEffect::Updated);
+        QJsonObject refused{{"symbol", "AAPL"}, {"ext_price", QJsonValue::Null}, {"unavailable", true}};
+        QCOMPARE(apply_row(quotes, declined, refused, false, kNow), RowEffect::Unavailable);
+        QVERIFY(quotes.contains("AAPL"));
+
+        QJsonObject amzn_refused{{"symbol", "AMZN"}, {"ext_price", QJsonValue::Null}, {"unavailable", true}};
+        apply_row(quotes, declined, amzn_refused, false, kNow);
+        QVERIFY(!declined.contains("AMZN"));
+        // AMZN post-market print: 260.20, +2.31 on the 257.89 close.
+        QVERIFY(apply_print(quotes, declined, "AMZN", 2, 260.20, 2.31, kNow * 1000, kNow));
+        QVERIFY(quotes.contains("AMZN"));
+        QVERIFY(quotes["AMZN"].pct > 0);
+    }
+
+    // A null ext_price on its own is "no print yet", not a refusal.
+    void a_null_ext_price_is_not_a_decline() {
+        QHash<QString, HeldQuote> quotes;
+        QSet<QString> declined;
+        QJsonObject empty{{"symbol", "MSFT"}, {"ext_price", QJsonValue::Null}, {"regular", 505.0}};
+        apply_row(quotes, declined, empty, false, kNow);
+        QVERIFY(!declined.contains("MSFT"));
+        QVERIFY(apply_print(quotes, declined, "MSFT", 2, 510.0, 5.0, kNow * 1000, kNow));
+    }
+
+    // The explicit decline (a stale reference close) still shuts the door.
+    void a_declined_row_removes_and_blocks_prints() {
+        QHash<QString, HeldQuote> quotes;
+        QSet<QString> declined;
+        apply_row(quotes, declined, aapl(), false, kNow);
+        QJsonObject stale = aapl();
+        stale.insert("declined", true);
+        QCOMPARE(apply_row(quotes, declined, stale, false, kNow), RowEffect::Declined);
+        QVERIFY(!quotes.contains("AAPL"));
+        QVERIFY(!apply_print(quotes, declined, "AAPL", 2, 300.0, -34.16, kNow * 1000, kNow));
+    }
+
+    // A live print newer than the fetched bar, against the same close, wins.
+    void a_newer_live_print_outlives_an_older_fetch() {
+        QHash<QString, HeldQuote> quotes;
+        QSet<QString> declined;
+        apply_row(quotes, declined, aapl(), false, kNow);
+        QVERIFY(apply_print(quotes, declined, "AAPL", 2, 310.0, 310.0 - 334.16, (kPost30Jul + 60) * 1000, kNow));
+        QCOMPARE(apply_row(quotes, declined, aapl(), false, kNow), RowEffect::Kept);
+        QCOMPARE(quotes["AAPL"].price, 310.0);
+    }
+
+    // No print against a NEW close: the old move (another close's) goes.
+    void a_move_against_another_close_is_dropped() {
+        QHash<QString, HeldQuote> quotes;
+        QSet<QString> declined;
+        apply_row(quotes, declined, aapl(), false, kNow);
+        QJsonObject next{{"symbol", "AAPL"}, {"regular", 320.0}, {"session", "POST"}};
+        QCOMPARE(apply_row(quotes, declined, next, false, kNow), RowEffect::Removed);
+        QVERIFY(!quotes.contains("AAPL"));
+    }
 };
 
 QTEST_MAIN(TestExtendedHoursMath)

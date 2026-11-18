@@ -1,7 +1,9 @@
 // src/screens/dashboard/widgets/ExtendedHoursMath.h
 #pragma once
 #include <QDateTime>
+#include <QHash>
 #include <QJsonObject>
+#include <QSet>
 #include <QLatin1String>
 #include <QString>
 #include <QTimeZone>
@@ -106,6 +108,22 @@ inline std::optional<ExtQuote> quote_from_row(const QJsonObject& row, bool in_pr
     q.regular_ts = reg_ts ? static_cast<qint64>(*reg_ts) : 0;
     q.ext_ts = ext_ts ? static_cast<qint64>(*ext_ts) : 0;
     return q;
+}
+
+/// The daemon declined this symbol ON PURPOSE (its reference close is from an
+/// earlier day): no number, and a live print must not build one back either.
+///
+/// Read from the explicit flag only. A null `ext_price` alone also means "no
+/// print yet" or "Yahoo refused the request" — reading that as a refusal is
+/// how a 429 at app start blanked heatmap tiles for good (2026-11-17).
+inline bool row_declined(const QJsonObject& row) {
+    return row.value(QLatin1String("declined")).toBool();
+}
+
+/// The source refused or dropped this symbol (rate limit, timeout): the row
+/// is not an answer. Keep what is shown and ask again.
+inline bool row_unavailable(const QJsonObject& row) {
+    return row.value(QLatin1String("unavailable")).toBool();
 }
 
 /// Whether the two prices in a quote can honestly be compared.
@@ -218,6 +236,85 @@ inline std::optional<ExtFromTick> ext_for_holding(bool held, bool declined, int 
     if (!held || declined)
         return std::nullopt;
     return ext_from_tick(market_hours, price, change, tick_ms);
+}
+
+/// One symbol's extended-hours move as every AFT surface shows it.
+struct HeldQuote {
+    double pct = 0;
+    double price = 0;     // the extended print
+    double regular = 0;   // the close it is measured against
+    QString session;      // "PRE" / "POST" / "OVERNIGHT"
+    qint64 print_ts = 0;  // EVENT-STAMP: when the print happened (0 = unknown)
+    qint64 updated_at = 0; // when this value last arrived
+};
+
+/// What one `extended_hours` row did to the shown quotes.
+enum class RowEffect { Updated, Kept, Removed, Declined, Unavailable };
+
+/// Fold one daemon row into the shown quotes — the single rule behind every
+/// AFT surface, so they cannot disagree about the same symbol.
+///
+///   unavailable → not an answer: whatever is shown stays (ask again later).
+///   declined    → the reference close is stale: no number, and a live print
+///                 must not build one back.
+///   a sound quote → shown, unless a live print against the SAME close is
+///                 newer (the fetch is served from bars that trail the tape).
+///   no print    → a shown value measured against a different close goes;
+///                 one against this close (a live print) stays.
+inline RowEffect apply_row(QHash<QString, HeldQuote>& quotes, QSet<QString>& declined, const QJsonObject& row,
+                           bool in_pre_session, qint64 now_secs) {
+    const QString sym = row.value(QLatin1String("symbol")).toString();
+    if (sym.isEmpty() || row_unavailable(row))
+        return RowEffect::Unavailable;
+    if (row_declined(row)) {
+        declined.insert(sym);
+        quotes.remove(sym);
+        return RowEffect::Declined;
+    }
+    declined.remove(sym);
+    const auto q = quote_from_row(row, in_pre_session);
+    if (q && pairing_is_sound(*q, now_secs)) {
+        const auto cur = quotes.constFind(sym);
+        if (cur != quotes.constEnd() && cur->regular == q->regular && q->ext_ts > 0 && cur->print_ts > q->ext_ts)
+            return RowEffect::Kept;
+        quotes.insert(sym, HeldQuote{q->pct, q->price, q->regular,
+                                     q->from_pre ? QStringLiteral("PRE") : QStringLiteral("POST"), q->ext_ts,
+                                     now_secs});
+        return RowEffect::Updated;
+    }
+    const auto cur = quotes.constFind(sym);
+    if (cur == quotes.constEnd())
+        return RowEffect::Kept;
+    const auto regular = json_num(row, "regular");
+    if (regular && *regular != cur->regular) {
+        quotes.remove(sym);
+        return RowEffect::Removed;
+    }
+    return RowEffect::Kept;
+}
+
+/// Lay one live print of a WATCHED symbol on the shown quotes. Returns whether
+/// that symbol's quote changed. A shown quote moves only for a newer print
+/// against its own close (apply_ext_tick); with none shown, the print's own
+/// (price, change) pair builds one — unless the fetch declined the symbol.
+inline bool apply_print(QHash<QString, HeldQuote>& quotes, const QSet<QString>& declined, const QString& sym,
+                        int market_hours, double price, double change, qint64 time_ms, qint64 now_secs) {
+    auto it = quotes.find(sym);
+    if (it == quotes.end()) {
+        const auto f = ext_for_holding(true, declined.contains(sym), market_hours, price, change, time_ms);
+        if (!f)
+            return false;
+        quotes.insert(sym, HeldQuote{f->pct, f->price, f->regular, ext_side_label(f->side), f->ts_secs,
+                                     f->ts_secs > 0 ? f->ts_secs : now_secs});
+        return true;
+    }
+    const auto side = apply_ext_tick(it->regular, it->price, it->pct, it->print_ts, market_hours, price, change,
+                                     time_ms);
+    if (!side)
+        return false;
+    it->session = ext_side_label(*side);
+    it->updated_at = it->print_ts > 0 ? it->print_ts : now_secs;
+    return true;
 }
 
 } // namespace finterm::screens::widgets::exthours

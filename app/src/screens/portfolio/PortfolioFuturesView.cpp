@@ -4,7 +4,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
-#include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "services/markets/ExtendedHoursService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -208,73 +208,19 @@ QString PortfolioFuturesView::quote_symbol(const QString& symbol) {
 
 PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     build_ui();
-    // Periodic extended-hours refresh. Without this the table only
-    // updated when PortfolioService re-emitted a summary, which is gated
-    // by a 5-minute TTL cache — so live pre/post-market prints would
-    // sit stale until the user manually refreshed.
-    ext_refresh_timer_ = new QTimer(this);
-    ext_refresh_timer_->setInterval(kExtRefreshIntervalMs);
-    connect(ext_refresh_timer_, &QTimer::timeout, this, [this]() {
-        // Timer-driven refreshes skip if one is already in flight — a
-        // slow yfinance response shouldn't cause request inflation.
-        // set_summary's direct refresh bypasses this guard so new
-        // holdings still get fresh data immediately on arrival.
-        if (ext_in_flight_)
+    // The extended-hours table renders the one source every AFT surface
+    // shares (fetch, live prints, merge rules, last-known snapshot).
+    auto& ext = services::ExtendedHoursService::instance();
+    connect(&ext, &services::ExtendedHoursService::quotes_changed, this, [this](const QSet<QString>& syms) {
+        if (!isVisible())
             return;
-        refresh_extended_hours();
+        for (const auto& h : summary_.holdings)
+            if (syms.contains(h.symbol)) {
+                ext_render_.request();
+                return;
+            }
     });
-    // Live extended-hours prints between the 20 s fetches. Each moves a row
-    // only when it pairs with the close that row is measured against
-    // (exthours::live_ext_side) — a disk-cached or pre-bell row whose close
-    // the print isn't measured against waits for the next fetch.
-    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
-            [this](const QVector<services::StreamTick>& ticks) {
-                if (!isVisible())
-                    return;
-                namespace exthours = finterm::screens::widgets::exthours;
-                bool changed = false;
-                QSet<QString> held; // once per batch, not a holdings scan per print
-                for (const auto& h : summary_.holdings)
-                    held.insert(h.symbol);
-                for (const auto& t : ticks) {
-                    auto it = ext_quotes_.find(t.symbol);
-                    // A row with no ext price is the fetch declining this pairing on purpose.
-                    const bool declined = it != ext_quotes_.end() && !it->has_ext;
-                    if (it == ext_quotes_.end() || declined) {
-                        // No fetched row at all: a held name's own print is a
-                        // complete one (Yahoo's change vs the last close).
-                        const auto f = exthours::ext_for_holding(held.contains(t.symbol), declined, t.market_hours,
-                                                                 t.price, t.change, t.time_ms);
-                        if (f) {
-                            ExtQuote q;
-                            q.regular = f->regular;
-                            q.ext_price = f->price;
-                            q.ext_change = f->price - f->regular;
-                            q.ext_change_pct = f->pct;
-                            q.session = exthours::ext_side_label(f->side);
-                            q.has_ext = true;
-                            q.ext_ts = f->ts_secs;
-                            ext_quotes_.insert(t.symbol, q);
-                            changed = true;
-                        }
-                        continue;
-                    }
-                    const auto pre = exthours::apply_ext_tick(it->regular, it->ext_price, it->ext_change_pct,
-                                                              it->ext_ts, t.market_hours, t.price, t.change,
-                                                              t.time_ms);
-                    if (!pre)
-                        continue;
-                    it->ext_change = it->ext_price - it->regular;
-                    it->session = exthours::ext_side_label(*pre);
-                    changed = true;
-                }
-                if (changed)
-                    ext_render_.request();
-            });
-    // Hydrate ext_quotes_ from the disk snapshot so the table paints
-    // with stale-but-real values on first paint, instead of "—"
-    // everywhere until the first 20 s refresh returns.
-    load_ext_cache();
+    connect(&ext, &services::ExtendedHoursService::state_changed, this, [this] { update_ext_status(); });
 }
 
 void PortfolioFuturesView::showEvent(QShowEvent* event) {
@@ -282,23 +228,15 @@ void PortfolioFuturesView::showEvent(QShowEvent* event) {
     // Live futures quotes only while the view is visible, so the hub's
     // subscriber count stays honest.
     resubscribe_futures();
-    sync_ext_stream();
-    // Start the extended-hours refresh tick while visible. set_summary
-    // (which runs whenever the parent emits a new summary) still fires
-    // an immediate refresh; this timer keeps it ticking even when no
-    // new summary arrives.
-    if (ext_refresh_timer_ && !ext_refresh_timer_->isActive()) {
-        ext_refresh_timer_->start();
-    }
+    watch_ext();
+    populate_extended();
 }
 
 void PortfolioFuturesView::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     datahub::DataHub::instance().unsubscribe(this);
     fut_subscribed_.clear();
-    services::MarketDataService::instance().set_stream_extras(this, {});
-    if (ext_refresh_timer_)
-        ext_refresh_timer_->stop();
+    watch_ext();
 }
 
 void PortfolioFuturesView::build_ui() {
@@ -366,12 +304,10 @@ void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summar
         currency_ = currency;
     populate_futures();
     populate_extended();
-    refresh_extended_hours();
     // The futures holdings may have changed with the summary.
-    if (isVisible()) {
+    if (isVisible())
         resubscribe_futures();
-        sync_ext_stream();
-    }
+    watch_ext();
 }
 
 void PortfolioFuturesView::resubscribe_futures() {
@@ -479,16 +415,18 @@ void PortfolioFuturesView::populate_extended() {
         return;
     }
 
+    const auto& svc = services::ExtendedHoursService::instance();
     extended_table_->setRowCount(summary_.holdings.size());
     for (int i = 0; i < summary_.holdings.size(); ++i) {
         const auto& h = summary_.holdings[i];
-        const auto it = ext_quotes_.constFind(h.symbol);
-        const bool have = (it != ext_quotes_.constEnd() && it->has_ext);
+        const auto it = svc.quote(h.symbol);
+        const bool have = it.has_value();
 
-        const double regular = have ? it->regular : h.current_price;
-        const double ext = have ? it->ext_price : 0.0;
-        const double chg = have ? it->ext_change : 0.0;
-        const double pct = have ? it->ext_change_pct : 0.0;
+        const double close = svc.regular_close(h.symbol);
+        const double regular = have ? it->regular : close > 0 ? close : h.current_price;
+        const double ext = have ? it->price : 0.0;
+        const double chg = have ? it->price - it->regular : 0.0;
+        const double pct = have ? it->pct : 0.0;
         const QString session = have ? it->session : QString("—");
         const double mv_delta = have ? (chg * h.quantity) : 0.0;
 
@@ -517,153 +455,34 @@ void PortfolioFuturesView::populate_extended() {
     }
 }
 
-void PortfolioFuturesView::sync_ext_stream() {
+void PortfolioFuturesView::watch_ext() {
     QStringList syms;
-    for (const auto& h : summary_.holdings)
-        syms << h.symbol;
-    services::MarketDataService::instance().set_stream_extras(this, syms);
+    if (isVisible())
+        for (const auto& h : summary_.holdings)
+            syms << h.symbol;
+    services::ExtendedHoursService::instance().watch(this, syms);
+    update_ext_status();
 }
 
-void PortfolioFuturesView::refresh_extended_hours() {
+void PortfolioFuturesView::update_ext_status() {
     if (summary_.holdings.isEmpty()) {
         extended_status_->setText("no holdings");
         return;
     }
-
-    QJsonArray syms;
-    for (const auto& h : summary_.holdings)
-        syms.append(h.symbol);
-
-    extended_status_->setText("loading ext hours…");
-    const quint64 my_gen = ++ext_gen_;
-    ext_in_flight_ = true;
-
-    QJsonObject payload;
-    payload.insert("symbols", syms);
-
-    // Persistent yfinance daemon — saves the ~1.5s pandas/yfinance import
-    // we'd otherwise pay every time the user opens this view.
-    python::PythonWorker::instance().submit(
-        "extended_hours", payload,
-        [this, my_gen](bool ok, QJsonObject result, QString /*err*/) {
-            ext_in_flight_ = false; // release first, before any early-return
-            if (my_gen != ext_gen_)
-                return; // superseded
-            if (!ok) {
-                extended_status_->setText("ext hours error");
-                return;
-            }
-            // Daemon returns a flat array; PythonWorker wraps as {_value: [...]}.
-            const QJsonArray rows =
-                result.contains("_value") ? result.value("_value").toArray() : result.value("data").toArray();
-            // Merge (don't clear): if yfinance dropped a symbol from this
-            // round, the previous value stays in ext_quotes_ rather than
-            // disappearing entirely, and the next save doesn't lose it from
-            // disk either.
-            for (const auto& v : rows) {
-                const auto o = v.toObject();
-                ExtQuote q;
-                q.regular = o.value("regular").toDouble();
-                const auto ext_val = o.value("ext_price");
-                if (ext_val.isNull() || ext_val.isUndefined()) {
-                    q.has_ext = false;
-                } else {
-                    q.has_ext = true;
-                    q.ext_price = ext_val.toDouble();
-                    q.ext_change = o.value("ext_change").toDouble();
-                    q.ext_change_pct = o.value("ext_change_pct").toDouble();
-                    q.ext_ts = static_cast<qint64>(o.value("ext_ts").toDouble());
-                }
-                q.session = o.value("session").toString();
-                // A live print newer than the fetched one stays.
-                const auto cur = ext_quotes_.constFind(o.value("symbol").toString());
-                if (q.has_ext && cur != ext_quotes_.constEnd() && cur->has_ext && cur->regular == q.regular &&
-                    q.ext_ts > 0 && cur->ext_ts > q.ext_ts)
-                    continue;
-                ext_quotes_.insert(o.value("symbol").toString(), q);
-            }
-            extended_status_->setText(QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
-            // Skip the disk write when the response had no rows — that
-            // path is rare (only happens if the symbols list was empty
-            // or the daemon errored upstream) and would otherwise no-op
-            // overwrite a perfectly good prior snapshot.
-            if (!rows.isEmpty())
-                save_ext_cache();
-            populate_extended();
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
-}
-
-QString PortfolioFuturesView::ext_cache_path() const {
-    const QString dir = AppPaths::cache() + "/portfolio_ext";
-    QDir().mkpath(dir);
-    return dir + "/quotes.json";
-}
-
-void PortfolioFuturesView::save_ext_cache() const {
-    QJsonArray arr;
-    for (auto it = ext_quotes_.cbegin(); it != ext_quotes_.cend(); ++it) {
-        const auto& q = it.value();
-        QJsonObject o;
-        o.insert("symbol", it.key());
-        o.insert("regular", q.regular);
-        o.insert("has_ext", q.has_ext);
-        if (q.has_ext) {
-            o.insert("ext_price", q.ext_price);
-            o.insert("ext_change", q.ext_change);
-            o.insert("ext_change_pct", q.ext_change_pct);
-        }
-        o.insert("session", q.session);
-        arr.append(o);
-    }
-    QJsonObject root;
-    root.insert("saved_at", QDateTime::currentDateTime().toString(Qt::ISODate));
-    root.insert("quotes", arr);
-
-    // Atomic write: QSaveFile commits on success, otherwise leaves the
-    // previous snapshot intact.
-    QSaveFile f(ext_cache_path());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return;
-    f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    f.commit();
-}
-
-void PortfolioFuturesView::load_ext_cache() {
-    QFile f(ext_cache_path());
-    if (!f.open(QIODevice::ReadOnly))
-        return;
-    const auto bytes = f.readAll();
-    f.close();
-    const auto doc = QJsonDocument::fromJson(bytes);
-    if (!doc.isObject())
-        return;
-
-    // The snapshot exists to avoid a blank table for the second it takes the
-    // fetch to return — not to answer the question when the fetch never runs.
-    // An extended-hours move is only meaningful next to the close it was
-    // measured against, so once a new session has opened these numbers are not
-    // stale, they are wrong. Twelve hours spans an overnight gap (a 16:30 ET
-    // save is still good at the next 04:00 ET pre-open) without ever reaching
-    // back past a regular session.
-    const auto saved_at = QDateTime::fromString(doc.object().value("saved_at").toString(), Qt::ISODate);
-    if (!saved_at.isValid() || saved_at.secsTo(QDateTime::currentDateTime()) > 12 * 3600)
-        return;
-
-    const auto arr = doc.object().value("quotes").toArray();
-    for (const auto& v : arr) {
-        const auto o = v.toObject();
-        const QString sym = o.value("symbol").toString();
-        if (sym.isEmpty())
-            continue;
-        ExtQuote q;
-        q.regular = o.value("regular").toDouble();
-        q.has_ext = o.value("has_ext").toBool();
-        q.ext_price = o.value("ext_price").toDouble();
-        q.ext_change = o.value("ext_change").toDouble();
-        q.ext_change_pct = o.value("ext_change_pct").toDouble();
-        q.session = o.value("session").toString();
-        ext_quotes_.insert(sym, q);
+    using State = services::ExtendedHoursService::State;
+    const auto& ext = services::ExtendedHoursService::instance();
+    const QDateTime at = ext.last_answer();
+    switch (ext.state()) {
+        case State::Loading:
+            extended_status_->setText("loading ext hours…");
+            break;
+        case State::Failed:
+            extended_status_->setText("ext hours error");
+            break;
+        case State::Idle:
+            extended_status_->setText(at.isValid() ? QString("yfinance · %1").arg(at.toString("HH:mm:ss"))
+                                                   : QStringLiteral("last known"));
+            break;
     }
 }
 

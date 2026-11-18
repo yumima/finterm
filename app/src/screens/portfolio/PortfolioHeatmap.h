@@ -92,38 +92,16 @@ class PortfolioHeatmap : public QWidget {
     QPushButton* day_btn_ = nullptr;
     QPushButton* aft_btn_ = nullptr; // after-hours (pre/post market change)
 
-    // AFT cache — populated on demand via the yfinance daemon's
-    // `extended_hours` action when the user enters AFT mode. Map of
-    // symbol → post/pre-market percent change, with the close it is measured
-    // against (a live print may move it only when it pairs with that close).
-    // Missing-key vs zero-value is meaningful — missing renders neutral gray
-    // in block_color().
-    struct AftQuote {
-        double pct = 0;
-        double regular = 0;
-        double price = 0;
-        qint64 print_ts = 0;
-    };
-    QHash<QString, AftQuote> aft_quotes_;
-    QSet<QString> aft_declined_; ///< the fetch declined the pairing: never built from a print
-    /// Live extended-hours prints → aft_quotes_ (AFT mode, on screen only).
-    void on_stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
-    void sync_aft_stream();
-    quint64 aft_gen_ = 0;        // supersedes in-flight stale requests
-    bool aft_in_flight_ = false; // suppresses duplicate refetches
-    // Symbol set the last (or in-flight) AFT fetch covered. set_holdings
-    // compares against it so late-arriving holdings or a portfolio switch
-    // re-fetch instead of leaving every tile stuck on gray "—". Cleared on
-    // a failed fetch so the next holdings tick (20 s) retries.
-    QStringList aft_fetched_symbols_;
+    // AFT tiles read services::ExtendedHoursService — the one source the
+    // dashboard's AFT% column and the futures view share. A symbol with no
+    // quote renders neutral gray in block_color(), never a 0-value green.
+    void watch_aft();
+    void on_aft_changed(const QSet<QString>& symbols);
+    void update_aft_status();
     QLabel* aft_status_ = nullptr; // visible only in AFT mode
     // Whether aft_status_ currently reads as a failure — lets refresh_theme
     // re-derive its colour from the new palette without re-running the fetch.
     bool aft_status_error_ = false;
-    /// Fetch extended-hours quotes for the current holdings. `is_retry`
-    /// marks the single automatic retry so a second failure reports instead
-    /// of looping.
-    void fetch_aft_quotes(bool is_retry = false);
     void set_aft_status(const QString& text, const QString& color, bool is_error = false);
     QStringList holding_symbols() const;
 

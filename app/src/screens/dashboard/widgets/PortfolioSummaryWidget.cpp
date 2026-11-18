@@ -5,6 +5,7 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "services/markets/ExtendedHoursService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
@@ -31,11 +32,6 @@ namespace finterm::screens::widgets {
 // QSettings key remembering which portfolio the dashboard widget last showed.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
 
-// How often the after-hours column re-fetches while the widget is on screen.
-// Deliberately slow: `extended_hours` downloads 5 days of 1-minute bars with
-// pre/post included for every holding, which is a far heavier call than the
-// quote stream feeding the other columns.
-static constexpr int kAftRefreshMs = 60'000;
 
 namespace {
 
@@ -145,7 +141,7 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     header_labels_.at(kColPnl)->setToolTip(
         QStringLiteral("Return on cost: price vs average cost"));
     aft_header_ = header_labels_.at(kColAft);
-    set_aft_header_state(AftState::Idle);
+    update_aft_header();
     vl->addWidget(header_row_);
 
     // Scrollable holdings list
@@ -172,58 +168,23 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
 
     connect(this, &BaseWidget::refresh_requested, this, [this] {
         load_holdings();
-        // Explicit user refresh supersedes anything in flight, so a fetch that
-        // is wedged can't make the button do nothing.
-        ++aft_gen_;
-        aft_in_flight_ = false;
-        fetch_aft();
+        services::ExtendedHoursService::instance().refresh();
     });
 
-    // Extended hours refresh on its own slow cadence — see kAftRefreshMs. It
-    // runs only while the widget is on screen (showEvent/hideEvent), so a
-    // dashboard tab the user isn't looking at costs nothing.
-    aft_timer_ = new QTimer(this);
-    aft_timer_->setInterval(kAftRefreshMs);
-    connect(aft_timer_, &QTimer::timeout, this, [this] { fetch_aft(); });
-
-    // Live extended-hours prints between the slow fetches: each moves a
-    // symbol's AFT% only when it pairs with the close that quote is already
-    // measured against (exthours::live_ext_side).
-    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
-            [this](const QVector<services::StreamTick>& ticks) {
-                if (!isVisible() || aft_.isEmpty())
-                    return;
-                bool changed = false;
-                QSet<QString> held; // once per batch, not a holdings scan per print
-                for (const auto& h : last_holdings_)
-                    held.insert(h.symbol);
-                for (const auto& t : ticks) {
-                    auto it = aft_.find(t.symbol);
-                    if (it == aft_.end()) {
-                        // No fetched quote (refused / not yet): a held name's
-                        // own print is a complete, self-consistent one.
-                        const auto f = exthours::ext_for_holding(held.contains(t.symbol),
-                                                                 aft_declined_.contains(t.symbol), t.market_hours,
-                                                                 t.price, t.change, t.time_ms);
-                        if (f) {
-                            const qint64 at = f->ts_secs > 0 ? f->ts_secs : QDateTime::currentSecsSinceEpoch();
-                            aft_.insert(t.symbol, AftQuote{f->pct, f->price, f->regular,
-                                                           exthours::ext_side_label(f->side), at, f->ts_secs});
-                            changed = true;
-                        }
-                        continue;
-                    }
-                    const auto pre = exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts,
-                                                              t.market_hours, t.price, t.change, t.time_ms);
-                    if (!pre)
-                        continue;
-                    it->session = exthours::ext_side_label(*pre);
-                    it->fetched_at = it->print_ts > 0 ? it->print_ts : QDateTime::currentSecsSinceEpoch();
-                    changed = true;
-                }
-                if (changed)
-                    quote_render_.request();
-            });
+    // AFT% comes from the one extended-hours source every surface shares
+    // (fetch, stream prints, merge rules); this widget only says what it
+    // shows and renders.
+    auto& ext = services::ExtendedHoursService::instance();
+    connect(&ext, &services::ExtendedHoursService::quotes_changed, this, [this](const QSet<QString>& syms) {
+        if (!isVisible())
+            return;
+        for (const auto& h : last_holdings_)
+            if (syms.contains(h.symbol)) {
+                quote_render_.request();
+                return;
+            }
+    });
+    connect(&ext, &services::ExtendedHoursService::state_changed, this, [this] { update_aft_header(); });
 
     // Stay in sync with the real portfolio backend the Portfolio screen uses.
     auto& svc = services::PortfolioService::instance();
@@ -249,20 +210,15 @@ void PortfolioSummaryWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
     if (!hub_active_)
         load_holdings();
-    aft_timer_->start();
-    fetch_aft();
+    watch_aft();
 }
 
 void PortfolioSummaryWidget::hideEvent(QHideEvent* e) {
     BaseWidget::hideEvent(e);
     if (hub_active_)
         hub_unsubscribe_all();
-    aft_timer_->stop();
-    services::MarketDataService::instance().set_stream_extras(this, {});
-    // Supersede anything in flight: an off-screen tile shouldn't repaint, and
-    // by the time it is shown again the numbers would be stale anyway.
-    ++aft_gen_;
-    aft_in_flight_ = false;
+    // Off screen, this widget asks for nothing.
+    services::ExtendedHoursService::instance().watch(this, {});
 }
 
 void PortfolioSummaryWidget::apply_styles() {
@@ -395,6 +351,8 @@ void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary
 
     if (holdings.isEmpty()) {
         hub_unsubscribe_all();
+        last_holdings_.clear();
+        watch_aft();
         render({}, {});
         set_loading(false);
         return;
@@ -408,185 +366,43 @@ void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary
 void PortfolioSummaryWidget::fetch_prices(const QVector<Holding>& holdings) {
     last_holdings_ = holdings;
     hub_resubscribe(holdings);
-    fetch_aft();
+    watch_aft();
 }
 
 // ── After-hours column ───────────────────────────────────────────────────────
 
-PortfolioSummaryWidget::ExtSession PortfolioSummaryWidget::current_session() {
-    const QDateTime et = QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York"));
-    if (et.date().dayOfWeek() >= 6) // Sat / Sun
-        return ExtSession::Closed;
-    const QTime t = et.time();
-    if (t < QTime(4, 0))
-        return ExtSession::Closed;
-    if (t < QTime(9, 30))
-        return ExtSession::Pre;
-    if (t < QTime(16, 0))
-        return ExtSession::Regular;
-    if (t < QTime(20, 0))
-        return ExtSession::Post;
-    // Past 20:00 the session is over, but the evening's post-market move is
-    // still the most recent thing that happened and hasn't been absorbed by a
-    // regular session yet — so it stays on screen rather than blanking at 8pm.
-    return ExtSession::Closed;
-}
-
-void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
+void PortfolioSummaryWidget::update_aft_header() {
     if (!aft_header_)
         return;
-    aft_state_ = state;
-    static constexpr auto kBase =
+    using State = services::ExtendedHoursService::State;
+    const auto& ext = services::ExtendedHoursService::instance();
+    static const QString kBase =
         QLatin1String("Extended-hours move against the last regular close (pre-market, post-market or "
                       "overnight).\nDuring the regular session it is already inside DAY CHG% — not additive.");
-    switch (state) {
-        case AftState::Idle:
+    switch (ext.state()) {
+        case State::Idle:
             aft_header_->setText(QStringLiteral("AFT%"));
             aft_header_->setToolTip(kBase);
             break;
-        case AftState::Loading:
-            // The suffix is the only feedback that a slow first call is still
-            // running. Without it an empty column is indistinguishable from a
-            // broken one, which is exactly how this looked before.
+        case State::Loading:
+            // A suffix, not a replacement: the column keeps its name and its
+            // last values while the fetch is out.
             aft_header_->setText(QStringLiteral("AFT% ·"));
             aft_header_->setToolTip(QString("%1\n\nFetching extended-hours prices…").arg(kBase));
             break;
-        case AftState::Failed:
+        case State::Failed:
             aft_header_->setText(QStringLiteral("AFT% !"));
-            aft_header_->setToolTip(QString("%1\nExtended-hours fetch failed: %2")
-                                        .arg(kBase, aft_error_));
+            aft_header_->setToolTip(QString("%1\nExtended-hours fetch failed: %2").arg(kBase, ext.error()));
             break;
     }
 }
 
-void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
-    if (last_holdings_.isEmpty()) {
-        aft_.clear();
-        services::MarketDataService::instance().set_stream_extras(this, {});
-        return;
-    }
+void PortfolioSummaryWidget::watch_aft() {
     QStringList symbols;
-    for (const auto& h : last_holdings_)
-        symbols << h.symbol;
-    // Keep the book's extended-hours prints streaming while this is on screen.
     if (isVisible())
-        services::MarketDataService::instance().set_stream_extras(this, symbols);
-
-    // During the regular session the extended-hours numbers are frozen: the
-    // pre-market window has closed and the post-market one hasn't opened, so
-    // the answer cannot change until the bell. Fetch once — the column still
-    // shows the last extended move, which is what the Portfolio screen's
-    // heatmap has always done — then stop re-polling. Re-fetch only when the
-    // symbol set moves out from under the last one, which is how holdings that
-    // arrive late or a portfolio switch would otherwise leave rows blank.
-    if (current_session() == ExtSession::Regular && symbols == aft_fetched_symbols_)
-        return;
-    if (aft_in_flight_ && !is_retry && symbols == aft_fetched_symbols_)
-        return;
-
-    QJsonArray syms;
-    for (const auto& s : symbols)
-        syms.append(s);
-
-    QJsonObject payload;
-    payload.insert(QStringLiteral("symbols"), syms);
-
-    const quint64 gen = ++aft_gen_;
-    aft_in_flight_ = true;
-    aft_fetched_symbols_ = symbols;
-    set_aft_header_state(AftState::Loading);
-    QPointer<PortfolioSummaryWidget> guard(this);
-
-    // An explicit timeout is not optional here. PythonWorker only arms a
-    // deadline when one is given, so with the default of 0 a daemon that never
-    // answers never calls back — `aft_in_flight_` would stay true forever and
-    // every later refresh would return at the guard above, leaving the column
-    // permanently empty with nothing logged.
-    python::PythonWorker::instance().submit(
-        QStringLiteral("extended_hours"), payload,
-        [guard, gen, is_retry](bool ok, QJsonObject result, QString err) {
-            if (!guard || gen != guard->aft_gen_)
-                return; // superseded by a newer fetch, or the tile is gone
-            guard->aft_in_flight_ = false;
-            if (!ok) {
-                // Keep whatever the column already shows. A failed background
-                // refresh is a reason to leave the last good number up, not to
-                // blank a column the user may be reading.
-                LOG_WARN("PortfolioSummary", QString("extended-hours fetch failed: %1").arg(err.left(120)));
-                guard->aft_error_ = err.left(120);
-                // Drop the covered-symbols marker: it is what tells the
-                // regular-session path "already fetched", and leaving it set
-                // after a failure would refuse every later retry.
-                guard->aft_fetched_symbols_.clear();
-                guard->set_aft_header_state(AftState::Failed);
-                // One retry. The first extended-hours call of a session pays
-                // the Yahoo cookie/crumb handshake and can time out on that
-                // alone; the retry runs against a warm session and normally
-                // returns straight away. Without it the column stays empty
-                // until the next minute tick, which reads as broken.
-                if (!is_retry) {
-                    QTimer::singleShot(1500, guard.data(), [guard, gen]() {
-                        if (guard && guard->aft_gen_ == gen)
-                            guard->fetch_aft(/*is_retry=*/true);
-                    });
-                }
-                return;
-            }
-            const QJsonArray rows = result.contains(QStringLiteral("_value"))
-                                        ? result.value(QStringLiteral("_value")).toArray()
-                                        : result.value(QStringLiteral("data")).toArray();
-            QHash<QString, AftQuote> fresh;
-            guard->aft_declined_.clear();
-            for (const auto& v : rows) {
-                const auto o = v.toObject();
-                const QString sym = o.value(QStringLiteral("symbol")).toString();
-                if (sym.isEmpty())
-                    continue;
-                // Sign, base and session pairing all live in the tested
-                // header — this arithmetic shipped inverted once and is not
-                // something to keep a second copy of.
-                const auto q = exthours::quote_from_row(o, current_session() == ExtSession::Pre);
-                // Rejected here rather than at render: an unsound pairing is
-                // not a value to be displayed carefully, it is not a value.
-                if (!q || !exthours::pairing_is_sound(*q, QDateTime::currentSecsSinceEpoch())) {
-                    // Declined on purpose (stale reference, unpaired prints):
-                    // a print must not build it back either.
-                    if (o.value(QStringLiteral("ext_price")).isNull())
-                        guard->aft_declined_.insert(sym);
-                    continue;
-                }
-                fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
-                                           q->from_pre ? QStringLiteral("PRE") : QStringLiteral("POST"),
-                                           QDateTime::currentSecsSinceEpoch(), q->ext_ts});
-            }
-            // Merge, never replace. Yahoo's multi-symbol intraday download
-            // returns a different subset of the book from one call to the
-            // next, so assigning the reply wholesale made rows appear and
-            // vanish on every refresh even though nothing about the position
-            // had changed. A symbol keeps its last known extended-hours move
-            // until a newer one arrives for that same symbol.
-            for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it) {
-                // A live print newer than the fetched one stays (the fetch is
-                // served from bars that can trail the tape).
-                const auto cur = guard->aft_.constFind(it.key());
-                if (cur != guard->aft_.constEnd() && cur->regular == it->regular && it->print_ts > 0 &&
-                    cur->print_ts > it->print_ts)
-                    continue;
-                guard->aft_.insert(it.key(), it.value());
-            }
-            // Positions that left the book are the one thing that does get
-            // dropped — otherwise a sold holding's move would linger in the
-            // map and reappear if it were ever bought back.
-            QSet<QString> held;
-            for (const auto& h : guard->last_holdings_)
-                held.insert(h.symbol);
-            for (auto it = guard->aft_.begin(); it != guard->aft_.end();)
-                it = held.contains(it.key()) ? std::next(it) : guard->aft_.erase(it);
-            guard->aft_error_.clear();
-            guard->set_aft_header_state(AftState::Idle);
-            guard->rebuild_from_cache();
-        },
-        python::PythonWorker::kComputeActionTimeoutMs);
+        for (const auto& h : last_holdings_)
+            symbols << h.symbol;
+    services::ExtendedHoursService::instance().watch(this, symbols);
 }
 
 void PortfolioSummaryWidget::hub_resubscribe(const QVector<Holding>& holdings) {
@@ -737,8 +553,8 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // against the row's own price: this feed rolls over to extended-hours
         // pricing, so on exactly the symbols that moved, the two are the same
         // number and any "consistency" test between them measures the move.
-        const auto it = aft_.constFind(h.symbol);
-        if (it != aft_.constEnd()) {
+        const auto it = services::ExtendedHoursService::instance().quote(h.symbol);
+        if (it) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
@@ -756,7 +572,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                                                         -(it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2))
                                    : QString())
                           // EVENT-STAMP: when it last arrived — a fetch, or a live print's own time.
-                          .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));
+                          .arg(QDateTime::fromSecsSinceEpoch(it->updated_at).toString("HH:mm:ss"));
         }
         cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);
 

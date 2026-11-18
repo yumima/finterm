@@ -5789,7 +5789,9 @@ def get_extended_hours_quotes(symbols):
     now_et = datetime.now(et)
 
     if data is None or getattr(data, "empty", True):
-        return [_empty_ext_row(s, _ext_session_label(now_et)) for s in symbols]
+        # Nothing came back at all — a rate-limited burst (429) looks exactly
+        # like this. That says nothing about any symbol's prints.
+        return [_empty_ext_row(s, _ext_session_label(now_et), unavailable=True) for s in symbols]
 
     session = _ext_session_label(now_et)
     today = now_et.date()
@@ -6068,6 +6070,11 @@ def get_extended_hours_quotes(symbols):
                 "post_market_ts": post_ts,
                 "ext_ts": ext_ts,
                 "session": session,
+                # The ONE case the consumers must not rebuild from a live
+                # print: the reference close is from an earlier day. Said
+                # explicitly — a null ext_price also means "no print yet",
+                # and reading that as a refusal blanked tiles for good.
+                "declined": bool(reg_stale),
                 # name/currency are no longer fetched — they required
                 # the per-symbol Ticker.info call we just removed. The
                 # consumer (PortfolioFuturesView, PortfolioHeatmap) gets
@@ -6101,12 +6108,18 @@ def get_extended_hours_quotes(symbols):
         at = {r["symbol"]: i for i, r in enumerate(rows)}
         targets = missing[:_EXT_RETRY_MAX]
 
+        # A refusal yfinance raises (429 YFRateLimitError, a timeout, a
+        # transport error) is not an answer: the row is marked `unavailable`
+        # and the consumers ask again. An empty frame is taken as "no intraday
+        # bars" (a money-market fund) — yfinance swallows other failures into
+        # an empty frame too, which is why the consumers re-ask every symbol on
+        # every poll while an extended session is open rather than trusting it.
         def _retry_one(sym):
             try:
                 h = _yf.Ticker(sym).history(period="5d", interval="1m",
                                             prepost=True, auto_adjust=False)
             except Exception:
-                return sym, None
+                return sym, "unavailable"
             if h is None or getattr(h, "empty", True) or "Close" not in h.columns:
                 return sym, None
             return sym, _row(sym, h)
@@ -6124,8 +6137,13 @@ def get_extended_hours_quotes(symbols):
         # otherwise multiply out to 24 concurrent single-ticker downloads.
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(2, len(targets))) as ex:
             for sym, row in ex.map(_retry_one, targets):
-                if row is not None:
+                if row == "unavailable":
+                    rows[at[sym]]["unavailable"] = True
+                elif row is not None:
                     rows[at[sym]] = row
+        # Past the retry cap nothing was asked: not an answer either.
+        for sym in missing[_EXT_RETRY_MAX:]:
+            rows[at[sym]]["unavailable"] = True
     return rows
 
 
@@ -6436,7 +6454,9 @@ def get_futures_spread_history(near, far, period="6mo"):
     return {"near": near, "far": far, "rows": rows}
 
 
-def _empty_ext_row(sym, session):
+def _empty_ext_row(sym, session, unavailable=False):
+    """A row with nothing in it. `unavailable` = the source refused or dropped
+    the request (ask again); without it, the symbol simply has no prints."""
     return {
         "symbol": sym, "regular": None,
         "pre_market": None, "post_market": None,
@@ -6444,6 +6464,7 @@ def _empty_ext_row(sym, session):
         "regular_ts": None, "pre_market_ts": None, "post_market_ts": None,
         "ext_ts": None,
         "session": session, "currency": "", "name": sym,
+        "declined": False, "unavailable": bool(unavailable),
     }
 
 

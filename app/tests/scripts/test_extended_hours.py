@@ -140,7 +140,7 @@ def _multi(frames):
                      names=["Ticker", "Price"])
 
 
-def _stub_downloads(minute_frames, daily_frames=None, fail=False, retry_frame=None):
+def _stub_downloads(minute_frames, daily_frames=None, fail=False, retry_frame=None, retry_error=None):
     """Point yfinance at canned frames; returns a restore callable.
 
     Ticker() is stubbed alongside download() because symbols the bulk frame
@@ -164,6 +164,8 @@ def _stub_downloads(minute_frames, daily_frames=None, fail=False, retry_frame=No
             self.sym = sym
 
         def history(self, **kw):
+            if retry_error is not None:
+                raise retry_error
             return retry_frame if retry_frame is not None else pd.DataFrame()
 
     yf.download = fake
@@ -178,10 +180,11 @@ def _stub_downloads(minute_frames, daily_frames=None, fail=False, retry_frame=No
     return restore
 
 
-def _quote(symbols, minute_frames, daily_frames=None, hour=18, retry_frame=None):
+def _quote(symbols, minute_frames, daily_frames=None, hour=18, retry_frame=None, retry_error=None):
     """One get_extended_hours_quotes call at a fixed ET hour."""
     _, unfreeze = _freeze(hour)
-    restore = _stub_downloads(minute_frames, daily_frames, retry_frame=retry_frame)
+    restore = _stub_downloads(minute_frames, daily_frames, retry_frame=retry_frame,
+                              retry_error=retry_error)
     try:
         return yd.get_extended_hours_quotes(symbols)
     finally:
@@ -426,6 +429,45 @@ def test_stale_reference_yields_no_move():
           row["post_market"] is None and row["pre_market"] is None
           and row["post_market_ts"] is None and row["pre_market_ts"] is None,
           f"got pre={row['pre_market']} post={row['post_market']}")
+    check("a stale reference is flagged declined", row.get("declined") is True,
+          f"got {row.get('declined')}")
+
+
+class _RateLimited(Exception):
+    """Stands in for YFRateLimitError: any refusal that isn't 'no data'."""
+
+
+def test_refusal_is_unavailable_not_declined():
+    """A 429 says nothing about the prints: ask again, and let a live print in.
+
+    2026-11-17, app start: Yahoo rate-limited the bulk download and the retry,
+    the rows came back empty, and the heatmap read every empty row as a
+    deliberate refusal — tiles blank for good, live prints shut out, while the
+    dashboard (which re-polls) showed them all a minute later.
+    """
+    minute = _multi({"MSFT": _minute_frame([(_et(16, 0), 500.0), (_et(19, 0), 505.0)])})
+    rows = {r["symbol"]: r for r in _quote(["MSFT", "AMZN"], minute, retry_error=_RateLimited("429"))}
+    check("a symbol the source refused is unavailable", rows["AMZN"].get("unavailable") is True,
+          f"got {rows['AMZN']}")
+    check("a refusal is not a decline", rows["AMZN"].get("declined") is not True,
+          f"got {rows['AMZN'].get('declined')}")
+    check("an answered symbol is neither", not rows["MSFT"].get("unavailable")
+          and rows["MSFT"].get("declined") is False, f"got {rows['MSFT']}")
+
+
+def test_no_bars_is_an_answer():
+    """A fund with no intraday bars (empty frame, no exception) is answered."""
+    minute = _multi({"MSFT": _minute_frame([(_et(16, 0), 500.0), (_et(19, 0), 505.0)])})
+    rows = {r["symbol"]: r for r in _quote(["MSFT", "VMRXX"], minute)}
+    check("no price data is not 'unavailable'", not rows["VMRXX"].get("unavailable"),
+          f"got {rows['VMRXX']}")
+
+
+def test_empty_download_is_unavailable():
+    """Nothing at all back (a rate-limited burst) marks every row unavailable."""
+    rows = _quote(["MSFT", "AAPL"], pd.DataFrame())
+    check("every row of an empty download is unavailable",
+          all(r.get("unavailable") is True for r in rows), f"got {rows}")
 
 
 def test_post_market_move_is_reported():

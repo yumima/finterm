@@ -4,7 +4,7 @@
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
-#include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "services/markets/ExtendedHoursService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -24,8 +24,10 @@
 namespace finterm::screens {
 
 PortfolioHeatmap::PortfolioHeatmap(QWidget* parent) : QWidget(parent) {
-    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
-            &PortfolioHeatmap::on_stream_ticks);
+    // AFT tiles render the one extended-hours source every surface shares.
+    auto& ext = services::ExtendedHoursService::instance();
+    connect(&ext, &services::ExtendedHoursService::quotes_changed, this, &PortfolioHeatmap::on_aft_changed);
+    connect(&ext, &services::ExtendedHoursService::state_changed, this, &PortfolioHeatmap::update_aft_status);
     setMinimumWidth(180);
     setMaximumWidth(220);
     build_ui();
@@ -269,17 +271,9 @@ void PortfolioHeatmap::set_holdings(const QVector<portfolio::HoldingWithQuote>& 
     update_top_movers();
     stat_holdings_->setText(QString::number(holdings.size()));
 
-    // AFT quotes are fetched on mode entry, which leaves two holes the user
-    // hits as "AFT shows nothing": holdings that arrive *after* AFT was
-    // selected (screen opened straight into AFT, or the first summary load
-    // lost the race with the click), and a symbol set that changes under us
-    // (portfolio switch, position added). Both leave aft_quotes_ not covering
-    // the tiles on screen. Re-fetch only when the symbol set differs from what
-    // the last fetch covered, so the 20 s refresh tick doesn't re-download on
-    // every quote update.
-    sync_aft_stream();
-    if (mode_ == portfolio::HeatmapMode::Aft && !aft_in_flight_ && holding_symbols() != aft_fetched_symbols_)
-        fetch_aft_quotes();
+    // Late-arriving holdings or a portfolio switch: the shared source fetches
+    // whatever it has no answer for yet.
+    watch_aft();
 }
 
 void PortfolioHeatmap::set_metrics(const portfolio::ComputedMetrics& metrics) {
@@ -329,8 +323,8 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
             // the yfinance fetch hasn't returned yet, or this symbol has no
             // extended quote, render a neutral gray — NOT a 0-value green,
             // which would falsely flag the symbol as flat-but-quoted.
-            auto it = aft_quotes_.find(h.symbol);
-            if (it == aft_quotes_.end())
+            const auto it = services::ExtendedHoursService::instance().quote(h.symbol);
+            if (!it)
                 return QColor(45, 45, 48);
             val = it->pct;
             break;
@@ -467,7 +461,7 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
     // Content. Each mode needs its own value source — falling through to
     // `weight` for Aft (the prior bug) made the tile display "+12.3%"
     // (weight, always positive prefix) on a color computed from the
-    // after-hours change. We now read from aft_quotes_ for Aft and render
+    // after-hours change. We now read the shared extended-hours quote for Aft and render
     // "—" when the daemon hasn't returned a quote for that symbol.
     QString chg_str;
     switch (mode_) {
@@ -481,8 +475,8 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
             chg_str = QString("%1%").arg(QString::number(h.weight, 'f', 1));
             break;
         case portfolio::HeatmapMode::Aft: {
-            const auto it = aft_quotes_.find(h.symbol);
-            if (it == aft_quotes_.end()) {
+            const auto it = services::ExtendedHoursService::instance().quote(h.symbol);
+            if (!it) {
                 chg_str = QStringLiteral("—"); // matches gray tile from block_color
             } else {
                 const double v = it->pct;
@@ -808,6 +802,9 @@ void PortfolioHeatmap::refresh_theme() {
 }
 
 void PortfolioHeatmap::set_aft_status(const QString& text, const QString& color, bool is_error) {
+    // Called per live-print batch: an unchanged line must not cost a restyle.
+    if (aft_status_->text() == text && aft_status_error_ == is_error)
+        return;
     aft_status_error_ = is_error;
     aft_status_->setStyleSheet(QString("color:%1; font-size:10px;").arg(color));
     aft_status_->setText(text);
@@ -821,175 +818,73 @@ QStringList PortfolioHeatmap::holding_symbols() const {
     return out;
 }
 
-// Deliberately NOT the 10 s network default. The daemon serves this action
-// with a single yf.download of 5 days of 1-minute bars, prepost=True, across
-// every holding — measured at 40 s for an 18-symbol portfolio on a cold Yahoo
-// session (one stalled symbol blocks the whole batch, and curl (28) stalls
-// show up regularly in the logs). At 10 s the very first click nearly always
-// timed out and the callback dropped the failure on the floor, so the tiles
-// sat gray until a mode toggle re-fired the fetch against a now-warm session
-// — the "click DAY then AFT and it works" symptom.
-static constexpr int kAftFetchTimeoutMs = 45'000;
-
-// Fetch after-hours / pre-market percent change for each held symbol via the
-// persistent yfinance daemon. Same `extended_hours` action used by
-// PortfolioFuturesView::refresh_extended_hours. Generation counter supersedes
-// any in-flight stale requests when the user toggles AFT off and back on
-// quickly.
-void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
-    if (holdings_.isEmpty()) {
-        aft_quotes_.clear();
-        aft_fetched_symbols_.clear();
-        aft_in_flight_ = false;
-        set_aft_status(QStringLiteral("no holdings"), ui::colors::TEXT_SECONDARY());
-        refresh_block_appearances();
-        return;
-    }
-
-    // A fetch covering exactly these symbols is already in flight. Clicking
-    // AFT again (the natural reaction to a slow load) must not stack a second
-    // multi-symbol download on the daemon — the pending callback will paint
-    // the tiles.
-    if (aft_in_flight_ && !is_retry && holding_symbols() == aft_fetched_symbols_)
-        return;
-
-    QJsonArray syms;
-    for (const auto& h : holdings_)
-        syms.append(h.symbol);
-
-    const quint64 my_gen = ++aft_gen_;
-    QPointer<PortfolioHeatmap> guard(this);
-    aft_in_flight_ = true;
-    aft_fetched_symbols_ = holding_symbols();
-
-    // Wipe stale quotes immediately so blocks render gray ("loading") until
-    // the fresh fetch returns; without this the user briefly sees the
-    // previous AFT session's colors against a different symbol set.
-    aft_quotes_.clear();
-    set_aft_status(is_retry ? QStringLiteral("retrying…") : QStringLiteral("loading ext hours…"),
-                   ui::colors::TEXT_SECONDARY());
-    refresh_block_appearances();
-
-    QJsonObject payload;
-    payload.insert(QStringLiteral("symbols"), syms);
-
-    python::PythonWorker::instance().submit(
-        QStringLiteral("extended_hours"), payload,
-        [guard, my_gen, is_retry](bool ok, QJsonObject result, QString err) {
-            if (!guard || my_gen != guard->aft_gen_)
-                return; // superseded or destroyed
-            guard->aft_in_flight_ = false;
-            if (!ok) {
-                // One automatic retry. A first-of-session extended-hours call
-                // pays the Yahoo cookie/crumb handshake and any per-symbol
-                // stall; the retry runs against a warm session (and hits the
-                // daemon's 8 s result cache if the abandoned first call did
-                // finish), so it normally returns in under a second.
-                if (!is_retry) {
-                    guard->set_aft_status(QStringLiteral("slow — retrying…"), ui::colors::WARNING());
-                    QTimer::singleShot(1500, guard.data(), [guard, my_gen]() {
-                        if (guard && guard->aft_gen_ == my_gen && guard->mode_ == portfolio::HeatmapMode::Aft)
-                            guard->fetch_aft_quotes(/*is_retry=*/true);
-                    });
-                    return;
-                }
-                LOG_WARN("PortfolioHeatmap", QString("extended-hours fetch failed: %1").arg(err));
-                // Drop the covered-symbols marker so the next holdings tick
-                // (the screen's 20 s refresh) retries on its own.
-                guard->aft_fetched_symbols_.clear();
-                guard->set_aft_status(QStringLiteral("ext hours unavailable — click AFT to retry"),
-                                      ui::colors::NEGATIVE(), /*is_error=*/true);
-                return;
-            }
-            const QJsonArray rows = result.contains(QStringLiteral("_value"))
-                                        ? result.value(QStringLiteral("_value")).toArray()
-                                        : result.value(QStringLiteral("data")).toArray();
-            guard->aft_quotes_.clear();
-            guard->aft_declined_.clear();
-            // Same reduction the dashboard's AFT% column uses. Reading the
-            // daemon's ext_change_pct straight off the row skipped the session
-            // pairing and the timestamp check, so this column would happily
-            // colour a tile from a reference bar left over from an earlier day
-            // — a multi-day return painted as an after-hours move.
-            namespace exthours = finterm::screens::widgets::exthours;
-            const bool in_pre = exthours::before_the_close_et();
-            const qint64 now_secs = QDateTime::currentSecsSinceEpoch();
-            for (const auto& v : rows) {
-                const auto o = v.toObject();
-                const QString sym = o.value(QStringLiteral("symbol")).toString();
-                if (sym.isEmpty())
-                    continue;
-                const auto q = exthours::quote_from_row(o, in_pre);
-                if (!q || !exthours::pairing_is_sound(*q, now_secs)) {
-                    if (o.value(QStringLiteral("ext_price")).isNull())
-                        guard->aft_declined_.insert(sym); // declined on purpose: not from a print either
-                    continue;
-                }
-                guard->aft_quotes_.insert(sym, AftQuote{q->pct, q->regular, q->price, q->ext_ts});
-            }
-            guard->set_aft_status(guard->aft_quotes_.isEmpty()
-                                      ? QStringLiteral("no extended-hours quotes")
-                                      : QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")),
-                                  ui::colors::TEXT_SECONDARY());
-            guard->refresh_block_appearances();
-        },
-        kAftFetchTimeoutMs);
-}
-
-void PortfolioHeatmap::sync_aft_stream() {
-    // The book's extended-hours prints stream only while AFT tiles are shown.
+void PortfolioHeatmap::watch_aft() {
+    // The book's extended-hours moves are wanted only while AFT tiles show.
     QStringList syms;
     if (mode_ == portfolio::HeatmapMode::Aft && isVisible())
         syms = holding_symbols();
-    services::MarketDataService::instance().set_stream_extras(this, syms);
+    services::ExtendedHoursService::instance().watch(this, syms);
+}
+
+void PortfolioHeatmap::update_aft_status() {
+    if (mode_ != portfolio::HeatmapMode::Aft)
+        return;
+    using State = services::ExtendedHoursService::State;
+    const auto& ext = services::ExtendedHoursService::instance();
+    if (holdings_.isEmpty()) {
+        set_aft_status(QStringLiteral("no holdings"), ui::colors::TEXT_SECONDARY());
+        return;
+    }
+    bool any = false;
+    for (const auto& h : holdings_)
+        if (ext.quote(h.symbol)) {
+            any = true;
+            break;
+        }
+    switch (ext.state()) {
+        case State::Loading:
+            if (!any) {
+                set_aft_status(QStringLiteral("loading ext hours…"), ui::colors::TEXT_SECONDARY());
+                return;
+            }
+            break;
+        case State::Failed:
+            set_aft_status(QStringLiteral("ext hours unavailable — click AFT to retry"), ui::colors::NEGATIVE(),
+                           /*is_error=*/true);
+            return;
+        case State::Idle:
+            break;
+    }
+    const QDateTime at = ext.last_answer();
+    set_aft_status(!any                ? QStringLiteral("no extended-hours quotes")
+                   : at.isValid()      ? QString("yfinance · %1").arg(at.toString("HH:mm:ss"))
+                                       : QStringLiteral("last known"),
+                   ui::colors::TEXT_SECONDARY());
 }
 
 void PortfolioHeatmap::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    sync_aft_stream();
+    watch_aft();
 }
 
 void PortfolioHeatmap::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
-    sync_aft_stream();
+    watch_aft();
 }
 
-void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& ticks) {
+void PortfolioHeatmap::on_aft_changed(const QSet<QString>& symbols) {
     if (mode_ != portfolio::HeatmapMode::Aft || !isVisible())
         return;
-    namespace exthours = finterm::screens::widgets::exthours;
-    QSet<QString> moved;
-    QSet<QString> held; // once per batch, not a holdings scan per print
-    for (const auto& h : holdings_)
-        held.insert(h.symbol);
-    for (const auto& t : ticks) {
-        auto it = aft_quotes_.find(t.symbol);
-        if (it == aft_quotes_.end()) {
-            // No fetched quote: a held name's own print is a complete one.
-            const auto f = exthours::ext_for_holding(held.contains(t.symbol), aft_declined_.contains(t.symbol),
-                                                     t.market_hours, t.price, t.change, t.time_ms);
-            if (f) {
-                aft_quotes_.insert(t.symbol, AftQuote{f->pct, f->regular, f->price, f->ts_secs});
-                moved.insert(t.symbol);
-            }
-            continue;
-        }
-        // Only a newer print measured against this tile's own close.
-        if (exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts, t.market_hours, t.price,
-                                     t.change, t.time_ms))
-            moved.insert(t.symbol);
-    }
-    if (moved.isEmpty())
-        return;
-    // Restyle only the tiles that moved: a stylesheet per tile per tick batch
-    // across the whole grid is the expensive part.
+    // Restyle only the tiles that moved: a stylesheet per tile per print
+    // batch across the whole grid is the expensive part.
     for (const auto& h : holdings_) {
-        if (!moved.contains(h.symbol))
+        if (!symbols.contains(h.symbol))
             continue;
         const auto b = block_widgets_.constFind(h.symbol);
         if (b != block_widgets_.constEnd() && b.value())
             update_block_appearance(b.value(), h);
     }
+    update_aft_status();
 }
 
 void PortfolioHeatmap::set_mode(portfolio::HeatmapMode m) {
@@ -999,17 +894,15 @@ void PortfolioHeatmap::set_mode(portfolio::HeatmapMode m) {
     day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
     aft_btn_->setChecked(m == portfolio::HeatmapMode::Aft);
     aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
-    sync_aft_stream();
+    watch_aft();
     if (m == portfolio::HeatmapMode::Aft) {
-        fetch_aft_quotes();
-    } else {
-        // Switching out of AFT supersedes any in-flight fetch so its
-        // callback won't fire a stale block refresh while the user is
-        // looking at a different mode.
-        ++aft_gen_;
-        aft_in_flight_ = false;
-        refresh_block_appearances();
+        // Clicking AFT after a failure is the retry the status line offers.
+        auto& ext = services::ExtendedHoursService::instance();
+        if (ext.state() == services::ExtendedHoursService::State::Failed)
+            ext.refresh();
+        update_aft_status();
     }
+    refresh_block_appearances();
     emit mode_changed(m);
 }
 

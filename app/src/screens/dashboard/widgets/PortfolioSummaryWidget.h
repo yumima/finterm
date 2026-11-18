@@ -111,51 +111,15 @@ class PortfolioSummaryWidget : public BaseWidget {
     bool hub_active_ = false;
 
     // ── After-hours column ───────────────────────────────────────────────────
-    // The live quote feed only carries the regular session, so the AFT% column
-    // is fed separately by the daemon's `extended_hours` action — the same
-    // source the Portfolio screen's heatmap uses in AFT mode.
-    enum class ExtSession { Pre, Regular, Post, Closed };
-    /// Which US-equity session the ET clock is in. Clock-only, like the
-    /// daemon's own label: a holiday or half-day still reads Regular, which
-    /// costs at most one skipped re-poll on a day the market is shut.
-    static ExtSession current_session();
-    /// Kick an extended-hours fetch for the current holdings. During the
-    /// regular session the answer cannot change, so this no-ops once the
-    /// current symbol set has been fetched.
-    void fetch_aft(bool is_retry = false);
-
-    /// Whether the column is idle, waiting, or stuck — shown as a suffix on
-    /// the AFT% header. An empty column with no explanation reads as a bug,
-    /// and the first extended-hours call of a session is slow often enough
-    /// that "still loading" needs to be sayable.
-    enum class AftState { Idle, Loading, Failed };
-    void set_aft_header_state(AftState state);
+    // Fed by services::ExtendedHoursService, the source every AFT surface
+    // shares, so the same symbol can't read differently here and on the
+    // Portfolio screen.
+    /// Tell the shared extended-hours source what this widget shows.
+    void watch_aft();
+    /// AFT% header suffix from the shared source's state: an empty column
+    /// with no explanation reads as a bug, so "loading" and "failed" show.
+    void update_aft_header();
     QLabel* aft_header_ = nullptr;
-    AftState aft_state_ = AftState::Idle;
-    QString aft_error_;
-
-    struct AftQuote {
-        double pct = 0;     // move against the last regular close
-        double price = 0;   // the extended-hours print itself
-        double regular = 0; // the close it is measured against
-        QString session;    // "PRE" or "POST" — whichever field supplied the price
-        // When this symbol's value last arrived. Values persist across
-        // refreshes that don't mention them, so the row has to be able to say
-        // how old the number it is showing actually is.
-        qint64 fetched_at = 0;
-        qint64 print_ts = 0; ///< when the extended price printed (0 = unknown)
-    };
-    QHash<QString, AftQuote> aft_;
-    QSet<QString> aft_declined_; ///< the last fetch had a row but no sound pairing: never built from a print
-    // Bumped per fetch so a reply that lands after a portfolio switch can't
-    // paint another book's after-hours moves onto this one.
-    quint64 aft_gen_ = 0;
-    bool aft_in_flight_ = false;
-    /// Symbols the last fetch covered. Holdings that arrive after a fetch, or
-    /// a portfolio switch, otherwise leave the new rows blank forever — the
-    /// same hole the Portfolio screen's heatmap documents.
-    QStringList aft_fetched_symbols_;
-    QTimer* aft_timer_ = nullptr;
 
     // ── Portfolio selection ──────────────────────────────────────────────────
     QComboBox* portfolio_combo_ = nullptr;

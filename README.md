@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`616afbb13`](https://github.com/yumima/finterm/commit/616afbb13) release: 4.0.9
 - [`d9df6c999`](https://github.com/yumima/finterm/commit/d9df6c999) earnings links: the SEC contact goes to sec.gov hosts only, redirects included
 - [`516a812b3`](https://github.com/yumima/finterm/commit/516a812b3) performance: back to a split in 0.1 s, the IPO calendar whole in a second
 - [`22f4a9d04`](https://github.com/yumima/finterm/commit/22f4a9d04) earnings call player: actually paints on hybrid-GPU Linux; a call link outlives the host's feed

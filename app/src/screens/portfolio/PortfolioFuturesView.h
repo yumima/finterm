@@ -44,34 +44,15 @@ class PortfolioFuturesView : public QWidget {
     void hideEvent(QHideEvent* event) override;
 
   private:
-    struct ExtQuote {
-        double regular = 0;
-        double ext_price = 0;
-        double ext_change = 0;
-        double ext_change_pct = 0;
-        QString session; // "REGULAR" / "PRE" / "POST" / "CLOSED"
-        bool has_ext = false;
-        qint64 ext_ts = 0; ///< when ext_price printed (0 = unknown)
-    };
-
     void build_ui();
     void populate_futures();
     void populate_extended();
-    void refresh_extended_hours();
-    /// Stream every holding's prints while the view is on screen.
-    void sync_ext_stream();
+    /// Tell the shared extended-hours source which holdings are on screen.
+    void watch_ext();
+    void update_ext_status();
     void resubscribe_futures();
     /// The feed symbol a futures holding is priced from (ROOT=F).
     static QString quote_symbol(const QString& symbol);
-
-    /// Disk-cache last successful extended-hours batch so the table
-    /// paints with real (if stale) values on app startup instead of
-    /// "—" everywhere until the first 20 s refresh returns. Flat
-    /// symbol→ExtQuote map; symbols not in the current holdings are
-    /// silently ignored by populate_extended.
-    QString ext_cache_path() const;
-    void save_ext_cache() const;
-    void load_ext_cache();
 
     portfolio::PortfolioSummary summary_;
     QString currency_ = "USD";
@@ -84,23 +65,6 @@ class PortfolioFuturesView : public QWidget {
     QHash<QString, services::QuoteData> fut_quotes_; // keyed by quote_symbol()
     QDateTime fut_last_update_;
     QSet<QString> fut_subscribed_; // topics currently held on the hub
-    QHash<QString, ExtQuote> ext_quotes_;
-    quint64 ext_gen_ = 0;
-    // Suppresses timer-driven refresh while one is already in flight.
-    // Without this guard a slow yfinance response (>20 s) lets the
-    // 20 s tick fire repeatedly, stacking requests on the daemon. The
-    // ext_gen_ epoch only drops *responses*; this drops *requests*.
-    // set_summary still proceeds even when true — its callers explicitly
-    // want fresh data for newly-arrived holdings.
-    bool ext_in_flight_ = false;
-
-    // Periodic refresh of the extended-hours table while the view is
-    // visible. The futures table above ticks with the DataHub quote
-    // stream instead; the timer is
-    // started in showEvent and stopped in hideEvent so no work happens
-    // when the view isn't on screen.
-    QTimer* ext_refresh_timer_ = nullptr;
-    static constexpr int kExtRefreshIntervalMs = 20'000;
     ui::RenderCoalescer ext_render_{this, [this]() { populate_extended(); }};
 };
 

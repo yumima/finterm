@@ -870,6 +870,7 @@ set(SERVICE_SOURCES
     src/services/crypto/TotpService.cpp
     src/services/python_cli/PythonCliService.cpp
     src/services/markets/LiveQuoteFollower.cpp
+    src/services/markets/ExtendedHoursService.cpp
     src/services/markets/MarketDataService.cpp
     src/services/markets/IndexFutures.cpp
     src/services/futures/FuturesService.cpp
