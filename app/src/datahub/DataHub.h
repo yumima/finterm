@@ -191,7 +191,14 @@ class DataHub : public QObject {
     /// `force=true` bypasses `min_interval_ms` (so a user-driven refresh
     /// button can refetch even inside the interval gate). Per-producer
     /// `max_requests_per_sec()` is still honoured — rage-clicking can't
-    /// hammer upstream.
+    /// hammer upstream. The rate limit is one gate per call: a list asks its
+    /// producer for all of its topics in one refresh, or for none.
+    ///
+    /// `force=true` also means "the caller is waiting for this answer": the
+    /// topic's current subscribers get the next publish even when it repeats
+    /// the value they hold — a consumer that set aside the held value (a
+    /// quote restored from an earlier session) is not left waiting for a
+    /// price change.
     void request(const QString& topic, bool force = false);
     void request(const QStringList& topics, bool force = false);
 
@@ -294,6 +301,10 @@ class DataHub : public QObject {
         int total_publishes = 0;
         int total_errors = 0;
         bool in_flight = false;
+        /// A forced request the producer's rate limit turned away: the next
+        /// scheduler pass refreshes the topic even inside its TTL — a caller
+        /// is waiting for that answer.
+        bool force_pending = false;
         TopicPolicy policy;
         bool policy_explicit = false; ///< set_policy() was called
         QString last_error;           ///< most recent error string; cleared on successful publish
@@ -308,7 +319,13 @@ class DataHub : public QObject {
     };
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-    void deliver_initial_value(QObject* owner, const QString& topic, const std::function<void(const QVariant&)>& slot);
+    /// Queue `snapshot` (when valid) to a new subscriber — decided under the
+    /// same lock and clock reading that marked the subscription primed.
+    static void deliver_initial_value(QObject* owner, const std::function<void(const QVariant&)>& slot,
+                                      const QVariant& snapshot);
+    /// request() body. `waiting` (a caller's forced request, not the
+    /// subscribe cold start): un-prime the topics' subscribers.
+    void request_impl(const QStringList& topics, bool force, bool waiting);
     void on_owner_destroyed(QObject* owner);
     Producer* find_producer(const QString& topic) const;
     TopicPolicy resolve_policy(const QString& topic) const;

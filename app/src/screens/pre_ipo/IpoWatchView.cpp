@@ -1978,8 +1978,8 @@ void IpoWatchView::enrich_priced_with_quotes() {
                 return;
             struct Chunk {
                 QHash<QString, double> price;
-                QSet<QString> errored;    // answered without a quote, or refused
-                bool any_refused = false; // an error other than "no such quote", or no answer at all
+                QSet<QString> no_quote; // answered without one (kNoQuoteError): settled
+                QSet<QString> refused;  // any other error, or no answer by the deadline
                 int pending = 0;
                 bool finished = false;
             };
@@ -1995,17 +1995,16 @@ void IpoWatchView::enrich_priced_with_quotes() {
                 if (!self)
                     return;
                 for (const auto& t : syms)
-                    if (!st->price.contains(t) && !st->errored.contains(t)) {
-                        st->errored.insert(t); // no answer by the deadline
-                        st->any_refused = true;
-                    }
-                // Refused: no ticker of the chunk was quoted and the download
-                // was refused (its error lands on every topic) — what didn't
-                // answer is asked again on the next apply / refresh, and the
-                // chain stops. Answered without quotes (delisted, not yet
-                // trading: kNoQuoteError) is an answer, settled until then,
-                // so the same chunk can't stall the chain every apply.
-                const bool refused = st->price.isEmpty() && st->any_refused;
+                    if (!st->price.contains(t) && !st->no_quote.contains(t))
+                        st->refused.insert(t); // no answer by the deadline
+                // ANY ticker refused (a 429'd download's error, or no answer)
+                // stops the chain and cools down, and those tickers are asked
+                // again on the next apply — even when others in the chunk were
+                // quoted (a fresh quote must not hide a refusal on the rest).
+                // Answered without a quote (delisted, not yet trading:
+                // kNoQuoteError) is an answer, settled until then, so the same
+                // chunk can't stall the chain every apply.
+                const bool refused = !st->refused.isEmpty();
                 for (auto& e : self->entries_) {
                     if (e.status != "priced" || e.ticker.isEmpty())
                         continue;
@@ -2019,32 +2018,42 @@ void IpoWatchView::enrich_priced_with_quotes() {
                                     : std::numeric_limits<double>::quiet_NaN();
                     e.perf_fetched = true;
                 }
-                done(refused, refused ? st->errored : QSet<QString>{});
+                done(refused, st->refused);
             };
             auto settle = [st, finish](const QString& sym, const double* price, const QString& error) {
-                if (st->finished || st->price.contains(sym) || st->errored.contains(sym))
+                if (st->finished || st->price.contains(sym) || st->no_quote.contains(sym) || st->refused.contains(sym))
                     return; // answered already: later prints are follow_priced's
-                if (price) {
+                if (price)
                     st->price.insert(sym, *price);
-                } else {
-                    st->errored.insert(sym);
-                    if (error != services::MarketDataService::kNoQuoteError)
-                        st->any_refused = true;
-                }
+                else if (error == services::MarketDataService::kNoQuoteError)
+                    st->no_quote.insert(sym);
+                else
+                    st->refused.insert(sym);
                 if (--st->pending == 0)
                     finish();
             };
             auto& hub = datahub::DataHub::instance();
+            auto& mds = services::MarketDataService::instance();
+            QStringList restored; // held quotes from an earlier session: refresh them now
             for (const auto& sym : syms) {
                 const QString topic = QStringLiteral("market:quote:") + sym;
                 hub.subscribe_errors(subs, topic, [settle, sym](const QString& error) { settle(sym, nullptr, error); });
                 hub.subscribe(subs, topic, [settle, sym](const QVariant& v) {
-                    if (!v.canConvert<services::QuoteData>())
+                    // The one rule for "current": a quote polled or ticked this
+                    // process — a restored one is an earlier session's price.
+                    if (!v.canConvert<services::QuoteData>() ||
+                        !services::MarketDataService::instance().has_live_quote(sym))
                         return;
                     const double price = v.value<services::QuoteData>().price;
                     settle(sym, &price, QString());
                 });
+                if (!mds.has_live_quote(sym))
+                    restored << topic;
             }
+            // One refresh for those, answered to these subscriptions even when
+            // it repeats the restored value (DataHub::request force).
+            if (!restored.isEmpty())
+                hub.request(restored, /*force=*/true);
             // A topic that never answers must not hold its subscription (and
             // the pump) for good: what answered by then is used.
             QTimer::singleShot(kQuoteChunkDeadlineMs, subs, finish);

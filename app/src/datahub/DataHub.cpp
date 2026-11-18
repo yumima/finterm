@@ -234,24 +234,10 @@ void DataHub::on_owner_destroyed(QObject* owner) {
     }
 }
 
-void DataHub::deliver_initial_value(QObject* owner, const QString& topic,
-                                    const std::function<void(const QVariant&)>& slot) {
-    // Caller has released mutex_. We snapshot the value under the lock,
-    // then deliver the slot on the owner's thread via queued invocation.
-    QVariant snapshot;
-    bool have_value = false;
-    {
-        QMutexLocker lock(&mutex_);
-        auto it = topics_.find(topic);
-        if (it != topics_.end() && it->value.isValid()) {
-            const auto policy = it->policy;
-            if (policy.push_only || (now_ms() - it->last_publish_ms) < policy.ttl_ms) {
-                snapshot = it->value;
-                have_value = true;
-            }
-        }
-    }
-    if (!have_value)
+void DataHub::deliver_initial_value(QObject* owner, const std::function<void(const QVariant&)>& slot,
+                                    const QVariant& snapshot) {
+    // Delivered on the owner's thread via queued invocation.
+    if (!snapshot.isValid())
         return;
 
     QPointer<QObject> safe_owner = owner;
@@ -270,17 +256,23 @@ QMetaObject::Connection DataHub::subscribe(QObject* owner, const QString& topic,
 
     bool became_active = false;
     bool needs_cold_start_fetch = false;
+    QVariant initial; // valid = handed to the subscriber below
     {
         QMutexLocker lock(&mutex_);
         // Make sure the topic state exists with correct policy.
         auto& st = state_for(topic);
 
+        // One clock reading decides both: the subscription is primed exactly
+        // when it is handed the value — never primed with nothing delivered.
+        const qint64 t = now_ms();
+        if (st.value.isValid() && (st.policy.push_only || (t - st.last_publish_ms) < st.policy.ttl_ms))
+            initial = st.value;
+
         Subscription sub;
         sub.owner = owner;
         sub.slot = slot;
         sub.is_pattern = false;
-        // deliver_initial_value() below hands it the value on the same rule.
-        sub.primed = st.value.isValid() && (st.policy.push_only || (now_ms() - st.last_publish_ms) < st.policy.ttl_ms);
+        sub.primed = initial.isValid();
 
         auto& bucket = subscriptions_[topic];
         if (bucket.isEmpty())
@@ -294,7 +286,7 @@ QMetaObject::Connection DataHub::subscribe(QObject* owner, const QString& topic,
         // topics have no producer-side pull, so skip — they only get data via
         // explicit publish() calls.
         const bool have_fresh_value =
-            st.value.isValid() && st.last_publish_ms > 0 && (now_ms() - st.last_publish_ms) < st.policy.ttl_ms;
+            st.value.isValid() && st.last_publish_ms > 0 && (t - st.last_publish_ms) < st.policy.ttl_ms;
         if (!have_fresh_value && !st.in_flight && !st.policy.push_only) {
             needs_cold_start_fetch = true;
         }
@@ -309,12 +301,12 @@ QMetaObject::Connection DataHub::subscribe(QObject* owner, const QString& topic,
     if (became_active) {
         emit topic_active(topic);
     }
-    deliver_initial_value(owner, topic, slot);
+    deliver_initial_value(owner, slot, initial);
 
     // Dispatch the cold-start fetch outside the mutex. force=true bypasses
     // min_interval_ms but per-producer rate limit still applies.
     if (needs_cold_start_fetch) {
-        request(topic, /*force=*/true);
+        request_impl({topic}, /*force=*/true, /*waiting=*/false);
     }
     return conn;
 }
@@ -354,7 +346,7 @@ QMetaObject::Connection DataHub::subscribe_pattern(QObject* owner, const QString
     auto conn = connect(
         owner, &QObject::destroyed, this, [this, owner](QObject*) { on_owner_destroyed(owner); }, Qt::QueuedConnection);
     if (!cold_start_topics.isEmpty())
-        request(cold_start_topics, /*force=*/true);
+        request_impl(cold_start_topics, /*force=*/true, /*waiting=*/false);
     return conn;
 }
 
@@ -718,10 +710,14 @@ QVariant DataHub::peek_raw(const QString& topic) const {
 }
 
 void DataHub::request(const QString& topic, bool force) {
-    request(QStringList{topic}, force);
+    request_impl(QStringList{topic}, force, force);
 }
 
 void DataHub::request(const QStringList& topics, bool force) {
+    request_impl(topics, force, force);
+}
+
+void DataHub::request_impl(const QStringList& topics, bool force, bool waiting) {
     // Apply gates under the lock, then buffer into coalesce_pending_. The
     // coalesce timer (kCoalesceWindowMs) merges bursts of request() calls —
     // e.g., dashboard + markets subscribing simultaneously — into one
@@ -742,7 +738,18 @@ void DataHub::request(const QStringList& topics, bool force) {
     {
         QMutexLocker lock(&mutex_);
         const qint64 t = now_ms();
+        // The rate limit is one gate per call and producer: the first topic
+        // that passes it opens it for the rest of this list (one refresh),
+        // instead of the first topic closing it on all the others.
+        QHash<Producer*, bool> gate;
         for (const auto& topic : topics) {
+            if (waiting) {
+                // The caller waits for this refresh: its answer reaches every
+                // current subscriber, even repeating the value they hold.
+                if (auto it = subscriptions_.find(topic); it != subscriptions_.end())
+                    for (auto& s : it.value())
+                        s.primed = false;
+            }
             auto& st = state_for(topic);
             if (st.in_flight)
                 continue;
@@ -755,14 +762,26 @@ void DataHub::request(const QStringList& topics, bool force) {
                 orphan_topics.append(topic);
                 continue;
             }
-            const int rps = p->max_requests_per_sec();
-            if (rps > 0) {
-                const qint64 last = producer_last_refresh_ms_.value(p, 0);
-                const qint64 min_gap = 1000 / std::max(1, rps);
-                if (last > 0 && (t - last) < min_gap)
-                    continue;
+            auto g = gate.find(p);
+            if (g == gate.end()) {
+                bool open = true;
+                const int rps = p->max_requests_per_sec();
+                if (rps > 0) {
+                    const qint64 last = producer_last_refresh_ms_.value(p, 0);
+                    const qint64 min_gap = 1000 / std::max(1, rps);
+                    open = !(last > 0 && (t - last) < min_gap);
+                }
+                g = gate.insert(p, open);
+            }
+            if (!g.value()) {
+                // Turned away by the rate limit: a forced ask is still owed its
+                // refresh — the next scheduler pass sends it, TTL or not.
+                if (force)
+                    st.force_pending = true;
+                continue;
             }
             st.in_flight = true;
+            st.force_pending = false;
             st.last_refresh_request_ms = t;
             producer_last_refresh_ms_[p] = t;
             // Buffer instead of dispatching — duplicate topics within the
@@ -912,7 +931,7 @@ void DataHub::scheduler_body() {
             const bool have_value = st.value.isValid() && st.last_publish_ms > 0;
             const bool ttl_expired = !have_value || (t - st.last_publish_ms) >= st.policy.ttl_ms;
             const bool min_interval_ok = (t - st.last_refresh_request_ms) >= st.policy.min_interval_ms;
-            if (!ttl_expired || !min_interval_ok)
+            if (!st.force_pending && (!ttl_expired || !min_interval_ok)) // a turned-away forced ask goes now
                 continue;
 
             Producer* p = find_producer(topic);
@@ -936,6 +955,7 @@ void DataHub::scheduler_body() {
             producer_last_refresh_ms_[p] = t;
             for (auto& c : cit.value()) {
                 c.st->in_flight = true;
+                c.st->force_pending = false;
                 c.st->last_refresh_request_ms = t;
                 work[p].append(c.topic);
             }

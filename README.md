@@ -6,6 +6,14 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`209fa1465`](https://github.com/yumima/finterm/commit/209fa1465) lint: D1 and D4 cover screens and ui with no opt-out comment
+- [`38188a652`](https://github.com/yumima/finterm/commit/38188a652) screener: the add-to-portfolio price reads its quote topic
+- [`428743ff4`](https://github.com/yumima/finterm/commit/428743ff4) datahub: a subscriber that joined while the value was stale gets an unchanged refresh
+- [`7329a5846`](https://github.com/yumima/finterm/commit/7329a5846) social, code editor: the last Python processes started by screens move to services
+- [`f60880ce4`](https://github.com/yumima/finterm/commit/f60880ce4) screener: ScreenerService owns the screener's runs and its saved scans
+- [`fe868d88a`](https://github.com/yumima/finterm/commit/fe868d88a) economics, calendar: What's On and the World board read their data through owners
+- [`f44df6d76`](https://github.com/yumima/finterm/commit/f44df6d76) market data: the options surface and IPO pop quotes go through MarketDataService
+- [`17a963840`](https://github.com/yumima/finterm/commit/17a963840) equity research: symbol search and earnings dates are read through their owner
 - [`a682d3aa6`](https://github.com/yumima/finterm/commit/a682d3aa6) release notes: 4.0.9 — one source per dataset, extended hours by session
 - [`88446df7a`](https://github.com/yumima/finterm/commit/88446df7a) connectors: delete 201 CLI commands no caller sends, and what only they ran
 - [`e88a0a4f3`](https://github.com/yumima/finterm/commit/e88a0a4f3) cleanup: close the review's dead-code findings and the unread settings

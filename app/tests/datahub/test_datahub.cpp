@@ -178,6 +178,87 @@ class TestDataHub : public QObject {
         QCOMPARE(early_calls, 1);
     }
 
+    // A forced request is a caller waiting for the answer: a subscriber that
+    // set aside the value it was handed (a restored quote) gets the refresh
+    // even when it repeats that value.
+    void forced_request_answer_reaches_subscribers_holding_that_value() {
+        auto& hub = DataHub::instance();
+        RecordingProducer prod({"test:forced:*"});
+        hub.register_producer(&prod);
+        const QString topic = "test:forced:1";
+        hub.publish(topic, QVariant(5)); // fresh: handed to the subscriber below
+
+        QObject owner;
+        int calls = 0;
+        hub.subscribe(&owner, topic, [&](const QVariant&) { ++calls; });
+        QTRY_COMPARE(calls, 1);
+
+        hub.publish(topic, QVariant(5)); // unchanged, nobody asked: skipped
+        QCOMPARE(calls, 1);
+
+        hub.request(topic, /*force=*/true);
+        hub.publish(topic, QVariant(5)); // the forced refresh's answer, same value
+        QCOMPARE(calls, 2);
+        hub.publish(topic, QVariant(5)); // and only that one
+        QCOMPARE(calls, 2);
+        hub.unregister_producer(&prod);
+    }
+
+    // One forced request for a list asks its producer for all of it in one
+    // refresh — the rate limit gates the call, not each topic after the first.
+    void forced_list_request_is_one_refresh_of_every_topic() {
+        auto& hub = DataHub::instance();
+        RecordingProducer prod({"test:list:*"}, /*rps=*/2);
+        hub.register_producer(&prod);
+        const QStringList topics{"test:list:a", "test:list:b", "test:list:c"};
+        hub.request(topics, /*force=*/true);
+        QTRY_COMPARE(prod.refresh_count, 1);
+        QCOMPARE(QSet<QString>(prod.last_refresh_topics.begin(), prod.last_refresh_topics.end()),
+                 QSet<QString>(topics.begin(), topics.end()));
+        hub.unregister_producer(&prod);
+    }
+
+    // A forced ask the rate limit turned away is not dropped: the next
+    // scheduler pass sends it even though the topic's value is inside TTL.
+    void rate_limited_forced_request_is_sent_by_the_scheduler() {
+        auto& hub = DataHub::instance();
+        RecordingProducer prod({"test:gated:*"}, /*rps=*/10);
+        hub.register_producer(&prod);
+        QObject owner;
+        hub.publish("test:gated:b", QVariant(1)); // fresh: no cold-start fetch
+        hub.subscribe(&owner, "test:gated:b", [](const QVariant&) {});
+        hub.request("test:gated:a", /*force=*/true); // opens and closes the 100 ms gate
+        hub.request("test:gated:b", /*force=*/true); // turned away
+        QTRY_COMPARE(prod.refresh_count, 1);
+        QCOMPARE(prod.last_refresh_topics, QStringList{"test:gated:a"});
+        QTest::qWait(150);
+        hub.tick_scheduler();
+        QTRY_VERIFY(prod.all_requested_topics.contains("test:gated:b"));
+        hub.unregister_producer(&prod);
+    }
+
+    // A subscriber is primed exactly when it is handed the value: at the
+    // TTL boundary it must never be left primed with nothing delivered (it
+    // would then miss an unchanged refresh for good).
+    void primed_iff_initial_value_delivered() {
+        auto& hub = DataHub::instance();
+        const QString topic = "test:boundary:1";
+        TopicPolicy p;
+        p.ttl_ms = 1;
+        hub.set_policy(topic, p);
+        for (int i = 0; i < 300; ++i) {
+            hub.publish(topic, QVariant(9));
+            QObject owner;
+            int got = 0;
+            hub.subscribe(&owner, topic, [&](const QVariant&) { ++got; });
+            QCoreApplication::processEvents(); // the initial delivery, if any
+            hub.publish(topic, QVariant(9));   // unchanged refresh
+            QCoreApplication::processEvents();
+            QVERIFY2(got >= 1, qPrintable(QStringLiteral("iteration %1: nothing delivered").arg(i)));
+            hub.unsubscribe(&owner);
+        }
+    }
+
     // Scheduler skips push-only topics.
     void push_only_skips_scheduler() {
         auto& hub = DataHub::instance();
