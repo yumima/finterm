@@ -204,6 +204,10 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     void fetch_top_movers(int count, TopMoversCallback cb);
     static constexpr int kMoversMax = 25;
     static inline const QString kMoversTopic = QStringLiteral("market:movers");
+    /// The error a market:quote:<sym> topic carries when the quote download
+    /// answered without that symbol (unknown, delisted, not yet trading) —
+    /// unlike a refused download, whose error is the refusal's own text.
+    static inline const QString kNoQuoteError = QStringLiteral("no quote returned");
 
     /// Drop cached quote entries for the given symbols, forcing the next
     /// fetch_quotes() call to hit the data source. The DataHub min_interval
@@ -343,6 +347,22 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     using OptionsChainCallback = std::function<void(const OptionsChainReply&)>;
     void fetch_options_chain(const QString& symbol, OptionsChainCallback cb);
     static constexpr int kOptionsChainTtlSec = 300; // CBOE's quotes are 15 min delayed
+
+    /// Yahoo's out-of-the-money IV surface for `symbol` — every expiry's
+    /// two-sided OTM quotes, the ATM term structure and the spot (the daemon's
+    /// options_surface; one Yahoo request per expiry). The ER Options tab's
+    /// read. Cached kOptionsSurfaceTtlSec, concurrent asks coalesced; a
+    /// failure — and an answer whose expiry listing failed — never cached.
+    /// Always answers, after the call returns.
+    struct OptionsSurfaceReply {
+        bool ok = false;
+        QJsonObject surface; ///< {spot, points: [...], atm: [...], as_of, source, expiries_used, …}
+        QString error;       ///< why, when !ok (the action's own text, or the worker's)
+    };
+    using OptionsSurfaceCallback = std::function<void(const OptionsSurfaceReply&)>;
+    void fetch_options_surface(const QString& symbol, OptionsSurfaceCallback cb);
+    static constexpr int kOptionsSurfaceTtlSec = 300; // the daemon's own cache for the action
+    static constexpr int kOptionsSurfaceTimeoutMs = 90'000; // one request per expiry
 
     /// Wikipedia summary lookup — used by IPO Watch as a description fallback
     /// when yfinance's `longBusinessSummary` is empty (common for pre-IPO
@@ -673,6 +693,7 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     };
     QHash<QString, QVector<SecSubmissionsWaiter>> sec_submissions_waiters_; // ticker → callers
     QHash<QString, QVector<OptionsChainCallback>> options_chain_waiters_; // symbol → callers
+    QHash<QString, QVector<OptionsSurfaceCallback>> options_surface_waiters_; // symbol → callers
 };
 
 } // namespace finterm::services

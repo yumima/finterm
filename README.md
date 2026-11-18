@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`17a963840`](https://github.com/yumima/finterm/commit/17a963840) equity research: symbol search and earnings dates are read through their owner
 - [`88446df7a`](https://github.com/yumima/finterm/commit/88446df7a) connectors: delete 201 CLI commands no caller sends, and what only they ran
 - [`e88a0a4f3`](https://github.com/yumima/finterm/commit/e88a0a4f3) cleanup: close the review's dead-code findings and the unread settings
 - [`2a829c612`](https://github.com/yumima/finterm/commit/2a829c612) extended hours: the fetch window follows the market calendar's early close

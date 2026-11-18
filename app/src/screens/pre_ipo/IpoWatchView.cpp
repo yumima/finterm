@@ -3,7 +3,8 @@
 
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
-#include "python/PythonRunner.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/dashboard/canvas/AddWidgetDialog.h"
 #include "screens/dashboard/canvas/DashboardCanvas.h"
 #include "screens/dashboard/canvas/WidgetRegistry.h"
@@ -1439,9 +1440,10 @@ void IpoWatchView::on_fetch_done() {
 // ONE ~700-symbol batch_info at open — the burst that got the whole app
 // rate-limited (429) for minutes, blanking Markets charts and portfolio
 // prices. A refused chunk stops the chain; the rest is asked on the next
-// apply, not hammered into a limit. "Refused" is the reply saying so: quotes
-// are asked with stale_on_failure=false (a 429'd download is a failed reply
-// since the daemon reads yfinance's per-ticker errors), profiles report a
+// apply, not hammered into a limit. "Refused" is the reply saying so: a quote
+// chunk's hub topics carry the failed download's error (a 429'd download is a
+// failed reply since the daemon reads yfinance's per-ticker errors), never
+// MarketDataService::kNoQuoteError, which is an answer; profiles report a
 // failed lookup as ok=false and a refused row as `refused`. A chunk that
 // answers nothing for its tickers (delisted, not yet trading) is an answer,
 // not a refusal — it must not stall the chain on the same chunk every apply.
@@ -1450,6 +1452,9 @@ static constexpr int kYahooChunk = 40;
 static constexpr int kYahooChunkGapMs = 1500;
 static constexpr int kPumpWatchdogMs = 120'000;
 static constexpr int kPumpRefusalCooldownMs = 30'000; // after Yahoo refused a chunk
+// A quote chunk's topics answer within the hub's refresh timeout (30 s) plus a
+// scheduler pass; well inside the pump's watchdog.
+static constexpr int kQuoteChunkDeadlineMs = 60'000;
 
 // The SECTOR cell: the sector; "…" while a listed ticker's profile is being
 // asked; "—" when answered without one, or never asked (an unlisted deal's
@@ -1961,39 +1966,88 @@ void IpoWatchView::enrich_priced_with_quotes() {
     run_pump(
         &quote_pump_, "quote",
         [self](const QStringList& syms, ChunkDone done) {
-            services::MarketDataService::instance()
-                .fetch_quotes( // D4-exempt: paced ChunkPump needs the ok flag to retry refusals
-                    syms,
-                    [self, syms, done](bool ok, QVector<services::QuoteData> quotes, const QString& /*err*/) {
-                        if (!self)
-                            return;
-                        QHash<QString, double> price_map;
-                        for (const auto& q : quotes)
-                            price_map.insert(q.symbol, q.price);
-                        // A refusal: what didn't answer is asked again (the
-                        // PERFORMANCE-lens retry / next refresh). Without one, a
-                        // ticker merely unquoted stays asked until then.
-                        QSet<QString> retry;
-                        if (!ok)
-                            for (const auto& t : syms)
-                                if (!price_map.contains(t))
-                                    retry.insert(t);
-                        for (auto& e : self->entries_) {
-                            if (e.status != "priced" || e.ticker.isEmpty())
-                                continue;
-                            auto it = price_map.constFind(e.ticker);
-                            if (it == price_map.constEnd())
-                                continue;
-                            e.last_price = it.value();
-                            // No offer price or no usable quote → return since IPO is unknown.
-                            e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
-                                            ? (e.last_price - e.final_price) / e.final_price * 100.0
-                                            : std::numeric_limits<double>::quiet_NaN();
-                            e.perf_fetched = true;
-                        }
-                        done(!ok, retry);
-                    },
-                    /*stale_on_failure=*/false); // a refusal must stop the chain, not read as answered
+            // One look at the chunk's market:quote topics through the hub: its
+            // scheduler batches them into one quote refresh (or answers from a
+            // fresh value), each topic says its quote or its error, and the
+            // subscriptions end when every topic has answered. Never held:
+            // hundreds of held topics would be re-polled together every TTL —
+            // the burst this pump exists to prevent. (Priced names on screen
+            // stay live through follow_priced, capped.)
+            if (!self)
+                return;
+            struct Chunk {
+                QHash<QString, double> price;
+                QSet<QString> errored;   // answered without a quote, or refused
+                bool any_refused = false; // an error other than "no such quote", or no answer at all
+                int pending = 0;
+                bool finished = false;
+            };
+            auto st = std::make_shared<Chunk>();
+            st->pending = static_cast<int>(syms.size());
+            auto* subs = new QObject(self.data()); // owns this chunk's subscriptions
+            auto finish = [self, subs, st, syms, done]() {
+                if (st->finished)
+                    return;
+                st->finished = true;
+                datahub::DataHub::instance().unsubscribe(subs);
+                subs->deleteLater();
+                if (!self)
+                    return;
+                for (const auto& t : syms)
+                    if (!st->price.contains(t) && !st->errored.contains(t)) {
+                        st->errored.insert(t); // no answer by the deadline
+                        st->any_refused = true;
+                    }
+                // Refused: no ticker of the chunk was quoted and the download
+                // was refused (its error lands on every topic) — what didn't
+                // answer is asked again on the next apply / refresh, and the
+                // chain stops. Answered without quotes (delisted, not yet
+                // trading: kNoQuoteError) is an answer, settled until then,
+                // so the same chunk can't stall the chain every apply.
+                const bool refused = st->price.isEmpty() && st->any_refused;
+                for (auto& e : self->entries_) {
+                    if (e.status != "priced" || e.ticker.isEmpty())
+                        continue;
+                    auto it = st->price.constFind(e.ticker);
+                    if (it == st->price.constEnd())
+                        continue;
+                    e.last_price = it.value();
+                    // No offer price or no usable quote → return since IPO is unknown.
+                    e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
+                                    ? (e.last_price - e.final_price) / e.final_price * 100.0
+                                    : std::numeric_limits<double>::quiet_NaN();
+                    e.perf_fetched = true;
+                }
+                done(refused, refused ? st->errored : QSet<QString>{});
+            };
+            auto settle = [st, finish](const QString& sym, const double* price, const QString& error) {
+                if (st->finished || st->price.contains(sym) || st->errored.contains(sym))
+                    return; // answered already: later prints are follow_priced's
+                if (price) {
+                    st->price.insert(sym, *price);
+                } else {
+                    st->errored.insert(sym);
+                    if (error != services::MarketDataService::kNoQuoteError)
+                        st->any_refused = true;
+                }
+                if (--st->pending == 0)
+                    finish();
+            };
+            auto& hub = datahub::DataHub::instance();
+            for (const auto& sym : syms) {
+                const QString topic = QStringLiteral("market:quote:") + sym;
+                hub.subscribe_errors(subs, topic,
+                                     [settle, sym](const QString& error) { settle(sym, nullptr, error); });
+                hub.subscribe(subs, topic, [settle, sym](const QVariant& v) {
+                    if (!v.canConvert<services::QuoteData>())
+                        return;
+                    const double price = v.value<services::QuoteData>().price;
+                    settle(sym, &price, QString());
+                });
+            }
+            // A topic that never answers must not hold its subscription (and
+            // the pump) for good: what answered by then is used.
+            QTimer::singleShot(kQuoteChunkDeadlineMs, subs, finish);
         },
         [self]() {
             if (!self)
