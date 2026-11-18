@@ -2881,17 +2881,18 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
     QPointer<PortfolioService> self = this;
     for (auto it = mv_by_symbol.cbegin(); it != mv_by_symbol.cend(); ++it) {
         const QString sym = it.key();
-        QJsonObject payload;
-        payload["symbol"] = sym;
-        python::PythonWorker::instance().submit(
-            "info", payload,
-            [self, portfolio_id, sym, state, mv_by_symbol, price_by_symbol, total_mv](bool ok, QJsonObject obj,
-                                                                                      QString /*err*/) {
+        // The app's one company-info read (shared with Equity Research).
+        MarketDataService::instance().fetch_info_raw(
+            sym, [self, portfolio_id, sym, state, mv_by_symbol, price_by_symbol,
+                  total_mv](const MarketDataService::InfoReply& reply) {
                 if (!self)
                     return;
 
                 SymResult& r = state->results[sym];
-                if (ok && !obj.contains("error")) {
+                // Absent fields read as 0 here and every use below is gated
+                // on > 0, so an unknown figure is left out, never averaged in.
+                if (reply.ok) {
+                    const QJsonObject& obj = reply.info;
                     r.tgt_low = obj["target_low_price"].toDouble();
                     r.tgt_mean = obj["target_mean_price"].toDouble();
                     r.tgt_high = obj["target_high_price"].toDouble();
@@ -3000,8 +3001,7 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     self->fundamentals_cache_[portfolio_id] = f;
                 }
                 emit self->portfolio_fundamentals_loaded(portfolio_id, f);
-            },
-            python::PythonWorker::kNetworkActionTimeoutMs);
+            });
     }
 }
 
@@ -3303,13 +3303,13 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
     QPointer<PortfolioService> self = this;
     auto pending = std::make_shared<int>(static_cast<int>(missing.size()));
     for (const QString& sym : std::as_const(missing)) {
-        QJsonObject payload;
-        payload["symbol"] = sym;
-        python::PythonWorker::instance().submit(
-            "info", payload,
-            [self, sym, pending](bool ok, QJsonObject obj, QString /*err*/) {
+        // The app's one company-info read (shared with Equity Research).
+        MarketDataService::instance().fetch_info_raw(
+            sym, [self, sym, pending](const MarketDataService::InfoReply& reply) {
                 if (!self)
                     return;
+                const bool ok = reply.ok;
+                const QJsonObject& obj = reply.info;
                 {
                     QMutexLocker lock(&self->cache_mutex_);
                     self->currency_inflight_.remove(sym);
@@ -3326,9 +3326,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     // A refusal or a timeout is not an answer: retry in
                     // minutes, not after the 6h an answer without one earns.
                     lock.unlock();
-                    // A daemon {"error"} arrives as ok:false with its body, which
-                    // says whether it was a refusal; no body (timeout) is one.
-                    const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
+                    const bool transient = reply.transient;
                     finterm::CacheManager::instance().put(symbol_currency_key(sym),
                                                           QString::fromLatin1(kCurrencyUnknown),
                                                           transient ? kCurrencyRetryTtlSec : kCurrencyUnknownTtlSec);
@@ -3352,8 +3350,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     for (const auto& [pid, per] : rerun)
                         self->backfill_history(pid, per);
                 }
-            },
-            python::PythonWorker::kNetworkActionTimeoutMs);
+            });
     }
 }
 

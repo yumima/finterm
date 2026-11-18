@@ -2446,10 +2446,10 @@ void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::Sta
     cached_quote_ = q;
     // The analyst-target rows state each target's distance from the LIVE
     // price, so they have to be re-rendered whenever that price moves.
-    // kQuoteTtlSec is 60 and kInfoTtlSec is 1800: info usually resolves from
-    // cache before the first quote arrives, so rendering these once at info
-    // time pinned the percentages to a reference up to half an hour old while
-    // the header price beside them updated every minute.
+    // The quote refreshes every minute and the info (MarketDataService::
+    // kInfoTtlSec) far less often: rendering these once at info time pinned
+    // the percentages to a reference up to the info's age while the header
+    // price beside them kept moving.
     if (cached_info_.valid)
         refresh_target_rows();
     open_val_->setText(fmt_price(q.open));

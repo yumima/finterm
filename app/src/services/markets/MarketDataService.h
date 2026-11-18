@@ -374,6 +374,23 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     /// "range:YYYY-MM-DD:YYYY-MM-DD"; interval: "1m" … "1mo".
     /// Streaming chart widgets subscribe to market:history:<sym>:<period>:<interval>
     /// instead — the same parser and cache.
+    /// One company's yfinance `info` answer, as every reader gets it.
+    struct InfoReply {
+        bool ok = false;
+        QJsonObject info;     ///< the daemon's info dict (each reader parses its own view)
+        QDateTime as_of;      ///< when fetched (a cache hit keeps its original time)
+        QString error;        ///< the vendor's reason when !ok
+        bool transient = false; ///< a refusal / no answer — ask again later, never "no such company"
+    };
+    using InfoReplyCallback = std::function<void(const InfoReply&)>;
+    /// The ONE company-info read: the daemon's `info`, one cache entry per
+    /// symbol (kInfoTtlSec), concurrent asks coalesced, one retry when the
+    /// daemon call itself timed out, a failure never cached. Equity Research's
+    /// StockInfo, fetch_info()'s InfoData, the portfolio fundamentals and the
+    /// workflow nodes are all views of this one answer.
+    void fetch_info_raw(const QString& symbol, InfoReplyCallback cb);
+    static constexpr int kInfoTtlSec = 600;
+
     /// Split/dividend-adjusted prices, or the prints that actually traded.
     /// A strong enum, not a bool: a stray integer argument must not compile.
     enum class Adjust { Adjusted, Raw };
@@ -414,7 +431,13 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     void stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
 
   private:
+    /// Every shared read answers on a later turn of the event loop, cache hit
+    /// or not: a caller that sets up state after the call (a counter, a
+    /// guard, a render already running) must never see its callback inside it.
+    void later(std::function<void()> f) { QTimer::singleShot(0, this, std::move(f)); }
     QHash<QString, QVector<BarsCallback>> bars_waiters_; // series key → callers waiting on its request
+    QHash<QString, QVector<InfoReplyCallback>> info_waiters_; // symbol → callers waiting on its info
+    void request_info(const QString& symbol, int tries_left);
     /// The one movers fetch (kMoversMax per side): cached kMoversTtlSec,
     /// concurrent callers coalesced onto the request already out.
     void fetch_movers_all(std::function<void(bool, const TopMovers&, const QString&)> cb, bool fresh = false);

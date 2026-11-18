@@ -944,7 +944,7 @@ QDateTime MarketDataService::quote_as_of(const QString& symbol) const {
 
 void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb, bool stale_on_failure) {
     if (symbols.isEmpty()) {
-        cb(true, {}, {});
+        later([cb] { cb(true, {}, {}); });
         return;
     }
 
@@ -972,7 +972,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
         }
         if (!cached_results.isEmpty()) {
             overlay_live(cached_results);
-            cb(true, cached_results, {});
+            later([cb, cached_results] { cb(true, cached_results, {}); });
             return;
         }
     }
@@ -1155,6 +1155,71 @@ void MarketDataService::fetch_orderbook(const QString& symbol, OrderbookCallback
 
 // ── Info fetch (company fundamentals) ───────────────────────────────────────
 
+void MarketDataService::fetch_info_raw(const QString& symbol_in, InfoReplyCallback cb) {
+    const QString symbol = symbol_in.trimmed().toUpper(); // one entry per company, however it was typed
+    // Two caches stand between a reader and Yahoo: this one and the daemon's
+    // (_CACHE_TTL). A reader sees their SUM, so the daemon's is kept well
+    // inside this one. Info carries analyst targets, which move on report days.
+    const QString key = QStringLiteral("info:v1:") + symbol;
+    if (const auto hit = finterm::CacheManager::instance().try_get_aged(key)) {
+        InfoReply r;
+        r.ok = true;
+        r.info = QJsonDocument::fromJson(hit->value.toUtf8()).object();
+        r.as_of = hit->written_at;
+        later([cb, r] { cb(r); });
+        return;
+    }
+    auto& waiting = info_waiters_[symbol];
+    waiting.append(std::move(cb));
+    if (waiting.size() == 1)
+        request_info(symbol, /*tries_left=*/1);
+}
+
+void MarketDataService::request_info(const QString& symbol, int tries_left) {
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    QPointer<MarketDataService> self = this;
+    python::PythonWorker::instance().submit(
+        "info", payload,
+        [self, symbol, tries_left](bool ok, QJsonObject obj, QString err) {
+            if (!self)
+                return;
+            // One retry after a TIMEOUT of the daemon call itself (no body):
+            // usually a network blip (a DNS resolve that timed out took every
+            // provider down for four minutes on 2026-09-06). A vendor error
+            // ({"error": …}) is a fact about the symbol and is not retried.
+            if (!ok && !obj.contains("error") && tries_left > 0 &&
+                err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
+                LOG_WARN("MarketData", QString("info timed out for %1 — retrying once").arg(symbol));
+                QTimer::singleShot(4000, self.data(), [self, symbol, tries_left] {
+                    if (self)
+                        self->request_info(symbol, tries_left - 1);
+                });
+                return;
+            }
+            InfoReply r;
+            if (!ok || obj.contains("error")) {
+                r.error = obj.value("error").toString(err.isEmpty() ? QStringLiteral("info fetch failed") : err);
+                // A daemon {"error"} arrives as ok:false WITH its body, which
+                // says whether it was a refusal; no body counts as one.
+                r.transient = python::PythonWorker::reply_is_transient(ok, obj);
+                LOG_WARN("MarketData", QString("info failed for %1%2: %3")
+                                           .arg(symbol, r.transient ? " (transient)" : "", r.error.left(160)));
+            } else {
+                r.ok = true;
+                r.info = obj;
+                r.as_of = QDateTime::currentDateTime();
+                finterm::CacheManager::instance().put(
+                    QStringLiteral("info:v1:") + symbol,
+                    QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)), kInfoTtlSec, "market_data");
+            }
+            const auto waiters = self->info_waiters_.take(symbol);
+            for (const auto& w : waiters)
+                w(r);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
 void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
     // Use financial_ratios command — it has all ratio fields in one call
     // and falls back gracefully. We run two parallel Python calls and merge:
@@ -1181,23 +1246,15 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
         cb(ok, shared->info);
     };
 
-    // ── Call 1: get_info via daemon ───────────────────────────────────────────
-    QJsonObject info_payload;
-    info_payload["symbol"] = symbol;
-    python::PythonWorker::instance().submit(
-        "info", info_payload,
-        [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
+    // ── Call 1: the one company-info read ───────────────────────────────────
+    fetch_info_raw(symbol, [shared, symbol, try_complete](const InfoReply& reply) {
             shared->info_done = true;
-            if (!ok || o.contains("error")) {
-                // A daemon-side {"error"} arrives as ok:false WITH its body,
-                // which says whether it was a refusal; no body (timeout, no
-                // daemon) counts as one.
-                shared->info.info_transient = python::PythonWorker::reply_is_transient(ok, o);
-                LOG_WARN("MarketData",
-                         "get_info failed for " + symbol + (shared->info.info_transient ? " (transient)" : ""));
+            if (!reply.ok) {
+                shared->info.info_transient = reply.transient;
                 try_complete();
                 return;
             }
+            const QJsonObject& o = reply.info;
             shared->info.symbol = o["symbol"].toString(symbol);
             shared->info.name = o["company_name"].toString();
             // The daemon's get_info defaults missing string fields to "N/A"
@@ -1239,8 +1296,7 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
             shared->info_ok = true;
             shared->info.info_answered = true;
             try_complete();
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+    });
 
     // ── Call 2: financial_ratios via daemon ───────────────────────────────────
     QJsonObject ratios_payload;
@@ -1279,8 +1335,9 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
 // ── History fetch (OHLCV) ────────────────────────────────────────────────────
 
 
-void MarketDataService::fetch_bars(const QString& symbol, const QString& period, const QString& interval,
+void MarketDataService::fetch_bars(const QString& symbol_in, const QString& period, const QString& interval,
                                    BarsCallback cb, Adjust adjust) {
+    const QString symbol = symbol_in.trimmed().toUpper(); // one series however the ticker was typed
     const bool adjusted = adjust == Adjust::Adjusted;
     const QString key = bars_key(symbol, period, interval, adjusted);
     if (const auto hit = finterm::CacheManager::instance().try_get_aged(key)) {
@@ -1289,7 +1346,7 @@ void MarketDataService::fetch_bars(const QString& symbol, const QString& period,
         r.bars = bars::parse(r.rows);
         r.ok = true;
         r.as_of = hit->written_at;
-        cb(r);
+        later([cb, r] { cb(r); });
         return;
     }
     auto& waiting = bars_waiters_[key];
@@ -1538,7 +1595,8 @@ void MarketDataService::fetch_movers_all(std::function<void(bool, const TopMover
     // `fresh`: the hub's refresh — its own policy decides when to ask, so a
     // forced refresh must not be answered from the one-shot cache.
     if (const auto cached = fresh ? std::nullopt : finterm::CacheManager::instance().try_get(kMoversCacheKey)) {
-        cb(true, parse_movers(QJsonDocument::fromJson(cached->toUtf8()).object()), {});
+        const TopMovers tm = parse_movers(QJsonDocument::fromJson(cached->toUtf8()).object());
+        later([cb, tm] { cb(true, tm, {}); });
         return;
     }
     movers_waiters_.append(std::move(cb));

@@ -121,9 +121,21 @@ void update_symbol_cache(const QString& symbol, const QString& key, const QJsonV
         return;
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
+    root.insert("symbol", symbol); // what the startup restore keys on — every save writes it
     root.insert(key, value);
     if (key != QLatin1String("symbol") && key != QLatin1String("peers_key"))
         stamp_section(root, key);
+    // Sections MarketDataService now owns (quote, info, candles: one cache
+    // each, app-wide) — nothing reads them here any more; drop them rather
+    // than re-serialise dead data on every save.
+    QJsonObject at_dead = root.value("_at").toObject();
+    for (const char* dead : {"quote", "info", "info_v2", "info_v3", "candles"}) {
+        root.remove(QLatin1String(dead));
+        at_dead.remove(QLatin1String(dead));
+    }
+    for (auto it = at_dead.begin(); it != at_dead.end();)
+        it = it.key().startsWith(QLatin1String("candles/")) ? at_dead.erase(it) : std::next(it);
+    root.insert("_at", at_dead);
     // A versioned sub-key leaves its predecessors behind: nothing reads them
     // once the hydrator moves to "<base>_vN", but every save would keep
     // re-serialising payloads that can never be used again. Drop the whole
@@ -198,15 +210,8 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
             // instead of claiming the blob was fetched at app launch.
             finterm::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
         };
-        // quote / info / financials / news live in the root, peers as array
-        // "info_v3": adds quote_type, which v2 blobs lack — without it an
-        // ETF served from a warm entry has no way to say it HAS no analysts
-        // and falls into the "incomplete profile, refresh to retry" branch.
-        // (v2 itself existed because pre-v2 blobs carried dividend_yield as
-        // Yahoo's PERCENTAGE.) The disk sub-key moves with the key so a
-        // stale blob cannot rehydrate into the new one.
-        if (root.contains("info_v3"))
-            repopulate("info_v3", "equity:info:v3:", kInfoTtlSec);
+        // financials / news live in the root, peers as array. (Quote, info
+        // and candles are MarketDataService's — one cache each, app-wide.)
         if (root.contains("financials"))
             repopulate("financials", "equity:financials:", kFinancialsTtlSec);
         if (root.contains("news"))
@@ -374,49 +379,19 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
 void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol, query::QueryStore::Callback cb) {
     if (symbol.isEmpty())
         return;
-    const QString key = "equity:info:v3:" + symbol;
+    const QString key = "equity:info:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto icv_aged = finterm::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
-        const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
-        if (!icv.isNull()) {
-            StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
-            emit info_loaded(parsed);
-            // Resolve with the cache entry\'s WRITE time: a hit answers
-            // instantly, and stamping "now" would present a value hydrated
-            // from disk at startup as brand new.
-            resolve(QVariant::fromValue(parsed), icv_aged->written_at);
-            return;
-        }
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        run_daemon("info", payload, [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
-            if (!ok || obj.contains("error")) {
-                const QString msg = !ok ? err : obj["error"].toString();
-                emit error_occurred(symbol, "Info", msg);
-                StockInfo failed;
-                failed.symbol = symbol;
-                failed.valid = false;
-                emit info_loaded(failed);
-                // A daemon that never answered (no body) is as transient as a
-                // refusal; a vendor {"error"} body (ok:false since the daemon
-                // sends errors as failed replies) says which it was.
-                const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
-                reject(transient ? mark_transient_error(msg) : msg);
-                return;
-            }
-            finterm::CacheManager::instance().put(
-                "equity:info:v3:" + symbol,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec, "equity");
-            update_symbol_cache(symbol, "info_v3", obj);
-            update_symbol_cache(symbol, "symbol", symbol);
-            StockInfo parsed = parse_info(obj);
-            emit info_loaded(parsed);
-            resolve(QVariant::fromValue(parsed));
+        read_info(symbol, [resolve, reject](const StockInfo& info, const services::MarketDataService::InfoReply& r) {
+            if (!r.ok)
+                reject(r.transient ? mark_transient_error(r.error) : r.error);
+            else
+                resolve(QVariant::fromValue(info), r.as_of);
         });
     };
     // Info is the slowest yfinance call (~1-3s) and changes slowly. Generous
     // SWR window — 8 × TTL ≈ 4 hours — keeps repeat views instant for a
     // working session. After that, treat as cold.
+    constexpr int kInfoTtlSec = services::MarketDataService::kInfoTtlSec;
     query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, kInfoTtlSec * 8, std::move(cb),
                                             std::move(fetcher));
 }
@@ -740,6 +715,30 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
     query::QueryStore::instance().prefetch(key, kHistoricalTtlSec, std::move(fetcher));
 }
 
+void EquityResearchService::read_info(
+    const QString& symbol,
+    std::function<void(const StockInfo&, const services::MarketDataService::InfoReply&)> done) {
+    // The app's one company-info read (MarketDataService::fetch_info_raw:
+    // one cache, coalesced, one retry on a daemon timeout).
+    QPointer<EquityResearchService> self = this;
+    services::MarketDataService::instance().fetch_info_raw(
+        symbol, [self, symbol, done](const services::MarketDataService::InfoReply& r) {
+            if (!self)
+                return;
+            StockInfo info;
+            if (!r.ok) {
+                emit self->error_occurred(symbol, "Info", r.error);
+                info.symbol = symbol;
+                info.valid = false;
+            } else {
+                info = self->parse_info(r.info);
+            }
+            emit self->info_loaded(info);
+            if (done)
+                done(info, r);
+        });
+}
+
 void EquityResearchService::read_quote(const QString& symbol,
                                        std::function<void(const QuoteData&, const QDateTime&)> done) {
     // The app's one quote: MarketDataService's batch action, parser and cache
@@ -812,58 +811,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     read_quote(symbol, {});
 
     // ── Info ─────────────────────────────────────────────────────────────────
-    {
-        const auto icv_aged = finterm::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
-        const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
-        if (!icv.isNull()) {
-            emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
-        } else {
-            const QString inflight_key = "info:" + symbol;
-            if (acquire_inflight(inflight_key)) {
-                QJsonObject payload;
-                payload["symbol"] = symbol;
-                // One retry after a TIMEOUT, a few seconds later. A daemon that
-                // did not answer in ten seconds is usually a network blip — a
-                // DNS resolve that timed out took every provider down for four
-                // minutes on 2026-09-06 — and the reader is left with a blank
-                // analyst panel until they reload the symbol. A vendor error
-                // ({"error": …}) is a fact about the symbol and is not retried.
-                auto attempt = std::make_shared<std::function<void(int)>>();
-                *attempt = [this, symbol, inflight_key, payload, attempt](int tries_left) {
-                    run_daemon(
-                        "info", payload,
-                        [this, symbol, inflight_key, attempt, tries_left](bool ok, QJsonObject obj, QString err) {
-                            // A timeout of the daemon call itself — no body; a vendor
-                            // error's text can say "timed out" too and is not retried.
-                            if (!ok && !obj.contains("error") && tries_left > 0 &&
-                                err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
-                                LOG_WARN("EquityResearch",
-                                         QString("info timed out for %1 — retrying once").arg(symbol));
-                                QTimer::singleShot(4000, this, [attempt, tries_left]() { (*attempt)(tries_left - 1); });
-                                return;
-                            }
-                            release_inflight(inflight_key);
-                            if (!ok || obj.contains("error")) {
-                                emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
-                                StockInfo failed;
-                                failed.symbol = symbol;
-                                failed.valid = false;
-                                emit info_loaded(failed);
-                                return;
-                            }
-                            finterm::CacheManager::instance().put(
-                                "equity:info:v3:" + symbol,
-                                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                                kInfoTtlSec, "equity");
-                            update_symbol_cache(symbol, "info_v3", obj);
-                            update_symbol_cache(symbol, "symbol", symbol);
-                            emit info_loaded(parse_info(obj));
-                        });
-                };
-                (*attempt)(1);
-            }
-        }
-    }
+    read_info(symbol, {});
 
     // ── Historical ───────────────────────────────────────────────────────────
     // The app's one price-history read: keyed by period (a period switch is

@@ -82,6 +82,18 @@ void run_python_json(const QString& script, const QStringList& args,
     });
 }
 
+// The info dict through the app's one company-info read (shared cache and
+// retry with Equity Research, the portfolio and the market screens).
+void emit_info(const QString& symbol, const std::function<void(bool, QJsonValue, QString)>& cb) {
+    services::MarketDataService::instance().fetch_info_raw(
+        symbol, [cb](const services::MarketDataService::InfoReply& r) {
+            if (!r.ok)
+                cb(false, {}, r.error);
+            else
+                cb(true, r.info, {});
+        });
+}
+
 } // anonymous namespace
 
 void register_market_data_nodes(NodeRegistry& registry) {
@@ -237,9 +249,10 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>&,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                QString symbol = params.value("symbol").toString("AAPL");
-                // info command returns 52w high/low, volume, market cap, etc.
-                run_python_json("yfinance_data.py", {"info", symbol}, cb);
+                const QString symbol = params.value("symbol").toString("AAPL");
+                // The app's one company-info read: 52w high/low, volume,
+                // market cap, etc.
+                emit_info(symbol, cb);
             },
     });
 
@@ -264,7 +277,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 QString symbol = params.value("symbol").toString("AAPL");
                 QString type = params.value("type").toString("overview");
                 if (type == "overview") {
-                    run_python_json("yfinance_data.py", {"info", symbol}, cb);
+                    emit_info(symbol, cb);
                 } else {
                     // income, balance, cashflow, earnings → financials command
                     run_python_json(

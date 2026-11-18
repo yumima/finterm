@@ -1645,14 +1645,10 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
             }
             self->history_inflight_.remove(sym);
             self->history_cache_.insert(sym, closes);
-            // Only re-render if this ticker is still on screen — on the next
-            // turn: a cached series answers inside this call, which runs from
-            // render_detail itself.
+            // Only re-render if this ticker is still on screen. (fetch_bars
+            // always answers on a later turn, never inside render_detail.)
             if (self->detail_symbol_ == sym)
-                QTimer::singleShot(0, self.data(), [self, sym] {
-                    if (self && self->detail_symbol_ == sym)
-                        self->rerender_detail();
-                });
+                self->rerender_detail();
         });
 }
 

@@ -479,7 +479,6 @@ void MarketChartDialog::load() {
             sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
             [self, seq](const services::MarketDataService::BarsReply& r) {
                 // A later click (another period or symbol) supersedes this one.
-                // (A cached series answers at once, inside this call.)
                 if (!self || seq != self->request_seq_)
                     return;
                 self->overlay_->hide_loading();

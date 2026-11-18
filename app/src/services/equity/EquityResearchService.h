@@ -1,6 +1,7 @@
 // src/services/equity/EquityResearchService.h
 #pragma once
 #include "python/PythonWorker.h"
+#include "services/markets/MarketDataService.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
 
@@ -13,10 +14,6 @@
 #include <QTimer>
 
 #include <functional>
-
-namespace finterm::services {
-struct QuoteData; // MarketDataService.h — the app's one market quote
-} // namespace finterm::services
 
 namespace finterm::services::equity {
 
@@ -222,6 +219,10 @@ class EquityResearchService : public QObject {
     bool acquire_inflight(const QString& key);
     void release_inflight(const QString& key);
 
+    /// The company info for `symbol` (the app's one info read), emitted as
+    /// info_loaded (error_occurred + valid = false on a failure), handed to `done`.
+    void read_info(const QString& symbol,
+                   std::function<void(const StockInfo&, const services::MarketDataService::InfoReply&)> done);
     /// The market quote for `symbol`, emitted as quote_loaded (and
     /// error_occurred on a failure, with q.valid = false) and handed to `done`.
     void read_quote(const QString& symbol, std::function<void(const QuoteData&, const QDateTime&)> done);
@@ -239,12 +240,6 @@ class EquityResearchService : public QObject {
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
     static constexpr int kQuoteTtlSec = 60;
-    // Two caches stand between the screen and Yahoo: this one and the data
-    // daemon's. The age a reader can see is their SUM, so the daemon's is
-    // kept well inside this one (yfinance_data.py _CACHE_TTL). Info carries
-    // the analyst consensus and targets, which move on report days: 30 min
-    // here on top of 10 there had shown figures up to 40 minutes old.
-    static constexpr int kInfoTtlSec = 600;
     static constexpr int kHistoricalTtlSec = 600; // daily candles stable within 10 min
     static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
 

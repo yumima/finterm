@@ -73,7 +73,7 @@ class MarketChartDialog : public QDialog {
     QString label_;
     // Bumped per load: a later click (another period or symbol) supersedes an
     // answer still out. Bars come from MarketDataService::fetch_bars, whose
-    // shared cache answers a repeat of a fresh series at once.
+    // shared cache answers a repeat of a fresh series without a fetch.
     int request_seq_ = 0;
 
     ResearchCandleCanvas* canvas_ = nullptr;
