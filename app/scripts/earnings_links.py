@@ -56,14 +56,36 @@ class _FetchFailed(Exception):
     not empty, and must not be cached as an answer."""
 
 
+def _is_sec(url):
+    host = (urlparse(url).hostname or "").lower()
+    return host == "sec.gov" or host.endswith(".sec.gov")
+
+
+class _ContactStaysOnSec(urllib.request.HTTPRedirectHandler):
+    """urllib copies the request's headers onto a redirect: a sec.gov URL
+    that redirects elsewhere would carry the user's contact there. The hop
+    off SEC is made as the project instead."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not _is_sec(newurl):
+            new.add_header("User-Agent", project_user_agent())
+        return new
+
+
+_OPENER = urllib.request.build_opener(_ContactStaysOnSec)
+
+
 def _get(url, as_json=True, limit=None, sec=True, final_url=False):
     """GET `url`. SEC requests carry the user's declared contact; anything
     else (IR sites) the project's identity. `final_url` also returns where
     redirects ended (amazon.com/ir → ir.aboutamazon.com)."""
-    ua = user_agent() if sec else project_user_agent()
+    # The contact is declared to SEC only: decided by the host itself, so an
+    # exhibit link parsed out of a filing that points elsewhere never gets it.
+    ua = user_agent() if sec and _is_sec(url) else project_user_agent()
     req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Encoding": "identity"})
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as r:
+        with _OPENER.open(req, timeout=_TIMEOUT_SEC) as r:
             raw = r.read(limit) if limit else r.read()
             where = r.geturl()
     except Exception as e:  # noqa: BLE001

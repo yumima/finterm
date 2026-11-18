@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`516a812b3`](https://github.com/yumima/finterm/commit/516a812b3) performance: back to a split in 0.1 s, the IPO calendar whole in a second
 - [`22f4a9d04`](https://github.com/yumima/finterm/commit/22f4a9d04) earnings call player: actually paints on hybrid-GPU Linux; a call link outlives the host's feed
 - [`637f4d6a7`](https://github.com/yumima/finterm/commit/637f4d6a7) earnings: ▶ LISTEN plays every call in finterm — host's own player when there's no public stream
 - [`88281d0bf`](https://github.com/yumima/finterm/commit/88281d0bf) earnings: the current print's call + release, listened to in-app, refreshed when it lands
