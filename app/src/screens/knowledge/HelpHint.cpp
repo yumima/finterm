@@ -1,5 +1,6 @@
 #include "screens/knowledge/HelpHint.h"
 
+#include "core/events/EventBus.h"
 #include "screens/knowledge/ContentLoader.h"
 #include "ui/theme/Theme.h"
 
@@ -13,17 +14,9 @@
 namespace finterm::knowledge {
 
 namespace {
-std::function<void(QString)>& navigator_storage() {
-    static std::function<void(QString)> n;
-    return n;
-}
 constexpr int POPOVER_WIDTH = 320;
 constexpr int HINT_SIZE = 16;
 } // namespace
-
-void HelpHint::set_navigator(std::function<void(QString)> nav) {
-    navigator_storage() = std::move(nav);
-}
 
 HelpHint::HelpHint(QString entry_id, QWidget* parent) : QPushButton(parent), entry_id_(std::move(entry_id)) {
     setText("?");
@@ -117,8 +110,9 @@ void HelpHint::show_popover() {
         QString id = entry->id;
         connect(open_btn, &QPushButton::clicked, popover, [popover, id]() {
             popover->close();
-            if (auto& nav = navigator_storage(); nav)
-                nav(id);
+            ContentLoader::instance().request_open(id);
+            EventBus::instance().publish(QStringLiteral("nav.switch_screen"),
+                                         QVariantMap{{QStringLiteral("screen_id"), QStringLiteral("knowledge")}});
         });
         vl->addWidget(open_btn);
     }

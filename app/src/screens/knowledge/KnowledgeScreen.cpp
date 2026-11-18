@@ -8,14 +8,13 @@
 #include "screens/knowledge/RailWidget.h"
 #include "ui/theme/Theme.h"
 
-#include <QCoreApplication>
-#include <QDir>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace finterm::knowledge {
@@ -53,33 +52,23 @@ QString small_label_ss() {
     return QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO);
 }
 
-QString resolve_root() {
-    const QString exe_dir = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-        exe_dir + "/resources/knowledge",
-        exe_dir + "/../resources/knowledge",
-        exe_dir + "/../share/finterm/knowledge",
-    };
-    for (const auto& p : candidates)
-        if (QDir(p).exists())
-            return QDir(p).absolutePath();
-    return candidates.first();
-}
-
 } // namespace
 
 KnowledgeScreen::KnowledgeScreen(QWidget* parent) : QWidget(parent) {
     setObjectName("knowledgeScreen");
     setStyleSheet(QString("QWidget#knowledgeScreen { background: %1; }").arg(ui::colors::BG_BASE()));
 
-    auto& loader = ContentLoader::instance();
-    if (!loader.is_loaded())
-        loader.load(resolve_root());
-
     build_layout();
 
-    // Wire HelpHint global navigator to ourselves on construction.
-    HelpHint::set_navigator([this](QString id) { open_entry(id); });
+    // A "?" elsewhere asks for an entry; one asked before this screen existed
+    // (the ask is what built it) is waiting.
+    auto& loader = ContentLoader::instance();
+    connect(&loader, &ContentLoader::open_requested, this, [this](const QString& id) {
+        ContentLoader::instance().take_pending_open();
+        open_entry(id);
+    });
+    if (const QString id = loader.take_pending_open(); !id.isEmpty())
+        QTimer::singleShot(0, this, [this, id] { open_entry(id); }); // once laid out
 }
 
 void KnowledgeScreen::build_layout() {

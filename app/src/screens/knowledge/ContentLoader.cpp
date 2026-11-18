@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -11,12 +12,41 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <utility>
 
 namespace finterm::knowledge {
 
 ContentLoader& ContentLoader::instance() {
-    static ContentLoader inst;
+    // Loaded on first use, by whoever asks first: a "?" beside a metric reads
+    // entries long before (or without) the KNOWLEDGE screen ever being built.
+    static ContentLoader& inst = [] () -> ContentLoader& {
+        static ContentLoader l;
+        l.load(default_root());
+        return l;
+    }();
     return inst;
+}
+
+QString ContentLoader::default_root() {
+    const QString exe_dir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        exe_dir + "/resources/knowledge",
+        exe_dir + "/../resources/knowledge",
+        exe_dir + "/../share/finterm/knowledge",
+    };
+    for (const auto& p : candidates)
+        if (QDir(p).exists())
+            return QDir(p).absolutePath();
+    return candidates.first();
+}
+
+void ContentLoader::request_open(const QString& entry_id) {
+    pending_open_ = entry_id;
+    emit open_requested(entry_id);
+}
+
+QString ContentLoader::take_pending_open() {
+    return std::exchange(pending_open_, QString());
 }
 
 /// The content names screens by id, and some of those screens are gone or were
