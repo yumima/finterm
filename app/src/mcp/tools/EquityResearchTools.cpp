@@ -76,7 +76,6 @@ QJsonObject quote_to_json(const services::equity::QuoteData& q) {
         {"low", q.low},
         {"prev_close", q.prev_close},
         {"volume", q.volume},
-        {"exchange", q.exchange},
         {"fetched_at", q.timestamp > 0 ? QJsonValue(fetched_iso) : QJsonValue()},
         {"fetched_at_unix", q.timestamp > 0 ? QJsonValue(q.timestamp) : QJsonValue()},
         {"market_time", QJsonValue()},

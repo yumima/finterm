@@ -44,8 +44,8 @@ struct QuoteData {
     double low = kUnknown;
     double prev_close = kUnknown;
     double volume = kUnknown;
-    QString exchange;
-    qint64 timestamp = 0;
+    QString error;        // why there is no quote (valid = false): the vendor's own words
+    qint64 timestamp = 0; // when fetched (the exchange is company info: StockInfo::exchange)
 };
 
 // ── Company fundamentals ──────────────────────────────────────────────────────

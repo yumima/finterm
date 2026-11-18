@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QVector>
 
+#include <cmath>
 #include <functional>
 #include <limits>
 
@@ -29,6 +30,11 @@ struct QuoteData {
     double high = 0;
     double low = 0;
     double volume = 0;
+    // The session's open and the close `change` is measured against — NaN
+    // when the feed did not say. prev_close is the one stored baseline: a
+    // live print re-derives change / change_pct from it (with_live_price).
+    double open = kUnknownNum;
+    double prev_close = kUnknownNum;
     // Live order-book snapshot — populated when the upstream feed reports
     // it. yfinance's fast_info returns bid/ask best-effort: zeros outside
     // regular trading hours, illiquid tickers, or paid-feed-only exchanges.
@@ -46,7 +52,16 @@ struct QuoteData {
     // in-place-mutated, retained instance. Do NOT add operator== to a payload
     // type whose producer mutates and re-publishes the same instance, or the
     // dirty-check could wrongly skip a real update.
-    bool operator==(const QuoteData&) const = default;
+    // NaN-aware: an absent open / prev_close / change is NaN, and NaN != NaN
+    // would make every unchanged quote look new — every tick republished and
+    // every subscriber repainted.
+    bool operator==(const QuoteData& o) const {
+        auto same = [](double a, double b) { return a == b || (std::isnan(a) && std::isnan(b)); };
+        return symbol == o.symbol && name == o.name && same(price, o.price) && same(change, o.change) &&
+               same(change_pct, o.change_pct) && same(high, o.high) && same(low, o.low) && same(volume, o.volume) &&
+               same(open, o.open) && same(prev_close, o.prev_close) && same(bid, o.bid) && same(ask, o.ask) &&
+               same(bid_size, o.bid_size) && same(ask_size, o.ask_size);
+    }
 };
 
 struct OfficerInfo {
@@ -159,7 +174,9 @@ struct StreamTick {
 class MarketDataService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
-    using QuoteCallback = std::function<void(bool, QVector<QuoteData>)>;
+    /// (ok, quotes, error): `error` is the vendor's own reason when !ok — a
+    /// rate limit or refusal must not read as "no such symbol".
+    using QuoteCallback = std::function<void(bool, QVector<QuoteData>, const QString&)>;
 
     static MarketDataService& instance();
 
@@ -181,6 +198,10 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     /// instead (ok=false, no rows) — for a caller pacing its own asks, which
     /// must see a refusal to stop.
     void fetch_quotes(const QStringList& symbols, QuoteCallback cb, bool stale_on_failure = true);
+    /// When `symbol`'s quote was fetched (the cache entry's write time) —
+    /// kept off QuoteData so an unchanged tick stays byte-identical for the
+    /// hub's no-change check. Invalid when no quote is held.
+    QDateTime quote_as_of(const QString& symbol) const;
 
     /// Real day's top gainers + losers via yfinance's predefined screeners.
     /// Returns both sides in one daemon round-trip. Used by TopMoversWidget;

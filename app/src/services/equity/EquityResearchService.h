@@ -4,6 +4,7 @@
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
 
+#include <QDateTime>
 #include <QObject>
 #include <QDate>
 #include <QHash>
@@ -12,6 +13,10 @@
 #include <QTimer>
 
 #include <functional>
+
+namespace finterm::services {
+struct QuoteData; // MarketDataService.h — the app's one market quote
+} // namespace finterm::services
 
 namespace finterm::services::equity {
 
@@ -51,13 +56,9 @@ class EquityResearchService : public QObject {
     /// Fetches quote + info + historical in parallel (three Python calls)
     void load_symbol(const QString& symbol, const QString& period = "1y");
 
-    /// Quote-only refresh — used by the 20s refresh timer and showEvent.
-    /// load_symbol() unnecessarily re-fires info + historical on every tick
-    /// (info hits cache cheaply but historical periodically misses TTL,
-    /// causing a visible chart hiccup every ~10min). The refresh path should
-    /// only freshen the quote; info/historical refresh on their own slower
-    /// cadence or on explicit user action.
-    void fetch_quote(const QString& symbol);
+    /// MarketDataService's quote (the app's one quote) in this screen's shape;
+    /// `as_of` = when it was fetched (MarketDataService::quote_as_of).
+    static QuoteData to_equity_quote(const services::QuoteData& m, const QDateTime& as_of);
 
     // ── QueryStore-backed subscription API ────────────────────────────────────
     // Per-subscriber stream replacing the broadcast quote_loaded /
@@ -221,8 +222,11 @@ class EquityResearchService : public QObject {
     bool acquire_inflight(const QString& key);
     void release_inflight(const QString& key);
 
+    /// The market quote for `symbol`, emitted as quote_loaded (and
+    /// error_occurred on a failure, with q.valid = false) and handed to `done`.
+    void read_quote(const QString& symbol, std::function<void(const QuoteData&, const QDateTime&)> done);
+
     // ── Parsers ───────────────────────────────────────────────────────────────
-    QuoteData parse_quote(const QJsonObject& obj) const;
     StockInfo parse_info(const QJsonObject& obj) const;
     QVector<Candle> parse_candles(const QJsonArray& arr) const;
     FinancialsData parse_financials(const QJsonObject& obj) const;

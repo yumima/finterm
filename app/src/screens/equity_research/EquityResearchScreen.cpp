@@ -164,29 +164,22 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent, bool hosted) : QWidg
         // visible tab subscribes to, keeping the displayed values in place
         // until the replacements land.
         //
-        // Ordering matters: the QueryStore quote fetcher and fetch_quote()
-        // dedupe through DIFFERENT in-flight guards, so running both against
-        // a lapsed TTL spawned two identical daemon RPCs every minute. The
-        // subscribed path covers the Overview tab; the broadcast fetch runs
-        // only for tabs that have no quote subscription of their own.
-        bool quote_covered = false;
+        // The header's quote is not polled here: it follows the shared
+        // market:quote topic (follow_live_quote), which the hub refreshes.
         if (tab_widget_) {
-            if (QWidget* visible = tab_widget_->currentWidget()) {
+            if (QWidget* visible = tab_widget_->currentWidget())
                 services::query::QueryStore::instance().revalidate_owner(visible);
-                quote_covered = (visible == overview_tab_);
-            }
             // The screen's own subscriptions (the analyst-recommendation chip
             // in the header) belong to no tab, so nothing re-asked for them
             // while a symbol stayed open. Revalidated against their own TTL.
             services::query::QueryStore::instance().revalidate_owner(this);
         }
-        if (!quote_covered)
-            services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
     });
 
     // Wire service signals
     auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::quote_loaded, this, &EquityResearchScreen::on_quote_loaded);
+    // The header follows the shared market:quote topic only (follow_live_quote);
+    // the service's quote_loaded broadcast marks tabs loaded (below).
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityResearchScreen::on_info_loaded);
 
     // ── Per-tab freshness tracking ──────────────────────────────────────────
@@ -359,15 +352,12 @@ EquityResearchScreen::~EquityResearchScreen() {
 void EquityResearchScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     refresh_timer_->start();
+    // The header's quote: the shared topic delivers its last value at once
+    // (possibly last-known from the previous session) and a forced poll
+    // replaces it with a fresh one.
     follow_live_quote(true);
-    // Force-fresh on tab activation: invalidate the quote cache and re-fetch
-    // just the quote. Info/historical stay warm — they don't move fast enough
-    // to justify a refetch on every screen activation. The user can force a
-    // full reload by re-submitting the symbol in the search bar.
-    if (!current_symbol_.isEmpty()) {
-        services::MarketDataService::instance().invalidate_quotes({current_symbol_});
-        services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
-    }
+    if (!live_topic_.isEmpty())
+        datahub::DataHub::instance().request(live_topic_, /*force=*/true);
 }
 
 void EquityResearchScreen::hideEvent(QHideEvent* e) {
@@ -391,24 +381,12 @@ void EquityResearchScreen::follow_live_quote(bool on) {
         if (!v.canConvert<services::QuoteData>())
             return;
         const auto mq = v.value<services::QuoteData>();
-        // Needs the header's own quote first (it carries prev_close).
-        if (mq.symbol != current_symbol_ || bar_quote_.symbol != current_symbol_)
+        if (mq.symbol != current_symbol_ || !std::isfinite(mq.price) || mq.price <= 0)
             return;
-        if (!std::isfinite(mq.price) || mq.price <= 0)
-            return;
-        // Baseline: the header's own previous close; failing that, the hub
-        // quote's (price − change) — the same rule MarketDataService applies.
-        const double prev = (std::isfinite(bar_quote_.prev_close) && bar_quote_.prev_close > 0)
-                                ? bar_quote_.prev_close
-                            : std::isfinite(mq.change) ? mq.price - mq.change
-                                                       : qQNaN();
-        auto q = bar_quote_;
-        services::apply_live_price(q, prev, mq.price, mq.volume);
-        // The day range only widens: keep the stretch for the next tick, which
-        // starts from bar_quote_ again.
-        bar_quote_.high = q.high;
-        bar_quote_.low = q.low;
-        update_quote_bar(q);
+        // The app's one quote — previous close, open, the day's range and the
+        // live tape all carried on it — so the header shows exactly what every
+        // other screen shows for this symbol.
+        update_quote_bar(services::equity::EquityResearchService::to_equity_quote(mq, QDateTime()));
     });
 }
 
@@ -812,10 +790,6 @@ QWidget* EquityResearchScreen::build_quote_bar() {
 }
 
 // ── Slots ─────────────────────────────────────────────────────────────────────
-void EquityResearchScreen::on_quote_loaded(services::equity::QuoteData q) {
-    update_quote_bar(q);
-}
-
 namespace {
 // Compact market-cap text for the quote bar. Local rather than widening
 // EquityOverviewTab's private API for a single call site.
@@ -953,7 +927,7 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
 
     // Clear quote-bar values so the header doesn't show the previous ticker's
     // price next to the new ticker's name during the cold-load window.
-    // on_quote_loaded fills these in when the new symbol's data arrives.
+    // The shared market:quote topic fills these in for the new symbol.
     clear_quote_bar();
 
     // Overview tab owns its own historical fetch (with the period it has

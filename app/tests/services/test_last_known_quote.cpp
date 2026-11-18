@@ -15,6 +15,7 @@
 #include "services/markets/LastKnownQuote.h"
 
 #include <QCoreApplication>
+#include <cmath>
 #include <QTest>
 
 using finterm::datahub::DataHub;
@@ -114,6 +115,27 @@ class TestLastKnownQuote : public QObject {
         QVERIFY(quote_is_stale(true, SubscriptionState::Error));
         QVERIFY(!quote_is_stale(true, SubscriptionState::Fresh));
         QVERIFY(!quote_is_stale(true, SubscriptionState::Refreshing));
+    }
+
+    // An unchanged quote is not re-delivered — including one whose open /
+    // prev_close the feed left out (NaN). With a defaulted operator== NaN
+    // never equals itself, so every poll and tick repainted every subscriber.
+    void unchanged_quote_with_unknown_fields_is_not_redelivered() {
+        QuoteData q = quote("^NAN", 100.0);
+        QVERIFY(std::isnan(q.open) && std::isnan(q.prev_close));
+        QVERIFY(q == q);
+        auto& hub = DataHub::instance();
+        const QString topic = QStringLiteral("market:quote:^NAN");
+        QObject owner;
+        int delivered = 0;
+        hub.subscribe(&owner, topic, [&delivered](const QVariant&) { ++delivered; });
+        hub.publish(topic, QVariant::fromValue(q));
+        pump();
+        const int after_first = delivered;
+        QVERIFY(after_first >= 1);
+        hub.publish(topic, QVariant::fromValue(q));
+        pump();
+        QCOMPARE(delivered, after_first);
     }
 
   private:

@@ -64,13 +64,15 @@ void register_trigger_nodes(NodeRegistry& registry) {
                     return;
                 }
                 services::MarketDataService::instance().fetch_quotes(
-                    {symbol}, [symbol, condition, threshold, cb](bool ok, QVector<services::QuoteData> quotes) {
+                    {symbol}, [symbol, condition, threshold, cb](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
                         double price = 0.0;
                         for (const auto& q : quotes)
                             if (q.symbol.compare(symbol, Qt::CaseInsensitive) == 0 && q.price > 0.0)
                                 price = q.price;
                         if (!ok || !(price > 0.0)) {
-                            cb(false, {}, QString("Price Alert: no market price available for %1").arg(symbol));
+                            cb(false, {},
+                               QString("Price Alert: no market price available for %1%2")
+                                   .arg(symbol, err.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(err)));
                             return;
                         }
                         const bool hit = condition == "above" ? price > threshold : price < threshold;

@@ -78,10 +78,10 @@ std::vector<ToolDef> get_markets_tools() {
             }
             auto* svc = &services::MarketDataService::instance();
             AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, symbols](auto resolve) {
-                svc->fetch_quotes(symbols, [resolve, symbols](bool ok, QVector<services::QuoteData> qs) {
+                svc->fetch_quotes(symbols, [resolve, symbols](bool ok, QVector<services::QuoteData> qs, const QString& err) {
                     if (!ok) {
-                        resolve(ToolResult::fail("Quote fetch failed for " + symbols.join(", ") +
-                                                 " — data unavailable right now."));
+                        resolve(ToolResult::fail("Quote fetch failed for " + symbols.join(", ") + " — " +
+                                                 (err.isEmpty() ? QStringLiteral("data unavailable right now.") : err)));
                         return;
                     }
                     const QString fetched_at = markets_now_utc_iso();

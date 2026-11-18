@@ -708,7 +708,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
     QPointer<PortfolioService> self = this;
 
     MarketDataService::instance().fetch_quotes(fetch_symbols, [self, portfolio_id, assets, port_ccy,
-                                                               portfolio](bool ok, QVector<QuoteData> quotes) {
+                                                               portfolio](bool ok, QVector<QuoteData> quotes, const QString& /*err: the last-known fallback below covers a refusal*/) {
         if (!self)
             return;
 
@@ -1906,7 +1906,7 @@ void PortfolioService::fetch_risk_free_rate() {
     QPointer<PortfolioService> self = this;
     services::MarketDataService::instance().fetch_quotes(
         {QStringLiteral("^TNX")},
-        [self, now_secs](bool ok, QVector<services::QuoteData> quotes) {
+        [self, now_secs](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
             if (!self)
                 return;
             const double px = ok && !quotes.isEmpty() ? quotes.first().price : qQNaN();
@@ -1924,8 +1924,8 @@ void PortfolioService::fetch_risk_free_rate() {
             } else {
                 // Keep the last real value (NaN if there never was one —
                 // Sharpe/Sortino then render unavailable, not on a guess).
-                LOG_WARN("PortfolioSvc", QString("^TNX risk-free quote unusable (ok=%1, px=%2) — %3")
-                                             .arg(ok)
+                LOG_WARN("PortfolioSvc", QString("^TNX risk-free quote unusable (%1, px=%2) — %3")
+                                             .arg(ok ? QStringLiteral("ok") : err)
                                              .arg(px)
                                              .arg(std::isnan(self->rf_rate_)
                                                       ? QStringLiteral("no rate available")

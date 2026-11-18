@@ -70,7 +70,6 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private slots:
-    void on_quote_loaded(services::equity::QuoteData quote);
     void on_info_loaded(services::equity::StockInfo info);
     void on_tab_changed(int index);
 

@@ -65,6 +65,8 @@ QuoteData quote_from_daemon(const QJsonObject& q) {
     qd.high = q["high"].toDouble();
     qd.low = q["low"].toDouble();
     qd.volume = q["volume"].toDouble(qQNaN());
+    qd.open = q["open"].toDouble(qQNaN());
+    qd.prev_close = q["previous_close"].toDouble(qQNaN());
     qd.bid = q["bid"].toDouble();
     qd.ask = q["ask"].toDouble();
     qd.bid_size = q["bid_size"].toDouble();
@@ -82,6 +84,8 @@ QJsonObject quote_to_cache(const QuoteData& q) {
     o["high"] = q.high;
     o["low"] = q.low;
     o["volume"] = q.volume;
+    o["open"] = q.open; // NaN is written as null and read back as NaN
+    o["prev_close"] = q.prev_close;
     o["bid"] = q.bid;
     o["ask"] = q.ask;
     o["bid_size"] = q.bid_size;
@@ -99,6 +103,8 @@ QuoteData quote_from_cache(const QJsonObject& o, const QString& fallback_symbol 
     qd.high = o.value("high").toDouble();
     qd.low = o.value("low").toDouble();
     qd.volume = o.value("volume").toDouble(qQNaN());
+    qd.open = o.value("open").toDouble(qQNaN());
+    qd.prev_close = o.value("prev_close").toDouble(qQNaN());
     qd.bid = o.value("bid").toDouble();
     qd.ask = o.value("ask").toDouble();
     qd.bid_size = o.value("bid_size").toDouble();
@@ -471,10 +477,13 @@ QuoteData MarketDataService::with_live_price(QuoteData q, double price, double v
     // previous close — never mix in the stream's change, whose baseline may
     // differ from the one this quote was polled against. A fast-lane snapshot
     // brings its own close (same snapshot as its price) and uses that.
-    const double prev = (std::isfinite(prev_close) && prev_close > 0) ? prev_close
+    const double prev = (std::isfinite(prev_close) && prev_close > 0)     ? prev_close
+                        : (std::isfinite(q.prev_close) && q.prev_close > 0) ? q.prev_close
                         : (std::isfinite(q.change) && std::isfinite(q.price) && q.price > 0) ? q.price - q.change
                                                                                              : qQNaN();
     apply_live_price(q, prev, price, volume);
+    if (std::isfinite(prev) && prev > 0)
+        q.prev_close = prev; // change is now measured against this one
     return q;
 }
 
@@ -904,9 +913,14 @@ void MarketDataService::invalidate_quotes(const QStringList& symbols) {
 
 // ── Batched + Cached fetch_quotes ───────────────────────────────────────────
 
+QDateTime MarketDataService::quote_as_of(const QString& symbol) const {
+    const auto aged = finterm::CacheManager::instance().try_get_aged(QStringLiteral("market:") + symbol);
+    return aged ? aged->written_at : QDateTime();
+}
+
 void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb, bool stale_on_failure) {
     if (symbols.isEmpty()) {
-        cb(true, {});
+        cb(true, {}, {});
         return;
     }
 
@@ -934,7 +948,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
         }
         if (!cached_results.isEmpty()) {
             overlay_live(cached_results);
-            cb(true, cached_results);
+            cb(true, cached_results, {});
             return;
         }
     }
@@ -1013,7 +1027,7 @@ void MarketDataService::flush_batch() {
             // Fan out results to each waiting callback, filtered to their requested symbols
             for (const auto& req : requests) {
                 if (!ok && !req.stale_on_failure) {
-                    req.cb(false, {});
+                    req.cb(false, {}, err.isEmpty() ? QStringLiteral("quote fetch failed") : err);
                     continue;
                 }
                 if (!ok) {
@@ -1026,7 +1040,7 @@ void MarketDataService::flush_batch() {
                                 quote_from_cache(QJsonDocument::fromJson(cv.toString().toUtf8()).object(), sym));
                         }
                     }
-                    req.cb(!stale.isEmpty(), stale);
+                    req.cb(!stale.isEmpty(), stale, err);
                     continue;
                 }
 
@@ -1041,7 +1055,8 @@ void MarketDataService::flush_batch() {
                 // ITS tickers refused by Yahoo) as one, with what did answer.
                 const bool refused_mine = !req.stale_on_failure && wanted.intersects(refused_syms);
                 overlay_live(filtered);
-                req.cb(!refused_mine, filtered);
+                req.cb(!refused_mine, filtered,
+                       refused_mine ? QStringLiteral("Yahoo refused the quote (rate limit)") : QString());
             }
         },
         python::PythonWorker::kNetworkActionTimeoutMs);

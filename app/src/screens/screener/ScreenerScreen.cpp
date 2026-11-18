@@ -1524,7 +1524,7 @@ void ScreenerScreen::add_to_portfolio(const QString& sym) {
     auto& mds = services::MarketDataService::instance();
     mds.invalidate_quotes({sym}); // "current" means now, not a cached quote
     mds.fetch_quotes({sym}, [alive, sym, &typed, set_price, note, can_add, listed](bool ok,
-                                                                                   QVector<services::QuoteData> q) {
+                                                                                   QVector<services::QuoteData> q, const QString& /*err*/) {
         if (!alive || typed) // closed already (the captured locals are gone), or the reader's price stands
             return;
         for (const auto& d : q) {

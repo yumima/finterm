@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`d316dcb45`](https://github.com/yumima/finterm/commit/d316dcb45) movers: one hub topic for every screen; quotes say when they fail
 - [`76e7cd2d8`](https://github.com/yumima/finterm/commit/76e7cd2d8) earnings calendar: one feed for the dashboard tile and What's On
 - [`8d4383a7d`](https://github.com/yumima/finterm/commit/8d4383a7d) release notes: 4.0.9 adds one source for after-hours, IPO and earnings calendars
 - [`cee256ecc`](https://github.com/yumima/finterm/commit/cee256ecc) earnings calendar: the dashboard tile reads the same script as What's On

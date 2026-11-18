@@ -180,14 +180,15 @@ void fetch_fill_price(const QString& symbol, std::function<void(double, QString)
         return;
     }
     services::MarketDataService::instance().fetch_quotes(
-        {symbol}, [symbol, cb](bool ok, QVector<services::QuoteData> quotes) {
+        {symbol}, [symbol, cb](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
             for (const auto& q : quotes) {
                 if (ok && q.symbol.compare(symbol, Qt::CaseInsensitive) == 0 && q.price > 0.0) {
                     cb(q.price, {});
                     return;
                 }
             }
-            cb(0.0, QString("No market price available for %1").arg(symbol));
+            cb(0.0, QString("No market price available for %1%2")
+                        .arg(symbol, err.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(err)));
         });
 }
 

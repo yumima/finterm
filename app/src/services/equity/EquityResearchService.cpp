@@ -6,6 +6,7 @@
 #include "python/PythonWorker.h"
 #include "services/equity/EarningsRefresh.h"
 #include "services/equity/TechnicalRating.h"
+#include "services/markets/MarketDataService.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
@@ -290,8 +291,6 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
             finterm::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
         };
         // quote / info / financials / news live in the root, peers as array
-        if (root.contains("quote"))
-            repopulate("quote", "equity:quote:", kQuoteTtlSec);
         // "info_v3": adds quote_type, which v2 blobs lack — without it an
         // ETF served from a warm entry has no way to say it HAS no analysts
         // and falls into the "incomplete profile, refresh to retry" branch.
@@ -449,42 +448,13 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
         return;
     const QString key = "equity:quote:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        // Cache check inside the fetcher so we participate in QueryStore's
-        // in-flight dedup. If multiple subscribers attach concurrently, only
-        // one daemon spawn happens; everyone else waits on the same fetch.
-        const auto qcv_aged = finterm::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
-        const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
-        if (!qcv.isNull()) {
-            QuoteData parsed = parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object());
-            // Mirror to legacy broadcast for non-migrated tabs.
-            emit quote_loaded(parsed);
-            // Resolve with the cache entry\'s WRITE time: a hit answers
-            // instantly, and stamping "now" would present a value hydrated
-            // from disk at startup as brand new.
-            resolve(QVariant::fromValue(parsed), qcv_aged->written_at);
-            return;
-        }
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        run_daemon("quote", payload, [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
-            if (!ok || obj.contains("error")) {
-                const QString msg = !ok ? err : obj["error"].toString();
-                emit error_occurred(symbol, "Quote", msg);
-                QuoteData failed;
-                failed.symbol = symbol;
-                failed.valid = false;
-                emit quote_loaded(failed);
-                reject(msg);
-                return;
-            }
-            finterm::CacheManager::instance().put(
-                "equity:quote:" + symbol,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec, "equity");
-            update_symbol_cache(symbol, "quote", obj);
-            update_symbol_cache(symbol, "symbol", symbol);
-            QuoteData parsed = parse_quote(obj);
-            emit quote_loaded(parsed);
-            resolve(QVariant::fromValue(parsed));
+        read_quote(symbol, [resolve, reject](const QuoteData& q, const QDateTime& as_of) {
+            if (!q.valid)
+                reject(q.error);
+            else if (as_of.isValid())
+                resolve(QVariant::fromValue(q), as_of);
+            else
+                resolve(QVariant::fromValue(q));
         });
     };
     // SWR window: 5 × TTL. A quote 5 minutes past its 60s TTL is still
@@ -893,38 +863,35 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
     query::QueryStore::instance().prefetch(key, kHistoricalTtlSec, std::move(fetcher));
 }
 
-// ── Quote-only fetch (refresh-timer + showEvent path) ─────────────────────────
-void EquityResearchService::fetch_quote(const QString& symbol) {
-    if (symbol.isEmpty())
-        return;
-    const auto qcv_aged = finterm::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
-    const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
-    if (!qcv.isNull()) {
-        emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
-        return;
-    }
-    const QString inflight_key = "quote:" + symbol;
-    if (!acquire_inflight(inflight_key))
-        return; // existing call will fan out via quote_loaded
-    QJsonObject payload;
-    payload["symbol"] = symbol;
-    run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
-        release_inflight(inflight_key);
-        if (!ok || obj.contains("error")) {
-            emit error_occurred(symbol, "Quote", !ok ? err : obj["error"].toString());
-            QuoteData failed;
-            failed.symbol = symbol;
-            failed.valid = false;
-            emit quote_loaded(failed);
-            return;
-        }
-        finterm::CacheManager::instance().put(
-            "equity:quote:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-            kQuoteTtlSec, "equity");
-        update_symbol_cache(symbol, "quote", obj);
-        update_symbol_cache(symbol, "symbol", symbol);
-        emit quote_loaded(parse_quote(obj));
-    });
+void EquityResearchService::read_quote(const QString& symbol,
+                                       std::function<void(const QuoteData&, const QDateTime&)> done) {
+    // The app's one quote: MarketDataService's batch action, parser and cache
+    // — the numbers the market:quote topic, the dashboard and the header's
+    // live price carry. fetch_quotes batches and dedupes concurrent asks.
+    QPointer<EquityResearchService> self = this;
+    services::MarketDataService::instance().fetch_quotes(
+        {symbol},
+        [self, symbol, done](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
+            // The vendor's own reason: a rate limit is not "no such symbol".
+            const QString why = !err.isEmpty() ? err : QStringLiteral("no quote for %1").arg(symbol);
+            if (!self)
+                return;
+            QuoteData q;
+            QDateTime as_of;
+            if (!ok || quotes.isEmpty()) {
+                emit self->error_occurred(symbol, "Quote", why);
+                q.symbol = symbol;
+                q.valid = false;
+                q.error = why;
+            } else {
+                as_of = services::MarketDataService::instance().quote_as_of(symbol);
+                q = to_equity_quote(quotes.first(), as_of);
+            }
+            emit self->quote_loaded(q);
+            if (done)
+                done(q, as_of);
+        },
+        /*stale_on_failure=*/false);
 }
 
 // ── Load symbol (quote + info + historical in parallel) ───────────────────────
@@ -965,9 +932,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     // overview overlay hung waiting on signals that never arrive.
 
     // ── Quote ────────────────────────────────────────────────────────────────
-    // Delegated to fetch_quote() so the 20s refresh path can share the same
-    // dedup + cache + emit logic without re-firing info and historical.
-    fetch_quote(symbol);
+    read_quote(symbol, {});
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {
@@ -1447,19 +1412,20 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
 }
 
 // ── Parsers ───────────────────────────────────────────────────────────────────
-QuoteData EquityResearchService::parse_quote(const QJsonObject& o) const {
+QuoteData EquityResearchService::to_equity_quote(const services::QuoteData& m, const QDateTime& as_of) {
+    // The market quote, in this screen's shape. Absent stays NaN (never 0).
+    auto known = [](double v) { return std::isfinite(v) && v != 0.0 ? v : kUnknown; };
     QuoteData q;
-    q.symbol = o["symbol"].toString();
-    q.price = num(o, "price");
-    q.change = num(o, "change");
-    q.change_pct = num(o, "change_percent");
-    q.open = num(o, "open");
-    q.high = num(o, "high");
-    q.low = num(o, "low");
-    q.prev_close = num(o, "previous_close");
-    q.volume = num(o, "volume");
-    q.exchange = o["exchange"].toString();
-    q.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
+    q.symbol = m.symbol;
+    q.price = known(m.price);
+    q.change = m.change;
+    q.change_pct = m.change_pct;
+    q.open = m.open;
+    q.high = known(m.high);
+    q.low = known(m.low);
+    q.prev_close = m.prev_close;
+    q.volume = m.volume;
+    q.timestamp = as_of.isValid() ? as_of.toSecsSinceEpoch() : 0; // EVENT-STAMP: the fetch's own instant
     return q;
 }
 

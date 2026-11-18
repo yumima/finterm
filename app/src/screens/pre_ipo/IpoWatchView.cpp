@@ -1963,7 +1963,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
             services::MarketDataService::instance()
                 .fetch_quotes( // D4-exempt: paced ChunkPump needs the ok flag to retry refusals
                     syms,
-                    [self, syms, done](bool ok, QVector<services::QuoteData> quotes) {
+                    [self, syms, done](bool ok, QVector<services::QuoteData> quotes, const QString& /*err*/) {
                         if (!self)
                             return;
                         QHash<QString, double> price_map;

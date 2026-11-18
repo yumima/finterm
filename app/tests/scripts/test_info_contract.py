@@ -182,17 +182,24 @@ def check_absent_is_not_zero():
               "it shares fmt_price with StockInfo; two sentinels in one "
               f"formatter means one of them is rendered wrong: {zero_defaults}")
 
-    m = re.search(r"QuoteData EquityResearchService::parse_quote.*?\n\}", svc, re.DOTALL)
-    check(m is not None, "found parse_quote")
+    # ER's quote is the app's one market quote (MarketDataService), mapped by
+    # to_equity_quote. Two guards keep "absent" from becoming 0 on the way:
+    # the daemon-row parser defaults every NaN-able field to NaN, and the
+    # mapping turns the market quote's 0-means-unknown price/high/low to NaN.
+    mkt = read(MKTSVC)
+    m = re.search(r"QuoteData quote_from_daemon\(.*?\n\}", mkt, re.DOTALL)
+    check(m is not None, "found quote_from_daemon")
     if m:
-        # "timestamp" is exempt: it is a qint64 epoch second, not a measured
-        # quantity, and casting a NaN to an integer is undefined. Its absence
-        # is already carried by QuoteData::valid.
-        raw = [f for f in re.findall(r'o\["([a-z_]+)"\]\.toDouble\(\)', m.group(0))
-               if f != "timestamp"]
-        check(not raw,
-              "parse_quote reads no measured field with a bare toDouble()",
-              f"both quote producers emit null for these: {raw}")
+        for f in ("change", "change_percent", "volume", "open", "previous_close"):
+            check(re.search(rf'q\["{f}"\]\.toDouble\(qQNaN\(\)\)', m.group(0)) is not None,
+                  f"quote_from_daemon reads {f} with a NaN default",
+                  "the daemon emits null for these; a bare toDouble() reads it as 0")
+    m = re.search(r"QuoteData EquityResearchService::to_equity_quote.*?\n\}", svc, re.DOTALL)
+    check(m is not None, "found to_equity_quote")
+    if m:
+        for f in ("price", "high", "low"):
+            check(f"q.{f} = known(m.{f})" in m.group(0),
+                  f"to_equity_quote maps an unknown {f} (0 in the market quote) to NaN")
 
     # The daemon fills missing strings with the literal "N/A"; unscrubbed,
     # every isEmpty() check reads it as a real value and the AI prompt states
