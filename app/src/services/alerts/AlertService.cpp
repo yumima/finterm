@@ -606,12 +606,9 @@ void AlertService::check_insiders() {
                 return;
             }
             self->form4_scanned_to_ = found.scanned_to.toString(Qt::ISODate);
-            QVector<InsiderBuy> rows;
-            for (const auto& r : found.rows)
-                rows.push_back({r.symbol, r.accession, r.insider, r.filed, r.traded, r.value.value_or(kNaN)});
             const QDate today = QDate::currentDate();
             bool dirty = false;
-            const auto events = step_insider(rows, covered, self->set_.insider_seen, today, &dirty);
+            const auto events = step_insider(found.rows, covered, self->set_.insider_seen, today, &dirty);
             dirty |= prune_seen(self->set_.insider_seen, today);
             QStringList fired_rules;
             for (const auto& ev : events) {

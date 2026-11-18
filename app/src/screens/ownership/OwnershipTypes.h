@@ -21,6 +21,7 @@
 #include <QStringList>
 #include <QVector>
 
+#include <limits>
 #include <optional>
 
 namespace finterm::ownership {
@@ -616,15 +617,16 @@ struct OwnershipCalendar {
 // OwnershipService answers these from the same stores and parsers the screens
 // use. `error` set means the read failed or was refused: the rows say nothing.
 
-/// One scorable open-market purchase (no 10% owner, no 10b5-1 plan), as the
-/// insider-cluster alert groups them.
+/// One scorable open-market purchase from the local Form 4 store (10% owners
+/// and 10b5-1 plan trades already excluded by the query), as the
+/// insider-cluster alert groups them (alerts::step_insider).
 struct ClusterBuy {
     QString symbol;
     QString accession;
-    QString insider; ///< CIK when filed, else the name
+    QString insider; ///< CIK when filed, else the name — one buyer, one key
     QDate filed;
     QDate traded;
-    std::optional<double> value;
+    double value = std::numeric_limits<double>::quiet_NaN(); ///< NaN when the filing has none
 };
 
 struct ClusterBuys {

@@ -31,6 +31,7 @@
 // a newer build's rules.
 
 #include "screens/ownership/OwnershipFlags.h" // kClusterWindowDays / kClusterMinInsiders
+#include "screens/ownership/OwnershipTypes.h" // ClusterBuy
 #include "services/markets/LivePrice.h"      // tick_pairs_with
 
 #include <QDate>
@@ -386,17 +387,6 @@ inline Step step_day_move(const Rule& r, RuleState& s, double change_pct, double
 
 // ── 3. Insider clusters, once per filing ────────────────────────────────────
 
-/// One scorable open-market purchase from the local Form 4 store (10% owners
-/// and 10b5-1 plan trades already excluded by the query).
-struct InsiderBuy {
-    QString symbol;
-    QString accession;
-    QString insider; ///< CIK when filed, else the name — one buyer, one key
-    QDate filed;
-    QDate traded;
-    double value = kNaN;
-};
-
 struct ClusterEvent {
     QString symbol;
     int insiders = 0;
@@ -413,10 +403,10 @@ struct ClusterEvent {
 /// ownership::find_cluster_buys). A cluster fires when it contains a FRESH
 /// accession (filed within kInsiderFreshDays of @today) that @seen does not
 /// hold; every accession of a fired cluster is then added to @seen.
-inline QVector<ClusterEvent> step_insider(const QVector<InsiderBuy>& rows, const QSet<QString>& covered,
+inline QVector<ClusterEvent> step_insider(const QVector<ownership::ClusterBuy>& rows, const QSet<QString>& covered,
                                           QHash<QString, QDate>& seen, const QDate& today, bool* changed = nullptr) {
     QVector<ClusterEvent> out;
-    QHash<QString, QVector<const InsiderBuy*>> by_symbol;
+    QHash<QString, QVector<const ownership::ClusterBuy*>> by_symbol;
     for (const auto& b : rows) {
         if (b.symbol.isEmpty() || b.accession.isEmpty() || !b.traded.isValid() || !b.filed.isValid())
             continue;
@@ -428,7 +418,7 @@ inline QVector<ClusterEvent> step_insider(const QVector<InsiderBuy>& rows, const
     symbols.sort(); // deterministic order of notifications
     for (const auto& sym : symbols) {
         auto buys = by_symbol.value(sym);
-        std::stable_sort(buys.begin(), buys.end(), [](const InsiderBuy* a, const InsiderBuy* b) {
+        std::stable_sort(buys.begin(), buys.end(), [](const ownership::ClusterBuy* a, const ownership::ClusterBuy* b) {
             return a->traded != b->traded ? a->traded < b->traded : a->accession < b->accession;
         });
         int i = 0;
