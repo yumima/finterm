@@ -113,6 +113,72 @@ QString payload_of(const QJsonObject& o) {
     return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
 }
 
+// One parser per row shape, shared by the screens' loads and the alert reads,
+// so the two can never read the same store differently.
+
+Stake parse_stake(const QJsonObject& r) {
+    Stake s;
+    s.accession = r.value(QStringLiteral("accession")).toString();
+    s.filed = iso_date(r, "filed");
+    s.form = r.value(QStringLiteral("form")).toString();
+    s.ticker = r.value(QStringLiteral("ticker")).toString();
+    s.company = r.value(QStringLiteral("company")).toString();
+    s.filer = r.value(QStringLiteral("filer")).toString();
+    s.pct = opt_num(r, "pct");
+    s.prev_pct = opt_num(r, "prev_pct");
+    s.shares = opt_num(r, "shares");
+    s.event = iso_date(r, "event_date");
+    s.activist = r.value(QStringLiteral("activist")).toBool();
+    s.amendment = r.value(QStringLiteral("amendment")).toBool();
+    s.url = r.value(QStringLiteral("url")).toString();
+    return s;
+}
+
+BigMove parse_big_move(const QJsonObject& r) {
+    BigMove m;
+    m.cik = r.value(QStringLiteral("cik")).toString();
+    m.manager = r.value(QStringLiteral("manager")).toString();
+    m.quarter = iso_date(r, "quarter");
+    m.prior_quarter = iso_date(r, "prior_quarter");
+    m.issuer = r.value(QStringLiteral("issuer")).toString();
+    m.cusip = r.value(QStringLiteral("cusip")).toString();
+    m.ticker = r.value(QStringLiteral("ticker")).toString();
+    m.kind = r.value(QStringLiteral("kind")).toString();
+    m.shares = r.value(QStringLiteral("shares")).toDouble();
+    m.prior_shares = r.value(QStringLiteral("prior_shares")).toDouble();
+    m.flow = r.value(QStringLiteral("flow")).toDouble();
+    m.book_value = r.value(QStringLiteral("book_value")).toDouble();
+    m.position_count = r.value(QStringLiteral("position_count")).toInt();
+    m.book_pct = opt_num(r, "book_pct");
+    m.filed = iso_date(r, "filed");
+    if (r.value(QStringLiteral("range_low")).isDouble() && r.value(QStringLiteral("range_high")).isDouble()) {
+        m.range_low = r.value(QStringLiteral("range_low")).toDouble();
+        m.range_high = r.value(QStringLiteral("range_high")).toDouble();
+    }
+    m.url = r.value(QStringLiteral("url")).toString();
+    return m;
+}
+
+std::optional<FirmMoveTop> parse_top_move(const QJsonValue& v) {
+    if (!v.isObject())
+        return std::nullopt;
+    const auto m = v.toObject();
+    return FirmMoveTop{m.value(QStringLiteral("issuer")).toString(), m.value(QStringLiteral("ticker")).toString(),
+                       m.value(QStringLiteral("value")).toDouble()};
+}
+
+QJsonArray sorted_upper(const QStringList& in) {
+    QStringList out;
+    for (const auto& s : in) {
+        const QString u = s.trimmed().toUpper();
+        if (!u.isEmpty())
+            out << u;
+    }
+    out.sort();
+    out.removeDuplicates();
+    return QJsonArray::fromStringList(out);
+}
+
 /// Errors from the `all` action live INSIDE each half, not at the top level.
 /// Missing this is not cosmetic: parsing an {"error": ...} object yields zeros
 /// and empty arrays for every key, so an EDGAR outage renders as "0 Form 4
@@ -1247,6 +1313,134 @@ void OwnershipService::check_holdings_alerts() {
         /*on_line=*/{}, 60'000);
 }
 
+// ── Reads for the alert checks ───────────────────────────────────────────────
+
+void OwnershipService::run_query(const QString& script, const QString& action, const QJsonObject& payload,
+                                 int timeout_ms, QueryDone done) {
+    const QString args = payload_of(payload);
+    const QString key = script + QLatin1Char('|') + action + QLatin1Char('|') + args;
+    auto& waiters = queries_in_flight_[key];
+    waiters.push_back(std::move(done));
+    if (waiters.size() > 1)
+        return; // the same read is already running: its answer is ours too
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        script, {action, args},
+        [self, key, script, action](python::PythonResult result) {
+            if (!self)
+                return;
+            const QVector<QueryDone> waiting = self->queries_in_flight_.take(key);
+            QJsonObject o;
+            QString error;
+            if (!result.success) {
+                const QString e = result.error.trimmed();
+                error = e.isEmpty() ? QStringLiteral("%1 %2 failed").arg(script, action)
+                                    : e.section(QLatin1Char('\n'), -1).left(200);
+            } else {
+                o = parse_object(result);
+                error = o.isEmpty() ? QStringLiteral("%1 %2 gave no answer").arg(script, action)
+                                    : o.value(QStringLiteral("error")).toString();
+            }
+            // PythonRunner can answer inside run() (no interpreter, no
+            // script); the caller is promised a later turn either way.
+            QTimer::singleShot(0, self, [waiting, o, error]() {
+                for (const auto& w : waiting)
+                    w(o, error);
+            });
+        },
+        /*on_line=*/{}, timeout_ms);
+}
+
+void OwnershipService::query_cluster_buys(const QStringList& symbols, int days,
+                                          std::function<void(ClusterBuys)> done) {
+    run_query(QStringLiteral("ownership_watch.py"), QStringLiteral("cluster_rows"),
+              {{"symbols", sorted_upper(symbols)}, {"days", days}}, 60'000,
+              [done](const QJsonObject& o, const QString& error) {
+                  ClusterBuys c;
+                  c.error = error;
+                  if (error.isEmpty()) {
+                      c.scanned_to = iso_date(o, "scanned_to");
+                      for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                          const QJsonObject r = v.toObject();
+                          ClusterBuy b;
+                          b.symbol = r.value(QStringLiteral("symbol")).toString().toUpper();
+                          b.accession = r.value(QStringLiteral("accession")).toString();
+                          b.insider = r.value(QStringLiteral("insider")).toString();
+                          b.filed = iso_date(r, "filed");
+                          b.traded = iso_date(r, "traded");
+                          b.value = opt_num(r, "value"); // null stays unknown
+                          c.rows.push_back(b);
+                      }
+                  }
+                  done(c);
+              });
+}
+
+void OwnershipService::query_stakes(const QStringList& symbols, int days, std::function<void(Stakes)> done) {
+    run_query(QStringLiteral("sec_stakes_market.py"), QStringLiteral("recent"),
+              {{"symbols", sorted_upper(symbols)}, {"days", days}}, 120'000,
+              [done](const QJsonObject& o, const QString& error) {
+                  Stakes st;
+                  st.loaded = true;
+                  st.error = error;
+                  if (error.isEmpty()) {
+                      st.read_through = iso_date(o, "read_through");
+                      for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+                          st.rows.push_back(parse_stake(v.toObject()));
+                  }
+                  done(st);
+              });
+}
+
+void OwnershipService::query_big_moves(const QStringList& symbols, int filed_within,
+                                       std::function<void(BigMoves)> done) {
+    // `readonly`: what the sync last stored, never the minutes-long
+    // recomputation (screens read, the sync computes).
+    run_query(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("big_moves"),
+              {{"symbols", sorted_upper(symbols)},
+               {"filed_within", filed_within},
+               {"limit", 100},
+               {"active_only", true},
+               {"readonly", true}},
+              120'000, [done](const QJsonObject& o, const QString& error) {
+                  BigMoves b;
+                  b.loaded = true;
+                  b.error = error;
+                  if (error.isEmpty()) {
+                      b.side = o.value(QStringLiteral("side")).toString();
+                      b.sort = o.value(QStringLiteral("sort")).toString();
+                      b.active_only = o.value(QStringLiteral("active_only")).toBool(true);
+                      b.filed_within = o.value(QStringLiteral("filed_within")).toInt();
+                      for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+                          b.rows.push_back(parse_big_move(v.toObject()));
+                  }
+                  done(b);
+              });
+}
+
+void OwnershipService::query_fund_filings(const QStringList& ciks, std::function<void(FundFilings)> done) {
+    run_query(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("fund_filings"), {{"ciks", sorted_upper(ciks)}},
+              120'000, [done](const QJsonObject& o, const QString& error) {
+                  FundFilings f;
+                  f.error = error;
+                  if (error.isEmpty()) {
+                      for (const auto& v : o.value(QStringLiteral("funds")).toArray()) {
+                          const QJsonObject r = v.toObject();
+                          FundFiling ff;
+                          ff.cik = r.value(QStringLiteral("cik")).toString().toUpper();
+                          ff.accession = r.value(QStringLiteral("accession")).toString();
+                          ff.manager = r.value(QStringLiteral("manager")).toString();
+                          ff.quarter = iso_date(r, "quarter");
+                          ff.filed = iso_date(r, "filed");
+                          ff.top_buy = parse_top_move(r.value(QStringLiteral("top_buy")));
+                          ff.top_sell = parse_top_move(r.value(QStringLiteral("top_sell")));
+                          f.rows.push_back(ff);
+                      }
+                  }
+                  done(f);
+              });
+}
+
 // ── Filers ───────────────────────────────────────────────────────────────────
 
 void OwnershipService::load_top_firms(bool force) {
@@ -1273,14 +1467,6 @@ void OwnershipService::load_top_firms(bool force) {
                 t.top = o.value(QStringLiteral("top")).toInt(20);
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     t.partial_quarters << v.toString();
-                auto top_move = [](const QJsonValue& v) -> std::optional<FirmMoveTop> {
-                    if (!v.isObject())
-                        return std::nullopt;
-                    const auto m = v.toObject();
-                    return FirmMoveTop{m.value(QStringLiteral("issuer")).toString(),
-                                       m.value(QStringLiteral("ticker")).toString(),
-                                       m.value(QStringLiteral("value")).toDouble()};
-                };
                 for (const auto& v : o.value(QStringLiteral("firms")).toArray()) {
                     const auto r = v.toObject();
                     TopFirm f;
@@ -1305,8 +1491,8 @@ void OwnershipService::load_top_firms(bool force) {
                         f.exited = m.value(QStringLiteral("exited")).toInt();
                         f.bought_value = m.value(QStringLiteral("bought_value")).toDouble();
                         f.sold_value = m.value(QStringLiteral("sold_value")).toDouble();
-                        f.top_buy = top_move(m.value(QStringLiteral("top_buy")));
-                        f.top_sell = top_move(m.value(QStringLiteral("top_sell")));
+                        f.top_buy = parse_top_move(m.value(QStringLiteral("top_buy")));
+                        f.top_sell = parse_top_move(m.value(QStringLiteral("top_sell")));
                     }
                     if (!f.cik.isEmpty())
                         t.firms.push_back(f);
@@ -1364,30 +1550,7 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     b.partial_quarters << v.toString();
                 for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                    const auto r = v.toObject();
-                    BigMove m;
-                    m.cik = r.value(QStringLiteral("cik")).toString();
-                    m.manager = r.value(QStringLiteral("manager")).toString();
-                    m.quarter = iso_date(r, "quarter");
-                    m.prior_quarter = iso_date(r, "prior_quarter");
-                    m.issuer = r.value(QStringLiteral("issuer")).toString();
-                    m.ticker = r.value(QStringLiteral("ticker")).toString();
-                    m.kind = r.value(QStringLiteral("kind")).toString();
-                    m.shares = r.value(QStringLiteral("shares")).toDouble();
-                    m.prior_shares = r.value(QStringLiteral("prior_shares")).toDouble();
-                    m.flow = r.value(QStringLiteral("flow")).toDouble();
-                    m.book_value = r.value(QStringLiteral("book_value")).toDouble();
-                    m.position_count = r.value(QStringLiteral("position_count")).toInt();
-                    if (r.value(QStringLiteral("book_pct")).isDouble())
-                        m.book_pct = r.value(QStringLiteral("book_pct")).toDouble();
-                    m.filed = iso_date(r, "filed");
-                    if (r.value(QStringLiteral("range_low")).isDouble() &&
-                        r.value(QStringLiteral("range_high")).isDouble()) {
-                        m.range_low = r.value(QStringLiteral("range_low")).toDouble();
-                        m.range_high = r.value(QStringLiteral("range_high")).toDouble();
-                    }
-                    m.url = r.value(QStringLiteral("url")).toString();
-                    b.rows.push_back(m);
+                    b.rows.push_back(parse_big_move(v.toObject()));
                 }
             }
             self->big_moves_ = b;
@@ -1803,26 +1966,8 @@ void OwnershipService::load_stakes(int days, const QString& kind, bool new_only)
                 const auto o = parse_object(result);
                 st.error = o.value(QStringLiteral("error")).toString();
                 st.read_through = iso_date(o, "read_through");
-                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                    const auto r = v.toObject();
-                    Stake s;
-                    s.filed = iso_date(r, "filed");
-                    s.form = r.value(QStringLiteral("form")).toString();
-                    s.ticker = r.value(QStringLiteral("ticker")).toString();
-                    s.company = r.value(QStringLiteral("company")).toString();
-                    s.filer = r.value(QStringLiteral("filer")).toString();
-                    if (r.value(QStringLiteral("pct")).isDouble())
-                        s.pct = r.value(QStringLiteral("pct")).toDouble();
-                    if (r.value(QStringLiteral("prev_pct")).isDouble())
-                        s.prev_pct = r.value(QStringLiteral("prev_pct")).toDouble();
-                    if (r.value(QStringLiteral("shares")).isDouble())
-                        s.shares = r.value(QStringLiteral("shares")).toDouble();
-                    s.event = iso_date(r, "event_date");
-                    s.activist = r.value(QStringLiteral("activist")).toBool();
-                    s.amendment = r.value(QStringLiteral("amendment")).toBool();
-                    s.url = r.value(QStringLiteral("url")).toString();
-                    st.rows.push_back(s);
-                }
+                for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+                    st.rows.push_back(parse_stake(v.toObject()));
             }
             self->stakes_ = st;
             emit self->stakes_updated();

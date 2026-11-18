@@ -7,6 +7,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 Latest first.
 
 - [`e493f7e22`](https://github.com/yumima/finterm/commit/e493f7e22) storage: one store per dataset; retired storage cleaned by its owner
+- [`1199ac031`](https://github.com/yumima/finterm/commit/1199ac031) extended hours: the AFT% column and the ER box read one set of session rules
 - [`c5055aea8`](https://github.com/yumima/finterm/commit/c5055aea8) info: one company-info read; shared reads always answer later
 - [`eba46712d`](https://github.com/yumima/finterm/commit/eba46712d) history: one price-history read for the whole app
 - [`80b23b584`](https://github.com/yumima/finterm/commit/80b23b584) quote: Equity Research reads the app's one market quote

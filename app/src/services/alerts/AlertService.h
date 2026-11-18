@@ -16,11 +16,13 @@
 //   • MarketDataService::stream_ticks for extended-hours rules — each print
 //     self-checks against the polled quote's close (AlertRules.h,
 //     extended_print_ok) before it is used.
-//   • ownership_watch.py cluster_rows — the LOCAL Form 4 store, no network. The
-//     store is kept current by the Ownership feature's existing daily EDGAR
-//     read (OwnershipService::ensure_form4_current); this service only nudges
-//     that read when the store is already warm (an incremental day or two), so
-//     it adds no SEC traffic of its own.
+//   • OwnershipService's alert reads (query_cluster_buys, query_stakes,
+//     query_big_moves, query_fund_filings) — the LOCAL Form 4, stakes and 13F
+//     stores, no network; OwnershipService is their only reader and writer.
+//     The Form 4 store is kept current by its daily EDGAR read
+//     (ensure_form4_current); this service only nudges that read when the
+//     store is already warm (an incremental day or two), so it adds no SEC
+//     traffic of its own. A failed or refused read concludes nothing.
 //
 // The pure rules (firing, re-arm, once-per-session, dedupe, persistence) are
 // in AlertRules.h. Evaluation is a handful of comparisons per quote on the GUI
