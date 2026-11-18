@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`428743ff4`](https://github.com/yumima/finterm/commit/428743ff4) datahub: a subscriber that joined while the value was stale gets an unchanged refresh
 - [`7329a5846`](https://github.com/yumima/finterm/commit/7329a5846) social, code editor: the last Python processes started by screens move to services
 - [`f60880ce4`](https://github.com/yumima/finterm/commit/f60880ce4) screener: ScreenerService owns the screener's runs and its saved scans
 - [`fe868d88a`](https://github.com/yumima/finterm/commit/fe868d88a) economics, calendar: What's On and the World board read their data through owners

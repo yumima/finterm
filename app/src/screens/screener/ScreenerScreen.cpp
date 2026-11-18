@@ -1,6 +1,8 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/screener/ScreenerScreen.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
@@ -9,7 +11,6 @@
 #include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
-#include <QTimeZone>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -42,6 +43,7 @@
 #include <QTableWidget>
 #include <QTextBrowser>
 #include <QTime>
+#include <QTimeZone>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -1481,27 +1483,40 @@ void ScreenerScreen::add_to_portfolio(const QString& sym) {
     }
     can_add();
 
+    // The symbol's market:quote topic, asked to refresh now ("current" means
+    // now, not a cached quote); the subscription ends with the dialog. Only a
+    // quote polled or ticked this process is taken — the hub can hand back a
+    // disk-hydrated one from an earlier session.
     QPointer<QDialog> alive(&dlg);
-    auto& mds = services::MarketDataService::instance();
-    mds.invalidate_quotes({sym}); // "current" means now, not a cached quote
-    mds.fetch_quotes({sym}, [alive, sym, &typed, set_price, note, can_add, listed](bool ok,
-                                                                                   QVector<services::QuoteData> q, const QString& /*err*/) {
+    auto got_quote = std::make_shared<bool>(false);
+    auto& hub = datahub::DataHub::instance();
+    const QString topic = QStringLiteral("market:quote:") + sym;
+    hub.subscribe(&dlg, topic, [alive, sym, &typed, set_price, note, can_add, got_quote](const QVariant& v) {
         if (!alive || typed) // closed already (the captured locals are gone), or the reader's price stands
             return;
-        for (const auto& d : q) {
-            if (d.symbol.compare(sym, Qt::CaseInsensitive) == 0 && d.price > 0) {
-                set_price(d.price);
-                // the fetch time, not the price's: out of hours the latest
-                // quote is the last close
-                note->setText(QStringLiteral("Latest quote, fetched %1.").arg(QTime::currentTime().toString("HH:mm")));
-                can_add();
-                return;
-            }
-        }
+        if (!v.canConvert<services::QuoteData>() || !services::MarketDataService::instance().has_live_quote(sym))
+            return;
+        const double price = v.value<services::QuoteData>().price;
+        if (!(price > 0))
+            return;
+        *got_quote = true;
+        set_price(price);
+        // the fetch time, not the price's: out of hours the latest quote is
+        // the last close
+        note->setText(QStringLiteral("Latest quote, fetched %1.").arg(QTime::currentTime().toString("HH:mm")));
+        can_add();
+    });
+    hub.subscribe_errors(&dlg, topic, [alive, &typed, note, listed, got_quote](const QString& error) {
+        if (!alive || typed || *got_quote)
+            return;
+        // kNoQuoteError: answered without this symbol; anything else: the
+        // download failed.
+        const bool failed = error != services::MarketDataService::kNoQuoteError;
         note->setText(listed && *listed > 0
-                          ? QStringLiteral("No quote%1 — the screener's price.").arg(ok ? "" : " (fetch failed)")
+                          ? QStringLiteral("No quote%1 — the screener's price.").arg(failed ? " (fetch failed)" : "")
                           : QStringLiteral("No price available — enter one."));
     });
+    hub.request(topic, /*force=*/true);
 
     if (dlg.exec() != QDialog::Accepted)
         return;
