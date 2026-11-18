@@ -14,24 +14,11 @@ scripts/
 ├── agno_trading/        # Agno trading system framework
 ├── ai_quant_lab/        # Quantitative research lab (Qlib, RDAgent)
 ├── Analytics/           # Financial analytics modules
-├── *.py                 # Data source integrations (60+ providers)
+├── *.py                 # Data source integrations
 └── README.md           # This file
 ```
 
 ## Quick Links
-
-### Data Sources Documentation
-
-| Category | Description | Link |
-|----------|-------------|------|
-| 🏛️ **Government Data** | 19 countries/portals - official statistics | [GOVERNMENT_DATA_SOURCES.md](./GOVERNMENT_DATA_SOURCES.md) |
-| 🌍 **Economic Data** | 11 organizations - FRED, World Bank, IMF, OECD | [ECONOMIC_DATA_SOURCES.md](./ECONOMIC_DATA_SOURCES.md) |
-| 📊 **Market Data** | 9 providers - stocks, options, crypto, forex | [MARKET_DATA_SOURCES.md](./MARKET_DATA_SOURCES.md) |
-| 🇨🇳 **China Data** | 9 modules - AkShare ecosystem, Chinese markets | [CHINA_DATA_SOURCES.md](./CHINA_DATA_SOURCES.md) |
-| 🌏 **Regional Data** | 5 sources - Japan, Sweden, Spain, Africa, Asia | [REGIONAL_DATA_SOURCES.md](./REGIONAL_DATA_SOURCES.md) |
-| 🇺🇸 **US Financial** | 4 agencies - SEC, Treasury, Energy | [US_FINANCIAL_DATA_SOURCES.md](./US_FINANCIAL_DATA_SOURCES.md) |
-| 🔧 **Specialty Data** | 7 tools - EconDB, technicals, reports, news | [SPECIALTY_DATA_SOURCES.md](./SPECIALTY_DATA_SOURCES.md) |
-| 🛰️ **Satellite & Geo** | 4 providers - NASA, ESA, ocean data, tracking | [SATELLITE_GEO_DATA_SOURCES.md](./SATELLITE_GEO_DATA_SOURCES.md) |
 
 ### Module Documentation
 
@@ -40,12 +27,12 @@ scripts/
 | 📊 **Analytics** | 80+ modules - equity, portfolio, derivatives, economics | [Analytics/README.md](./Analytics/README.md) |
 | 🤖 **AI Agents** | 30+ agents - hedge funds, investors, geopolitics | [agents/README.md](./agents/README.md) |
 | 🔬 **AI Quant Lab** | Qlib + RDAgent - automated strategy research | [ai_quant_lab/README.md](./ai_quant_lab/README.md) |
-| 🚀 **Agno Trading** | Multi-agent trading system with debates | `agno_trading/` |
+| 🚀 **Agno Trading** | Multi-agent trading framework (used by Alpha Arena) | `agno_trading/` |
 
 ## Key Features
 
-### Data Integration (60+ Sources)
-- **Market Data**: Yahoo Finance, Alpha Vantage, TradingView, Databento
+### Data Integration
+- **Market Data**: Yahoo Finance, Databento
 - **Economic Data**: FRED, World Bank, IMF, OECD, ECB, BEA, BLS
 - **Crypto**: CoinGecko, Kraken, Binance
 - **Government**: SEC Edgar, Congress.gov, Federal Reserve
@@ -61,7 +48,6 @@ scripts/
 - **Financial Analysis**: Statement analysis, quality metrics, tax analysis
 
 ### AI & Machine Learning
-- **Agno Trading**: Multi-agent trading system with debate orchestration
 - **Geopolitical Agents**: Grand Chessboard, Prisoners of Geography frameworks
 - **Investor Personas**: Warren Buffett, Benjamin Graham strategies
 - **Hedge Fund Agents**: Bridgewater, Citadel, Renaissance, Two Sigma
@@ -80,11 +66,11 @@ Scripts are invoked from the Qt/C++ application via `PythonRunner`:
 ```cpp
 // Scripts are called via src/python/PythonRunner.cpp
 
-// Example: Fetch market data
+// Example: a script file under scripts/, then its CLI arguments
 finterm::python::PythonRunner::instance().run(
-    "yfinance_data",
-    {"get_historical_data", "AAPL", "1y"},
-    [](const QString& json_result) {
+    "fred_data.py",
+    {"series", "GDP"},
+    [](const finterm::python::PythonResult& result) {
         // handle result
     }
 );
@@ -95,20 +81,17 @@ finterm::python::PythonRunner::instance().run(
 ### Adding New Data Sources
 1. Create `{source}_data.py` in scripts root
 2. Implement standardized response format
-3. Wire the script into the relevant Qt service (`src/services/`) or screen
-4. Update [DATA_SOURCES.md](./DATA_SOURCES.md)
+3. Wire the script into the relevant Qt service (`src/services/`) or screen — a script nothing runs is deleted
 
 ### Adding Analytics Modules
 1. Place in appropriate `Analytics/` subdirectory
 2. Follow CFA curriculum structure
 3. Include docstrings and type hints
-4. Update [ANALYTICS.md](./ANALYTICS.md)
 
 ### Adding AI Agents
 1. Add to `agents/` with appropriate subdirectory
 2. Use FinAgent core framework
 3. Define persona and strategy
-4. Update [AGENTS.md](./AGENTS.md)
 
 ## Technical Requirements
 
@@ -145,8 +128,4 @@ MIT License - Part of finterm
 
 ---
 
-**Last Updated**: 2026-01-23
-**Python Scripts**: 250+
-**Data Sources**: 60+
-**Analytics Modules**: 15+
-**AI Agents**: 30+
+**Last Updated**: 2026-11-17

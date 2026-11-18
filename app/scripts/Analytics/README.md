@@ -21,27 +21,17 @@ Comprehensive financial analytics library covering equity valuation, portfolio m
 | 📊 **Technical Analysis** | 2 modules | Momentum indicators, chart patterns |
 | 🧪 **Backtesting** | 4 frameworks | LEAN, VectorBT, Backtrading.py, FastTrade |
 
-## Portfolio Optimization Libraries
-
-| Library | File | Description |
-|---------|------|-------------|
-| **RiskFolioLib** | `riskfoliolib_wrapper.py` | Risk parity, hierarchical clustering |
-
 ## Analytics Modules Breakdown
 
 ### Equity Investment (`/equityInvestment/`)
 
 | Module | Files | Coverage |
 |--------|-------|----------|
-| **DCF Models** | `dcf_models.py` | Free cash flow, WACC, terminal value |
-| **Dividend Models** | `dividend_models.py` | DDM, Gordon growth, multi-stage |
-| **Multiples Valuation** | `multiples_valuation.py` | P/E, P/B, EV/EBITDA, PEG |
 | **Residual Income** | `residual_income.py` | RI valuation, equity charge |
-| **Private Valuation** | `private_valuation.py` | Pre-money, post-money, VC method |
 | **Fundamental Analysis** | `fundamental_analysis.py` | DuPont, quality metrics |
 | **Industry Analysis** | `industry_analysis.py` | Porter's 5 forces, competitive analysis |
 | **Forecasting** | `forecasting.py` | Revenue, earnings projections |
-| **Market Analysis** | 3 files | Index construction, efficiency, structure |
+| **Market Analysis** | `market_structure.py` | Market structure |
 
 ### Portfolio Management (`/portfolioManagement/`)
 
@@ -50,11 +40,6 @@ Comprehensive financial analytics library covering equity valuation, portfolio m
 | **Portfolio Analytics** | `portfolio_analytics.py` | Returns, risk, performance attribution |
 | **Portfolio Management** | `portfolio_management.py` | Asset allocation, rebalancing |
 | **Risk Management** | `risk_management.py` | VaR, CVaR, stress testing |
-| **Active Management** | `active_management.py` | Alpha, tracking error, information ratio |
-| **Portfolio Planning** | `portfolio_planning.py` | IPS, goals-based planning |
-| **ETF Analytics** | `etf_analytics.py` | Tracking difference, premiums |
-| **Behavioral Finance** | `behavioral_finance.py` | Biases, investor behavior |
-| **Economics & Markets** | `economics_markets.py` | Macro factors, market regimes |
 | **Math Engine** | `math_engine.py` | Portfolio math utilities |
 | **Data Manager** | `data_manager.py` | Data handling |
 | **Config** | `config.py` | Configuration |
@@ -99,9 +84,6 @@ Comprehensive financial analytics library covering equity valuation, portfolio m
 | **Asset Analysis** | `asset_analysis.py` | Asset impairment, valuation |
 | **Inventory Analysis** | `inventory_analysis.py` | FIFO, LIFO, inventory ratios |
 | **Tax Analysis** | `tax_analysis.py` | Deferred tax, effective rates |
-| **Employee Compensation** | `employee_compensation.py` | Pension, stock-based comp |
-| **Financial Institutions** | `financial_institutions.py` | Bank-specific analysis |
-| **Multinational Operations** | `multinational_operations.py` | Currency translation |
 
 ### Alternative Investments (`/alternateInvestment/`)
 
