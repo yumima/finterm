@@ -1,8 +1,3 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import json
 from datetime import datetime
 import time
@@ -15,6 +10,14 @@ def scrape_forex_calendar(date_str="oct15.2026"):
     Returns:
         JSON with structured data
     """
+    # Imported here so a missing Selenium reaches the caller as a JSON error
+    # (see __main__), not as an import traceback.
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
     url = f"https://www.forexfactory.com/calendar?day={date_str}"
 
     # Setup headless Chrome
@@ -102,6 +105,14 @@ if __name__ == "__main__":
     else:
         today = datetime.now()
         day = f"{today.strftime('%b').lower()}{today.day}.{today.year}"
-    data = scrape_forex_calendar(day)
+    try:
+        data = scrape_forex_calendar(day)
+    except Exception as e:
+        # No Selenium / ChromeDriver, a page that never rendered the table
+        # (TimeoutException), a blocked request: the panel shows the reason
+        # instead of a traceback. EconomicsService treats {"error"} as failure.
+        why = (str(e).strip().splitlines() or [""])[0]
+        data = {"error": f"Forex Factory calendar unavailable for {day}: {type(e).__name__}"
+                         + (f": {why}" if why else "")}
 
     print(json.dumps(data, indent=2))

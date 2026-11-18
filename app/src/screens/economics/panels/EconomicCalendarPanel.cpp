@@ -80,15 +80,18 @@ void EconomicCalendarPanel::on_fetch() {
 
     show_loading("Fetching economic calendar for " + date.toString("MMM d, yyyy") + "…");
 
+    // Set before execute(): a cached answer can come back synchronously.
+    pending_request_ = "calendar_" + ff_date;
+    pending_date_ = date;
     services::EconomicsService::instance().execute(kEconomicCalendarSourceId, kEconomicCalendarScript, ff_date, {},
-                                                   "calendar_" + ff_date);
+                                                   pending_request_);
 }
 
 void EconomicCalendarPanel::on_result(const QString& request_id, const services::EconomicsResult& result) {
     if (result.source_id != kEconomicCalendarSourceId)
         return;
-    if (!request_id.startsWith("calendar_"))
-        return;
+    if (request_id.isEmpty() || request_id != pending_request_)
+        return; // not ours, or a superseded pick answering late
     if (!result.success) {
         show_error(result.error);
         return;
@@ -121,7 +124,7 @@ void EconomicCalendarPanel::on_result(const QString& request_id, const services:
         return;
     }
 
-    const QString date_str = date_edit_->date().toString("MMM d, yyyy");
+    const QString date_str = pending_date_.toString("MMM d, yyyy");
     const int total = result.data["events_count"].toInt(events.size());
     const QString title = QString("Economic Calendar — %1  (%2 events)").arg(date_str).arg(total);
 

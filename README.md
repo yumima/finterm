@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`44d50943e`](https://github.com/yumima/finterm/commit/44d50943e) economics: restore the analytics engine's methods to their own classes
 - [`3fc9e5fe9`](https://github.com/yumima/finterm/commit/3fc9e5fe9) economics: delete the unreachable trend block after analytics_engine's return
 - [`8a7cff138`](https://github.com/yumima/finterm/commit/8a7cff138) scripts: delete script actions and CLI commands no caller sends
 - [`f87ba8875`](https://github.com/yumima/finterm/commit/f87ba8875) scripts: delete functions, classes and imports nothing calls

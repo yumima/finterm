@@ -25,6 +25,11 @@ class EconomicCalendarPanel : public EconPanelBase {
   private:
     QDateEdit* date_edit_ = nullptr;
     QComboBox* filter_combo_ = nullptr; // filter by impact level
+    // The one request whose reply this panel shows, and the day it asked for.
+    // A reply for an earlier pick that lands after a newer fetch is dropped,
+    // and the title names the requested day, not whatever the picker shows now.
+    QString pending_request_;
+    QDate pending_date_;
 };
 
 } // namespace finterm::screens
