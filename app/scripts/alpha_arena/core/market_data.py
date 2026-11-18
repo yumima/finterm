@@ -250,18 +250,6 @@ async def get_market_data_provider(exchange_id: str = "kraken") -> MarketDataPro
     return _provider
 
 
-async def reset_market_data_provider():
-    """Reset the market data provider singleton (useful between competitions)."""
-    global _provider
-    if _provider:
-        try:
-            await _provider.close()
-        except Exception as e:
-            logger.warning(f"Error closing market data provider: {e}")
-        _provider = None
-        logger.info("Market data provider reset")
-
-
 # =============================================================================
 # Polymarket Data Provider
 # =============================================================================
@@ -436,15 +424,3 @@ async def get_polymarket_provider() -> PolymarketDataProvider:
         await _polymarket_provider.initialize()
 
     return _polymarket_provider
-
-
-async def reset_polymarket_provider():
-    """Reset the Polymarket data provider singleton."""
-    global _polymarket_provider
-    if _polymarket_provider:
-        try:
-            await _polymarket_provider.close()
-        except Exception as e:
-            logger.warning(f"Error closing Polymarket provider: {e}")
-        _polymarket_provider = None
-        logger.info("Polymarket data provider reset")

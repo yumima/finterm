@@ -762,15 +762,6 @@ STRATEGY_BUILDERS = {
 }
 
 
-def get_strategy_class(strategy_type: str, params: Dict[str, Any],
-                       opt_params: Dict = None):
-    """Get a Strategy class for the given type and parameters."""
-    builder = STRATEGY_BUILDERS.get(strategy_type)
-    if builder:
-        return builder(params, opt_params)
-    return build_sma_crossover(params, opt_params)
-
-
 def list_strategies() -> List[Dict[str, str]]:
     """Return list of available strategies for frontend catalog."""
     return [{'id': k, 'name': k.replace('_', ' ').title()} for k in STRATEGY_BUILDERS]

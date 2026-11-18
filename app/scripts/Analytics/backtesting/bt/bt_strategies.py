@@ -369,14 +369,6 @@ _bt = _import_bt_library()
 _BT_AVAILABLE = _bt is not None
 
 
-def _make_bt_strategy(name, algos, data):
-    """Create a bt.Strategy + bt.Backtest if bt is available."""
-    if not _BT_AVAILABLE:
-        return None, None
-    strategy = _bt.Strategy(name, algos)
-    return strategy, data
-
-
 # ============================================================================
 # Portfolio Allocation Strategies (unique to bt)
 # ============================================================================

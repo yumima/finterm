@@ -2573,40 +2573,6 @@ def get_batch_all(payload):
     return out
 
 
-def get_company_profile(symbol):
-    """Get company profile data formatted for peer comparison"""
-    try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-
-        if not info or 'symbol' not in info:
-            return {"error": f"No data found for symbol: {symbol}"}
-
-        # Format data to match FMP structure
-        profile = {
-            "symbol": info.get("symbol", symbol),
-            "companyName": info.get("longName", info.get("shortName", "")),
-            "sector": info.get("sector", ""),
-            "industry": info.get("industry", ""),
-            "website": info.get("website", ""),
-            "description": info.get("longBusinessSummary", ""),
-            "exchange": info.get("exchange", ""),
-            "country": info.get("country", ""),
-            "city": info.get("city", ""),
-            "address": info.get("address1", ""),
-            "phone": info.get("phone", ""),
-            "marketCap": info.get("marketCap", 0),
-            "employees": info.get("fullTimeEmployees", 0),
-            "currency": info.get("currency") or "",
-            "beta": info.get("beta", 0),
-            "price": info.get("currentPrice", info.get("regularMarketPrice", 0)),
-            "changes": info.get("regularMarketChangePercent", 0),
-        }
-
-        return profile
-    except Exception as e:
-        return {"error": str(e)}
-
 def get_financial_ratios(symbol):
     """Get financial ratios formatted for peer comparison"""
     try:
@@ -2676,9 +2642,9 @@ def get_financial_ratios(symbol):
             # parse_peers had nothing to assign and all three rendered empty
             # for every row. They cost nothing here: `info` is already fetched.
             # currentPrice comes from Yahoo's financialData module, which is
-            # absent for ETFs, indices and many non-US listings — the same
-            # fallback get_company_profile uses, or the new PRICE column would
-            # stay empty for exactly those peer rows.
+            # absent for ETFs, indices and many non-US listings — so it falls
+            # back to regularMarketPrice, or the new PRICE column would stay
+            # empty for exactly those peer rows.
             # `or`, not a get-default: a default only fires for a MISSING key,
             # and Yahoo sends currentPrice present-but-null for halted and
             # delisted names — the very rows the fallback exists for. (This is
@@ -2695,15 +2661,6 @@ def get_financial_ratios(symbol):
         return ratios
     except Exception as e:
         return {"error": str(e)}
-
-def get_multiple_profiles(symbols):
-    """Get company profiles for multiple symbols"""
-    results = []
-    for symbol in symbols:
-        profile = get_company_profile(symbol)
-        if profile and "error" not in profile:
-            results.append(profile)
-    return results
 
 def get_multiple_ratios(symbols):
     """Get financial ratios for multiple symbols"""
@@ -4825,59 +4782,6 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         return {"error": f"{type(e).__name__}: {e}" + (f" [{_trace_refusal_text()}]" if refused else ""),
                 "symbol": symbol, "transient": refused or "RateLimit" in type(e).__name__}
 
-def resolve_symbol(symbol):
-    """
-    Resolve a bare stock symbol to its correct yfinance-compatible form.
-
-    Tries the symbol as-is, then the common exchange suffixes
-    (_candidate_yf_symbols: .TO, .L, .AX, .HK).
-
-    Returns a dict with:
-      - resolved_symbol: the working yfinance symbol (e.g., "SHOP.TO")
-      - original_symbol: what the user typed (e.g., "SHOP")
-      - exchange: detected exchange name (if available)
-      - found: bool indicating if any variant returned data
-    """
-    symbol = symbol.strip().upper()
-    if not symbol:
-        return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
-
-    # If it already has a suffix, verify it works and return as-is
-    if '.' in symbol or symbol.startswith('^') or '-' in symbol or '=' in symbol:
-        try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="5d")
-            exchange = ticker.info.get("exchange", "") if hasattr(ticker, 'info') else ""
-            if not hist.empty:
-                return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": exchange, "found": True}
-        except Exception:
-            pass
-        return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
-
-    # Same candidates as the portfolio history path, so both resolvers agree
-    for candidate in _candidate_yf_symbols(symbol):
-        try:
-            ticker = yf.Ticker(candidate)
-            hist = ticker.history(period="5d")
-            if hist is not None and not hist.empty and len(hist) >= 1:
-                exchange = ""
-                try:
-                    exchange = ticker.info.get("exchange", "")
-                except Exception:
-                    pass
-                return {
-                    "resolved_symbol": candidate,
-                    "original_symbol": symbol,
-                    "exchange": exchange,
-                    "found": True
-                }
-        except Exception:
-            continue
-
-    # Nothing worked — return original
-    return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
-
-
 def main(args=None):
     # Support both worker pool (args parameter) and subprocess/CLI (sys.argv)
     if args is None:
@@ -4926,26 +4830,12 @@ def main(args=None):
             symbol = args[1]
             result = get_financials(symbol)
 
-    elif command == "company_profile":
-        if len(args) < 2:
-            result = {"error": "Usage: python yfinance_data.py company_profile <symbol>"}
-        else:
-            symbol = args[1]
-            result = get_company_profile(symbol)
-
     elif command == "financial_ratios":
         if len(args) < 2:
             result = {"error": "Usage: python yfinance_data.py financial_ratios <symbol>"}
         else:
             symbol = args[1]
             result = get_financial_ratios(symbol)
-
-    elif command == "multiple_profiles":
-        if len(args) < 2:
-            result = {"error": "Usage: python yfinance_data.py multiple_profiles <symbol1,symbol2,...>"}
-        else:
-            symbols = args[1].split(",")
-            result = get_multiple_profiles(symbols)
 
     elif command == "multiple_ratios":
         if len(args) < 2:
@@ -5024,13 +4914,6 @@ def main(args=None):
                     result = get_batch_all(payload)
                 except json.JSONDecodeError as e:
                     result = {"error": f"batch_all: invalid JSON payload: {e}"}
-
-    elif command == "resolve_symbol":
-        if len(args) < 2:
-            result = {"error": "Usage: python yfinance_data.py resolve_symbol <symbol>"}
-        else:
-            symbol = args[1]
-            result = resolve_symbol(symbol)
 
     elif command == "historical_price":
         # Get closing price for a specific date

@@ -146,26 +146,6 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
-class ConnectionManager:
-    """Context manager for database connections."""
-
-    def __init__(self):
-        self.conn: Optional[sqlite3.Connection] = None
-
-    def __enter__(self) -> sqlite3.Connection:
-        self.conn = get_connection()
-        return self.conn
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.conn:
-            if exc_type is None:
-                self.conn.commit()
-            else:
-                self.conn.rollback()
-            self.conn.close()
-        return False  # Don't suppress exceptions
-
-
 class PaperTradingBridge:
     """
     Bridge to the host paper trading module via SQLite.

@@ -772,15 +772,3 @@ async def get_multi_exchange_provider(default_exchange: str = "binance") -> Mult
         await _multi_provider.initialize()
 
     return _multi_provider
-
-
-async def reset_multi_exchange_provider():
-    """Reset the multi-exchange provider singleton."""
-    global _multi_provider
-    if _multi_provider is not None:
-        try:
-            await _multi_provider.close()
-        except Exception as e:
-            logger.warning(f"Error closing multi-exchange provider: {e}")
-        _multi_provider = None
-        logger.info("Multi-exchange provider reset")

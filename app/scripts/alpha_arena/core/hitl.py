@@ -365,12 +365,6 @@ def get_hitl_manager() -> HITLManager:
     return _hitl_manager
 
 
-def reset_hitl_manager():
-    """Reset the HITL manager"""
-    global _hitl_manager
-    _hitl_manager = None
-
-
 # Convenience functions for C++ integration
 def check_decision_approval(
     decision_dict: Dict[str, Any],

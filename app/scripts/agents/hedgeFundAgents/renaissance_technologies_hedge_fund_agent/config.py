@@ -286,9 +286,3 @@ def set_config(config: RenTechConfig):
     """Set the global configuration"""
     global _config
     _config = config
-
-
-def reset_config():
-    """Reset configuration to default"""
-    global _config
-    _config = None

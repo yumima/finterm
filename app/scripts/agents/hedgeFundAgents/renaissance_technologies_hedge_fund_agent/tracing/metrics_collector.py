@@ -626,9 +626,3 @@ def get_metrics_collector() -> MetricsCollector:
     if _metrics_collector is None:
         _metrics_collector = MetricsCollector()
     return _metrics_collector
-
-
-def reset_metrics_collector():
-    """Reset the metrics collector (for testing)"""
-    global _metrics_collector
-    _metrics_collector = None

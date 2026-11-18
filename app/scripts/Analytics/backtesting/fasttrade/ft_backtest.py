@@ -435,29 +435,6 @@ def run_backtest(
         )
 
 
-def run_backtest_from_csv(
-    backtest: Dict[str, Any],
-    csv_path: str,
-    summary: bool = True
-) -> Dict[str, Any]:
-    """
-    Run backtest loading data from a CSV file.
-
-    Convenience wrapper that loads CSV then runs backtest.
-
-    Args:
-        backtest: Strategy config (same as run_backtest)
-        csv_path: Path to OHLCV CSV file
-        summary: Compute summary stats
-
-    Returns:
-        Same as run_backtest()
-    """
-    from fast_trade.build_data_frame import load_basic_df_from_csv
-    df = load_basic_df_from_csv(csv_path)
-    return run_backtest(backtest, df=df, summary=summary)
-
-
 def run_multiple_backtests(
     configs: List[Dict[str, Any]],
     df: Optional[pd.DataFrame] = None,

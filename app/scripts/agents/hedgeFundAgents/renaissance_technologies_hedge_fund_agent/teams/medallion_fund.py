@@ -236,12 +236,6 @@ def get_medallion_fund() -> Team:
     return _medallion_fund
 
 
-def reset_medallion_fund():
-    """Reset the global Medallion Fund instance"""
-    global _medallion_fund
-    _medallion_fund = None
-
-
 async def run_medallion_fund(
     task: str,
     context: Optional[Dict[str, Any]] = None,
@@ -283,13 +277,3 @@ async def run_medallion_fund(
     else:
         response = fund.run(message)
         return response.content if hasattr(response, 'content') else str(response)
-
-
-# Convenience function for synchronous usage
-def run_medallion_fund_sync(
-    task: str,
-    context: Optional[Dict[str, Any]] = None,
-) -> str:
-    """Synchronous version of run_medallion_fund"""
-    import asyncio
-    return asyncio.run(run_medallion_fund(task, context, stream=False))

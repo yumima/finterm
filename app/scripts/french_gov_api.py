@@ -45,35 +45,6 @@ DEFAULT_HEADERS = {
     'User-Agent': 'finterm-Terminal/1.0'
 }
 
-# French to English translation patterns
-FRENCH_PATTERNS = [
-    r'\b(le|la|les|de|du|des|et|en|pour|dans|une|avec|par|sur|est|sont|ont|été)\b',
-    r'\b(région|régions|département|départements|commune|communes|ville|villes)\b',
-    r'\b(population|surface|superficie|code|nom|adresse|coord|coordonnées)\b',
-    r'\b(statistique|données|information|informations|entreprise|entreprises)\b'
-]
-
-def _detect_french(text: str) -> bool:
-    """
-    Detect if text is in French language
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        True if text appears to be French, False otherwise
-    """
-    if not text or not isinstance(text, str):
-        return False
-
-    text_lower = text.lower()
-
-    # Count French pattern matches
-    french_matches = sum(len(re.findall(pattern, text_lower)) for pattern in FRENCH_PATTERNS)
-
-    # Consider it French if we find enough matches
-    return french_matches >= 2
-
 def _translate_french_to_english(text: str) -> str:
     """
     Simple translation dictionary for common French terms

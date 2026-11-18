@@ -39,7 +39,7 @@ import json
 import io
 import csv
 import requests
-from datetime import datetime, date
+from datetime import date
 from typing import Dict, List, Optional, Any, Union
 
 # ---------------------------------------------------------------------------
@@ -678,11 +678,6 @@ SERIES_GROUPS: Dict[str, List[str]] = {
 # ---------------------------------------------------------------------------
 # Helper utilities
 # ---------------------------------------------------------------------------
-
-def _today_str() -> str:
-    """Return today's date in BoE format DD/Mon/YYYY."""
-    return datetime.now().strftime("%d/%b/%Y")
-
 
 def _parse_value(raw: str) -> Optional[float]:
     """Convert raw cell string to float; return None for missing ('..' or empty)."""

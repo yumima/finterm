@@ -140,13 +140,6 @@ def tema(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series
     return TA.TEMA(ohlc, period, column)
 
 
-def trima(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Triangular Moving Average."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.TRIMA(ohlc, period)
-
-
 def wma(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series:
     """Weighted Moving Average."""
     TA = _get_ta()
@@ -173,13 +166,6 @@ def smma(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.SMMA(ohlc, period, column)
-
-
-def ssma(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series:
-    """Smoothed Simple Moving Average (alias)."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.SSMA(ohlc, period, column)
 
 
 def frama(df: pd.DataFrame, period: int = 14, batch: int = 10) -> pd.Series:
@@ -210,20 +196,6 @@ def zlema(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return TA.ZLEMA(ohlc, period)
 
 
-def vama(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Volume Adjusted Moving Average."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VAMA(ohlc, period)
-
-
-def vidya(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Variable Index Dynamic Average."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VIDYA(ohlc, period)
-
-
 # ============================================================================
 # Oscillators
 # ============================================================================
@@ -240,13 +212,6 @@ def stoch(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.STOCH(ohlc, period)
-
-
-def stochd(df: pd.DataFrame, period: int = 3, stoch_period: int = 14) -> pd.Series:
-    """Stochastic %D (smoothed %K)."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.STOCHD(ohlc, period, stoch_period)
 
 
 def stochrsi(df: pd.DataFrame, rsi_period: int = 14, stoch_period: int = 14) -> pd.Series:
@@ -330,13 +295,6 @@ def ppo(df: pd.DataFrame, fast: int = 12, slow: int = 26) -> pd.DataFrame:
     return TA.PPO(ohlc, fast, slow)
 
 
-def ift_rsi(df: pd.DataFrame, rsi_period: int = 5, wma_period: int = 9) -> pd.Series:
-    """Inverse Fisher Transform on RSI."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.IFT_RSI(ohlc, rsi_period, wma_period)
-
-
 def wto(df: pd.DataFrame, channel_length: int = 10, avg_length: int = 21) -> pd.DataFrame:
     """Wave Trend Oscillator."""
     TA = _get_ta()
@@ -357,13 +315,6 @@ def bbands(df: pd.DataFrame, period: int = 20, std_multiplier: float = 2.0, colu
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.BBANDS(ohlc, period, std_multiplier, column)
-
-
-def bbwidth(df: pd.DataFrame, period: int = 20, std_multiplier: float = 2.0, column: str = 'close') -> pd.Series:
-    """Bollinger Band Width."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.BBWIDTH(ohlc, period, std_multiplier, column)
 
 
 def percent_b(df: pd.DataFrame, period: int = 20, std_multiplier: float = 2.0, column: str = 'close') -> pd.Series:
@@ -398,13 +349,6 @@ def kc(df: pd.DataFrame, period: int = 20, atr_period: int = 10, multiplier: flo
     return TA.KC(ohlc, period, atr_period, multiplier)
 
 
-def apz(df: pd.DataFrame, period: int = 21, dev_factor: float = 2.0) -> pd.DataFrame:
-    """Adaptive Price Zone."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.APZ(ohlc, period, dev_factor)
-
-
 def donchian(df: pd.DataFrame, upper_period: int = 20, lower_period: int = 20) -> pd.DataFrame:
     """
     Donchian Channels.
@@ -416,27 +360,6 @@ def donchian(df: pd.DataFrame, upper_period: int = 20, lower_period: int = 20) -
     return TA.DO(ohlc, upper_period, lower_period)
 
 
-def mobo(df: pd.DataFrame, period: int = 10, std_multiplier: float = 0.8) -> pd.DataFrame:
-    """Momentum Bands."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.MOBO(ohlc, period, std_multiplier)
-
-
-def chandelier(df: pd.DataFrame, period: int = 22, multiplier: float = 3.0) -> pd.DataFrame:
-    """Chandelier Exit."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.CHANDELIER(ohlc, period, multiplier)
-
-
-def msd(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Mean Standard Deviation."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.MSD(ohlc, period)
-
-
 # ============================================================================
 # Volume Indicators
 # ============================================================================
@@ -446,13 +369,6 @@ def obv(df: pd.DataFrame) -> pd.Series:
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.OBV(ohlc)
-
-
-def wobv(df: pd.DataFrame) -> pd.Series:
-    """Weighted On-Balance Volume."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.WOBV(ohlc)
 
 
 def adl(df: pd.DataFrame) -> pd.Series:
@@ -469,20 +385,6 @@ def chaikin(df: pd.DataFrame, fast: int = 3, slow: int = 10) -> pd.Series:
     return TA.CHAIKIN(ohlc, fast, slow)
 
 
-def cfi(df: pd.DataFrame) -> pd.Series:
-    """Cumulative Force Index / Chaikin Money Flow."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.CFI(ohlc)
-
-
-def efi(df: pd.DataFrame, period: int = 13) -> pd.Series:
-    """Elder's Force Index."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.EFI(ohlc, period)
-
-
 def emv(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Ease of Movement."""
     TA = _get_ta()
@@ -497,13 +399,6 @@ def mfi(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return TA.MFI(ohlc, period)
 
 
-def vfi(df: pd.DataFrame, period: int = 130, smoothing: int = 3, coef: float = 0.2, vol_coef: float = 2.5) -> pd.Series:
-    """Volume Flow Indicator."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VFI(ohlc, period, smoothing, coef, vol_coef)
-
-
 def vpt(df: pd.DataFrame) -> pd.Series:
     """Volume Price Trend."""
     TA = _get_ta()
@@ -511,46 +406,11 @@ def vpt(df: pd.DataFrame) -> pd.Series:
     return TA.VPT(ohlc)
 
 
-def fve(df: pd.DataFrame, period: int = 22) -> pd.Series:
-    """Finite Volume Elements."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.FVE(ohlc, period)
-
-
-def evwma(df: pd.DataFrame, period: int = 20) -> pd.Series:
-    """Elastic Volume Weighted Moving Average."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.EVWMA(ohlc, period)
-
-
 def vwap(df: pd.DataFrame) -> pd.Series:
     """Volume Weighted Average Price."""
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.VWAP(ohlc)
-
-
-def tmf(df: pd.DataFrame, period: int = 21) -> pd.Series:
-    """Twiggs Money Flow."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.TMF(ohlc, period)
-
-
-def vzo(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Volume Zone Oscillator."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VZO(ohlc, period)
-
-
-def pzo(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Price Zone Oscillator."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.PZO(ohlc, period)
 
 
 # ============================================================================
@@ -630,20 +490,6 @@ def mi(df: pd.DataFrame, period: int = 9) -> pd.Series:
     return TA.MI(ohlc, period)
 
 
-def swi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Stochastic Williams Indicator."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.SWI(ohlc, period)
-
-
-def sqzmi(df: pd.DataFrame, period: int = 20, multiplier: float = 2.0) -> pd.Series:
-    """Squeeze Momentum Indicator."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.SQZMI(ohlc, period, multiplier)
-
-
 def er(df: pd.DataFrame, period: int = 10) -> pd.Series:
     """Efficiency Ratio (Kaufman)."""
     TA = _get_ta()
@@ -656,13 +502,6 @@ def fish(df: pd.DataFrame, period: int = 10) -> pd.Series:
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.FISH(ohlc, period)
-
-
-def copp(df: pd.DataFrame, roc1: int = 14, roc2: int = 11, wma_period: int = 10) -> pd.Series:
-    """Coppock Curve."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.COPP(ohlc, roc1, roc2, wma_period)
 
 
 # ============================================================================
@@ -690,41 +529,6 @@ def pivot(df: pd.DataFrame) -> pd.DataFrame:
     return TA.PIVOT(ohlc)
 
 
-def pivot_fib(df: pd.DataFrame) -> pd.DataFrame:
-    """Fibonacci Pivot Points."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.PIVOT_FIB(ohlc)
-
-
-def dymi(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Dynamic Momentum Index."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.DYMI(ohlc, period)
-
-
-def ebbp(df: pd.DataFrame, period: int = 13) -> pd.DataFrame:
-    """Elder Bull Bear Power."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.EBBP(ohlc, period)
-
-
-def ev_macd(df: pd.DataFrame, fast: int = 20, slow: int = 40) -> pd.DataFrame:
-    """Elastic Volume MACD."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.EV_MACD(ohlc, fast, slow)
-
-
-def evstc(df: pd.DataFrame, fast: int = 12, slow: int = 26) -> pd.Series:
-    """Elastic Volume STC."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.EVSTC(ohlc, fast, slow)
-
-
 def stc(df: pd.DataFrame, fast: int = 23, slow: int = 50, length: int = 10) -> pd.Series:
     """Schaff Trend Cycle."""
     TA = _get_ta()
@@ -732,67 +536,11 @@ def stc(df: pd.DataFrame, fast: int = 23, slow: int = 50, length: int = 10) -> p
     return TA.STC(ohlc, fast, slow, length)
 
 
-def mama(df: pd.DataFrame, fast_limit: float = 0.5, slow_limit: float = 0.05) -> pd.DataFrame:
-    """MESA Adaptive Moving Average."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.MAMA(ohlc, fast_limit, slow_limit)
-
-
-def qstick(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """QStick."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.QSTICK(ohlc, period)
-
-
-def vbm(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Volatility-Based Momentum."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VBM(ohlc, period)
-
-
 def vc(df: pd.DataFrame, period: int = 5) -> pd.DataFrame:
     """Value Chart."""
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.VC(ohlc, period)
-
-
-def vw_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
-    """Volume-Weighted MACD."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.VW_MACD(ohlc, fast, slow, signal)
-
-
-def wavepm(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Wave PM."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.WAVEPM(ohlc, period)
-
-
-def williams_fractal(df: pd.DataFrame, period: int = 2) -> pd.DataFrame:
-    """Williams Fractal."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.WILLIAMS_FRACTAL(ohlc, period)
-
-
-def basp(df: pd.DataFrame, period: int = 40) -> pd.DataFrame:
-    """Buy and Sell Pressure."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.BASP(ohlc, period)
-
-
-def baspn(df: pd.DataFrame, period: int = 40) -> pd.DataFrame:
-    """Buy and Sell Pressure (Normalized)."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.BASPN(ohlc, period)
 
 
 def rolling_max(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series:
@@ -807,13 +555,6 @@ def rolling_min(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd
     TA = _get_ta()
     ohlc = _ensure_ohlcv(df)
     return TA.ROLLING_MIN(ohlc, period, column)
-
-
-def smm(df: pd.DataFrame, period: int = 14, column: str = 'close') -> pd.Series:
-    """Simple Moving Median."""
-    TA = _get_ta()
-    ohlc = _ensure_ohlcv(df)
-    return TA.SMM(ohlc, period, column)
 
 
 # ============================================================================

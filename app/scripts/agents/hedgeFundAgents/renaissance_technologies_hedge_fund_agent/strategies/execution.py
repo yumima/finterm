@@ -13,7 +13,7 @@ Key concepts:
 """
 
 import math
-from typing import List, Dict, Any, Optional
+from typing import List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -333,27 +333,3 @@ def analyze_execution(
         execution_score=min(10, max(0, execution_score)),
         details=details
     )
-
-
-def calculate_implementation_shortfall(
-    decision_price: float,
-    execution_price: float,
-    benchmark_price: float
-) -> Dict[str, float]:
-    """
-    Calculate implementation shortfall components.
-    """
-    # Total shortfall
-    total_shortfall = (execution_price - decision_price) / decision_price
-
-    # Delay cost (decision to benchmark)
-    delay_cost = (benchmark_price - decision_price) / decision_price
-
-    # Trading cost (benchmark to execution)
-    trading_cost = (execution_price - benchmark_price) / benchmark_price
-
-    return {
-        "total_shortfall_bps": total_shortfall * 10000,
-        "delay_cost_bps": delay_cost * 10000,
-        "trading_cost_bps": trading_cost * 10000
-    }

@@ -153,9 +153,3 @@ def get_risk_team() -> Team:
     if _risk_team is None:
         _risk_team = create_risk_team()
     return _risk_team
-
-
-def reset_risk_team():
-    """Reset the global Risk Team instance"""
-    global _risk_team
-    _risk_team = None

@@ -575,12 +575,12 @@ def _setup(sym, rule, short, gap, gap_short, gap_text):
             "gap_short": gap_short, "gap_text": gap_text}
 
 
-def next_in_line(series, members, n, lo_first=False, fmt=None, what=""):
+def next_in_line(series, members, n, fmt=None, what=""):
     """A ranked screen's setting-up list: the names ranked just outside its cut
     (#n+1..#2n of `series`, best first, the screen's own stable order), each
     with how far its value is from the cut's. The tested definition
-    (setups_all_backtest.py). `lo_first`: the screen ranks lowest first (the
-    series is passed negated, as the screen ranks it)."""
+    (setups_all_backtest.py). A screen that ranks lowest first passes its
+    series negated, as the screen ranks it."""
     s = series.dropna().sort_values(ascending=False, kind="stable")
     if len(s) <= n or n <= 0:
         return []

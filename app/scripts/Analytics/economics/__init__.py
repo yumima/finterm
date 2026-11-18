@@ -126,34 +126,6 @@ __all__ = [
 ]
 
 
-# Quick access functions for common operations
-def analyze_currency_arbitrage(currency_data, base_currency='USD'):
-    """Quick triangular arbitrage analysis"""
-    detector = ArbitrageDetector()
-    return detector.detect_triangular_arbitrage(currency_data, base_currency)
-
-
-def calculate_gdp_growth(gdp_data, method='solow'):
-    """Quick GDP growth decomposition"""
-    analyzer = GrowthAnalyzer()
-    return analyzer.decompose_growth(gdp_data, method)
-
-
-def assess_policy_impact(policy_data, policy_type='fiscal'):
-    """Quick policy impact assessment"""
-    if policy_type == 'fiscal':
-        analyzer = FiscalPolicyAnalyzer()
-    else:
-        analyzer = MonetaryPolicyAnalyzer()
-    return analyzer.assess_impact(policy_data)
-
-
-def detect_business_cycle_phase(economic_indicators):
-    """Quick business cycle phase detection"""
-    analyzer = BusinessCycleAnalyzer()
-    return analyzer.detect_phase(economic_indicators)
-
-
 # Module configuration
 DEFAULT_CONFIG = {
     'precision': 8,
@@ -163,28 +135,6 @@ DEFAULT_CONFIG = {
     'default_forecast_periods': 12,
     'confidence_interval': 0.95
 }
-
-
-def configure_module(**kwargs):
-    """Configure module-wide settings"""
-    config = EconomicsConfig()
-    for key, value in kwargs.items():
-        if hasattr(config, key):
-            setattr(config, key, value)
-    return config
-
-
-# Version information
-def get_version_info():
-    """Return detailed version information"""
-    return {
-        'version': __version__,
-        'author': __author__,
-        'email': __email__,
-        'description': 'CFA-based Economics Analysis Module for finterm',
-        'modules': len(__all__),
-        'cfa_compliance': 'Level I & II'
-    }
 
 
 # ── Lazy attribute resolution (PEP 562) ─────────────────────────────────────

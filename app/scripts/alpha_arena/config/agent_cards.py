@@ -270,48 +270,6 @@ def list_agent_cards() -> List[AgentCard]:
     return list(_AGENT_CARDS.values())
 
 
-def get_enabled_agents() -> List[AgentCard]:
-    """Get only enabled agents."""
-    return [card for card in list_agent_cards() if card.enabled]
-
-
-def get_agents_by_provider(provider: str) -> List[AgentCard]:
-    """Get agents by provider."""
-    return [card for card in list_agent_cards() if card.provider == provider]
-
-
-def create_agent_from_card(
-    card: AgentCard,
-    api_key: Optional[str] = None,
-    mode: str = "baseline",
-    trading_style: Optional[str] = None,
-):
-    """
-    Create an agent instance from an AgentCard.
-
-    Args:
-        card: AgentCard configuration
-        api_key: Optional API key override
-        mode: Competition mode
-        trading_style: Optional trading style ID (e.g., "aggressive", "conservative")
-
-    Returns:
-        BaseTradingAgent instance
-    """
-    from alpha_arena.core.base_agent import LLMTradingAgent
-
-    return LLMTradingAgent(
-        name=card.name,
-        provider=card.provider,
-        model_id=card.model_id,
-        api_key=api_key,
-        temperature=card.temperature,
-        instructions=card.instructions if card.instructions else None,
-        mode=mode,
-        trading_style=trading_style,
-    )
-
-
 def create_styled_agents_from_provider(
     provider: str,
     model_id: str,
@@ -378,12 +336,3 @@ def create_styled_agents_from_provider(
         })
 
     return agents
-
-
-def get_available_styles() -> List[Dict[str, Any]]:
-    """Get list of available trading styles for UI display."""
-    try:
-        from alpha_arena.config.trading_styles import list_trading_styles
-        return [style.to_dict() for style in list_trading_styles()]
-    except ImportError:
-        return []

@@ -35,12 +35,6 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
-
-try:
     from scipy.stats import norm as scipy_norm
     from scipy.optimize import brentq
     SCIPY_AVAILABLE = True
@@ -3110,64 +3104,6 @@ class DatabentoProvider:
                 "symbols": symbols,
                 "timestamp": int(datetime.now().timestamp())
             }
-
-
-def compute_implied_volatility(
-    option_price: float,
-    spot: float,
-    strike: float,
-    time_to_expiry: float,
-    risk_free_rate: float = 0.043,
-    is_call: bool = True,
-    max_iterations: int = 100,
-    tolerance: float = 1e-6,
-) -> Optional[float]:
-    """
-    Compute implied volatility using Newton-Raphson method.
-    Based on Black-Scholes model.
-    """
-    if option_price <= 0 or time_to_expiry <= 0:
-        return None
-
-    def norm_cdf(x):
-        return 0.5 * (1 + math.erf(x / math.sqrt(2)))
-
-    def norm_pdf(x):
-        return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
-
-    def bs_price(sigma):
-        d1 = (math.log(spot / strike) + (risk_free_rate + sigma**2 / 2) * time_to_expiry) / (sigma * math.sqrt(time_to_expiry))
-        d2 = d1 - sigma * math.sqrt(time_to_expiry)
-
-        if is_call:
-            return spot * norm_cdf(d1) - strike * math.exp(-risk_free_rate * time_to_expiry) * norm_cdf(d2)
-        else:
-            return strike * math.exp(-risk_free_rate * time_to_expiry) * norm_cdf(-d2) - spot * norm_cdf(-d1)
-
-    def bs_vega(sigma):
-        d1 = (math.log(spot / strike) + (risk_free_rate + sigma**2 / 2) * time_to_expiry) / (sigma * math.sqrt(time_to_expiry))
-        return spot * norm_pdf(d1) * math.sqrt(time_to_expiry)
-
-    # Initial guess
-    sigma = math.sqrt(2 * math.pi / time_to_expiry) * option_price / spot
-    sigma = max(0.01, min(5.0, sigma))
-
-    for _ in range(max_iterations):
-        price = bs_price(sigma)
-        diff = price - option_price
-
-        if abs(diff) < tolerance:
-            return sigma
-
-        vega = bs_vega(sigma)
-        if vega < 1e-10:
-            break
-
-        sigma = sigma - diff / vega
-        if sigma <= 0.001 or sigma > 10:
-            break
-
-    return None
 
 
 def main():

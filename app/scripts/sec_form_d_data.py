@@ -55,13 +55,6 @@ def _cik_unpadded(cik):
     return str(int(str(cik).lstrip("0") or "0"))
 
 
-def _accession_dashed(adsh):
-    s = adsh.replace("-", "")
-    if len(s) >= 18:
-        return f"{s[0:10]}-{s[10:12]}-{s[12:18]}"
-    return adsh
-
-
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
 

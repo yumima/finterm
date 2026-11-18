@@ -245,37 +245,6 @@ class RiskMeasureTypeEnum(Enum):
     Strike = "Strike"
 
 
-class MarketDataShockTypeEnum(Enum):
-    """Types of market data shocks"""
-    Absolute = "Absolute"
-    Proportional = "Proportional"
-    Override = "Override"
-    StdDev = "StdDev"
-    StdVolFactor = "StdVolFactor"
-    StdVolFactorProportional = "StdVolFactorProportional"
-    CSWFFR = "CSWFFR"
-    AutoDefault = "AutoDefault"
-    Invalid = "Invalid"
-
-
-class ScenarioType(Enum):
-    """Types of scenarios"""
-    CARRY = "carry"
-    CURVE = "curve"
-    COMPOSITE = "composite"
-    MARKET_DATA = "market_data"
-    ROLL_FORWARD = "roll_forward"
-    STRESS = "stress"
-    CUSTOM = "custom"
-
-
-class GreekOrder(Enum):
-    """Order of Greeks"""
-    FIRST = 1  # Delta, Vega, Theta, Rho
-    SECOND = 2  # Gamma, Vanna, Volga, Charm
-    THIRD = 3  # Speed, Zomma, Color, Ultima
-
-
 # =============================================================================
 # DATA CLASSES
 # =============================================================================

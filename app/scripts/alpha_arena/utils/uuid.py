@@ -37,18 +37,6 @@ def generate_competition_id() -> str:
     return f"comp_{timestamp}_{random_suffix}"
 
 
-def generate_cycle_id(competition_id: str, cycle_number: int) -> str:
-    """Generate a unique cycle identifier."""
-    timestamp = int(time.time() * 1000)
-    return f"{competition_id}_cycle_{cycle_number}_{timestamp}"
-
-
-def generate_decision_id(competition_id: str, model_name: str, cycle_number: int) -> str:
-    """Generate a unique decision identifier."""
-    timestamp = int(time.time() * 1000)
-    return f"{competition_id}_{model_name}_{cycle_number}_{timestamp}"
-
-
 def generate_snapshot_id(competition_id: str, model_name: str, cycle_number: int) -> str:
     """Generate a unique snapshot identifier."""
     timestamp = int(time.time() * 1000)

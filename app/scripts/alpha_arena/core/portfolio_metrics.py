@@ -387,14 +387,3 @@ def get_analyzer(model_name: str, initial_capital: float = 10000.0) -> Portfolio
     if model_name not in _analyzers:
         _analyzers[model_name] = PortfolioAnalyzer(initial_capital=initial_capital)
     return _analyzers[model_name]
-
-
-def reset_analyzer(model_name: str):
-    """Reset a model's analyzer"""
-    if model_name in _analyzers:
-        del _analyzers[model_name]
-
-
-def reset_all_analyzers():
-    """Reset all analyzers"""
-    _analyzers.clear()

@@ -252,38 +252,6 @@ class ContinuousFuture:
 
 _registered_bundles = {}
 
-def register_bundle(name, f=None, calendar_name='XNYS', start_session=None,
-                    end_session=None, minutes_per_day=390, create_writers=True):
-    """Register a data bundle."""
-    _registered_bundles[name] = {
-        'ingest': f,
-        'calendar_name': calendar_name,
-        'start_session': start_session,
-        'end_session': end_session,
-        'minutes_per_day': minutes_per_day,
-    }
-
-def ingest_bundle(name, environ=None, timestamp=None, assets_versions=(),
-                  show_progress=False):
-    """Ingest data for a named bundle (stub)."""
-    if name not in _registered_bundles:
-        raise ValueError(f"Bundle '{name}' not registered")
-    print(f'[ZL-BUNDLE] Ingesting bundle: {name}', file=sys.stderr)
-
-def load_bundle(name, environ=None, timestamp=None):
-    """Load a previously ingested bundle (stub)."""
-    if name not in _registered_bundles:
-        raise ValueError(f"Bundle '{name}' not registered")
-    return {'name': name, 'data': None}
-
-def clean_bundle(name, before=None, after=None, keep_last=None):
-    """Clean bundle data (stub)."""
-    print(f'[ZL-BUNDLE] Cleaning bundle: {name}', file=sys.stderr)
-
-def unregister_bundle(name):
-    """Unregister a bundle."""
-    _registered_bundles.pop(name, None)
-
 def bundles():
     """List registered bundles."""
     return dict(_registered_bundles)

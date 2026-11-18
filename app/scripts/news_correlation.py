@@ -17,21 +17,6 @@ from collections import Counter, defaultdict
 
 # ── Signal Types ─────────────────────────────────────────────────────────────
 
-SIGNAL_TYPES = [
-    "velocity_spike",        # 3x+ normal volume in category
-    "keyword_spike",         # trending term above baseline
-    "news_leads_markets",    # negative news before price drop
-    "silent_divergence",     # market moves without news
-    "convergence",           # multiple signals in same location
-    "triangulation",         # entity in 3+ sources
-    "sector_cascade",        # sector-wide market move + news
-    "hotspot_escalation",    # conflict zone activity surge
-    "military_surge",        # military keyword spike
-    "prediction_leads_news", # prediction market odds shift before news
-    "geo_convergence",       # multiple events in same geography
-    "flow_divergence",       # capital flow vs price divergence
-]
-
 # ── Threat keywords by category ──────────────────────────────────────────────
 
 CATEGORY_KEYWORDS = {

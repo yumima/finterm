@@ -18,11 +18,7 @@ import traceback
 
 # EdgarTools imports
 try:
-    from edgar import (
-        Company, set_identity, get_identity,
-        find_company, get_company_tickers,
-        configure_http, clear_cache, storage_info
-    )
+    from edgar import Company, set_identity, get_identity, find_company
     EDGAR_AVAILABLE = True
 except ImportError as e:
     EDGAR_AVAILABLE = False
@@ -114,53 +110,6 @@ def get_user_identity() -> Dict[str, Any]:
         }
     except Exception as e:
         return {"error": EdgarError("get_identity", str(e)).to_dict()}
-
-
-def configure_connection(verify_ssl: Optional[bool] = None,
-                        proxy: Optional[str] = None,
-                        timeout: Optional[float] = None) -> Dict[str, Any]:
-    """Configure HTTP connection settings"""
-    try:
-        check_edgar_available()
-        configure_http(verify_ssl=verify_ssl, proxy=proxy, timeout=timeout)
-        return {
-            "success": True,
-            "message": "HTTP configuration updated",
-            "settings": {
-                "verify_ssl": verify_ssl,
-                "proxy": proxy,
-                "timeout": timeout
-            }
-        }
-    except Exception as e:
-        return {"error": EdgarError("configure_http", str(e)).to_dict()}
-
-
-def clear_local_cache(dry_run: bool = True) -> Dict[str, Any]:
-    """Clear local cache (dry_run=True for preview)"""
-    try:
-        check_edgar_available()
-        result = clear_cache(dry_run=dry_run)
-        return {
-            "success": True,
-            "dry_run": dry_run,
-            "statistics": result
-        }
-    except Exception as e:
-        return {"error": EdgarError("clear_cache", str(e)).to_dict()}
-
-
-def get_storage_info() -> Dict[str, Any]:
-    """Get storage and cache information"""
-    try:
-        check_edgar_available()
-        info = storage_info()
-        return {
-            "success": True,
-            "storage_info": str(info)
-        }
-    except Exception as e:
-        return {"error": EdgarError("storage_info", str(e)).to_dict()}
 
 
 # ============================================================================
@@ -281,48 +230,6 @@ def get_company_info(ticker: str) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"error": EdgarError("get_company", str(e), traceback.format_exc()).to_dict()}
-
-
-def get_all_company_tickers(limit: int = 1000) -> Dict[str, Any]:
-    """
-    Get list of all company tickers from SEC
-
-    Args:
-        limit: Maximum number of tickers to return
-
-    Returns:
-        List of companies with tickers and CIKs
-    """
-    try:
-        check_edgar_available()
-        tickers = get_company_tickers()
-
-        if not tickers:
-            return {
-                "success": True,
-                "data": [],
-                "count": 0
-            }
-
-        # Convert to list and limit
-        companies_list = []
-        for i, (cik, ticker_data) in enumerate(tickers.items()):
-            if i >= limit:
-                break
-            companies_list.append({
-                "cik": cik,
-                "ticker": ticker_data.get('ticker'),
-                "title": ticker_data.get('title'),
-            })
-
-        return {
-            "success": True,
-            "data": companies_list,
-            "count": len(companies_list),
-            "total": len(tickers)
-        }
-    except Exception as e:
-        return {"error": EdgarError("get_company_tickers", str(e), traceback.format_exc()).to_dict()}
 
 
 # ============================================================================
