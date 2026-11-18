@@ -24,22 +24,17 @@ TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", par
     coalesce_->setInterval(16);
     connect(coalesce_, &QTimer::timeout, this, &TopMoversWidget::rebuild_from_cache);
 
-    connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
-
-    list_timer_ = new QTimer(this);
-    list_timer_->setInterval(60'000); // the screener's own refresh (the service caches 60 s)
-    connect(list_timer_, &QTimer::timeout, this, &TopMoversWidget::refresh_data);
+    // A user refresh asks the hub to re-read the shared movers topic now.
+    connect(this, &BaseWidget::refresh_requested, this, [] {
+        datahub::DataHub::instance().request(services::MarketDataService::kMoversTopic, /*force=*/true);
+    });
     live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
         if (services::LiveQuoteFollower::merge_movers(cached_movers_, q))
             coalesce_->start();
     });
 
     apply_styles();
-    set_loading(true);
-    // Kick off the initial screener fetch — no fixed symbol list anymore;
-    // the daemon's yfinance.screen('day_gainers'/'day_losers') is the
-    // authoritative source of top movers.
-    refresh_data();
+    set_loading(true); // the movers topic answers on show
 }
 
 void TopMoversWidget::build_body() {
@@ -100,15 +95,12 @@ void TopMoversWidget::on_theme_changed() {
 
 void TopMoversWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
-    hub_active_ = true;
+    if (!hub_active_) { // a second show without a hide must not subscribe twice
+        hub_active_ = true;
+        subscribe_movers();
+    }
     resubscribe_sparklines();
     follow_live();
-    if (!list_timer_->isActive()) {
-        list_timer_->start();
-        if (shown_before_)
-            refresh_data(); // back on screen: the list may be minutes old (the first show's fetch is the ctor's)
-        shown_before_ = true;
-    }
 }
 
 void TopMoversWidget::follow_live() {
@@ -122,10 +114,9 @@ void TopMoversWidget::follow_live() {
 
 void TopMoversWidget::hideEvent(QHideEvent* e) {
     BaseWidget::hideEvent(e);
-    list_timer_->stop();
     live_->clear();
     if (hub_active_) {
-        datahub::DataHub::instance().unsubscribe(this);
+        datahub::DataHub::instance().unsubscribe(this); // data AND error subscriptions
         // Drop the tracking list too — otherwise resubscribe_sparklines() on
         // the next showEvent would skip every symbol as "already subscribed"
         // and the widget would render with no live sparklines.
@@ -134,29 +125,32 @@ void TopMoversWidget::hideEvent(QHideEvent* e) {
     }
 }
 
-void TopMoversWidget::refresh_data() {
-    QPointer<TopMoversWidget> self = this;
-    services::MarketDataService::instance().fetch_top_movers( // D4-exempt: polled screener movers, no hub producer yet
-        10, [self](bool ok, services::MarketDataService::TopMovers tm) {
-            if (!self)
-                return;
-            if (!ok) {
-                // Genuine fetch failure (daemon/yfinance error). Clear the
-                // spinner so it doesn't hang forever; show the error only when
-                // there is nothing to show yet — movers already on screen stay.
-                self->set_loading(false);
-                if (self->cached_movers_.gainers.isEmpty() && self->cached_movers_.losers.isEmpty())
-                    self->set_error(QStringLiteral("Couldn't load top movers"));
-                return;
-            }
-            self->cached_movers_ = std::move(tm);
-            services::LiveQuoteFollower::refresh_movers(self->cached_movers_); // the tape is newer than the screener
-            self->set_loading(false);
-            self->clear_error();
-            self->resubscribe_sparklines();
-            self->follow_live();
-            self->rebuild_from_cache();
-        });
+void TopMoversWidget::subscribe_movers() {
+    // The day's movers: one hub topic every screen reads (MarketDataService
+    // refreshes it once a minute while anyone is subscribed). A subscribe
+    // delivers the cached list at once.
+    auto& hub = datahub::DataHub::instance();
+    const QString& topic = services::MarketDataService::kMoversTopic;
+    hub.subscribe(this, topic, [this](const QVariant& v) {
+        if (v.canConvert<services::MarketDataService::TopMovers>())
+            on_movers(v.value<services::MarketDataService::TopMovers>());
+    });
+    hub.subscribe_errors(this, topic, [this](const QString&) {
+        // Movers already on screen stay; say so only when there is nothing.
+        set_loading(false);
+        if (cached_movers_.gainers.isEmpty() && cached_movers_.losers.isEmpty())
+            set_error(QStringLiteral("Couldn't load top movers"));
+    });
+}
+
+void TopMoversWidget::on_movers(const services::MarketDataService::TopMovers& tm) {
+    cached_movers_ = tm.truncated(kRows);
+    services::LiveQuoteFollower::refresh_movers(cached_movers_); // the tape is newer than the screener
+    set_loading(false);
+    clear_error();
+    resubscribe_sparklines();
+    follow_live();
+    rebuild_from_cache();
 }
 
 void TopMoversWidget::resubscribe_sparklines() {

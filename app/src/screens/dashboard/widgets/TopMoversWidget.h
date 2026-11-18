@@ -39,7 +39,10 @@ class TopMoversWidget : public BaseWidget {
 
   private:
     void apply_styles();
-    void refresh_data();
+    /// The shared movers topic (market:movers) — subscribed while on screen.
+    void subscribe_movers();
+    void on_movers(const services::MarketDataService::TopMovers& tm);
+    static constexpr int kRows = 10; // movers per side this tile shows
     void show_tab(bool gainers);
     /// Re-apply the gainers/losers tab-button stylesheets for the current
     /// active tab. Cheap, but only needs to run on tab switch + theme change —
@@ -79,8 +82,6 @@ class TopMoversWidget : public BaseWidget {
     QTimer* coalesce_ = nullptr;
     /// The LIST re-ranks from the screener every minute while shown; the
     /// listed rows' prices (and their order) follow the tape in between.
-    QTimer* list_timer_ = nullptr;
-    bool shown_before_ = false;
     services::LiveQuoteFollower* live_ = nullptr;
     void follow_live();
 };

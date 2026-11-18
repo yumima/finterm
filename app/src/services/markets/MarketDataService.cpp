@@ -50,10 +50,68 @@ MarketDataService& MarketDataService::instance() {
 
 MarketDataService::MarketDataService() {}
 
+// ── One mapping for a quote, wherever it comes from ─────────────────────────
+// A daemon row (change_percent), the cache entry (change_pct) and back. These
+// used to be five hand-copied blocks that had already drifted (one read no
+// order book, one fell back to the symbol for the name and one did not).
+namespace {
+QuoteData quote_from_daemon(const QJsonObject& q) {
+    QuoteData qd{};
+    qd.symbol = q["symbol"].toString();
+    qd.name = q["name"].toString(qd.symbol);
+    qd.price = q["price"].toDouble();
+    qd.change = q["change"].toDouble(qQNaN());
+    qd.change_pct = q["change_percent"].toDouble(qQNaN());
+    qd.high = q["high"].toDouble();
+    qd.low = q["low"].toDouble();
+    qd.volume = q["volume"].toDouble(qQNaN());
+    qd.bid = q["bid"].toDouble();
+    qd.ask = q["ask"].toDouble();
+    qd.bid_size = q["bid_size"].toDouble();
+    qd.ask_size = q["ask_size"].toDouble();
+    return qd;
+}
+
+QJsonObject quote_to_cache(const QuoteData& q) {
+    QJsonObject o;
+    o["symbol"] = q.symbol;
+    o["name"] = q.name;
+    o["price"] = q.price;
+    o["change"] = q.change;
+    o["change_pct"] = q.change_pct;
+    o["high"] = q.high;
+    o["low"] = q.low;
+    o["volume"] = q.volume;
+    o["bid"] = q.bid;
+    o["ask"] = q.ask;
+    o["bid_size"] = q.bid_size;
+    o["ask_size"] = q.ask_size;
+    return o;
+}
+
+QuoteData quote_from_cache(const QJsonObject& o, const QString& fallback_symbol = {}) {
+    QuoteData qd{};
+    qd.symbol = o.value("symbol").toString(fallback_symbol);
+    qd.name = o.value("name").toString(qd.symbol);
+    qd.price = o.value("price").toDouble();
+    qd.change = o.value("change").toDouble(qQNaN());
+    qd.change_pct = o.value("change_pct").toDouble(qQNaN());
+    qd.high = o.value("high").toDouble();
+    qd.low = o.value("low").toDouble();
+    qd.volume = o.value("volume").toDouble(qQNaN());
+    qd.bid = o.value("bid").toDouble();
+    qd.ask = o.value("ask").toDouble();
+    qd.bid_size = o.value("bid_size").toDouble();
+    qd.ask_size = o.value("ask_size").toDouble();
+    return qd;
+}
+} // namespace
+
 // ── DataHub Producer integration ────────────────────────────────────────────
 
 QStringList MarketDataService::topic_patterns() const {
-    return {QStringLiteral("market:quote:*"), QStringLiteral("market:sparkline:*"), QStringLiteral("market:history:*")};
+    return {QStringLiteral("market:quote:*"), QStringLiteral("market:sparkline:*"), QStringLiteral("market:history:*"),
+            kMoversTopic};
 }
 
 int MarketDataService::max_requests_per_sec() const {
@@ -86,6 +144,18 @@ void MarketDataService::refresh(const QStringList& topics) {
         QString interval;
     };
     QVector<HistReq> hist_reqs;
+    if (topics.contains(kMoversTopic)) {
+        // The day's movers: their own screener call, one list for every screen.
+        fetch_movers_all(
+            [](bool ok, const TopMovers& tm, const QString& why) {
+                auto& hub = datahub::DataHub::instance();
+                if (ok)
+                    hub.publish(kMoversTopic, QVariant::fromValue(tm));
+                else
+                    hub.publish_error(kMoversTopic, why.isEmpty() ? QStringLiteral("screener unavailable") : why);
+            },
+            /*fresh=*/true);
+    }
     for (const auto& t : topics) {
         if (t.startsWith(kQuote)) {
             quote_syms.append(t.mid(kQuote.size()));
@@ -131,7 +201,7 @@ void MarketDataService::refresh(const QStringList& topics) {
     }
 
     if (payload.isEmpty()) {
-        return; // Nothing to fetch — hub guarantees this won't happen in practice.
+        return; // nothing beyond the movers (fetched above)
     }
 
     QPointer<MarketDataService> self = this;
@@ -147,8 +217,19 @@ void MarketDataService::refresh(const QStringList& topics) {
 
             const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - refresh_t0;
 
+            auto& hub = datahub::DataHub::instance();
             if (!ok) {
                 LOG_WARN("MarketData", QString("batch_all failed in %1ms: %2").arg(elapsed).arg(err.left(200)));
+                // Say so on every topic asked for: a subscriber waiting on a
+                // refresh must hear a refusal, not silence (the last value,
+                // if any, stays on screen).
+                const QString why = err.left(200);
+                for (const auto& s : quote_syms)
+                    hub.publish_error(QStringLiteral("market:quote:") + s, why);
+                for (const auto& s : spark_syms)
+                    hub.publish_error(QStringLiteral("market:sparkline:") + s, why);
+                for (const auto& h : hist_reqs)
+                    hub.publish_error(h.topic, why);
                 return;
             }
 
@@ -174,23 +255,13 @@ void MarketDataService::refresh(const QStringList& topics) {
                 want_hists.insert(h.symbol + QLatin1Char('|') + h.period + QLatin1Char('|') + h.interval);
             const QJsonArray quotes_arr = root.value("quotes").toArray();
             int quotes_parsed = 0;
+            QSet<QString> answered_quotes;
             for (const auto& v : quotes_arr) {
                 const QJsonObject q = v.toObject();
                 if (q.isEmpty() || q.contains("error") || !want_quotes.contains(q["symbol"].toString()))
                     continue;
-                QuoteData qd{};
-                qd.symbol = q["symbol"].toString();
-                qd.name = q["name"].toString(q["symbol"].toString());
-                qd.price = q["price"].toDouble();
-                qd.change = q["change"].toDouble(qQNaN());
-                qd.change_pct = q["change_percent"].toDouble(qQNaN());
-                qd.high = q["high"].toDouble();
-                qd.low = q["low"].toDouble();
-                qd.volume = q["volume"].toDouble(qQNaN());
-                qd.bid = q["bid"].toDouble();
-                qd.ask = q["ask"].toDouble();
-                qd.bid_size = q["bid_size"].toDouble();
-                qd.ask_size = q["ask_size"].toDouble();
+                const QuoteData qd = quote_from_daemon(q);
+                answered_quotes.insert(qd.symbol);
                 // A symbol already waiting to be stored/published (merged
                 // refreshes answer every caller with the same union, or an
                 // older reply not yet drained) is replaced by this one — the
@@ -205,6 +276,12 @@ void MarketDataService::refresh(const QStringList& topics) {
                 self->refresh_pending_quotes_.append(qd);
                 ++quotes_parsed;
             }
+
+            // A symbol asked for and not answered (refused, or an {error}
+            // row) is an error on its topic — never an empty success.
+            for (const auto& sym : quote_syms)
+                if (!answered_quotes.contains(sym))
+                    hub.publish_error(QStringLiteral("market:quote:") + sym, QStringLiteral("no quote returned"));
 
             // Sparklines — {sym: [closes]}
             const QJsonObject sparks = root.value("sparklines").toObject();
@@ -238,10 +315,17 @@ void MarketDataService::refresh(const QStringList& topics) {
             int hists_parsed = 0;
             for (const auto& hv : hists) {
                 const QJsonObject h = hv.toObject();
-                if (h.contains("error") || !want_hists.contains(h.value("symbol").toString() + QLatin1Char('|') +
-                                                                h.value("period").toString() + QLatin1Char('|') +
-                                                                h.value("interval").toString()))
+                if (!want_hists.contains(h.value("symbol").toString() + QLatin1Char('|') +
+                                         h.value("period").toString() + QLatin1Char('|') +
+                                         h.value("interval").toString()))
                     continue;
+                if (h.contains("error")) {
+                    hub.publish_error(QStringLiteral("market:history:") + h.value("symbol").toString() +
+                                          QLatin1Char(':') + h.value("period").toString() + QLatin1Char(':') +
+                                          h.value("interval").toString(),
+                                      h.value("error").toString());
+                    continue;
+                }
                 PendingHistory ph;
                 ph.symbol = h.value("symbol").toString();
                 ph.period = h.value("period").toString();
@@ -317,20 +401,7 @@ void MarketDataService::drain_refresh_chunk() {
         const QuoteData qd = refresh_pending_quotes_.takeFirst();
         refresh_pending_quote_at_.remove(qd.symbol);
         ++refresh_pending_quote_base_; // positions are absolute: no reindex on takeFirst
-        QJsonObject co;
-        co["symbol"] = qd.symbol;
-        co["name"] = qd.name;
-        co["price"] = qd.price;
-        co["change"] = qd.change;
-        co["change_pct"] = qd.change_pct;
-        co["high"] = qd.high;
-        co["low"] = qd.low;
-        co["volume"] = qd.volume;
-        co["bid"] = qd.bid;
-        co["ask"] = qd.ask;
-        co["bid_size"] = qd.bid_size;
-        co["ask_size"] = qd.ask_size;
-        store_quote_entries(qd.symbol, co);
+        store_quote_entries(qd.symbol, quote_to_cache(qd));
         publish_quote_to_hub(qd, /*polled=*/true);
         --budget;
     }
@@ -696,9 +767,16 @@ void MarketDataService::ensure_registered_with_hub() {
     hist_p.min_interval_ms = 60'000;
     hub.set_policy_pattern(QStringLiteral("market:history:*"), hist_p);
 
+    // Movers: Yahoo's day_gainers/day_losers screeners refresh about once a
+    // minute; every screen showing them reads this one topic.
+    datahub::TopicPolicy movers_p;
+    movers_p.ttl_ms = 60'000;
+    movers_p.min_interval_ms = 60'000;
+    hub.set_policy(kMoversTopic, movers_p);
+
     hub_registered_ = true;
     init_stream();
-    LOG_INFO("DataHub", "MarketDataService registered (quote:*, sparkline:*, history:*)");
+    LOG_INFO("DataHub", "MarketDataService registered (quote:*, sparkline:*, history:*, movers)");
 
     // Cold-start hydration is deferred to the next event-loop tick so it
     // never competes with the LockScreen for input handling during the
@@ -773,15 +851,10 @@ void MarketDataService::hydrate_quotes_from_cache() {
         // a byte-identical quote, and a per-fetch timestamp would make every
         // tick look changed and defeat that. The age gate above is what keeps
         // a stale price off the screen.
-        QuoteData qd{};
-        qd.symbol = o.value("symbol").toString(sym);
-        qd.name = o.value("name").toString(qd.symbol);
-        qd.price = o.value("price").toDouble();
-        qd.change = o.value("change").toDouble(qQNaN());
-        qd.change_pct = o.value("change_pct").toDouble(qQNaN());
-        qd.high = o.value("high").toDouble();
-        qd.low = o.value("low").toDouble();
-        qd.volume = o.value("volume").toDouble(qQNaN());
+        QuoteData qd = quote_from_cache(o, sym);
+        // A restored price is a last-known level; an order book from an
+        // earlier session is not a book at all.
+        qd.bid = qd.ask = qd.bid_size = qd.ask_size = 0;
         hydrate_pending_.append(qd);
     }
     hydrate_pending_total_ = hydrate_pending_.size();
@@ -857,21 +930,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
                 cached_results.clear();
                 break;
             }
-            const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
-            QuoteData qd{};
-            qd.symbol = o["symbol"].toString();
-            qd.name = o["name"].toString();
-            qd.price = o["price"].toDouble();
-            qd.change = o["change"].toDouble(qQNaN());
-            qd.change_pct = o["change_pct"].toDouble(qQNaN());
-            qd.high = o["high"].toDouble();
-            qd.low = o["low"].toDouble();
-            qd.volume = o["volume"].toDouble(qQNaN());
-            qd.bid = o["bid"].toDouble();
-            qd.ask = o["ask"].toDouble();
-            qd.bid_size = o["bid_size"].toDouble();
-            qd.ask_size = o["ask_size"].toDouble();
-            cached_results.append(qd);
+            cached_results.append(quote_from_cache(QJsonDocument::fromJson(it.value().toUtf8()).object(), sym));
         }
         if (!cached_results.isEmpty()) {
             overlay_live(cached_results);
@@ -930,40 +989,6 @@ void MarketDataService::flush_batch() {
             QSet<QString> refused_syms; // rows Yahoo refused (transient)
 
             if (ok) {
-                auto parse_quote = [](const QJsonObject& q) -> QuoteData {
-                    QuoteData qd{};
-                    qd.symbol = q["symbol"].toString();
-                    qd.name = q["name"].toString(q["symbol"].toString());
-                    qd.price = q["price"].toDouble();
-                    qd.change = q["change"].toDouble(qQNaN());
-                    qd.change_pct = q["change_percent"].toDouble(qQNaN());
-                    qd.high = q["high"].toDouble();
-                    qd.low = q["low"].toDouble();
-                    qd.volume = q["volume"].toDouble(qQNaN());
-                    qd.bid = q["bid"].toDouble();
-                    qd.ask = q["ask"].toDouble();
-                    qd.bid_size = q["bid_size"].toDouble();
-                    qd.ask_size = q["ask_size"].toDouble();
-                    return qd;
-                };
-
-                auto store_quote = [](const QuoteData& q) {
-                    QJsonObject o;
-                    o["symbol"] = q.symbol;
-                    o["name"] = q.name;
-                    o["price"] = q.price;
-                    o["change"] = q.change;
-                    o["change_pct"] = q.change_pct;
-                    o["high"] = q.high;
-                    o["low"] = q.low;
-                    o["volume"] = q.volume;
-                    o["bid"] = q.bid;
-                    o["ask"] = q.ask;
-                    o["bid_size"] = q.bid_size;
-                    o["ask_size"] = q.ask_size;
-                    store_quote_entries(q.symbol, o);
-                };
-
                 // Daemon's batch_quotes returns a flat list; PythonWorker
                 // wraps it under "_value". Fall back to "quotes" for forward
                 // compatibility if the daemon ever returns a wrapped shape.
@@ -975,9 +1000,9 @@ void MarketDataService::flush_batch() {
                         refused_syms.insert(q["symbol"].toString());
                     if (q.contains("error") || !mine.contains(q["symbol"].toString()))
                         continue;
-                    auto quote = parse_quote(q);
+                    const QuoteData quote = quote_from_daemon(q);
                     all_quotes.append(quote);
-                    store_quote(quote);
+                    store_quote_entries(quote.symbol, quote_to_cache(quote));
                     publish_quote_to_hub(quote, /*polled=*/true);
                 }
                 LOG_INFO("MarketData", QString("Fetched %1 quotes (cached)").arg(all_quotes.size()));
@@ -997,21 +1022,8 @@ void MarketDataService::flush_batch() {
                     for (const auto& sym : req.symbols) {
                         const QVariant cv = finterm::CacheManager::instance().get("market:" + sym);
                         if (!cv.isNull()) {
-                            const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
-                            QuoteData qd{};
-                            qd.symbol = o["symbol"].toString();
-                            qd.name = o["name"].toString();
-                            qd.price = o["price"].toDouble();
-                            qd.change = o["change"].toDouble(qQNaN());
-                            qd.change_pct = o["change_pct"].toDouble(qQNaN());
-                            qd.high = o["high"].toDouble();
-                            qd.low = o["low"].toDouble();
-                            qd.volume = o["volume"].toDouble(qQNaN());
-                            qd.bid = o["bid"].toDouble();
-                            qd.ask = o["ask"].toDouble();
-                            qd.bid_size = o["bid_size"].toDouble();
-                            qd.ask_size = o["ask_size"].toDouble();
-                            stale.append(qd);
+                            stale.append(
+                                quote_from_cache(QJsonDocument::fromJson(cv.toString().toUtf8()).object(), sym));
                         }
                     }
                     req.cb(!stale.isEmpty(), stale);
@@ -1428,55 +1440,82 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
 // 60-second CacheManager TTL — market movers shift through the trading day
 // but cycling between gainers/losers tabs shouldn't burn a fresh daemon call
 // each time. Slightly stale-but-real data beats hardcoded-watchlist data.
-void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
-    constexpr int kTopMoversCacheTtlSec = 60;
-    const QString cache_key = QString("top_movers:%1").arg(count);
-    auto parse_side = [](const QJsonArray& arr) -> QVector<QuoteData> {
-        QVector<QuoteData> out;
-        out.reserve(arr.size());
-        for (const auto& v : arr) {
-            const auto o = v.toObject();
-            QuoteData q;
-            q.symbol = o["symbol"].toString();
-            q.name = o["name"].toString();
-            q.price = o["price"].toDouble();
-            q.change = o["change"].toDouble(qQNaN());
-            q.change_pct = o["change_pct"].toDouble(qQNaN());
-            q.high = o["high"].toDouble();
-            q.low = o["low"].toDouble();
-            q.volume = o["volume"].toDouble(qQNaN());
-            if (!q.symbol.isEmpty())
-                out.append(q);
-        }
-        return out;
-    };
-    auto parse = [parse_side](const QJsonObject& o) -> TopMovers {
-        TopMovers tm;
-        tm.gainers = parse_side(o["gainers"].toArray());
-        tm.losers = parse_side(o["losers"].toArray());
-        return tm;
-    };
-    auto cached = finterm::CacheManager::instance().try_get(cache_key);
-    if (cached.has_value()) {
-        const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
-        cb(true, parse(obj));
+namespace {
+constexpr int kMoversTtlSec = 60; // the screener's own refresh
+const QString kMoversCacheKey = QStringLiteral("top_movers:v2:%1").arg(MarketDataService::kMoversMax);
+
+QVector<QuoteData> parse_movers_side(const QJsonArray& arr) {
+    QVector<QuoteData> out;
+    out.reserve(arr.size());
+    for (const auto& v : arr) {
+        const auto o = v.toObject();
+        QuoteData q;
+        q.symbol = o["symbol"].toString();
+        q.name = o["name"].toString();
+        q.price = o["price"].toDouble();
+        q.change = o["change"].toDouble(qQNaN());
+        q.change_pct = o["change_pct"].toDouble(qQNaN());
+        q.high = o["high"].toDouble();
+        q.low = o["low"].toDouble();
+        q.volume = o["volume"].toDouble(qQNaN());
+        if (!q.symbol.isEmpty())
+            out.append(q);
+    }
+    return out;
+}
+
+MarketDataService::TopMovers parse_movers(const QJsonObject& o) {
+    MarketDataService::TopMovers tm;
+    tm.gainers = parse_movers_side(o["gainers"].toArray());
+    tm.losers = parse_movers_side(o["losers"].toArray());
+    return tm;
+}
+} // namespace
+
+void MarketDataService::fetch_movers_all(std::function<void(bool, const TopMovers&, const QString&)> cb, bool fresh) {
+    // `fresh`: the hub's refresh — its own policy decides when to ask, so a
+    // forced refresh must not be answered from the one-shot cache.
+    if (const auto cached = fresh ? std::nullopt : finterm::CacheManager::instance().try_get(kMoversCacheKey)) {
+        cb(true, parse_movers(QJsonDocument::fromJson(cached->toUtf8()).object()), {});
         return;
     }
+    movers_waiters_.append(std::move(cb));
+    if (movers_waiters_.size() > 1)
+        return; // the request already out answers this caller too
     QJsonObject payload;
-    payload["count"] = count;
+    payload["count"] = kMoversMax;
+    QPointer<MarketDataService> self = this;
     python::PythonWorker::instance().submit(
         "top_movers", payload,
-        [cb, parse, cache_key](bool ok, QJsonObject result, QString err) {
-            if (!ok || result.contains("error")) {
-                LOG_WARN("MarketData", "top_movers failed: " + err);
-                cb(false, {});
+        [self](bool ok, QJsonObject result, QString err) {
+            if (!self)
+                return;
+            const auto waiters = std::exchange(self->movers_waiters_, {});
+            // A side the screener refused ({gainers,losers}_error) fails the
+            // whole answer, as the daemon's own cache rule does: an empty side
+            // read as "no gainers today" would be published to every screen.
+            const bool side_failed = result.contains("gainers_error") || result.contains("losers_error");
+            if (!ok || result.contains("error") || side_failed) {
+                const QString why = result.value("error").toString(
+                    result.value("gainers_error").toString(result.value("losers_error").toString(err)));
+                LOG_WARN("MarketData", "top_movers failed: " + why);
+                for (const auto& w : waiters)
+                    w(false, {}, why);
                 return;
             }
-            const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            finterm::CacheManager::instance().put(cache_key, raw, kTopMoversCacheTtlSec, "movers");
-            cb(true, parse(result));
+            finterm::CacheManager::instance().put(
+                kMoversCacheKey, QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)),
+                kMoversTtlSec, "movers");
+            const TopMovers tm = parse_movers(result);
+            for (const auto& w : waiters)
+                w(true, tm, {});
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
+    const int n = qBound(1, count, kMoversMax);
+    fetch_movers_all([cb, n](bool ok, const TopMovers& all, const QString&) { cb(ok, all.truncated(n)); });
 }
 
 // ── IPO Watch detail-rail enrichment ────────────────────────────────────────

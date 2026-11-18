@@ -6,6 +6,7 @@ namespace finterm::datahub {
 
 void register_metatypes() {
     qRegisterMetaType<finterm::services::QuoteData>("finterm::services::QuoteData");
+    qRegisterMetaType<finterm::services::MarketDataService::TopMovers>("finterm::services::MarketDataService::TopMovers");
     qRegisterMetaType<finterm::services::HistoryPoint>("finterm::services::HistoryPoint");
     qRegisterMetaType<finterm::services::InfoData>("finterm::services::InfoData");
     qRegisterMetaType<finterm::services::NewsArticle>("finterm::services::NewsArticle");

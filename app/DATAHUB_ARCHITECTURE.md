@@ -44,6 +44,7 @@ Examples:
 market:quote:AAPL
 market:history:AAPL:1y:1d
 market:sparkline:TSLA
+market:movers
 news:general
 news:symbol:NVDA
 econ:fred:GDP
@@ -373,7 +374,7 @@ for (const auto& sym : symbols_) {
 **Inside `MarketDataService` (now a Producer):**
 ```cpp
 QStringList MarketDataService::topic_patterns() const {
-    return {"market:quote:*", "market:history:*", "market:sparkline:*"};
+    return {"market:quote:*", "market:history:*", "market:sparkline:*", "market:movers"};
 }
 
 void MarketDataService::refresh(const QStringList& topics) {

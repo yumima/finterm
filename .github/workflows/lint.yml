@@ -125,7 +125,8 @@ jobs:
           #   fetch_observations.
           # Anything else — an API with a topic (quote/sparkline/history) called
           # one-shot for its ok flag, or a polled API with no producer yet
-          # (top_movers, orderbook) — needs a `// D4-exempt: <reason>`.
+          # (orderbook) — needs a `// D4-exempt: <reason>`. Movers have a
+          # topic (market:movers): subscribe to it.
           # Match every fetch_* call, then grep -v the allowed ones.
           violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
             xargs -0 perl -0ne 'while (/(MarketDataService|NewsService|EconomicsService|DBnomicsService|GovDataService)::instance\(\)\s*\.\s*fetch_[^\n]*/g) {

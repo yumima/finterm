@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioDates.h"
 #include "services/portfolio/PortfolioLedger.h"
 #include "services/portfolio/PortfolioReturns.h"
@@ -1898,41 +1899,42 @@ void PortfolioService::fetch_risk_free_rate() {
                         : QDateTime();
     }
 
-    QJsonObject payload;
-    payload["symbol"] = QStringLiteral("^TNX");
-
+    // The 10-year yield through the market-data service's one-shot read —
+    // the same batch action, parser and cache as the market:quote:^TNX topic
+    // the dashboard shows. stale_on_failure=false: a refusal is reported, so
+    // a days-old cached level is never taken (and stamped) as today's rate.
     QPointer<PortfolioService> self = this;
-    python::PythonWorker::instance().submit(
-        "quote", payload,
-        [self, now_secs](bool ok, QJsonObject obj, QString err) {
+    services::MarketDataService::instance().fetch_quotes(
+        {QStringLiteral("^TNX")},
+        [self, now_secs](bool ok, QVector<services::QuoteData> quotes) {
             if (!self)
                 return;
-            // Keep the last real value on failure (NaN if there never was
-            // one — Sharpe/Sortino then render unavailable, not on a guess).
-            double rate = self->rf_rate_;
-            const double px = obj.value("current_price").toDouble(obj.value("price").toDouble(0.0));
+            const double px = ok && !quotes.isEmpty() ? quotes.first().price : qQNaN();
             // Sanity band: the 10y yield lives in low single digits. A parse
             // artifact (0, or a mis-scaled 42.8) must not become the Sharpe
             // hurdle for every portfolio.
-            if (ok && px > 0.1 && px < 25.0) {
-                rate = px / 100.0;
+            if (std::isfinite(px) && px > 0.1 && px < 25.0) {
+                const double rate = px / 100.0;
                 auto& settings = SettingsRepository::instance();
                 settings.set("portfolio.rf_rate_timestamp", QString::number(now_secs));
                 settings.set("portfolio.rf_rate_value", QString::number(rate, 'f', 6));
-                // EVENT-STAMP: this fetch's own instant (UTC)
+                self->rf_rate_ = rate;
+                // EVENT-STAMP: this read's own instant (UTC)
                 self->rf_as_of_ = QDateTime::fromSecsSinceEpoch(now_secs, QTimeZone::UTC);
             } else {
-                LOG_WARN("PortfolioSvc",
-                         QString("^TNX risk-free fetch unusable (px=%1): %2 — %3")
-                             .arg(px)
-                             .arg(err.left(120))
-                             .arg(std::isnan(rate) ? QStringLiteral("no rate available")
-                                                   : QStringLiteral("keeping last fetched %1").arg(rate, 0, 'f', 4)));
+                // Keep the last real value (NaN if there never was one —
+                // Sharpe/Sortino then render unavailable, not on a guess).
+                LOG_WARN("PortfolioSvc", QString("^TNX risk-free quote unusable (ok=%1, px=%2) — %3")
+                                             .arg(ok)
+                                             .arg(px)
+                                             .arg(std::isnan(self->rf_rate_)
+                                                      ? QStringLiteral("no rate available")
+                                                      : QStringLiteral("keeping last fetched %1")
+                                                            .arg(self->rf_rate_, 0, 'f', 4)));
             }
-            self->rf_rate_ = rate;
-            emit self->risk_free_rate_loaded(rate);
+            emit self->risk_free_rate_loaded(self->rf_rate_);
         },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+        /*stale_on_failure=*/false);
 }
 
 // ── Metrics computation (async, P8-safe) ─────────────────────────────────────

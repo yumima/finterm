@@ -17,8 +17,8 @@ namespace finterm::screens {
 /// snapshot, market hours.
 ///
 /// Subscribes to `market:quote:<sym>` on the DataHub for the union of
-/// breadth-basket + snapshot symbol sets. Gainers/losers come from the
-/// market-wide screener via MarketDataService::fetch_top_movers(). Each delivery updates the
+/// breadth-basket + snapshot symbol sets, and to `market:movers` for the
+/// market-wide screener's gainers/losers. Each delivery updates the
 /// matching row cache and triggers the relevant `rebuild_*_from_cache()`
 /// to re-render that section. The hub scheduler owns data-refresh cadence;
 /// `hours_timer_` is retained only because it drives wall-clock status
@@ -143,9 +143,10 @@ class MarketPulsePanel : public QWidget {
     void hub_unsubscribe_all();
     void rebuild_breadth_from_cache();
     void rebuild_movers_from_cache();
-    /// Pull real market-wide gainers/losers (yfinance day_gainers/day_losers
-    /// screener) — same source as TopMoversWidget.
-    void fetch_movers();
+    /// Market-wide gainers/losers (yfinance day_gainers/day_losers screener)
+    /// from the shared market:movers hub topic, subscribed in hub_subscribe_all.
+    void on_movers(const services::MarketDataService::TopMovers& tm);
+    void on_movers_error();
     void rebuild_snapshot_from_cache();
 
     QHash<QString, services::QuoteData> breadth_cache_;
@@ -155,7 +156,6 @@ class MarketPulsePanel : public QWidget {
     services::LiveQuoteFollower* movers_live_ = nullptr;
     void follow_movers();
     bool movers_loaded_ = false;
-    QTimer* movers_timer_ = nullptr;
     QHash<QString, services::QuoteData> snapshot_cache_;
     bool hub_active_ = false;
     QTimer* hours_timer_ = nullptr;

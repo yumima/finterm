@@ -91,10 +91,10 @@ static int breadth_basket_size() {
     return n;
 }
 
-// Gainers/losers come from the real market-wide yfinance screener
-// (day_gainers / day_losers) via MarketDataService::fetch_top_movers — the
-// same source TopMoversWidget uses. Count 10 shares that widget's cache key.
-static constexpr int kTopMoversFetchCount = 10;
+// Gainers/losers: the market-wide yfinance screener (day_gainers /
+// day_losers), read from the shared market:movers hub topic TopMoversWidget
+// reads too.
+static constexpr int kTopMoversShown = 10; // rows per side
 
 // Global snapshot symbols
 static const QStringList kSnapshotSymbols = services::MarketDataService::global_snapshot_symbols();
@@ -154,16 +154,13 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     movers_coalesce_->setSingleShot(true);
     movers_coalesce_->setInterval(16);
     connect(movers_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_movers_from_cache);
-    // Screener-driven movers are not on the DataHub quote stream; poll them
-    // while visible. fetch_top_movers() caches for 60s, so this is cheap.
+    // Movers: the shared market:movers hub topic (subscribed with the quotes
+    // in hub_subscribe_all); each row then follows the live tape.
     movers_live_ = new services::LiveQuoteFollower(this, [this](const services::QuoteData& q) {
         if (services::LiveQuoteFollower::merge_movers(movers_data_, q))
             movers_coalesce_->start();
     });
 
-    movers_timer_ = new QTimer(this);
-    movers_timer_->setInterval(60000);
-    connect(movers_timer_, &QTimer::timeout, this, &MarketPulsePanel::fetch_movers);
     snapshot_coalesce_ = new QTimer(this);
     snapshot_coalesce_->setSingleShot(true);
     snapshot_coalesce_->setInterval(16);
@@ -339,8 +336,6 @@ void MarketPulsePanel::showEvent(QShowEvent* e) {
         hub_subscribe_all();
     refresh_market_hours();
     hours_timer_->start();
-    fetch_movers();
-    movers_timer_->start();
 }
 
 void MarketPulsePanel::hideEvent(QHideEvent* e) {
@@ -348,7 +343,6 @@ void MarketPulsePanel::hideEvent(QHideEvent* e) {
     hub_unsubscribe_all();
     movers_live_->clear();
     hours_timer_->stop();
-    movers_timer_->stop();
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -952,33 +946,27 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
     }
 }
 
-void MarketPulsePanel::fetch_movers() {
-    QPointer<MarketPulsePanel> self = this;
-    services::MarketDataService::instance().fetch_top_movers( // D4-exempt: polled screener movers, no hub producer yet
-        kTopMoversFetchCount, [self](bool ok, services::MarketDataService::TopMovers tm) {
-            if (!self)
-                return;
-            if (!ok) {
-                // Keep movers already on screen; otherwise say so honestly.
-                if (!self->movers_loaded_) {
-                    for (auto* rows : {&self->gainer_rows_, &self->loser_rows_}) {
-                        for (int i = 0; i < rows->size(); ++i) {
-                            auto& row = (*rows)[i];
-                            if (!row.sym)
-                                continue;
-                            row.sym->setText(i == 0 ? QStringLiteral("UNAVAILABLE") : ui::formatting::placeholder());
-                            MarketChartDialog::set_target(row.container, QString(), QString());
-                        }
-                    }
-                }
-                return;
-            }
-            self->movers_data_ = std::move(tm);
-            services::LiveQuoteFollower::refresh_movers(self->movers_data_); // the tape is newer than the screener
-            self->movers_loaded_ = true;
-            self->follow_movers();
-            self->movers_coalesce_->start();
-        });
+void MarketPulsePanel::on_movers(const services::MarketDataService::TopMovers& tm) {
+    movers_data_ = tm.truncated(kTopMoversShown);
+    services::LiveQuoteFollower::refresh_movers(movers_data_); // the tape is newer than the screener
+    movers_loaded_ = true;
+    follow_movers();
+    movers_coalesce_->start();
+}
+
+void MarketPulsePanel::on_movers_error() {
+    // Keep movers already on screen; otherwise say so honestly.
+    if (movers_loaded_)
+        return;
+    for (auto* rows : {&gainer_rows_, &loser_rows_}) {
+        for (int i = 0; i < rows->size(); ++i) {
+            auto& row = (*rows)[i];
+            if (!row.sym)
+                continue;
+            row.sym->setText(i == 0 ? QStringLiteral("UNAVAILABLE") : ui::formatting::placeholder());
+            MarketChartDialog::set_target(row.container, QString(), QString());
+        }
+    }
 }
 
 void MarketPulsePanel::follow_movers() {
@@ -1075,13 +1063,19 @@ void MarketPulsePanel::hub_subscribe_all() {
             }
         });
     }
+    const QString& movers = services::MarketDataService::kMoversTopic;
+    hub.subscribe(this, movers, [this](const QVariant& v) {
+        if (v.canConvert<services::MarketDataService::TopMovers>())
+            on_movers(v.value<services::MarketDataService::TopMovers>());
+    });
+    hub.subscribe_errors(this, movers, [this](const QString&) { on_movers_error(); });
     hub_active_ = true;
 }
 
 void MarketPulsePanel::hub_unsubscribe_all() {
     if (!hub_active_)
         return;
-    datahub::DataHub::instance().unsubscribe(this);
+    datahub::DataHub::instance().unsubscribe(this); // data AND error subscriptions
     hub_active_ = false;
 }
 
@@ -1101,8 +1095,8 @@ void MarketPulsePanel::refresh_data() {
     };
     push(kBreadthSymbols);
     push(kSnapshotSymbols);
+    topics.append(services::MarketDataService::kMoversTopic);
     hub.request(topics, /*force=*/true); // user-triggered refresh
-    fetch_movers();
 }
 
 } // namespace finterm::screens

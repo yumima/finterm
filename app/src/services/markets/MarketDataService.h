@@ -189,9 +189,19 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     struct TopMovers {
         QVector<QuoteData> gainers;
         QVector<QuoteData> losers;
+        /// The first `n` of each side.
+        TopMovers truncated(int n) const {
+            TopMovers t{gainers.mid(0, n), losers.mid(0, n)};
+            return t;
+        }
     };
     using TopMoversCallback = std::function<void(bool, TopMovers)>;
+    /// The day's movers, `count` (≤ kMoversMax) per side. Screens subscribe
+    /// to the hub topic kMoversTopic instead; this one-shot form (the MCP
+    /// tool) reads the same fetch and cache.
     void fetch_top_movers(int count, TopMoversCallback cb);
+    static constexpr int kMoversMax = 25;
+    static inline const QString kMoversTopic = QStringLiteral("market:movers");
 
     /// Drop cached quote entries for the given symbols, forcing the next
     /// fetch_quotes() call to hit the data source. The DataHub min_interval
@@ -387,6 +397,10 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     void stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
 
   private:
+    /// The one movers fetch (kMoversMax per side): cached kMoversTtlSec,
+    /// concurrent callers coalesced onto the request already out.
+    void fetch_movers_all(std::function<void(bool, const TopMovers&, const QString&)> cb, bool fresh = false);
+    QVector<std::function<void(bool, const TopMovers&, const QString&)>> movers_waiters_;
     MarketDataService();
     void flush_batch();
 

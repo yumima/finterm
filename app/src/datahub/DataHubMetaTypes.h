@@ -34,6 +34,7 @@
 // Types that are not declared in a dedicated type header above — declare
 // them here so consumers only need to include DataHubMetaTypes.h.
 Q_DECLARE_METATYPE(finterm::services::QuoteData)
+Q_DECLARE_METATYPE(finterm::services::MarketDataService::TopMovers)
 Q_DECLARE_METATYPE(finterm::services::HistoryPoint)
 Q_DECLARE_METATYPE(finterm::services::InfoData)
 Q_DECLARE_METATYPE(QVector<finterm::services::HistoryPoint>)
