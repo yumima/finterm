@@ -39,7 +39,7 @@ inline const QStringList& groups() {
     return kGroups;
 }
 
-// 147 credentials.
+// 148 credentials.
 inline const QVector<CredentialDef>& catalogue() {
     static const QVector<CredentialDef> kAll = {
         {"ACLED_API_KEY", "Acled", "Economics & government", true},
@@ -80,6 +80,7 @@ inline const QVector<CredentialDef>& catalogue() {
         {"DATA_GOV_HK_LANGUAGE", "Data Gov Hk Language", "Economics & government", false},
         {"DATA_WORLD_TOKEN", "Data World", "Research & datasets", true},
         {"EBRD_API_KEY", "Ebrd", "Economics & government", true},
+        {"EDGAR_IDENTITY", "Edgar Identity", "Economics & government", true},
         {"EIA_API_KEY", "EIA (Energy Information Administration)", "Economics & government", true},
         {"EMBER_API_KEY", "Ember", "Energy, climate & geospatial", true},
         {"ENTREPRISE_API_KEY", "Entreprise", "Economics & government", true},
