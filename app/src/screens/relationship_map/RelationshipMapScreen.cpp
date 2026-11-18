@@ -3,8 +3,8 @@
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
-#include "python/PythonWorker.h"
 #include "screens/relationship_map/RelationshipGraphScene.h"
+#include "services/equity/EquityResearchService.h"
 #include "services/relationship_map/RelationshipMapService.h"
 #include "ui/SearchFailedText.h"
 #include "ui/formatting/NumberFormat.h"
@@ -13,9 +13,6 @@
 #include <QCheckBox>
 #include <QGraphicsItem>
 #include <QHBoxLayout>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QPointer>
 #include <QScrollArea>
 #include <QShowEvent>
@@ -556,30 +553,23 @@ void RelationshipMapScreen::on_search_text_changed(const QString& text) {
 }
 
 void RelationshipMapScreen::fire_asset_search(const QString& query) {
-    // Symbol search runs through the persistent yfinance daemon (action "search"),
-    // not the retired HTTP /market/search stub. type=stock keeps this to equities.
-    QJsonObject payload;
-    payload["query"] = query;
-    payload["type"] = QStringLiteral("stock");
-    payload["limit"] = kMaxSearchResults;
-
+    // type=stock keeps this to equities.
     QPointer<RelationshipMapScreen> self = this;
-    python::PythonWorker::instance().submit(
-        "search", payload,
-        [self, query](bool ok, QJsonObject result, QString) {
+    services::equity::EquityResearchService::instance().search_symbols_reply(
+        query, kMaxSearchResults, QStringLiteral("stock"), [self, query](services::equity::SymbolSearchReply reply) {
             if (!self)
                 return;
             if (self->pending_query_ != query)
                 return;
-            // A failed search says so (read_search_reply) — not the last query's
-            // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = finterm::ui::read_search_reply(ok, result);
-            self->on_asset_results(reply.results, reply.failure);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+            // A failed search says so — not the last query's matches, and not
+            // an empty list that reads as "no such ticker".
+            self->on_asset_results(reply.results,
+                                   reply.failed ? finterm::ui::search_failed_text(reply.transient) : QString());
+        });
 }
 
-void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QString& failure) {
+void RelationshipMapScreen::on_asset_results(const QVector<services::equity::SearchResult>& results,
+                                             const QString& failure) {
     search_dropdown_->clear();
 
     if (results.isEmpty()) {
@@ -599,16 +589,12 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QS
         return;
     }
 
-    for (const auto& val : results) {
-        auto obj = val.toObject();
-        QString symbol = obj["symbol"].toString();
-        QString name = obj["name"].toString();
-        QString exchange = obj["exchange"].toString();
-        QString country = obj["country"].toString();
-        QString type = obj["type"].toString("stock");
-
-        if (symbol.isEmpty())
-            continue;
+    for (const auto& r : results) {
+        const QString& symbol = r.symbol;
+        const QString& name = r.name;
+        const QString& exchange = r.exchange;
+        const QString& country = r.country;
+        const QString type = r.type.isEmpty() ? QStringLiteral("stock") : r.type;
 
         QString yf_symbol = to_yfinance_symbol(symbol, exchange, country);
 

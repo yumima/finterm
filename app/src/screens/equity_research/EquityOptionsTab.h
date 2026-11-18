@@ -64,7 +64,7 @@ class EquityOptionsTab : public QWidget {
 
     void build_ui();
     void fetch(bool background = false);
-    void on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& err);
+    void on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& failure);
     void show_message(const QString& text);
     void render();
     void render_surface();

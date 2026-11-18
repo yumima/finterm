@@ -2,9 +2,9 @@
 // MacroReleases.h — the printed number for a US macro release that is out.
 //
 // The calendar feed (ForexFactory) carries the consensus ("forecast") and the
-// pre-release prior, but never the actual. The actual comes from FRED's
-// public, key-less series download (fred.stlouisfed.org/graph/fredgraph.csv)
-// and is derived here with the same transform the headline uses (m/m %, y/y %,
+// pre-release prior, but never the actual. The actual comes from FRED
+// (fred_data.py through EconomicsService — keyless via FRED's public series
+// download when no API key is set) and is derived here with the same transform the headline uses (m/m %, y/y %,
 // change in thousands, level).
 //
 // The trap is staleness: right after 08:30 ET FRED often still ends at LAST
@@ -17,6 +17,9 @@
 // Header-only, Qt-Core-only, pure; tests/services/test_macro_releases.cpp.
 
 #include <QDate>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QLocale>
 #include <QString>
 #include <QStringList>
@@ -102,26 +105,17 @@ struct Obs {
     double value = NAN;
 };
 
-/// FRED's fredgraph.csv: "observation_date,SERIES" then "2026-09-01,324.5".
-/// Missing values ("." or empty) are skipped — absent, not zero.
-inline QVector<Obs> parse_fred_csv(const QString& csv) {
+/// fred_data.py's observations: [{"date": "2026-09-01", "value": 324.5}, …].
+/// A value that is not a number (null, FRED's ".") is skipped — absent, not zero.
+inline QVector<Obs> parse_fred_observations(const QJsonArray& arr) {
     QVector<Obs> out;
-    const QStringList lines = csv.split(QLatin1Char('\n'));
-    for (int i = 0; i < lines.size(); ++i) {
-        const QString line = lines[i].trimmed();
-        if (line.isEmpty())
+    for (const auto& v : arr) {
+        const QJsonObject o = v.toObject();
+        const QDate d = QDate::fromString(o.value(QLatin1String("date")).toString(), Qt::ISODate);
+        const QJsonValue x = o.value(QLatin1String("value"));
+        if (!d.isValid() || !x.isDouble() || !std::isfinite(x.toDouble()))
             continue;
-        const int comma = line.indexOf(QLatin1Char(','));
-        if (comma <= 0)
-            continue;
-        const QDate d = QDate::fromString(line.left(comma), Qt::ISODate);
-        if (!d.isValid())
-            continue; // header
-        bool ok = false;
-        const double v = line.mid(comma + 1).trimmed().toDouble(&ok);
-        if (!ok || !std::isfinite(v))
-            continue;
-        out.append({d, v});
+        out.append({d, x.toDouble()});
     }
     return out;
 }

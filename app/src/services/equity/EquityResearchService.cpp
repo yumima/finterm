@@ -131,7 +131,9 @@ void EquityResearchService::schedule_search(const QString& query) {
 namespace {
 
 QVector<SearchResult> parse_search_results(const QJsonObject& result) {
-    const auto arr = result.value("results").toArray();
+    // "results", or a flat array under "_value" (the other reply shape).
+    const auto arr =
+        result.value("_value").isArray() ? result.value("_value").toArray() : result.value("results").toArray();
     QVector<SearchResult> results;
     results.reserve(arr.size());
     for (const auto& v : arr) {
@@ -143,6 +145,7 @@ QVector<SearchResult> parse_search_results(const QJsonObject& result) {
         r.type = o["type"].toString();
         r.currency = o["currency"].toString();
         r.industry = o["industry"].toString();
+        r.country = o["country"].toString();
         if (!r.symbol.isEmpty())
             results.append(r);
     }
@@ -404,46 +407,78 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
         return;
     const QString key = "equity:earnings:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto ecv_aged = finterm::CacheManager::instance().try_get_aged("equity:earnings:" + symbol);
-        const QVariant ecv = ecv_aged ? QVariant(ecv_aged->value) : QVariant();
-        if (!ecv.isNull()) {
-            const auto doc = QJsonDocument::fromJson(ecv.toString().toUtf8());
-            if (doc.isArray()) {
-                // Resolve with the cache entry\'s WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                resolve(QVariant::fromValue(parse_earnings(doc.array())), ecv_aged->written_at);
+        load_earnings(symbol, [resolve, reject](const EarningsDatesReply& r) {
+            // A refusal or no answer at all is not "no earnings" — don't
+            // hold an empty answer for the TTL.
+            if (r.transient) {
+                reject(mark_transient_error(r.error));
                 return;
             }
-        }
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        run_daemon(
-            "earnings_dates", payload, [this, symbol, resolve, reject](bool ok, QJsonObject result, QString err) {
-                // A refusal or no answer at all is not "no earnings" — don't
-                // hold an empty answer for the TTL.
-                if (python::PythonWorker::reply_is_transient(ok, result)) {
-                    reject(mark_transient_error(result.contains("error") ? result.value("error").toString() : err));
-                    return;
-                }
-                if (result.contains("error")) {
-                    // Non-fatal: many tickers have no earnings (ETFs, indices,
-                    // certain ADRs). Resolve with empty so the chart just
-                    // doesn't draw markers, rather than reporting an error.
-                    resolve(QVariant::fromValue(QVector<EarningsEvent>{}));
-                    return;
-                }
-                const QJsonArray arr = result.value("dates").toArray();
-                finterm::CacheManager::instance().put(
-                    "equity:earnings:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kEarningsTtlSec,
-                    "equity");
-                resolve(QVariant::fromValue(parse_earnings(arr)));
-            });
+            // A plain failure is non-fatal: many tickers have no earnings
+            // (ETFs, indices, certain ADRs). Resolved empty so the chart just
+            // doesn't draw markers, rather than reporting an error.
+            resolve(QVariant::fromValue(r.ok ? r.events : QVector<EarningsEvent>{}), r.as_of);
+        });
     };
     // Earnings dates are session-stable. Generous SWR window.
     query::QueryStore::instance().subscribe(owner, key, kEarningsTtlSec, kEarningsTtlSec * 6, std::move(cb),
                                             std::move(fetcher));
+}
+
+void EquityResearchService::read_earnings(const QString& symbol, std::function<void(const EarningsDatesReply&)> done) {
+    if (!done)
+        return;
+    // A cache hit answers inline; the caller is owed its answer after the
+    // call returns, like a fetched one.
+    load_earnings(symbol, [this, done = std::move(done)](const EarningsDatesReply& r) {
+        QTimer::singleShot(0, this, [done, r]() { done(r); });
+    });
+}
+
+void EquityResearchService::load_earnings(const QString& symbol, std::function<void(const EarningsDatesReply&)> done) {
+    const QString cache_key = "equity:earnings:" + symbol;
+    const auto ecv_aged = finterm::CacheManager::instance().try_get_aged(cache_key);
+    const QVariant ecv = ecv_aged ? QVariant(ecv_aged->value) : QVariant();
+    if (!ecv.isNull()) {
+        const auto doc = QJsonDocument::fromJson(ecv.toString().toUtf8());
+        if (doc.isArray()) {
+            EarningsDatesReply r;
+            r.ok = true;
+            r.events = parse_earnings(doc.array());
+            // The cache entry's WRITE time: stamping "now" would present a
+            // value hydrated from disk at startup as brand new.
+            r.as_of = ecv_aged->written_at;
+            done(r);
+            return;
+        }
+    }
+    auto& waiting = earnings_in_flight_[symbol];
+    waiting.append(std::move(done));
+    if (waiting.size() > 1)
+        return; // one daemon call per symbol; this caller shares it
+
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    run_daemon("earnings_dates", payload, [this, symbol, cache_key](bool ok, QJsonObject result, QString err) {
+        EarningsDatesReply r;
+        if (python::PythonWorker::reply_is_transient(ok, result)) {
+            r.transient = true;
+            r.error = result.contains("error") ? result.value("error").toString() : err;
+        } else if (!ok || result.contains("error")) {
+            // Usually an ETF/index with no earnings.
+            r.error = result.contains("error") ? result.value("error").toString() : err;
+        } else {
+            const QJsonArray arr = result.value("dates").toArray();
+            finterm::CacheManager::instance().put(
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                kEarningsTtlSec, "equity");
+            r.ok = true;
+            r.events = parse_earnings(arr);
+        }
+        const auto waiters = earnings_in_flight_.take(symbol);
+        for (const auto& w : waiters)
+            w(r);
+    });
 }
 
 void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
@@ -519,34 +554,51 @@ void EquityResearchService::read_quote(const QString& symbol,
         /*stale_on_failure=*/false);
 }
 
-// ── Load symbol (quote + info + historical in parallel) ───────────────────────
 void EquityResearchService::search_symbols_for(const QString& query,
                                                std::function<void(QString, QVector<SearchResult>, QString)> cb) {
+    if (!cb)
+        return;
+    search_symbols_reply(query, 20, QString(), [cb = std::move(cb)](SymbolSearchReply r) {
+        // Answered even on failure — a caller that asked is owed an answer,
+        // or its box sits there looking like the search is still running —
+        // but the failure is said as one, not as an empty result list.
+        if (r.failed) {
+            // Whether a retry can help, said in the text (the one string
+            // this callback carries): the MCP tool's agent decides on it.
+            const QString why = r.error.isEmpty() ? QStringLiteral("search failed") : r.error;
+            cb(r.query, {}, r.transient ? QStringLiteral("no answer from Yahoo (retry may help): ") + why : why);
+            return;
+        }
+        cb(r.query, std::move(r.results), QString());
+    });
+}
+
+void EquityResearchService::search_symbols_reply(const QString& query, int limit, const QString& type,
+                                                 std::function<void(SymbolSearchReply)> cb) {
     const QString q = query.trimmed();
     if (q.isEmpty() || !cb)
         return;
     QJsonObject payload;
     payload["query"] = q;
-    payload["limit"] = 20;
+    payload["limit"] = limit;
+    if (!type.isEmpty())
+        payload["type"] = type; // the daemon filters by Yahoo quoteType
     run_daemon("search", payload, [q, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
-        // Answered even on failure — a caller that asked is owed an answer,
-        // or its box sits there looking like the search is still running —
-        // but the failure is said as one, not as an empty result list.
+        SymbolSearchReply r;
+        r.query = q;
         if (!ok) {
             LOG_WARN("EquityResearch", "Symbol search failed: " + err);
-            // Whether a retry can help, said in the text (the one string
-            // this callback carries): the MCP tool's agent decides on it.
-            const QString why = err.isEmpty() ? QStringLiteral("search failed") : err;
-            cb(q, {},
-               python::PythonWorker::reply_is_transient(ok, result)
-                   ? QStringLiteral("no answer from Yahoo (retry may help): ") + why
-                   : why);
-            return;
+            r.failed = true;
+            r.transient = python::PythonWorker::reply_is_transient(ok, result);
+            r.error = err;
+        } else {
+            r.results = parse_search_results(result);
         }
-        cb(q, parse_search_results(result), QString());
+        cb(std::move(r));
     });
 }
 
+// ── Load symbol (quote + info + historical in parallel) ───────────────────────
 void EquityResearchService::load_symbol(const QString& symbol, const QString& period) {
     if (symbol.isEmpty())
         return;
@@ -1282,17 +1334,17 @@ QVector<EarningsEvent> EquityResearchService::parse_earnings(const QJsonArray& a
         if (e.timestamp <= 0)
             continue;
         const auto est_v = o.value("eps_estimate");
-        if (!est_v.isNull()) {
+        if (est_v.isDouble()) {
             e.eps_estimate = est_v.toDouble();
             e.has_estimate = true;
         }
         const auto act_v = o.value("eps_actual");
-        if (!act_v.isNull()) {
+        if (act_v.isDouble()) {
             e.eps_actual = act_v.toDouble();
             e.has_actual = true;
         }
         const auto sur_v = o.value("surprise_pct");
-        if (!sur_v.isNull()) {
+        if (sur_v.isDouble()) {
             e.surprise_pct = sur_v.toDouble();
             e.has_surprise = true;
         }

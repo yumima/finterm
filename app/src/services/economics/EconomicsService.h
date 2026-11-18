@@ -52,6 +52,13 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     using ResultCallback = std::function<void(const EconomicsResult&)>;
     void fetch(const QString& script, const QString& command, const QStringList& args, ResultCallback cb);
 
+    /// The US Treasury daily par yield curve (treasury_data.py par_curve —
+    /// the 2-year Yahoo does not carry): data = {"rows": [{date, y2, y10, …}]},
+    /// newest first. fetch()'s cache and coalescing; a refusal is a failure.
+    void fetch_treasury_par_curve(ResultCallback cb) {
+        fetch(QStringLiteral("treasury_data.py"), QStringLiteral("par_curve"), {}, std::move(cb));
+    }
+
     /// Drop the cached answer for (script, command, args) so the next
     /// execute() of it re-runs the script (a forced refresh).
     void invalidate(const QString& script, const QString& command, const QStringList& args);

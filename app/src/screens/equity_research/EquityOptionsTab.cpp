@@ -3,9 +3,9 @@
 #include "screens/equity_research/EquityOptionsTab.h"
 
 #include "core/logging/Logger.h"
-#include "python/PythonWorker.h"
 #include "screens/surface_analytics/Surface3DWidget.h"
 #include "screens/surface_analytics/SurfaceLineWidget.h"
+#include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -32,8 +32,6 @@ namespace fmt = finterm::ui::formatting;
 
 namespace {
 
-// A chain is one Yahoo request per expiry (up to 12), fetched four at a time.
-constexpr int kFetchTimeoutMs = 90'000;
 // The smile chart stays legible with this many curves; expiries are sampled
 // evenly across the loaded ones (nearest and farthest always kept).
 constexpr int kMaxSmileCurves = 6;
@@ -178,32 +176,25 @@ void EquityOptionsTab::fetch(bool background) {
         show_message(QStringLiteral("Loading %1 option chain from Yahoo — one request per expiry…").arg(symbol_));
     }
 
-    QJsonObject payload;
-    payload["symbol"] = symbol_;
     QPointer<EquityOptionsTab> self = this;
     const QString sym = symbol_;
-    python::PythonWorker::instance().submit(
-        QStringLiteral("options_surface"), payload,
-        [self, gen, sym](bool ok, QJsonObject result, QString err) {
+    services::MarketDataService::instance().fetch_options_surface(
+        sym, [self, gen, sym](const services::MarketDataService::OptionsSurfaceReply& r) {
             if (!self || gen != self->generation_)
                 return;
-            self->on_result(sym, ok, result, err);
-        },
-        kFetchTimeoutMs);
+            self->on_result(sym, r.ok, r.surface, r.error);
+        });
 }
 
-void EquityOptionsTab::on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& err) {
+void EquityOptionsTab::on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& failure) {
     in_flight_ = false;
     refresh_btn_->setEnabled(true);
-    // The action's own {"error": ...} (no spot, every chain failed) arrives as
-    // ok=false with its text in err; the body check stays as a backstop.
-    const QString failure = !ok ? err : obj.value("error").toString();
-    if ((!ok || !failure.isEmpty()) && background_) {
+    if (!ok && background_) {
         // The chain already shown is still the newest one there is.
         LOG_WARN("EquityOptions", "background options_surface " + symbol + " failed, keeping the chain: " + failure);
         return;
     }
-    if (!ok || !failure.isEmpty()) {
+    if (!ok) {
         status_label_->setText(QStringLiteral("Option chain unavailable"));
         show_message(QStringLiteral("%1 option chain unavailable:\n%2").arg(symbol, failure));
         LOG_WARN("EquityOptions", "options_surface " + symbol + " failed: " + failure);

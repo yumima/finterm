@@ -1173,6 +1173,11 @@ if(Python3_Interpreter_FOUND)
         NAME whats_on_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_whats_on_calendar.py
     )
+    # FRED keyless (fred_data.py): error page ≠ empty series, "." ≠ 0, keyed shape
+    add_test(
+        NAME fred_data
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_fred_data.py
+    )
     # Vendor price sources → the daemon's payload (NY-midnight bars, total-return
     # basis, Yahoo fallback). Runs the daemon-merge case only where yfinance is
     # importable; the venv interpreter is preferred when present (see _TALIPP_TEST_PY).

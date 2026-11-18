@@ -19,6 +19,17 @@ namespace finterm::services {
 
 namespace {
 
+// fred_data.py `multiple` answers one entry per series, a refused one with its
+// own "error": the others are good and are shown, but the answer is not
+// cached, so the refused series is asked again on the next read.
+bool is_partial(const QString& command, const QJsonObject& data) {
+    if (command != QLatin1String("multiple"))
+        return false;
+    for (const auto& v : data.value(QLatin1String("data")).toArray())
+        if (!v.toObject().value(QLatin1String("error")).toString().isEmpty())
+            return true;
+    return false;
+}
 
 // Why an answer without a top-level error still holds nothing usable, or
 // empty. fred_economic_data.py's composite commands (the yield curve: one
@@ -154,9 +165,10 @@ void EconomicsService::run(const QString& script, const QString& command, const 
                 } else {
                     res.success = true;
                     res.as_of = QDateTime::currentDateTimeUtc();
-                    finterm::CacheManager::instance().put(
-                        key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
-                        kCacheTtlSec, "economics");
+                    if (!is_partial(command, res.data))
+                        finterm::CacheManager::instance().put(
+                            key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
+                            kCacheTtlSec, "economics");
                 }
             }
         }

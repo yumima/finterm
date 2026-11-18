@@ -1,18 +1,16 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/screener/ScreenerScreen.h"
 
-#include "core/logging/Logger.h"
-#include "python/PythonRunner.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "services/markets/LiveQuoteFollower.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
-#include "services/util/DiskCache.h"
+#include "services/screener/ScreenerService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
-#include <QRegularExpression>
-#include <QTimeZone>
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -45,26 +43,24 @@
 #include <QTableWidget>
 #include <QTextBrowser>
 #include <QTime>
+#include <QTimeZone>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <memory>
 #include <utility>
 
 namespace finterm::screens {
 
 namespace {
 
-constexpr const char* TAG = "Screener";
 namespace ou = ownership_ui;
 using screener::Kind;
 
 const QString kOverview = QStringLiteral("__overview__");
 const QString kWatchPortfolio = QStringLiteral("Screener Watch");
 
-// The scan downloads ~1,700 two-year price histories on a cold cache (about a
-// minute); with a warm one it is the TradingView request plus the math.
-constexpr int kScanTimeoutMs = 10 * 60 * 1000;
 constexpr int kSparkBars = 126; // ~6 months in the table's trend column
 
 constexpr int kSortKey = Qt::UserRole + 10;
@@ -551,10 +547,11 @@ void ScreenerScreen::build_ui() {
         // or the strategies alone: the previous universe's lists must not
         // stay up under this universe's name.
         run_scan();
-        const QJsonDocument doc = services::util::DiskCache(QStringLiteral("screener")).load(cache_name());
+        auto& svc = services::ScreenerService::instance();
+        const QJsonDocument doc = svc.latest_scan(min_mcap());
         // the generation that WROTE this cache, so a later-finishing older scan
         // cannot replace it
-        displayed_gen_ = saved_gen_.value(cache_name(), -1);
+        displayed_gen_ = svc.saved_generation(min_mcap());
         if (doc.isObject()) {
             apply_result(screener::parse_scan(doc.object()), true);
         } else {
@@ -572,10 +569,6 @@ double ScreenerScreen::min_mcap() const {
     return universe_->currentData().toDouble();
 }
 
-QString ScreenerScreen::cache_name() const {
-    return QStringLiteral("scan_v5_%1.json").arg(qint64(min_mcap())); // v5: setting up for every screen
-}
-
 void ScreenerScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     even_out_panes();
@@ -583,16 +576,9 @@ void ScreenerScreen::showEvent(QShowEvent* e) {
     if (shown_once_)
         return;
     shown_once_ = true;
-    // Scans of an earlier format (scan_v1…v4) are never read again: retire
-    // them where the name scheme lives (the directory also holds the price
-    // store's files, which are not scans and are left alone).
-    static const QRegularExpression kScan(QStringLiteral("^scan_v(\\d+)_"));
-    services::util::DiskCache(QStringLiteral("screener")).prune([](const QString& name) {
-        const auto m = kScan.match(name);
-        return !m.hasMatch() || name.startsWith(QLatin1String("scan_v5_"));
-    });
+    services::ScreenerService::instance().prune_old_scans();
     run_scan();
-    const QJsonDocument doc = services::util::DiskCache(QStringLiteral("screener")).load(cache_name());
+    const QJsonDocument doc = services::ScreenerService::instance().latest_scan(min_mcap());
     if (doc.isObject())
         apply_result(screener::parse_scan(doc.object()), true);
     else
@@ -733,21 +719,16 @@ void ScreenerScreen::even_out_panes() {
 }
 
 void ScreenerScreen::load_meta() {
-    QPointer<ScreenerScreen> self = this;
-    python::PythonRunner::instance().run_interactive(
-        QStringLiteral("screener_data.py"), {QStringLiteral("meta")},
-        [self](python::PythonResult res) {
-            if (!self || self->has_lists() || !res.success)
-                return;
-            const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(res.output).toUtf8());
-            auto r = screener::parse_scan(doc.object());
-            if (!doc.isObject() || !r.error.isEmpty() || r.strategies.isEmpty())
-                return;
-            r.meta_only = true;
-            self->result_ = r;
-            self->populate_strategies();
-        },
-        20'000);
+    services::ScreenerService::instance().fetch_meta(this, [this](const services::ScreenerService::Reply& reply) {
+        if (has_lists() || !reply.ok)
+            return;
+        auto r = screener::parse_scan(reply.root);
+        if (!r.error.isEmpty() || r.strategies.isEmpty())
+            return;
+        r.meta_only = true;
+        result_ = r;
+        populate_strategies();
+    });
 }
 
 void ScreenerScreen::set_status(const QString& text, bool error) {
@@ -796,73 +777,46 @@ bool ScreenerScreen::close_since(const QDateTime& when) {
 void ScreenerScreen::run_scan() {
     ui::mark_refreshed(this);
     last_scan_ = QDateTime::currentDateTimeUtc();
-    const int gen = ++scan_gen_;
     running_ = true;
     refresh_btn_->setEnabled(false);
     progress_row_->show();
     set_progress(0, 0, QStringLiteral("Starting…"));
     set_status(QStringLiteral("Running screens…"));
-    const double mcap = min_mcap();
-    const QString name = cache_name();
-    const QString payload =
-        QString::fromUtf8(QJsonDocument(QJsonObject{{"min_mcap", mcap}}).toJson(QJsonDocument::Compact));
-    QPointer<ScreenerScreen> self = this;
-    python::PythonRunner::instance().run( // D1-exempt: user-triggered scan with progress, no producer
-        QStringLiteral("screener_data.py"), {QStringLiteral("scan"), payload},
-        [self, gen, name](python::PythonResult res) {
-            if (!self)
-                return;
-            const bool current = gen == self->scan_gen_;
+    const qint64 mcap = qint64(min_mcap());
+    // Both callbacks run after run_scan() returns, so scan_gen_ is this scan's
+    // by then. The service saves a good answer as the universe's latest (a
+    // superseded universe's result included — it is still that universe's
+    // newest); this screen only decides what to show.
+    auto gen_box = std::make_shared<int>(0);
+    scan_gen_ = *gen_box = services::ScreenerService::instance().run_scan(
+        min_mcap(), this,
+        [this, gen_box](int done, int total, const QString& text) {
+            if (*gen_box == scan_gen_)
+                set_progress(done, total, text); // the bar's own label; the corner keeps "Running…"
+        },
+        [this, gen_box, mcap](const services::ScreenerService::Reply& reply) {
+            const int gen = *gen_box;
+            const bool current = gen == scan_gen_;
             if (current) {
-                self->running_ = false;
-                self->refresh_btn_->setEnabled(true);
-                self->progress_row_->hide();
+                running_ = false;
+                refresh_btn_->setEnabled(true);
+                progress_row_->hide();
             }
-            if (!res.success) {
+            if (!reply.ok) {
                 if (!current)
                     return;
-                const QString err = res.error.isEmpty() ? QStringLiteral("screener scan failed") : res.error.left(200);
-                LOG_WARN(TAG, "scan failed: " + err);
-                self->set_status(QStringLiteral("Scan failed — ") + err, true);
-                if (!self->has_lists())
-                    self->show_strategy(self->current_id_);
+                set_status(QStringLiteral("Scan failed — ") + reply.error.left(200), true);
+                if (!has_lists())
+                    show_strategy(current_id_);
                 return;
-            }
-            const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(res.output).toUtf8());
-            const auto r = screener::parse_scan(doc.object());
-            if (!doc.isObject() || !r.error.isEmpty()) {
-                if (!current)
-                    return;
-                const QString err = r.error.isEmpty() ? QStringLiteral("unreadable scan output") : r.error;
-                LOG_WARN(TAG, "scan error: " + err);
-                self->set_status(QStringLiteral("Scan failed — ") + err.left(200), true);
-                if (!self->has_lists())
-                    self->show_strategy(self->current_id_);
-                return;
-            }
-            // A superseded universe's result is still that universe's latest:
-            // keep it for the next time it is selected, just don't show it.
-            if (gen >= self->saved_gen_.value(name, -1)) {
-                self->saved_gen_.insert(name, gen);
-                services::util::DiskCache(QStringLiteral("screener")).save(name, doc);
             }
             // Show it if it is this scan, or an older scan for the universe
             // selected again meanwhile that is newer than what is on screen.
-            if (current || (name == self->cache_name() && gen > self->displayed_gen_)) {
-                self->displayed_gen_ = gen;
-                self->apply_result(r, !current);
+            if (current || (mcap == qint64(min_mcap()) && gen > displayed_gen_)) {
+                displayed_gen_ = gen;
+                apply_result(screener::parse_scan(reply.root), !current);
             }
-        },
-        [self, gen](QString line, bool is_stderr) {
-            if (!self || gen != self->scan_gen_ || !is_stderr || !line.startsWith(QLatin1String("PROGRESS ")))
-                return;
-            // "PROGRESS <done> <total> <text>"
-            const int done = line.section(QLatin1Char(' '), 1, 1).toInt();
-            const int total = line.section(QLatin1Char(' '), 2, 2).toInt();
-            const QString text = line.section(QLatin1Char(' '), 3);
-            self->set_progress(done, total, text); // the bar's own label; the corner keeps "Running…"
-        },
-        kScanTimeoutMs);
+        });
 }
 
 void ScreenerScreen::apply_result(const screener::ScanResult& r, bool provisional) {
@@ -1529,27 +1483,40 @@ void ScreenerScreen::add_to_portfolio(const QString& sym) {
     }
     can_add();
 
+    // The symbol's market:quote topic, asked to refresh now ("current" means
+    // now, not a cached quote); the subscription ends with the dialog. Only a
+    // quote polled or ticked this process is taken — the hub can hand back a
+    // disk-hydrated one from an earlier session.
     QPointer<QDialog> alive(&dlg);
-    auto& mds = services::MarketDataService::instance();
-    mds.invalidate_quotes({sym}); // "current" means now, not a cached quote
-    mds.fetch_quotes({sym}, [alive, sym, &typed, set_price, note, can_add, listed](bool ok,
-                                                                                   QVector<services::QuoteData> q, const QString& /*err*/) {
+    auto got_quote = std::make_shared<bool>(false);
+    auto& hub = datahub::DataHub::instance();
+    const QString topic = QStringLiteral("market:quote:") + sym;
+    hub.subscribe(&dlg, topic, [alive, sym, &typed, set_price, note, can_add, got_quote](const QVariant& v) {
         if (!alive || typed) // closed already (the captured locals are gone), or the reader's price stands
             return;
-        for (const auto& d : q) {
-            if (d.symbol.compare(sym, Qt::CaseInsensitive) == 0 && d.price > 0) {
-                set_price(d.price);
-                // the fetch time, not the price's: out of hours the latest
-                // quote is the last close
-                note->setText(QStringLiteral("Latest quote, fetched %1.").arg(QTime::currentTime().toString("HH:mm")));
-                can_add();
-                return;
-            }
-        }
+        if (!v.canConvert<services::QuoteData>() || !services::MarketDataService::instance().has_live_quote(sym))
+            return;
+        const double price = v.value<services::QuoteData>().price;
+        if (!(price > 0))
+            return;
+        *got_quote = true;
+        set_price(price);
+        // the fetch time, not the price's: out of hours the latest quote is
+        // the last close
+        note->setText(QStringLiteral("Latest quote, fetched %1.").arg(QTime::currentTime().toString("HH:mm")));
+        can_add();
+    });
+    hub.subscribe_errors(&dlg, topic, [alive, &typed, note, listed, got_quote](const QString& error) {
+        if (!alive || typed || *got_quote)
+            return;
+        // kNoQuoteError: answered without this symbol; anything else: the
+        // download failed.
+        const bool failed = error != services::MarketDataService::kNoQuoteError;
         note->setText(listed && *listed > 0
-                          ? QStringLiteral("No quote%1 — the screener's price.").arg(ok ? "" : " (fetch failed)")
+                          ? QStringLiteral("No quote%1 — the screener's price.").arg(failed ? " (fetch failed)" : "")
                           : QStringLiteral("No price available — enter one."));
     });
+    hub.request(topic, /*force=*/true);
 
     if (dlg.exec() != QDialog::Accepted)
         return;

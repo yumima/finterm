@@ -658,7 +658,7 @@ void PortfolioPerfChart::fetch_focus_orderbook() {
 
     const QString want = focus_symbol_;
     QPointer<PortfolioPerfChart> self = this;
-    services::MarketDataService::instance().fetch_orderbook( // D4-exempt: focus-symbol orderbook, no hub producer yet
+    services::MarketDataService::instance().fetch_orderbook(
         want, [self, want](bool ok, const services::MarketDataService::OrderbookData& ob) {
             if (!self)
                 return;

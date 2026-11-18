@@ -3,8 +3,8 @@
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "screens/ownership/OwnershipUi.h"
-#include "screens/social/SocialBackend.h"
 #include "screens/social/SocialModel.h"
+#include "services/social/SocialBackend.h"
 #include "ui/notifications/ToastService.h"
 #include "ui/theme/Theme.h"
 
@@ -15,6 +15,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QHideEvent>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -23,7 +24,6 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
-#include <QHideEvent>
 #include <QShowEvent>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -37,8 +37,8 @@ namespace finterm::screens {
 namespace {
 namespace so = finterm::social;
 namespace ou = finterm::screens::ownership_ui;
-using social_backend::call_backend;
-using social_backend::Outcome;
+using services::social_backend::call_backend;
+using services::social_backend::Outcome;
 
 constexpr int kQuickMs = 60'000;
 constexpr int kFactsMs = 180'000;   // SEC: a few requests per ticker, paced

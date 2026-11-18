@@ -1427,32 +1427,31 @@ void FuturesScreen::load_chart(bool retry) {
     canvas_->clear();
     chart_overlay_->show_loading(QStringLiteral("LOADING %1…").arg(sym));
     QPointer<FuturesScreen> self = this;
-    services::MarketDataService::instance()
-        .fetch_bars( // D4-exempt: one-shot chart read; needs the ok flag and chart_seq_ supersession
-            sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
-            [self, seq](const services::MarketDataService::BarsReply& r) {
-                if (!self || seq != self->chart_seq_)
-                    return;
-                const bool ok = r.ok;
-                const auto& pts = r.bars;
-                self->chart_overlay_->hide_loading();
-                if (!ok || pts.isEmpty()) {
-                    self->canvas_->clear();
-                    self->canvas_->set_placeholder_state(ok ? ResearchCandleCanvas::PlaceholderState::NoData
-                                                            : ResearchCandleCanvas::PlaceholderState::Error);
-                    // An empty answer is an answer; a failure is asked again
-                    // (unless another chart is picked meanwhile), and says so.
-                    const int in_s = ok ? 0 : self->schedule_retry(self->chart_retry_, [self, seq]() {
-                        if (self && seq == self->chart_seq_)
-                            self->load_chart(/*retry=*/true);
-                    });
-                    if (in_s > 0)
-                        self->chart_overlay_->show_loading(QStringLiteral("NO ANSWER — TRYING AGAIN IN %1 S").arg(in_s));
-                    return;
-                }
-                self->chart_retry_.reset();
-                self->canvas_->set_candles(pts, QString()); // Candle is the app's one bar type
-            });
+    services::MarketDataService::instance().fetch_bars(
+        sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
+        [self, seq](const services::MarketDataService::BarsReply& r) {
+            if (!self || seq != self->chart_seq_)
+                return;
+            const bool ok = r.ok;
+            const auto& pts = r.bars;
+            self->chart_overlay_->hide_loading();
+            if (!ok || pts.isEmpty()) {
+                self->canvas_->clear();
+                self->canvas_->set_placeholder_state(ok ? ResearchCandleCanvas::PlaceholderState::NoData
+                                                        : ResearchCandleCanvas::PlaceholderState::Error);
+                // An empty answer is an answer; a failure is asked again
+                // (unless another chart is picked meanwhile), and says so.
+                const int in_s = ok ? 0 : self->schedule_retry(self->chart_retry_, [self, seq]() {
+                    if (self && seq == self->chart_seq_)
+                        self->load_chart(/*retry=*/true);
+                });
+                if (in_s > 0)
+                    self->chart_overlay_->show_loading(QStringLiteral("NO ANSWER — TRYING AGAIN IN %1 S").arg(in_s));
+                return;
+            }
+            self->chart_retry_.reset();
+            self->canvas_->set_candles(pts, QString()); // Candle is the app's one bar type
+        });
 }
 
 // ── contract terms ─────────────────────────────────────────────────────────

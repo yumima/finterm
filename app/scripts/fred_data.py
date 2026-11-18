@@ -5,11 +5,19 @@ Returns JSON output for Qt/C++ integration
 Based on OpenBB FRED provider
 
 Optimized with concurrent fetching for multiple series
+
+The app's ONE FRED reader. With FRED_API_KEY set, series come from the keyed
+API (with metadata). Without a key, `series` and `multiple` fall back to
+FRED's public graph download (fredgraph.csv, no key) and answer in the SAME
+shape — observations [{date, value}], metadata "N/A". A frequency or unit
+transform still needs the key (the keyed API computes those); search and
+categories have no keyless source.
 """
 
 import sys
 import json
 import os
+import re
 import requests
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -64,6 +72,76 @@ def make_fred_request(endpoint: str, params: Dict[str, Any]) -> Dict:
         return {"error": str(e), "error_code": "REQUEST_FAILED"}
 
 
+FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+_FRED_ID = re.compile(r"^[A-Z0-9_]{2,30}$")
+
+
+def is_fred_csv(text: str, series_id: str) -> bool:
+    """A real download starts with the header naming the series; an error
+    page or a throttle notice does not — it is a failure, not an empty series."""
+    first = (text or "").lstrip().split("\n", 1)[0].strip()
+    parts = first.split(",", 1)
+    return len(parts) == 2 and parts[0].strip().lower() == "observation_date" and parts[1].strip() == series_id
+
+
+def parse_fred_csv(text: str) -> List[Dict]:
+    """fredgraph.csv rows → [{date, value}]; FRED's "." (no value) and blanks
+    are skipped — absent, never 0."""
+    out = []
+    for line in (text or "").splitlines()[1:]:
+        day, _, raw = line.strip().partition(",")
+        raw = raw.strip()
+        if not day or raw in ("", "."):
+            continue
+        try:
+            datetime.strptime(day, "%Y-%m-%d")
+            value = float(raw)
+        except ValueError:
+            continue
+        if value != value or value in (float("inf"), float("-inf")):
+            continue
+        out.append({"date": day, "value": value})
+    return out
+
+
+def get_series_keyless(series_id: str, start_date: Optional[str] = None,
+                       end_date: Optional[str] = None) -> Dict:
+    """get_series without a key: FRED's public graph download, same shape."""
+    if not _FRED_ID.match(series_id or ""):
+        return {"error": f"Not a FRED series id: {series_id!r}", "error_code": "BAD_SERIES_ID",
+                "series_id": series_id}
+    params = {"id": series_id}
+    if start_date:
+        params["cosd"] = start_date
+    if end_date:
+        params["coed"] = end_date
+    try:
+        response = session.get(FRED_CSV, params=params, timeout=15)
+        if response.status_code == 429:
+            return {"error": "FRED rate limit hit.", "error_code": "RATE_LIMITED", "series_id": series_id}
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        return {"error": "FRED request timed out.", "error_code": "TIMEOUT", "series_id": series_id}
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e), "error_code": "REQUEST_FAILED", "series_id": series_id}
+    if not is_fred_csv(response.text, series_id):
+        # An error page or a throttle notice: a failure, never an empty series.
+        return {"error": f"FRED returned no data for {series_id}", "error_code": "NO_DATA",
+                "series_id": series_id}
+    observations = parse_fred_csv(response.text)
+    return {
+        'series_id': series_id,
+        'title': 'N/A',
+        'units': 'N/A',
+        'frequency': 'N/A',
+        'seasonal_adjustment': 'N/A',
+        'last_updated': 'N/A',
+        'observations': observations,
+        'observation_count': len(observations),
+        'source': 'fredgraph',
+    }
+
+
 def get_series(series_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None,
                frequency: Optional[str] = None, transform: Optional[str] = None) -> Dict:
     """
@@ -75,7 +153,12 @@ def get_series(series_id: str, start_date: Optional[str] = None, end_date: Optio
         end_date: End date YYYY-MM-DD
         frequency: a=Annual, q=Quarterly, m=Monthly, w=Weekly, d=Daily
         transform: chg=Change, pch=Percent Change, log=Natural Log
+
+    Without FRED_API_KEY the plain series comes from the public graph
+    download (get_series_keyless); a frequency or transform needs the key.
     """
+    if not FRED_API_KEY and not frequency and not transform:
+        return get_series_keyless(series_id, start_date, end_date)
     try:
         # Get series observations
         params = {'series_id': series_id}

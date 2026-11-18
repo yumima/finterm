@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`a682d3aa6`](https://github.com/yumima/finterm/commit/a682d3aa6) release notes: 4.0.9 — one source per dataset, extended hours by session
 - [`88446df7a`](https://github.com/yumima/finterm/commit/88446df7a) connectors: delete 201 CLI commands no caller sends, and what only they ran
 - [`e88a0a4f3`](https://github.com/yumima/finterm/commit/e88a0a4f3) cleanup: close the review's dead-code findings and the unread settings
 - [`2a829c612`](https://github.com/yumima/finterm/commit/2a829c612) extended hours: the fetch window follows the market calendar's early close

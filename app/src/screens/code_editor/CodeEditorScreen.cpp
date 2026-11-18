@@ -6,8 +6,8 @@
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
-#include "python/PythonRunner.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/notebook/NotebookKernel.h"
 #include "ui/theme/Theme.h"
 
 #include <QAbstractTextDocumentLayout>
@@ -1198,7 +1198,7 @@ void CodeEditorScreen::on_run_cell(const QString& cell_id) {
     QPointer<CodeEditorScreen> self = this;
     QString cid = cell_id;
 
-    python::PythonRunner::instance().run_code(code, [self, cid, exec_num](python::PythonResult result) {
+    services::notebook::run_cell(this, code, [self, cid, exec_num](const python::PythonResult& result) {
         if (!self)
             return;
 

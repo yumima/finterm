@@ -1,4 +1,6 @@
 #pragma once
+#include "services/equity/EquityResearchModels.h"
+
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
@@ -81,7 +83,7 @@ class CommandBar : public QWidget {
     void activate_asset_mode(const QString& api_type);
     void schedule_asset_search(const QString& query);
     void fire_asset_search(const QString& query);
-    void on_asset_results(const QJsonArray& results,
+    void on_asset_results(const QVector<services::equity::SearchResult>& results,
                           const QString& failure = {}); // failure: shown instead of "No results"
     void select_asset(const QString& symbol, const QString& type);
 

@@ -3,10 +3,10 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "python/PythonRunner.h"
 #include "screens/dashboard/widgets/SectorHeatmapStyle.h"
 #include "screens/markets/world/MarketSessions.h"
 #include "screens/markets/world/OvernightSummary.h"
+#include "services/economics/EconomicsService.h"
 #include "services/markets/LastKnownQuote.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -14,7 +14,6 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QHelpEvent>
-#include <QJsonDocument>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
@@ -862,26 +861,29 @@ void WorldMarketsView::fetch_treasury() {
         return;
     ust_in_flight_ = true;
     QPointer<WorldMarketsView> self = this;
-    python::PythonRunner::instance().run(
-        QStringLiteral("treasury_data.py"), {QStringLiteral("par_curve")}, [self](python::PythonResult r) {
-            if (!self)
-                return;
-            self->ust_in_flight_ = false;
-            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            TreasuryCurve c = parse_treasury_curve(root);
+    services::EconomicsService::instance().fetch_treasury_par_curve([self](const services::EconomicsResult& r) {
+        if (!self)
+            return;
+        self->ust_in_flight_ = false;
+        TreasuryCurve c;
+        if (r.success) {
+            c = parse_treasury_curve(r.data);
             if (!c.valid() && c.error.isEmpty())
-                c.error = r.success ? QStringLiteral("no curve in the reply") : QStringLiteral("script failed");
-            if (c.valid()) {
-                self->ust_ = c;
-                self->ust_fetched_at_ = QDateTime::currentDateTimeUtc();
-            } else if (!self->ust_.valid()) {
-                self->ust_ = c; // nothing better to show: keep the reason for the tooltip
-            } else {
-                LOG_WARN("WorldMarkets", QStringLiteral("Treasury curve refresh failed: %1").arg(c.error));
-            }
-            self->mark_dirty(kUst2y);
-            self->mark_dirty(kUst2s10s);
-        });
+                c.error = QStringLiteral("no curve in the reply");
+        } else {
+            c.error = r.error.isEmpty() ? QStringLiteral("script failed") : r.error;
+        }
+        if (c.valid()) {
+            self->ust_ = c;
+            self->ust_fetched_at_ = r.as_of.isValid() ? r.as_of : QDateTime::currentDateTimeUtc();
+        } else if (!self->ust_.valid()) {
+            self->ust_ = c; // nothing better to show: keep the reason for the tooltip
+        } else {
+            LOG_WARN("WorldMarkets", QStringLiteral("Treasury curve refresh failed: %1").arg(c.error));
+        }
+        self->mark_dirty(kUst2y);
+        self->mark_dirty(kUst2s10s);
+    });
 }
 
 // ── rendering ──────────────────────────────────────────────────────────────

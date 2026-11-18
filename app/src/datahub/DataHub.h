@@ -258,6 +258,11 @@ class DataHub : public QObject {
         std::function<void(const QVariant&)> slot; // single-topic
         std::function<void(const QString&, const QVariant&)> pattern_slot;
         bool is_pattern = false;
+        /// Has had a value (the initial one, or a publish). A subscriber that
+        /// joined while the topic's value was stale gets the refresh even when
+        /// it republishes the same value — the no-change skip is for
+        /// subscribers that already show it, not for one still waiting.
+        bool primed = false;
     };
 
     /// Predicate for "this subscription should go away now", shared by every
@@ -309,7 +314,9 @@ class DataHub : public QObject {
     TopicPolicy resolve_policy(const QString& topic) const;
     TopicState& state_for(const QString& topic);
     static bool pattern_matches(const QString& pattern, const QString& topic);
-    void emit_to_subscribers(const QString& topic, const QVariant& value);
+    /// `only_unprimed`: an unchanged republish — delivered only to direct
+    /// subscribers that have not had a value yet (see Subscription::primed).
+    void emit_to_subscribers(const QString& topic, const QVariant& value, bool only_unprimed = false);
     void do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override,
                     bool live = false);
     void do_coalesced_flush(const QString& topic);

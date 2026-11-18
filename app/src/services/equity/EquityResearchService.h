@@ -50,6 +50,15 @@ class EquityResearchService : public QObject {
     void search_symbols_for(const QString& query,
                             std::function<void(QString, QVector<SearchResult>, QString error)> cb);
 
+    /// The symbol search every search box uses: at most `limit` matches,
+    /// `type` (stock/fund/index/crypto; empty = any) filtered by the daemon.
+    /// Always answered, after this call returns (never inline), with a
+    /// failure said as one (SymbolSearchReply::failed). No debounce and no
+    /// cache: each box debounces its own typing and drops a reply whose query
+    /// is no longer the one it shows.
+    void search_symbols_reply(const QString& query, int limit, const QString& type,
+                              std::function<void(SymbolSearchReply)> cb);
+
     /// Fetches quote + info + historical in parallel (three Python calls)
     void load_symbol(const QString& symbol, const QString& period = "1y");
 
@@ -132,6 +141,21 @@ class EquityResearchService : public QObject {
     /// QVector<EarningsEvent>. Backed by yfinance's ticker.earnings_dates;
     /// fetch is a single daemon call (~200-500ms).
     void subscribe_earnings(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
+
+    /// One read of `symbol`'s earnings dates, from the same cache and the same
+    /// daemon call as subscribe_earnings (concurrent reads share one call).
+    /// Answered after this returns, never inline. `ok` = Yahoo answered (an
+    /// empty `events` is a real "none"); otherwise `transient` says Yahoo
+    /// refused or did not answer — never read as "no earnings" — and a
+    /// non-transient failure is the ETF/index "no earnings data" case.
+    struct EarningsDatesReply {
+        bool ok = false;
+        bool transient = false;
+        QString error;
+        QVector<EarningsEvent> events;
+        QDateTime as_of; // when the cached copy was written; invalid = fetched just now
+    };
+    void read_earnings(const QString& symbol, std::function<void(const EarningsDatesReply&)> done);
 
     /// Subscribe to the full earnings picture for `symbol` — surprise +
     /// price-reaction history, live consensus, revision trend and forward
@@ -359,6 +383,13 @@ class EquityResearchService : public QObject {
     void note_earnings(const QString& symbol, const EarningsAnalysis& a, const QDateTime& fetched_at);
     void replan_earnings(const QString& symbol);
     void on_earnings_due(const QString& symbol);
+
+    // ── Earnings dates (subscribe_earnings + read_earnings) ───────────────────
+    /// The cache, then one daemon call per symbol however many ask at once.
+    /// A cache hit answers inline (the QueryStore fetcher wants that);
+    /// read_earnings defers it.
+    void load_earnings(const QString& symbol, std::function<void(const EarningsDatesReply&)> done);
+    QHash<QString, QVector<std::function<void(const EarningsDatesReply&)>>> earnings_in_flight_;
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

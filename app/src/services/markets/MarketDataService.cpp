@@ -296,7 +296,7 @@ void MarketDataService::refresh(const QStringList& topics) {
             // row) is an error on its topic — never an empty success.
             for (const auto& sym : quote_syms)
                 if (!answered_quotes.contains(sym))
-                    hub.publish_error(QStringLiteral("market:quote:") + sym, QStringLiteral("no quote returned"));
+                    hub.publish_error(QStringLiteral("market:quote:") + sym, kNoQuoteError);
 
             // Sparklines — {sym: [closes]}
             const QJsonObject sparks = root.value("sparklines").toObject();
@@ -2064,6 +2064,58 @@ void MarketDataService::fetch_options_chain(const QString& symbol, OptionsChainC
                     w(reply);
             });
         });
+}
+
+// ── Option IV surface (Yahoo) ──────────────────────────────────────────────
+void MarketDataService::fetch_options_surface(const QString& symbol, OptionsSurfaceCallback cb) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty()) {
+        later([cb]() { cb({false, {}, QStringLiteral("Options surface: no symbol")}); });
+        return;
+    }
+    const QString cache_key = QStringLiteral("options_surface:yahoo:") + sym;
+    if (const auto aged = finterm::CacheManager::instance().try_get_aged(cache_key)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(aged->value.toUtf8());
+        if (doc.isObject()) {
+            OptionsSurfaceReply r{true, doc.object(), {}};
+            later([cb, r]() { cb(r); });
+            return;
+        }
+    }
+    auto& waiters = options_surface_waiters_[sym];
+    waiters.append(std::move(cb));
+    if (waiters.size() > 1)
+        return; // the request already out answers this caller too
+
+    QPointer<MarketDataService> self = this;
+    python::PythonWorker::instance().submit(
+        QStringLiteral("options_surface"), QJsonObject{{"symbol", sym}},
+        [self, sym, cache_key](bool ok, QJsonObject result, QString err) {
+            if (!self)
+                return;
+            OptionsSurfaceReply reply;
+            // The action's own {"error": …} (no spot, every chain failed)
+            // arrives as ok=false with its text in err; the body check stays
+            // as a backstop.
+            const QString failure = !ok ? err : result.value("error").toString();
+            if (!ok || !failure.isEmpty()) {
+                reply.error = failure.isEmpty() ? QStringLiteral("options_surface failed") : failure;
+                LOG_WARN("MarketData", "options surface " + sym + " failed: " + reply.error);
+            } else {
+                reply.ok = true;
+                reply.surface = result;
+                // A listing that may itself have failed is shown, but is not
+                // this symbol's answer: the next ask goes to Yahoo again.
+                if (!result.contains("listing_error"))
+                    finterm::CacheManager::instance().put(
+                        cache_key, QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)),
+                        kOptionsSurfaceTtlSec, "options");
+            }
+            const auto waiters = self->options_surface_waiters_.take(sym);
+            for (const auto& w : waiters)
+                w(reply);
+        },
+        kOptionsSurfaceTimeoutMs);
 }
 
 // ── Wikipedia summary ──────────────────────────────────────────────────────

@@ -3,7 +3,6 @@
 
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
-#include "python/PythonWorker.h"
 #include "services/markets/ExtendedHoursService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"

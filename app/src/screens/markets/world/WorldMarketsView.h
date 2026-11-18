@@ -6,7 +6,7 @@
 // Data: market:quote:* and market:sparkline:* topics on the DataHub (the
 // yfinance daemon polls subscribed topics off the GUI thread; the push stream
 // refines quotes live), index FUT% through services::fetch_index_futures, and
-// the Treasury par curve through scripts/treasury_data.py. Everything is
+// the Treasury par curve through EconomicsService. Everything is
 // subscribed only while the view is on screen.
 
 #include "screens/markets/world/TreasuryCurve.h"

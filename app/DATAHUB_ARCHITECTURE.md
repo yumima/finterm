@@ -210,6 +210,46 @@ class DataHub : public QObject {
 } // namespace finterm::datahub
 ```
 
+### 4.1 What screens and UI may call (CI: `datahub-discipline`)
+
+`.github/workflows/lint.yml` checks every `.cpp`/`.h` under `src/screens`
+and `src/ui`. There is no opt-out comment.
+
+- **D1 — no Python, no daemon.** No `PythonRunner::instance()` or
+  `PythonWorker::instance()` at all: not `run`, `run_interactive`,
+  `run_code` or `submit`, and not a reference kept to call them later. The
+  service that owns the data runs the script and answers its callers — for
+  example `EquityResearchService::search_symbols_reply` (symbol search),
+  `EquityResearchService::read_earnings`, `MarketDataService::fetch_options_surface`,
+  `EconomicsService::fetch` / `fetch_treasury_par_curve` (FRED, keyless or
+  keyed, through `fred_data.py`), `company_events::fetch`
+  (`services/calendar`), `ScreenerService`, `social_backend::call_backend`,
+  `notebook::run_cell`.
+- **D4 — no streaming `fetch_*`.** A screen never calls
+  `MarketDataService` / `NewsService` / `EconomicsService` /
+  `DBnomicsService` / `GovDataService` `fetch_*` for data that has a topic
+  (quotes, sparklines, history, movers): it subscribes
+  (`subscribe` + `subscribe_errors` — a topic's error is a refusal, never an
+  empty answer). Allowed — one-shot owner reads with no topic:
+  `MarketDataService::fetch_bars`, `fetch_info`, `fetch_info_raw`,
+  `fetch_company_profiles`, `fetch_ipo_extras`, `fetch_news`,
+  `fetch_sec_filings`, `fetch_sec_filings_of_form`, `fetch_s1_funding`,
+  `fetch_wikipedia_summary`, `fetch_orderbook`, `fetch_options_chain`,
+  `fetch_options_surface`; `DBnomicsService::fetch_providers` /
+  `fetch_datasets` / `fetch_series` / `fetch_observations`;
+  `EconomicsService::fetch_treasury_par_curve`;
+  `NewsService::fetch_all_news_progressive` (the News screen's refresh with
+  per-feed progress, which `news:general` cannot carry). Calls are matched
+  across line breaks and through a reference to the service
+  (`auto& mds = MarketDataService::instance(); mds.fetch_quotes(…)` fails).
+  A new one-shot read goes on the allowlist in the workflow, with its
+  reason, in review.
+
+A one-shot look at topic data (a dialog's current price, IPO Watch's pop %
+for hundreds of priced tickers) subscribes, takes the first value or error
+per topic, and unsubscribes — holding hundreds of topics would have the
+scheduler re-poll them together every TTL.
+
 ---
 
 ## 5. Behaviour
@@ -452,11 +492,12 @@ Rejected alternative: wrapping the payload in `{list, is_final}` struct. Most co
 
 To prevent regression, a new set of CLAUDE.md rules:
 
-- **D1.** Screens and widgets **must not** call `PythonRunner::instance().run()` or `HttpClient::*` or service `fetch_*` callbacks directly. They subscribe via `DataHub`.
+- **D1.** Screens and UI **must not** reach Python or the daemon (`PythonRunner` / `PythonWorker`) — the owning service does (§4.1, CI-enforced).
 - **D2.** Services that fetch external data **must** implement `Producer` and publish results via `DataHub::publish()`.
 - **D3.** No `QTimer` in a widget whose only job is to trigger a data refresh. The hub's scheduler owns cadence.
-- **D4.** All topic keys **must** be documented in `docs/DATAHUB_TOPICS.md` (a registry added in Phase 4).
-- **D5.** `push_only` topics (WebSocket-driven) **must** declare their policy at producer construction time, not inline.
+- **D4.** Screens and UI **must not** call a service's streaming `fetch_*` for data that has a topic; they subscribe. One-shot owner reads without a topic are allowlisted (§4.1, CI-enforced).
+- **D5.** All topic keys **must** be documented in `docs/DATAHUB_TOPICS.md` (a registry added in Phase 4).
+- **D6.** `push_only` topics (WebSocket-driven) **must** declare their policy at producer construction time, not inline.
 
 ---
 

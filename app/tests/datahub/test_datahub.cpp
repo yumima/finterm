@@ -145,6 +145,39 @@ class TestDataHub : public QObject {
         QVERIFY(!seen.contains("test:other:gamma"));
     }
 
+    // The no-change skip is for subscribers that show the value. One that
+    // joined while it was stale (no initial delivery) gets the refresh even
+    // when it republishes the same value — else it waits forever.
+    void unchanged_republish_reaches_a_late_subscriber() {
+        auto& hub = DataHub::instance();
+        const QString topic = "test:unchanged:1";
+        TopicPolicy p;
+        p.ttl_ms = 1;
+        hub.set_policy(topic, p);
+
+        QObject early;
+        int early_calls = 0;
+        hub.subscribe(&early, topic, [&](const QVariant&) { ++early_calls; });
+        hub.publish(topic, QVariant(7));
+        QTRY_COMPARE(early_calls, 1);
+
+        QTest::qWait(5); // the value goes stale: a new subscriber gets no initial delivery
+        QObject late;
+        QVariant late_got;
+        hub.subscribe(&late, topic, [&](const QVariant& v) { late_got = v; });
+        QCoreApplication::processEvents();
+        QVERIFY(!late_got.isValid());
+
+        hub.publish(topic, QVariant(7)); // the refresh: same value
+        QCOMPARE(late_got.toInt(), 7);
+        QCOMPARE(early_calls, 1); // already shows 7: still skipped
+
+        late_got = QVariant();
+        hub.publish(topic, QVariant(7)); // primed now: skipped for both
+        QVERIFY(!late_got.isValid());
+        QCOMPARE(early_calls, 1);
+    }
+
     // Scheduler skips push-only topics.
     void push_only_skips_scheduler() {
         auto& hub = DataHub::instance();
