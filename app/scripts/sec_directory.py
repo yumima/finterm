@@ -174,3 +174,18 @@ def lookup(symbol: str) -> Optional[Dict[str, Any]]:
 def cik(symbol: str) -> Optional[str]:
     r = lookup(symbol)
     return str(r["cik"]) if r else None
+
+
+if __name__ == "__main__":
+    # `sec_directory.py cik_map` -> {"map": {"AAPL": 320193, ...}} or
+    # {"error": ..., "transient": true}: the C++ side's ticker -> CIK lookup
+    # (MarketDataService) reads the app's one copy through this.
+    import sys
+    if len(sys.argv) < 2 or sys.argv[1] != "cik_map":
+        print(json.dumps({"error": "usage: sec_directory.py cik_map"}))
+        sys.exit(2)
+    try:
+        print(json.dumps({"map": {t: r["cik"] for t, r in by_ticker().items()}}, separators=(",", ":")))
+    except Unavailable as e:
+        print(json.dumps({"error": str(e), "transient": True}))
+        sys.exit(1)

@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`cb0dddcc5`](https://github.com/yumima/finterm/commit/cb0dddcc5) storage: Equity Research and Economics keep one store, cache.db
+- [`29be76870`](https://github.com/yumima/finterm/commit/29be76870) whats on: the earnings feed calls ipo_calendar's Nasdaq client by its new signature
 - [`18796b452`](https://github.com/yumima/finterm/commit/18796b452) sec http: every EDGAR request in the scripts goes through sec_http
 - [`428c6ac81`](https://github.com/yumima/finterm/commit/428c6ac81) geolocation, whats on: per-call answers, one failure text, narrow yields window
 - [`8a45bce42`](https://github.com/yumima/finterm/commit/8a45bce42) data owners: review fixes — real ages, refusals not cached, one fan-out, one bridge

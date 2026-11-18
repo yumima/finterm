@@ -1648,7 +1648,6 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
 namespace {
 constexpr int kIpoExtrasCacheTtlSec = 15 * 60;          // 15 min — news + financials change slowly
 constexpr int kSecFilingsCacheTtlSec = 60 * 60;         // 1h — new SEC filings are infrequent
-constexpr int kSecCikMapTtlSec = 7 * 24 * 60 * 60;      // 7d — SEC publishes weekly
 constexpr int kWikipediaCacheTtlSec = 7 * 24 * 60 * 60; // 7d — descriptions stable
 } // namespace
 
@@ -1972,59 +1971,33 @@ void MarketDataService::read_sec_submissions(const QString& tkr, const QString& 
         return;
     sec_cik_loading_ = true;
 
-    // Try CacheManager first — the company_tickers.json mapping has a 7-day
-    // TTL since SEC refreshes weekly. Falls through to a live fetch if missing.
-    auto fire_waiters = [this](bool ok, const QString& why) {
-        sec_cik_loaded_ = ok;
-        sec_cik_loading_ = false;
-        auto waiters = std::move(sec_cik_waiters_);
-        for (auto& w : waiters)
-            w(ok, why);
-    };
-    auto populate_from_json = [this](const QJsonDocument& doc) {
-        // company_tickers.json is keyed by row index (strings "0","1",…); each
-        // value is {cik_str, ticker, title}.
-        const auto root = doc.object();
-        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-            const auto v = it.value().toObject();
-            const QString t = v["ticker"].toString().toUpper();
-            const int cik = v["cik_str"].toInt();
-            if (!t.isEmpty() && cik > 0)
-                sec_cik_map_.insert(t, cik);
-        }
-    };
-
-    auto cached_map = finterm::CacheManager::instance().try_get("sec_cik_map");
-    if (cached_map.has_value()) {
-        const auto doc = QJsonDocument::fromJson(cached_map->toUtf8());
-        if (doc.isObject()) {
-            populate_from_json(doc);
-            fire_waiters(true, {});
-            return;
-        }
-    }
-    QHash<QByteArray, QByteArray> headers;
-    const SecContact contact = sec_contact();
-    headers["User-Agent"] = sec_user_agent(contact);
+    // The ticker -> CIK map from sec_directory.py — the app's one copy of
+    // SEC's directory (daily refresh, SEC contact identity, last good copy on
+    // a refusal). Read once per session; this used to fetch and cache its
+    // own copy of company_tickers.json.
     QPointer<MarketDataService> self_ptr = this;
-    finterm::HttpClient::instance().get(
-        "https://www.sec.gov/files/company_tickers.json", headers,
-        [self_ptr, populate_from_json, fire_waiters, contact](Result<QJsonDocument> res) {
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_directory.py"), {QStringLiteral("cik_map")}, [self_ptr](python::PythonResult r) {
             if (!self_ptr)
                 return;
-            if (!res.is_ok() || !res.value().isObject()) {
-                const QString err =
-                    res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
-                sec_refused(contact, err);
-                const QString why = sec_failure(contact, err);
-                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed" + why);
-                fire_waiters(false, why);
-                return;
+            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
+            const QJsonObject map = root.value("map").toObject();
+            const bool ok = !map.isEmpty();
+            if (ok) {
+                for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+                    if (const int cik = it.value().toInt(); cik > 0)
+                        self_ptr->sec_cik_map_.insert(it.key(), cik);
             }
-            populate_from_json(res.value());
-            const QString raw = QString::fromUtf8(res.value().toJson(QJsonDocument::Compact));
-            finterm::CacheManager::instance().put("sec_cik_map", raw, kSecCikMapTtlSec, "sec");
-            fire_waiters(true, {});
+            const QString why =
+                ok ? QString()
+                   : QStringLiteral(" — %1").arg(root.value("error").toString(python::failure_message(r)));
+            if (!ok)
+                LOG_WARN("MarketData", "SEC ticker map unavailable" + why);
+            self_ptr->sec_cik_loaded_ = ok;
+            self_ptr->sec_cik_loading_ = false;
+            auto waiters = std::move(self_ptr->sec_cik_waiters_);
+            for (auto& w : waiters)
+                w(ok, why);
         });
 }
 
