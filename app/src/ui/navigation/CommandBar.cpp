@@ -3,7 +3,7 @@
 #include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/session/ScreenStateManager.h"
-#include "python/PythonWorker.h"
+#include "services/equity/EquityResearchService.h"
 #include "ui/SearchFailedText.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -11,9 +11,6 @@
 #include <algorithm>
 #include <QApplication>
 #include <QEvent>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QKeyEvent>
 #include <QListWidgetItem>
 #include <QRegularExpression>
@@ -1177,32 +1174,22 @@ void CommandBar::schedule_asset_search(const QString& query) {
 }
 
 void CommandBar::fire_asset_search(const QString& query) {
-    // Symbol search runs through the persistent yfinance daemon (action "search").
-    // The old HTTP /market/search endpoint was served by the now-deprecated local
-    // auth stub, which no longer runs — every search returned "No results found".
-    QJsonObject payload;
-    payload["query"] = query;
-    payload["type"] = active_asset_type_; // stock/fund/index/crypto — daemon filters
-    payload["limit"] = kMaxResults;
-
+    // active_asset_type_ (stock/fund/index/crypto) — the daemon filters on it.
     QPointer<CommandBar> self = this;
-    python::PythonWorker::instance().submit(
-        "search", payload,
-        [self, query](bool ok, QJsonObject result, QString) {
+    services::equity::EquityResearchService::instance().search_symbols_reply(
+        query, kMaxResults, active_asset_type_, [self, query](services::equity::SymbolSearchReply reply) {
             if (!self)
                 return;
             // Only process if user hasn't changed the query since we fired
             if (self->pending_query_ != query)
                 return;
-            // A failed search says so (read_search_reply) — not the last query's
-            // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = finterm::ui::read_search_reply(ok, result);
-            self->on_asset_results(reply.results, reply.failure);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+            // A failed search says so — not the last query's matches, and not
+            // an empty list that reads as "no such ticker".
+            self->on_asset_results(reply.results, reply.failed ? search_failed_text(reply.transient) : QString());
+        });
 }
 
-void CommandBar::on_asset_results(const QJsonArray& results, const QString& failure) {
+void CommandBar::on_asset_results(const QVector<services::equity::SearchResult>& results, const QString& failure) {
     list_->clear();
 
     if (results.isEmpty()) {
@@ -1222,16 +1209,12 @@ void CommandBar::on_asset_results(const QJsonArray& results, const QString& fail
         return;
     }
 
-    for (const auto& val : results) {
-        const auto obj = val.toObject();
-        const QString symbol = obj["symbol"].toString();
-        const QString name = obj["name"].toString();
-        const QString exchange = obj["exchange"].toString();
-        const QString country = obj["country"].toString();
-        const QString type = obj["type"].toString(active_asset_type_);
-
-        if (symbol.isEmpty())
-            continue;
+    for (const auto& r : results) {
+        const QString& symbol = r.symbol;
+        const QString& name = r.name;
+        const QString& exchange = r.exchange;
+        const QString& country = r.country;
+        const QString type = r.type.isEmpty() ? active_asset_type_ : r.type;
 
         // Convert to yfinance-compatible ticker (e.g. SAP → SAP.DE)
         const QString yf_symbol = to_yfinance_symbol(symbol, exchange, country);

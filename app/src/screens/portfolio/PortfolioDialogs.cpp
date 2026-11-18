@@ -1,7 +1,7 @@
 // src/screens/portfolio/PortfolioDialogs.cpp
 #include "screens/portfolio/PortfolioDialogs.h"
 
-#include "python/PythonWorker.h"
+#include "services/equity/EquityResearchService.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/portfolio/PortfolioDates.h"
 #include "ui/SearchFailedText.h"
@@ -14,9 +14,6 @@
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -334,29 +331,19 @@ void AddAssetDialog::fire_search(const QString& query) {
     if (query.isEmpty())
         return;
 
-    // Symbol search goes through the persistent yfinance daemon (action "search"),
-    // not the old HTTP /market/search endpoint — that was served by the now-deprecated
-    // local auth stub, which no longer runs (its port is taken by other localhost
-    // services, so the call 404'd and every search returned "No results found").
-    QJsonObject payload;
-    payload["query"] = query;
-    payload["limit"] = kAssetSearchLimit;
-
     QPointer<AddAssetDialog> self = this;
-    python::PythonWorker::instance().submit(
-        "search", payload,
-        [self, query](bool ok, QJsonObject result, QString) {
+    services::equity::EquityResearchService::instance().search_symbols_reply(
+        query, kAssetSearchLimit, QString(), [self, query](services::equity::SymbolSearchReply reply) {
             if (!self || self->pending_query_ != query)
                 return;
-            // A failed search says so (read_search_reply) — not the last query's
-            // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = finterm::ui::read_search_reply(ok, result);
-            self->show_results(reply.results, reply.failure);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+            // A failed search says so — not the last query's matches, and not
+            // an empty list that reads as "no such ticker".
+            self->show_results(reply.results,
+                               reply.failed ? finterm::ui::search_failed_text(reply.transient) : QString());
+        });
 }
 
-void AddAssetDialog::show_results(const QJsonArray& results, const QString& failure) {
+void AddAssetDialog::show_results(const QVector<services::equity::SearchResult>& results, const QString& failure) {
     search_list_->clear();
 
     if (results.isEmpty()) {
@@ -378,14 +365,11 @@ void AddAssetDialog::show_results(const QJsonArray& results, const QString& fail
         return;
     }
 
-    for (const auto& val : results) {
-        const auto obj = val.toObject();
-        const QString sym = obj["symbol"].toString();
-        const QString name = obj["name"].toString();
-        const QString exch = obj["exchange"].toString();
-        const QString type = obj["type"].toString("stock");
-        if (sym.isEmpty())
-            continue;
+    for (const auto& r : results) {
+        const QString& sym = r.symbol;
+        const QString& name = r.name;
+        const QString& exch = r.exchange;
+        const QString type = r.type.isEmpty() ? QStringLiteral("stock") : r.type;
 
         // The daemon's search returns yfinance-ready symbols — foreign listings
         // already carry their exchange suffix (e.g. "SPCX.TO", "SAP.DE"),

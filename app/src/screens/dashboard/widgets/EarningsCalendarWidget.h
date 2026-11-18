@@ -2,6 +2,7 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/equity/EquityResearchModels.h"
 
 #include <QComboBox>
 #include <QDate>
@@ -110,7 +111,8 @@ class EarningsCalendarWidget : public BaseWidget {
 
     // ── Per-symbol earnings dates (yfinance) ─────────────────────────────────
     void fetch_symbol_earnings(const QStringList& symbols, qint64 epoch, bool portfolio_view);
-    void apply_symbol_result(const QString& symbol, const QJsonObject& result, bool portfolio_view);
+    void apply_symbol_result(const QString& symbol, const QVector<services::equity::EarningsEvent>& events,
+                             bool portfolio_view);
 
     // ── Portfolio selector ───────────────────────────────────────────────────
     void rebuild_portfolio_model();

@@ -5,8 +5,8 @@
 #include "core/logging/Logger.h"
 #include "core/util/BarTime.h"
 #include "services/calendar/EarningsCalendarFeed.h"
-#include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/EarningsMath.h"
+#include "services/equity/EquityResearchService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
@@ -639,33 +639,28 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
 
     QPointer<EarningsCalendarWidget> self = this;
     for (const QString& sym : symbols) {
-        QJsonObject payload;
-        payload["symbol"] = sym;
-        // ~13 months back covers the year-ago comparison quarter and the last
-        // reported surprise; 180 days forward covers the next scheduled print.
-        payload["lookback_days"] = 400;
-        payload["lookahead_days"] = 180;
-
-        python::PythonWorker::instance().submit(
-            "earnings_dates", payload,
-            [self, sym, epoch, portfolio_view, total = symbols.size()](bool ok, QJsonObject result, QString err) {
+        // The ER chart's earnings dates (one cache, one call per symbol): the
+        // last ~5 years cover the year-ago quarter and the last reported
+        // surprise; 180 days forward covers the next scheduled print.
+        services::equity::EquityResearchService::instance().read_earnings(
+            sym, [self, sym, epoch, portfolio_view,
+                  total = symbols.size()](const services::equity::EquityResearchService::EarningsDatesReply& r) {
                 if (!self || epoch != self->epoch_)
                     return;
 
-                if (ok && !result.contains("error")) {
+                if (r.ok) {
                     ++self->ok_symbols_;
-                    self->apply_symbol_result(sym, result, portfolio_view);
-                } else if (python::PythonWorker::reply_is_transient(ok, result)) {
-                    // A refusal or no answer at all. A plain {"error"} body
-                    // (ok:false since the daemon sends errors as failed
-                    // replies) is the ETF/index "no earnings" case — skipped
-                    // quietly, as before.
-                    LOG_WARN("EarningsCal", QString("earnings_dates failed for %1: %2").arg(sym, err.left(120)));
+                    self->apply_symbol_result(sym, r.events, portfolio_view);
+                } else if (r.transient) {
+                    // A refusal or no answer at all — named in the note, never
+                    // read as "no upcoming earnings".
+                    LOG_WARN("EarningsCal", QString("earnings_dates failed for %1: %2").arg(sym, r.error.left(120)));
                     self->refused_symbols_.append(sym);
                 } else {
                     // Not a refusal: usually an ETF/index with no earnings —
                     // logged quietly so a real parse bug is still findable.
-                    LOG_DEBUG("EarningsCal", QString("earnings_dates: no data for %1: %2").arg(sym, err.left(120)));
+                    LOG_DEBUG("EarningsCal",
+                              QString("earnings_dates: no data for %1: %2").arg(sym, r.error.left(120)));
                 }
 
                 if (--self->pending_symbols_ > 0)
@@ -699,15 +694,14 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                     });
                 }
                 self->populate();
-            },
-            python::PythonWorker::kNetworkActionTimeoutMs);
+            });
     }
 }
 
-void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJsonObject& result,
+void EarningsCalendarWidget::apply_symbol_result(const QString& symbol,
+                                                 const QVector<services::equity::EarningsEvent>& events,
                                                  bool portfolio_view) {
     const QDate today = market_today();
-    const auto dates = result.value("dates").toArray();
 
     struct Point {
         QDate date;
@@ -720,23 +714,21 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
     };
     QVector<Point> past, future;
 
-    for (const auto& v : dates) {
-        const auto o = v.toObject();
-        const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
+    for (const auto& ev : events) {
         // Read in ET like the ER Earnings tab reads the same field
         // (EquityEarningsTab's et_date). In UTC a 20:00 ET print falls on the
         // next day, so the dashboard calendar listed it one day after the tab.
-        const QDate d = core::bartime::market_date_et(ts);
+        const QDate d = core::bartime::market_date_et(ev.timestamp);
         if (!d.isValid())
             continue;
         Point p;
         p.date = d;
-        p.has_estimate = o.value("eps_estimate").isDouble();
-        p.estimate = o.value("eps_estimate").toDouble();
-        p.has_actual = o.value("eps_actual").isDouble();
-        p.actual = o.value("eps_actual").toDouble();
-        p.has_surprise = o.value("surprise_pct").isDouble();
-        p.surprise = o.value("surprise_pct").toDouble();
+        p.has_estimate = ev.has_estimate;
+        p.estimate = ev.eps_estimate;
+        p.has_actual = ev.has_actual;
+        p.actual = ev.eps_actual;
+        p.has_surprise = ev.has_surprise;
+        p.surprise = ev.surprise_pct;
         (d < today ? past : future).append(p);
     }
 

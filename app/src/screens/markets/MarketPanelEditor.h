@@ -1,8 +1,8 @@
 #pragma once
 #include "screens/markets/MarketPanelConfig.h"
+#include "services/equity/EquityResearchModels.h"
 
 #include <QDialog>
-#include <QJsonArray>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QString>
@@ -11,7 +11,7 @@
 namespace finterm::screens {
 
 /// Modal dialog for creating or editing a market panel.
-/// Symbol search uses the same /market/search API as the command bar.
+/// Symbol search is EquityResearchService's, like the command bar's.
 class MarketPanelEditor : public QDialog {
     Q_OBJECT
   public:
@@ -32,7 +32,7 @@ class MarketPanelEditor : public QDialog {
   private:
     void build_ui();
     void fire_search(const QString& query);
-    void on_search_results(const QJsonArray& results,
+    void on_search_results(const QVector<services::equity::SearchResult>& results,
                            const QString& failure = {}); // failure: shown instead of "No results"
     void refresh_ticker_list();
     void reposition_dropdown();

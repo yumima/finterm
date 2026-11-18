@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioDialogs.h
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/equity/EquityResearchModels.h"
 
 #include <QComboBox>
 #include <QDateEdit>
@@ -60,7 +61,8 @@ class AddAssetDialog : public QDialog {
   private:
     void schedule_search(const QString& query);
     void fire_search(const QString& query);
-    void show_results(const QJsonArray& results, const QString& failure = {}); // failure: shown instead of "No results"
+    void show_results(const QVector<services::equity::SearchResult>& results,
+                      const QString& failure = {}); // failure: shown instead of "No results"
     void select_result(const QString& symbol);
     void position_dropdown();
 

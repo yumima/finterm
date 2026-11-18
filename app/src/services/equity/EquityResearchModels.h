@@ -24,6 +24,18 @@ struct SearchResult {
     QString type;
     QString currency;
     QString industry;
+    QString country; // Yahoo's market code ("us_market"), for boxes that map it to a suffix
+};
+
+/// One symbol-search answer, owed to the caller that asked. `failed` means
+/// there was no answer (Yahoo refused, timeout) — never the same as an answer
+/// with no matches, which reads as "no such ticker".
+struct SymbolSearchReply {
+    QString query; // trimmed, as sent
+    QVector<SearchResult> results;
+    bool failed = false;
+    bool transient = false; // failed, and a retry can help
+    QString error;          // the worker's text when failed
 };
 
 // ── Real-time quote ───────────────────────────────────────────────────────────

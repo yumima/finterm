@@ -1,6 +1,6 @@
 #include "screens/markets/MarketPanelEditor.h"
 
-#include "python/PythonWorker.h"
+#include "services/equity/EquityResearchService.h"
 #include "ui/SearchFailedText.h"
 #include "ui/theme/Theme.h"
 
@@ -8,9 +8,6 @@
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -230,27 +227,22 @@ void MarketPanelEditor::fire_search(const QString& query) {
     if (query.isEmpty())
         return;
 
-    QJsonObject payload;
-    payload["query"] = query;
-    payload["limit"] = kMaxResults;
-
     QPointer<MarketPanelEditor> self = this;
-    python::PythonWorker::instance().submit(
-        "search", payload,
-        [self, query](bool ok, QJsonObject result, QString) {
+    services::equity::EquityResearchService::instance().search_symbols_reply(
+        query, kMaxResults, QString(), [self, query](services::equity::SymbolSearchReply reply) {
             if (!self)
                 return;
             if (self->pending_query_ != query)
                 return; // stale response
-            // A failed search says so (read_search_reply) — not the last query's
-            // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = finterm::ui::read_search_reply(ok, result);
-            self->on_search_results(reply.results, reply.failure);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+            // A failed search says so — not the last query's matches, and not
+            // an empty list that reads as "no such ticker".
+            self->on_search_results(reply.results,
+                                    reply.failed ? finterm::ui::search_failed_text(reply.transient) : QString());
+        });
 }
 
-void MarketPanelEditor::on_search_results(const QJsonArray& results, const QString& failure) {
+void MarketPanelEditor::on_search_results(const QVector<services::equity::SearchResult>& results,
+                                          const QString& failure) {
     dropdown_->clear();
     if (!failure.isEmpty()) {
         auto* item = new QListWidgetItem(failure);
@@ -258,12 +250,9 @@ void MarketPanelEditor::on_search_results(const QJsonArray& results, const QStri
         dropdown_->addItem(item);
     }
 
-    for (const auto& v : results) {
-        const auto obj = v.toObject();
-        const QString sym = obj["symbol"].toString();
-        const QString name = obj["name"].toString();
-        if (sym.isEmpty())
-            continue;
+    for (const auto& r : results) {
+        const QString& sym = r.symbol;
+        const QString& name = r.name;
 
         const QString display = name.isEmpty() ? sym : QString("%1  ·  %2").arg(sym, name);
         auto* item = new QListWidgetItem(display);
