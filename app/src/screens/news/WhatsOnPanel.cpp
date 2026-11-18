@@ -14,6 +14,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QButtonGroup>
 #include <QCoreApplication>
 #include <QEvent>
 #include <QHBoxLayout>
@@ -30,7 +31,6 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-#include <QButtonGroup>
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -340,7 +340,7 @@ constexpr const char* kTdUpKey = "whatson:td:upcoming:v1";
 constexpr const char* kTdDoneKey = "whatson:td:auctioned:v1";
 constexpr int kFomcSec = 12 * 3600; // a published calendar
 constexpr int kEffrSec = 3600;      // one print a day
-constexpr int kTdSec = 60 * 60;      // announcements land a few days ahead; results at the close
+constexpr int kTdSec = 60 * 60;     // announcements land a few days ahead; results at the close
 
 std::optional<QJsonDocument> cached_doc(const QString& key) {
     if (const auto hit = CacheManager::instance().try_get(key)) {

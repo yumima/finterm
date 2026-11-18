@@ -8,7 +8,6 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <algorithm>
 #include <QApplication>
 #include <QEvent>
 #include <QKeyEvent>
@@ -16,6 +15,8 @@
 #include <QRegularExpression>
 #include <QScreen>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace finterm::ui {
 

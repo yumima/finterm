@@ -18,10 +18,12 @@
 namespace finterm::company_events {
 
 namespace {
-// v3: the key carries the window's end too.
-constexpr const char* kKeyPrefix = "whatson:company_events:v3:"; // + window + symbol-set hash
-constexpr int kFreshSec = 60 * 60;    // the script caches each day itself (4 h / 7 d)
-constexpr int kPartialSec = 10 * 60;  // some days unanswered: ask for them again soon
+// + window + symbol-set hash (v3: the key carries the window's end too).
+constexpr const char* kKeyPrefix = "whatson:company_events:v3:";
+// The script caches each day itself (4 h / 7 d).
+constexpr int kFreshSec = 60 * 60;
+// Some days unanswered: ask for them again soon.
+constexpr int kPartialSec = 10 * 60;
 // Cold: ~1 Nasdaq request per weekday of the window, paced — well over the
 // default 30 s process deadline the first time.
 constexpr int kRunTimeoutMs = 180'000;
@@ -66,9 +68,9 @@ void on_answer(const QString& key, const python::PythonResult& res) {
         r.ok = true;
         r.root = root;
         const bool partial = !root.value("div_days_failed").toArray().isEmpty();
-        finterm::CacheManager::instance().put(
-            key, QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
-            partial ? kPartialSec : kFreshSec, QStringLiteral("whatson"));
+        finterm::CacheManager::instance().put(key,
+                                              QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                                              partial ? kPartialSec : kFreshSec, QStringLiteral("whatson"));
     }
     auto it = runs().find(key);
     if (it == runs().end())

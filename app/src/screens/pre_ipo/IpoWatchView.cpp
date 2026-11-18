@@ -1636,25 +1636,26 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
     // Pick a window long enough to span most IPOs we care about. yfinance's
     // 6mo window covers the typical research horizon for a recently priced
     // deal; for older priced rows the curve will just clip to listing date.
-    services::MarketDataService::instance().fetch_bars( // D4-exempt: one-shot detail curve, caches per ticker
-        sym, "6mo", "1d", [self, sym](const services::MarketDataService::BarsReply& r) {
-            if (!self)
-                return;
-            const bool ok = r.ok;
-            const auto& points = r.bars;
-            QVector<double> closes;
-            if (ok) {
-                closes.reserve(points.size());
-                for (const auto& p : points)
-                    closes.append(p.close);
-            }
-            self->history_inflight_.remove(sym);
-            self->history_cache_.insert(sym, closes);
-            // Only re-render if this ticker is still on screen. (fetch_bars
-            // always answers on a later turn, never inside render_detail.)
-            if (self->detail_symbol_ == sym)
-                self->rerender_detail();
-        });
+    services::MarketDataService::instance().fetch_bars(sym, "6mo", "1d",
+                                                       [self, sym](const services::MarketDataService::BarsReply& r) {
+                                                           if (!self)
+                                                               return;
+                                                           const bool ok = r.ok;
+                                                           const auto& points = r.bars;
+                                                           QVector<double> closes;
+                                                           if (ok) {
+                                                               closes.reserve(points.size());
+                                                               for (const auto& p : points)
+                                                                   closes.append(p.close);
+                                                           }
+                                                           self->history_inflight_.remove(sym);
+                                                           self->history_cache_.insert(sym, closes);
+                                                           // Only re-render if this ticker is still on screen.
+                                                           // (fetch_bars always answers on a later turn, never inside
+                                                           // render_detail.)
+                                                           if (self->detail_symbol_ == sym)
+                                                               self->rerender_detail();
+                                                       });
 }
 
 // ── Lazy fetchers for the new detail-rail tabs (NEWS / FINANCIALS / HOLDERS /
@@ -1977,7 +1978,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
                 return;
             struct Chunk {
                 QHash<QString, double> price;
-                QSet<QString> errored;   // answered without a quote, or refused
+                QSet<QString> errored;    // answered without a quote, or refused
                 bool any_refused = false; // an error other than "no such quote", or no answer at all
                 int pending = 0;
                 bool finished = false;
@@ -2036,8 +2037,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
             auto& hub = datahub::DataHub::instance();
             for (const auto& sym : syms) {
                 const QString topic = QStringLiteral("market:quote:") + sym;
-                hub.subscribe_errors(subs, topic,
-                                     [settle, sym](const QString& error) { settle(sym, nullptr, error); });
+                hub.subscribe_errors(subs, topic, [settle, sym](const QString& error) { settle(sym, nullptr, error); });
                 hub.subscribe(subs, topic, [settle, sym](const QVariant& v) {
                     if (!v.canConvert<services::QuoteData>())
                         return;

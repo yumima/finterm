@@ -1,10 +1,9 @@
 #include "screens/social/SocialScreen.h"
 
-#include "screens/social/BriefsPanel.h"
-#include "services/social/SocialBackend.h"
-
 #include "core/logging/Logger.h"
 #include "screens/ownership/OwnershipUi.h"
+#include "screens/social/BriefsPanel.h"
+#include "services/social/SocialBackend.h"
 #include "ui/components/TooltipText.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/notifications/ToastService.h"
@@ -55,9 +54,9 @@ constexpr int kPublishTimeoutMs = 120'000;
 constexpr int kConnectTimeoutMs = 60'000;
 constexpr qint64 kStaleAfterMs = 10 * 60 * 1000;
 
+using services::social_backend::call_backend;
 using services::social_backend::Done;
 using services::social_backend::Outcome;
-using services::social_backend::call_backend;
 
 QString esc(const QString& s) { return s.toHtmlEscaped(); }
 

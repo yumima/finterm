@@ -176,7 +176,7 @@ void pump() {
         s.in_flight = true; // before any callback below can re-enter pump()
         s.run_start = lo;
         s.run_end = hi;
-        python::PythonRunner::instance().run_interactive( // D1-exempt: this feed is the calendar's one runner
+        python::PythonRunner::instance().run_interactive(
             QStringLiteral("whats_on_calendar.py"),
             {QStringLiteral("earnings"), lo.toString(Qt::ISODate), hi.toString(Qt::ISODate)},
             [](python::PythonResult r) { on_answer(r); }, kRunTimeoutMs);

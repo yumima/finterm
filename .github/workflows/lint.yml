@@ -79,71 +79,103 @@ jobs:
           echo "clang-tidy complete."
 
   # ── datahub-discipline ───────────────────────────────────────────────────────
-  # Enforces DataHub rules D1 and D4 (see app/DATAHUB_ARCHITECTURE.md §4):
-  #   D1 — screens must not spawn Python directly.
-  #   D4 — consumers must not call service fetch_* callbacks.
-  # A call site may opt out with `// D1-exempt: <reason>` / `// D4-exempt:
-  # <reason>` trailing the line that opens the call (the reason is required).
-  # Calls are found across a line break, because clang-format splits
-  # `X::instance()` from `.fetch_y(` once the line passes 120 columns — a
-  # line-based grep never saw those calls at all.
-  # If this step fails, route the offending code through DataHub. See
-  # app/DATAHUB_ARCHITECTURE.md §4 for the producer + topic you should
-  # be using instead.
+  # Enforces DataHub rules D1 and D4 (see app/DATAHUB_ARCHITECTURE.md §4.1) over
+  # src/screens AND src/ui:
+  #   D1 — screens and UI never reach the Python runner or the daemon: no
+  #        PythonRunner::instance() / PythonWorker::instance() at all (run,
+  #        run_interactive, run_code, submit, and a reference kept to call
+  #        them later). Their owning service runs the script.
+  #   D4 — consumers never call a streaming service's fetch_* API when the
+  #        data has a hub topic; only the one-shot owner reads listed below.
+  # There is no opt-out comment: a new one-shot read without a topic goes on
+  # the allowlist, in review, with its reason.
+  # Calls are found across a line break (clang-format splits `X::instance()`
+  # from `.fetch_y(` past 120 columns) and through a reference to the
+  # service (`auto& mds = MarketDataService::instance(); mds.fetch_quotes(`).
+  # If this step fails, route the offending code through its owner and
+  # DataHub. See app/DATAHUB_ARCHITECTURE.md §4.1 for the producer + topic you
+  # should be using instead.
   datahub-discipline:
     name: datahub-discipline
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check screens/ does not call PythonRunner directly
+      - name: Check screens/ and ui/ do not reach Python directly
         working-directory: app
         run: |
-          # Prints `file:line: <call>(<rest of that line>)` per call site.
-          violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
-            xargs -0 perl -0ne 'while (/PythonRunner::instance\(\)\s*\.\s*run\([^\n]*/g) {
-                my $ln = 1 + (substr($_, 0, $-[0]) =~ tr/\n//); print "$ARGV:$ln: $&\n" }' \
-            | grep -vE '// D1-exempt: *[^ ]' || true)
+          # Prints `file:line: <match>` per use.
+          violations=$(find src/screens src/ui \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
+            xargs -0 perl -0ne 'while (/\b(?:PythonRunner|PythonWorker)\s*::\s*instance\s*\(\s*\)/g) {
+                my $ln = 1 + (substr($_, 0, $-[0]) =~ tr/\n//); print "$ARGV:$ln: $&\n" }' || true)
           if [ -n "$violations" ]; then
             echo "$violations"
             echo ""
-            echo "::error::D1 violation — screens must not call PythonRunner directly."
-            echo "Route through a Producer registered with DataHub."
-            echo "See app/DATAHUB_ARCHITECTURE.md §4."
+            echo "::error::D1 violation — screens and UI must not run Python or call the daemon."
+            echo "Route through the service that owns the data (or a Producer registered with DataHub)."
+            echo "See app/DATAHUB_ARCHITECTURE.md §4.1."
             exit 1
           fi
-          echo "D1 — screens are clean."
+          echo "D1 — screens and ui are clean."
 
-      - name: Check screens/ does not call deprecated service fetch_* APIs
+      - name: Check screens/ and ui/ do not call streaming service fetch_* APIs
         working-directory: app
         run: |
-          # D4 exempts one-shot lookups that have no hub topic:
-          #   MarketDataService::fetch_info / fetch_news / fetch_company_profiles /
-          #   fetch_ipo_extras / fetch_sec_filings / fetch_s1_funding /
-          #   fetch_wikipedia_summary,
-          #   DBnomicsService::fetch_providers / fetch_datasets / fetch_series /
-          #   fetch_observations.
-          # Anything else — an API with a topic (quote/sparkline/history) called
-          # one-shot for its ok flag, or a polled API with no producer yet
-          # (orderbook) — needs a `// D4-exempt: <reason>`. Movers have a
-          # topic (market:movers): subscribe to it.
-          # Match every fetch_* call, then grep -v the allowed ones.
-          violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
-            xargs -0 perl -0ne 'while (/(MarketDataService|NewsService|EconomicsService|DBnomicsService|GovDataService)::instance\(\)\s*\.\s*fetch_[^\n]*/g) {
-                my $ln = 1 + (substr($_, 0, $-[0]) =~ tr/\n//); (my $m = $&) =~ s/\(\)\s*\.\s*/()./; print "$ARGV:$ln: $m\n" }' \
-            | grep -vE 'MarketDataService::instance\(\)\.fetch_(info|news|company_profiles|ipo_extras|sec_filings|s1_funding|wikipedia_summary)\b' \
-            | grep -vE 'DBnomicsService::instance\(\)\.fetch_(providers|datasets|series|observations)\b' \
-            | grep -vE '// D4-exempt: *[^ ]' \
-            || true)
+          # The allowlist: one-shot owner reads whose data has NO hub topic.
+          #   MarketDataService — bars (a chart's own load, needs its ok flag
+          #     and supersession), info / info_raw, company profiles, IPO
+          #     extras, news, SEC filings, S-1 funding, Wikipedia, orderbook
+          #     (no producer), CBOE option chain, Yahoo option IV surface.
+          #   DBnomicsService — providers / datasets / series / observations.
+          #   EconomicsService — the Treasury par curve.
+          #   NewsService — fetch_all_news_progressive: the News screen's own
+          #     refresh with per-feed progress; news:general carries only the
+          #     merged result.
+          # Never here: quotes, sparklines, history, movers — they have topics
+          # (market:quote / sparkline / history / movers): subscribe.
+          violations=$(find src/screens src/ui \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
+            xargs -0 perl -0ne '
+              BEGIN {
+                %allow = map { $_ => 1 } qw(
+                  MarketDataService::fetch_bars MarketDataService::fetch_company_profiles
+                  MarketDataService::fetch_info MarketDataService::fetch_info_raw
+                  MarketDataService::fetch_ipo_extras MarketDataService::fetch_news
+                  MarketDataService::fetch_options_chain MarketDataService::fetch_options_surface
+                  MarketDataService::fetch_orderbook MarketDataService::fetch_s1_funding
+                  MarketDataService::fetch_sec_filings MarketDataService::fetch_sec_filings_of_form
+                  MarketDataService::fetch_wikipedia_summary
+                  DBnomicsService::fetch_providers DBnomicsService::fetch_datasets
+                  DBnomicsService::fetch_series DBnomicsService::fetch_observations
+                  EconomicsService::fetch_treasury_par_curve
+                  NewsService::fetch_all_news_progressive
+                );
+              }
+              my $svc = qr/(MarketDataService|NewsService|EconomicsService|DBnomicsService|GovDataService)/;
+              my @hits;
+              # Svc::instance().fetch_x / ->fetch_x, across line breaks.
+              while (/\b$svc\s*::\s*instance\s*\(\s*\)\s*(?:\.|->)\s*(fetch_\w+)/g) {
+                push @hits, [$-[0], "$1::$2"];
+              }
+              # A name bound to the service (auto& s = Svc::instance(); auto* s = &...).
+              my %alias;
+              while (/\b(\w+)\s*=\s*&?\s*(?:\w+\s*::\s*)*$svc\s*::\s*instance\s*\(\s*\)/g) { $alias{$1} = $2; }
+              for my $v (keys %alias) {
+                while (/(?<![\w.>])\Q$v\E\s*(?:\.|->)\s*(fetch_\w+)/g) { push @hits, [$-[0], "$alias{$v}::$1"]; }
+              }
+              for my $h (sort { $a->[0] <=> $b->[0] } @hits) {
+                next if $allow{$h->[1]};
+                my $ln = 1 + (substr($_, 0, $h->[0]) =~ tr/\n//);
+                print "$ARGV:$ln: $h->[1]\n";
+              }' || true)
           if [ -n "$violations" ]; then
             echo "$violations"
             echo ""
             echo "::error::D4 violation — consumers must not call streaming fetch_* APIs."
             echo "Use DataHub::subscribe() for live data, DataHub::peek() for snapshots."
-            echo "See app/DATAHUB_ARCHITECTURE.md §4."
+            echo "See app/DATAHUB_ARCHITECTURE.md §4.1."
             exit 1
           fi
-          echo "D4 — screens are clean."
+          echo "D4 — screens and ui are clean."
 
   # ── cppcheck ─────────────────────────────────────────────────────────────────
   cppcheck:

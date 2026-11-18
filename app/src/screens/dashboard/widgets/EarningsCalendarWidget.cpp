@@ -4,8 +4,8 @@
 
 #include "core/logging/Logger.h"
 #include "core/util/BarTime.h"
-#include "services/calendar/EarningsCalendarFeed.h"
 #include "screens/dashboard/widgets/EarningsMath.h"
+#include "services/calendar/EarningsCalendarFeed.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
@@ -659,8 +659,7 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                 } else {
                     // Not a refusal: usually an ETF/index with no earnings —
                     // logged quietly so a real parse bug is still findable.
-                    LOG_DEBUG("EarningsCal",
-                              QString("earnings_dates: no data for %1: %2").arg(sym, r.error.left(120)));
+                    LOG_DEBUG("EarningsCal", QString("earnings_dates: no data for %1: %2").arg(sym, r.error.left(120)));
                 }
 
                 if (--self->pending_symbols_ > 0)

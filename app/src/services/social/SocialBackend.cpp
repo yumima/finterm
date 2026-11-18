@@ -26,8 +26,8 @@ constexpr const char* kScript = "social_app.py";
 /// else outside the standard library.
 QString backend_python() {
 #if defined(Q_OS_LINUX)
-    static const QString system_python = QStandardPaths::findExecutable(
-        QStringLiteral("python3"), {QStringLiteral("/usr/bin"), QStringLiteral("/bin")});
+    static const QString system_python =
+        QStandardPaths::findExecutable(QStringLiteral("python3"), {QStringLiteral("/usr/bin"), QStringLiteral("/bin")});
     if (!system_python.isEmpty())
         return system_python;
 #endif

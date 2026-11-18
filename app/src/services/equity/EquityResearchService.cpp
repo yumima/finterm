@@ -132,8 +132,8 @@ namespace {
 
 QVector<SearchResult> parse_search_results(const QJsonObject& result) {
     // "results", or a flat array under "_value" (the other reply shape).
-    const auto arr = result.value("_value").isArray() ? result.value("_value").toArray()
-                                                      : result.value("results").toArray();
+    const auto arr =
+        result.value("_value").isArray() ? result.value("_value").toArray() : result.value("results").toArray();
     QVector<SearchResult> results;
     results.reserve(arr.size());
     for (const auto& v : arr) {

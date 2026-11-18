@@ -190,11 +190,11 @@ void IpoDealsFeed::request(bool enrich, bool chain_enrich) {
         emit self->answered(enrich, ok, root, why);
     };
     if (enrich)
-        python::PythonRunner::instance().run( // D1-exempt: the one runner of the calendar (this feed)
-            QStringLiteral("ipo_calendar.py"), {QStringLiteral("enrich")}, std::move(on_done), {}, 600'000);
+        python::PythonRunner::instance().run(QStringLiteral("ipo_calendar.py"), {QStringLiteral("enrich")},
+                                             std::move(on_done), {}, 600'000);
     else
-        python::PythonRunner::instance().run_interactive( // D1-exempt: the one runner of the calendar
-            QStringLiteral("ipo_calendar.py"), {QStringLiteral("calendar")}, std::move(on_done), 90'000);
+        python::PythonRunner::instance().run_interactive(QStringLiteral("ipo_calendar.py"),
+                                                         {QStringLiteral("calendar")}, std::move(on_done), 90'000);
 }
 
 const IpoDeal* IpoDealIndex::deal_for(const pre_ipo::PrivateCompany& c, bool* strong) const {

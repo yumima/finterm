@@ -6,8 +6,8 @@
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
-#include "services/notebook/NotebookKernel.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/notebook/NotebookKernel.h"
 #include "ui/theme/Theme.h"
 
 #include <QAbstractTextDocumentLayout>

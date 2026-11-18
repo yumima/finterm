@@ -474,21 +474,20 @@ void MarketChartDialog::load() {
     readout_->clear();
     QPointer<MarketChartDialog> self = this;
     const QString sym = symbol_;
-    services::MarketDataService::instance()
-        .fetch_bars( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
-            sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
-            [self, seq](const services::MarketDataService::BarsReply& r) {
-                // A later click (another period or symbol) supersedes this one.
-                if (!self || seq != self->request_seq_)
-                    return;
-                self->overlay_->hide_loading();
-                if (!r.ok) {
-                    self->canvas_->clear();
-                    self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
-                    return;
-                }
-                self->apply(r.bars);
-            });
+    services::MarketDataService::instance().fetch_bars(
+        sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
+        [self, seq](const services::MarketDataService::BarsReply& r) {
+            // A later click (another period or symbol) supersedes this one.
+            if (!self || seq != self->request_seq_)
+                return;
+            self->overlay_->hide_loading();
+            if (!r.ok) {
+                self->canvas_->clear();
+                self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+                return;
+            }
+            self->apply(r.bars);
+        });
 }
 
 void MarketChartDialog::apply(const QVector<services::equity::Candle>& candles) {

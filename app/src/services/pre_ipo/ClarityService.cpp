@@ -256,7 +256,7 @@ void ClarityService::run_index(double max_age_h) {
     QPointer<ClarityService> self = this;
     const QString payload =
         QString::fromUtf8(QJsonDocument(QJsonObject{{"max_age_h", max_age_h}}).toJson(QJsonDocument::Compact));
-    python::PythonRunner::instance().run( // D1-exempt: page read on screen open, cached by the script
+    python::PythonRunner::instance().run(
         QStringLiteral("clarity_market.py"), {QStringLiteral("index"), payload},
         [self](python::PythonResult r) {
             if (!self)
@@ -383,7 +383,7 @@ void ClarityService::run_companies(const QStringList& slugs, bool background) {
         QJsonDocument(QJsonObject{{"slugs", QJsonArray::fromStringList(slugs)}, {"max_age_h", max_age_h}})
             .toJson(QJsonDocument::Compact));
     QPointer<ClarityService> self = this;
-    python::PythonRunner::instance().run( // D1-exempt: page reads, cached 12 h by the script
+    python::PythonRunner::instance().run(
         QStringLiteral("clarity_market.py"), {QStringLiteral("companies"), payload},
         [self, slugs, background](python::PythonResult r) {
             if (!self)

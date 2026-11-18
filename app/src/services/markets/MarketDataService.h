@@ -361,7 +361,7 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     };
     using OptionsSurfaceCallback = std::function<void(const OptionsSurfaceReply&)>;
     void fetch_options_surface(const QString& symbol, OptionsSurfaceCallback cb);
-    static constexpr int kOptionsSurfaceTtlSec = 300; // the daemon's own cache for the action
+    static constexpr int kOptionsSurfaceTtlSec = 300;       // the daemon's own cache for the action
     static constexpr int kOptionsSurfaceTimeoutMs = 90'000; // one request per expiry
 
     /// Wikipedia summary lookup — used by IPO Watch as a description fallback

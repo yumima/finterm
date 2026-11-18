@@ -3,8 +3,8 @@
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "screens/ownership/OwnershipUi.h"
-#include "services/social/SocialBackend.h"
 #include "screens/social/SocialModel.h"
+#include "services/social/SocialBackend.h"
 #include "ui/notifications/ToastService.h"
 #include "ui/theme/Theme.h"
 
@@ -15,6 +15,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QHideEvent>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -23,7 +24,6 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
-#include <QHideEvent>
 #include <QShowEvent>
 #include <QSplitter>
 #include <QStackedWidget>

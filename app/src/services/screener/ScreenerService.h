@@ -9,9 +9,9 @@
 // that finishes late never overwrites a newer saved result for its universe,
 // and a caller compares generations to drop a superseded answer.
 
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QHash>
 #include <QObject>
 #include <QString>
 

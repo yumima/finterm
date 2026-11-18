@@ -861,30 +861,29 @@ void WorldMarketsView::fetch_treasury() {
         return;
     ust_in_flight_ = true;
     QPointer<WorldMarketsView> self = this;
-    services::EconomicsService::instance().fetch_treasury_par_curve(
-        [self](const services::EconomicsResult& r) {
-            if (!self)
-                return;
-            self->ust_in_flight_ = false;
-            TreasuryCurve c;
-            if (r.success) {
-                c = parse_treasury_curve(r.data);
-                if (!c.valid() && c.error.isEmpty())
-                    c.error = QStringLiteral("no curve in the reply");
-            } else {
-                c.error = r.error.isEmpty() ? QStringLiteral("script failed") : r.error;
-            }
-            if (c.valid()) {
-                self->ust_ = c;
-                self->ust_fetched_at_ = r.as_of.isValid() ? r.as_of : QDateTime::currentDateTimeUtc();
-            } else if (!self->ust_.valid()) {
-                self->ust_ = c; // nothing better to show: keep the reason for the tooltip
-            } else {
-                LOG_WARN("WorldMarkets", QStringLiteral("Treasury curve refresh failed: %1").arg(c.error));
-            }
-            self->mark_dirty(kUst2y);
-            self->mark_dirty(kUst2s10s);
-        });
+    services::EconomicsService::instance().fetch_treasury_par_curve([self](const services::EconomicsResult& r) {
+        if (!self)
+            return;
+        self->ust_in_flight_ = false;
+        TreasuryCurve c;
+        if (r.success) {
+            c = parse_treasury_curve(r.data);
+            if (!c.valid() && c.error.isEmpty())
+                c.error = QStringLiteral("no curve in the reply");
+        } else {
+            c.error = r.error.isEmpty() ? QStringLiteral("script failed") : r.error;
+        }
+        if (c.valid()) {
+            self->ust_ = c;
+            self->ust_fetched_at_ = r.as_of.isValid() ? r.as_of : QDateTime::currentDateTimeUtc();
+        } else if (!self->ust_.valid()) {
+            self->ust_ = c; // nothing better to show: keep the reason for the tooltip
+        } else {
+            LOG_WARN("WorldMarkets", QStringLiteral("Treasury curve refresh failed: %1").arg(c.error));
+        }
+        self->mark_dirty(kUst2y);
+        self->mark_dirty(kUst2s10s);
+    });
 }
 
 // ── rendering ──────────────────────────────────────────────────────────────
