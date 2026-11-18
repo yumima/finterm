@@ -54,9 +54,7 @@ NOT_CREDENTIALS = {
 # Human labels for the providers users are most likely to configure. Anything
 # absent falls back to a title-cased form of the key, which is serviceable.
 LABELS = {
-    "ALPHA_VANTAGE_API_KEY": "Alpha Vantage",
     "BEA_API_KEY": "BEA (Bureau of Economic Analysis)",
-    "BENZINGA_API_KEY": "Benzinga",
     "BLS_API_KEY": "BLS (Bureau of Labor Statistics)",
     "CENSUS_API_KEY": "US Census Bureau",
     "CONGRESS_GOV_API_KEY": "Congress.gov (Gov Data)",
@@ -68,14 +66,12 @@ LABELS = {
     "FINTERM_CONTACT_EMAIL": "Contact email (declared to SEC, FINRA, OpenStreetMap)",
     "FINNHUB_API_KEY": "Finnhub",
     "FRED_API_KEY": "FRED (Federal Reserve)",
-    "NASDAQ_DATA_LINK_API_KEY": "Nasdaq Data Link (Quandl)",
-    "NEWSAPI_KEY": "NewsAPI",
-    "NEWS_API_KEY": "NewsAPI (alternate variable)",
     "POLYGON_API_KEY": "Polygon.io / Massive",
     "ALPACA_API_KEY_ID": "Alpaca market data — key ID",
     "ALPACA_API_SECRET_KEY": "Alpaca market data — secret key",
     "FMP_API_KEY": "Financial Modeling Prep",
-    "QUANDL_API_KEY": "Quandl",
+    "GITHUB_ACCESS_TOKEN": "GitHub (agents' GitHub tools)",
+    "OPENBB_PAT": "OpenBB personal access token (agents' OpenBB tools)",
     "TIINGO_API_KEY": "Tiingo",
 }
 
@@ -85,6 +81,21 @@ LABELS = {
 CPP_ONLY = [
     # MCP financial-datasets tools (FinancialDatasetsTools.cpp).
     "FINANCIAL_DATASETS_API_KEY",
+]
+
+# Keys read by libraries our scripts call, not by our own os.environ lookups,
+# so the scan cannot see them. Each entry names the library call that reads
+# it; re-check on a library upgrade. Without an entry the key is neither
+# offered in Settings nor injected, and a credential-shaped name (a suffix in
+# PythonRunner's strip list) is deleted from an inherited shell environment.
+LIBRARY_READ = [
+    # agno.tools.github.GithubTools: getenv("GITHUB_ACCESS_TOKEN") — the
+    # agents' "github" toolkit (finagent_core tools_registry). _ACCESS_TOKEN is
+    # a stripped suffix, so a token exported in the shell never reached it.
+    "GITHUB_ACCESS_TOKEN",
+    # agno.tools.openbb.OpenBBTools: getenv("OPENBB_PAT") logs in to OpenBB —
+    # the agents' "openbb" toolkit.
+    "OPENBB_PAT",
 ]
 
 
@@ -100,7 +111,7 @@ def scan():
                     keys.add(m.group(1))
         except OSError:
             continue
-    keys |= set(CPP_ONLY)
+    keys |= set(CPP_ONLY) | set(LIBRARY_READ)
     return sorted(k for k in keys if k not in NOT_CREDENTIALS)
 
 
@@ -109,36 +120,15 @@ def scan():
 # "Other data sources". Order here is the display order.
 GROUPS = [
     ("Your identity", {
-        "FINTERM_CONTACT_EMAIL", "ACLED_EMAIL", "CROSSREF_EMAIL", "KAGGLE_USERNAME",
+        "FINTERM_CONTACT_EMAIL",
     }),
     ("Market data", {
-        "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
-        "ALPHA_SPREAD_API_KEY", "ALPHA_VANTAGE_API_KEY", "CBOE_API_KEY", "CME_API_KEY",
-        "DATABENTO_API_KEY", "EODHD_API_KEY", "FINANCIAL_DATASETS_API_KEY", "FINNHUB_API_KEY",
-        "FMP_API_KEY", "GFD_API_KEY", "GLEIF_API_KEY", "ICE_API_KEY", "IEX_CLOUD_API_KEY",
-        "INTRINIO_API_KEY", "INVESTING_API_KEY", "LME_API_KEY", "MACROTRENDS_API_KEY",
-        "MARKETSTACK_API_KEY", "METALS_DEV_API_KEY", "NASDAQ_API_KEY", "NASDAQ_DATA_LINK_API_KEY",
-        "OPENBB_API_KEY", "OPENEXCHANGERATES_API_KEY", "OPENFIGI_API_KEY", "PLATTS_API_KEY",
-        "POLYGON_API_KEY", "PUBLIC_APIS_FINANCE_KEY", "QUIVER_API_KEY", "SIMFIN_API_KEY",
-        "TIINGO_API_KEY", "TRADINGVIEW_API_KEY", "TWELVE_DATA_API_KEY",
-        "YH_FINANCE_API_KEY", "OC_API_KEY",
+        "ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY", "DATABENTO_API_KEY",
+        "FINANCIAL_DATASETS_API_KEY", "FINNHUB_API_KEY", "FMP_API_KEY", "OPENFIGI_API_KEY",
+        "POLYGON_API_KEY", "TIINGO_API_KEY",
     }),
-    ("Crypto", {
-        "CMC_API_KEY", "COINCAP_API_KEY", "COINGECKO_API_KEY", "COINGLASS_API_KEY",
-        "CRYPTOCOMPARE_API_KEY", "GLASSNODE_API_KEY", "MESSARI_API_KEY",
-    }),
-    ("Energy, climate & geospatial", {
-        "AISSTREAM_API_KEY", "BALTIC_API_KEY", "CLIMATE_WATCH_API_KEY", "COPERNICUS_API_KEY",
-        "EMBER_API_KEY", "ENTSOE_API_KEY", "ENTSOG_API_KEY", "GFW_API_KEY",
-        "GLOBAL_SOLAR_ATLAS_API_KEY", "GLOBAL_WIND_ATLAS_API_KEY", "MARINETRAFFIC_API_KEY",
-        "N2YO_API_KEY", "NOAA_CDO_TOKEN", "OPENAQ_API_KEY", "OPSD_API_KEY", "PORTCHAIN_API_KEY",
-        "SENTINELHUB_CLIENT_ID", "SENTINELHUB_CLIENT_SECRET", "UNEP_API_KEY", "WAQI_TOKEN",
-        "WORLDPOP_API_KEY", "IEA_API_KEY", "IRENA_API_KEY", "OPEC_API_KEY",
-    }),
-    ("Research & datasets", {
-        "ARXIV_API_KEY", "CROSSREF_API_KEY", "DATA_WORLD_TOKEN", "GITHUB_TOKEN",
-        "HARVARD_DATAVERSE_TOKEN", "KAGGLE_KEY", "SEMANTIC_SCHOLAR_API_KEY", "SSRN_API_KEY",
-        "WIPO_API_KEY", "ZENODO_ACCESS_TOKEN", "WEFORUM_API_KEY", "NBER_API_KEY",
+    ("AI agent tools", {
+        "GITHUB_ACCESS_TOKEN", "OPENBB_PAT",
     }),
 ]
 # Everything else is economics / government / international statistics.
