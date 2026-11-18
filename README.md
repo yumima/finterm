@@ -7,6 +7,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 Latest first.
 
 - [`e493f7e22`](https://github.com/yumima/finterm/commit/e493f7e22) storage: one store per dataset; retired storage cleaned by its owner
+- [`d6bb1f3dc`](https://github.com/yumima/finterm/commit/d6bb1f3dc) alerts: ask OwnershipService for clusters, stakes, 13F moves and fund filings instead of running the scripts
 - [`1199ac031`](https://github.com/yumima/finterm/commit/1199ac031) extended hours: the AFT% column and the ER box read one set of session rules
 - [`c5055aea8`](https://github.com/yumima/finterm/commit/c5055aea8) info: one company-info read; shared reads always answer later
 - [`eba46712d`](https://github.com/yumima/finterm/commit/eba46712d) history: one price-history read for the whole app

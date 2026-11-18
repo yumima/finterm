@@ -493,6 +493,36 @@ void OwnershipService::load(const QString& symbol) {
     refresh(sym);
 }
 
+void OwnershipService::read_edgar(const QString& symbol, std::function<void(const OwnershipSnapshot&)> cb) {
+    const QString sym = symbol.trimmed().toUpper();
+    QPointer<OwnershipService> self = this;
+    QTimer::singleShot(0, this, [self, sym, cb = std::move(cb)]() {
+        if (!self)
+            return;
+        if (sym.isEmpty()) {
+            OwnershipSnapshot none;
+            none.edgar_error = QStringLiteral("no symbol");
+            cb(none);
+            return;
+        }
+        // Every source landing emits snapshot_updated (load() re-emits a fresh
+        // cached snapshot), so the watcher sees the moment EDGAR has answered —
+        // either way — whichever request carried it.
+        auto* watcher = new QObject(self);
+        connect(self, &OwnershipService::snapshot_updated, watcher, [self, sym, cb, watcher](const QString& s) {
+            if (!self || s != sym || self->pending_.value(sym).contains(kSrcEdgar))
+                return;
+            const OwnershipSnapshot snap = self->cache_.value(sym);
+            if (!snap.edgar_ok && snap.edgar_error.isEmpty())
+                return;
+            const auto done = cb; // deleting the watcher destroys this lambda
+            delete watcher;
+            done(snap);
+        });
+        self->load(sym);
+    });
+}
+
 void OwnershipService::ensure_holders(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
     if (sym.isEmpty() || !cache_.contains(sym) || !index_ready())

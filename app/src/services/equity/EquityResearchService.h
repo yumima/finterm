@@ -168,6 +168,32 @@ class EquityResearchService : public QObject {
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
     void fetch_news(const QString& symbol, int count = 20);
 
+    // ── Callback reads ────────────────────────────────────────────────────────
+    // One answer to ONE caller (a workflow node, a tool), always after the call
+    // returns, through the same cache and in-flight request as fetch_* — so
+    // the caller gets exactly what the tab shows. A failure carries the
+    // vendor's reason; it is never an empty success.
+
+    using FinancialsCallback = std::function<void(bool ok, const FinancialsData& data, const QString& error)>;
+    void read_financials(const QString& symbol, FinancialsCallback cb);
+
+    /// `count` is a request size, as for fetch_news: a cached list for the
+    /// symbol is served whatever its length (one entry per symbol, as the tab).
+    using NewsCallback = std::function<void(bool ok, const QVector<NewsArticle>& articles, const QString& error)>;
+    void read_news(const QString& symbol, int count, NewsCallback cb);
+
+    /// The Technicals tab's indicator compute (the daemon's
+    /// compute_technicals) over caller-supplied candles — the rows the tab's
+    /// rating is read from. Not cached: the candles are the caller's own.
+    using RowsCallback = std::function<void(bool ok, const QJsonArray& rows, const QString& error)>;
+    void compute_technicals_rows(const QJsonArray& candles, RowsCallback cb);
+
+    /// One statement as [{period, items}], most recent first — the JSON shape
+    /// of FinancialsData every non-UI reader (MCP, workflows) hands out.
+    static QJsonArray statement_json(const QVector<QPair<QString, QJsonObject>>& statement);
+    /// Articles as [{title, description, url, publisher, published_date}].
+    static QJsonArray news_json(const QVector<NewsArticle>& articles);
+
     /// TALIpp tab: fetch historical then run equity_talipp.py
     void compute_talipp(const QString& symbol, const QString& indicator, const QVariantMap& params,
                         const QString& period = "2y");

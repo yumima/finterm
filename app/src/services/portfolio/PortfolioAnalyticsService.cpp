@@ -50,7 +50,7 @@ void PortfolioAnalyticsService::run_monte_carlo(const QStringList& symbols, cons
 }
 
 void PortfolioAnalyticsService::optimize_weights(const QString& args_json, AnalyticsCallback cb) {
-    run_script(QStringLiteral("optimize_portfolio_weights"), args_json, std::move(cb));
+    run_script(QStringLiteral("optimize_portfolio_weights.py"), args_json, std::move(cb));
 }
 
 void PortfolioAnalyticsService::run_ffn(const QStringList& symbols, const QJsonObject& weights_by_symbol,

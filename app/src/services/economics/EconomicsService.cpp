@@ -10,8 +10,11 @@
 
 #include <QCryptographicHash>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QPointer>
+#include <QTimer>
 
 namespace finterm::services {
 
@@ -120,14 +123,8 @@ void EconomicsService::invalidate(const QString& request_id) {
 
 // ── Execute ───────────────────────────────────────────────────────────────────
 
-void EconomicsService::execute(const QString& source_id, const QString& script, const QString& command,
-                               const QStringList& args, const QString& request_id) {
+void EconomicsService::run(const QString& script, const QString& command, const QStringList& args, RunDone done) {
     const QString key = cache_key(script, command, args);
-
-    // Remember the dispatch so hub-driven refresh() can replay it later.
-    const QString topic = hub_topic(source_id, request_id);
-    dispatch_records_.insert(topic, DispatchRecord{source_id, script, command, args, request_id});
-
     {
         const QVariant cached = finterm::CacheManager::instance().get(key);
         if (!cached.isNull()) {
@@ -135,13 +132,15 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             EconomicsResult res;
             res.success = true;
             res.data = QJsonDocument::fromJson(cached.toString().toUtf8()).object();
-            res.source_id = source_id;
-            emit result_ready(request_id, res);
-            if (hub_registered_)
-                finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
+            done(res, false);
             return;
         }
     }
+
+    auto& waiters = in_flight_[key];
+    waiters.append(std::move(done));
+    if (waiters.size() > 1)
+        return; // the run already under way answers this caller too
 
     QStringList full_args;
     full_args << command << args;
@@ -149,95 +148,105 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
     LOG_INFO("EconomicsService", QString("Run %1 %2 [%3]").arg(script, command, args.join(", ")));
 
     QPointer<EconomicsService> self = this;
-    python::PythonRunner::instance().run(
-        script, full_args, [self, source_id, request_id, key](python::PythonResult py) {
-            if (!self)
-                return;
+    python::PythonRunner::instance().run(script, full_args, [self, key](python::PythonResult py) {
+        if (!self)
+            return;
 
-            EconomicsResult res;
-            res.source_id = source_id;
-
-            if (!py.success) {
-                res.success = false;
-                res.error = py.error.isEmpty() ? QString("Script exited with code %1").arg(py.exit_code) : py.error;
-                LOG_ERROR("EconomicsService", "Script failed: " + res.error);
-                emit self->result_ready(request_id, res);
-                return;
-            }
-
-            QString json_str = python::extract_json(py.output);
-            if (json_str.isEmpty()) {
-                res.success = false;
-                res.error = "No JSON output from script";
-                LOG_ERROR("EconomicsService", res.error);
-                emit self->result_ready(request_id, res);
-                return;
-            }
-
+        EconomicsResult res;
+        if (!py.success) {
+            res.error = py.error.isEmpty() ? QString("Script exited with code %1").arg(py.exit_code) : py.error;
+            LOG_ERROR("EconomicsService", "Script failed: " + res.error);
+        } else if (const QString json_str = python::extract_json(py.output); json_str.isEmpty()) {
+            res.error = "No JSON output from script";
+            LOG_ERROR("EconomicsService", res.error);
+        } else {
             QJsonParseError err;
-            QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &err);
+            const QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &err);
             if (doc.isNull()) {
-                res.success = false;
                 res.error = "JSON parse error: " + err.errorString();
                 LOG_ERROR("EconomicsService", res.error);
-                emit self->result_ready(request_id, res);
-                return;
+            } else {
+                // If the root is an array, wrap it
+                res.data = doc.isArray() ? QJsonObject{{"data", doc.array()}} : doc.object();
+                // Treat script-level error field as failure
+                if (res.data.contains("error") && !res.data["error"].isNull() &&
+                    !res.data["error"].toString().isEmpty() && !res.data.contains("data")) {
+                    const QString error_code = res.data.value("error_code").toString();
+                    const QString message = res.data["error"].toString();
+                    // Prefix with [CODE] so panels can branch on it without a schema change.
+                    res.error = error_code.isEmpty()
+                                    ? message
+                                    : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
+                } else {
+                    res.success = true;
+                    finterm::CacheManager::instance().put(
+                        key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
+                        kCacheTtlSec, "economics");
+                }
             }
+        }
 
-            // If the root is an array, wrap it
-            if (doc.isArray())
-                res.data = QJsonObject{{"data", doc.array()}};
-            else
-                res.data = doc.object();
+        const QVector<RunDone> waiters = self->in_flight_.take(key);
+        for (const auto& w : waiters)
+            w(res, true);
+    });
+}
 
-            // Treat script-level error field as failure
-            if (res.data.contains("error") && !res.data["error"].isNull() && !res.data["error"].toString().isEmpty() &&
-                !res.data.contains("data")) {
-                res.success = false;
-                const QString error_code = res.data.value("error_code").toString();
-                const QString message = res.data["error"].toString();
-                // Prefix with [CODE] so panels can branch on it without a schema change.
-                res.error = error_code.isEmpty() ? message
-                                                 : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
-                emit self->result_ready(request_id, res);
-                return;
-            }
+void EconomicsService::execute(const QString& source_id, const QString& script, const QString& command,
+                               const QStringList& args, const QString& request_id) {
+    // Remember the dispatch so hub-driven refresh() can replay it later.
+    const QString topic = hub_topic(source_id, request_id);
+    dispatch_records_.insert(topic, DispatchRecord{source_id, script, command, args, request_id});
 
-            res.success = true;
-            finterm::CacheManager::instance().put(
-                key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
-                "economics");
-
+    QPointer<EconomicsService> self = this;
+    run(script, command, args, [self, source_id, request_id, topic](const EconomicsResult& r, bool fresh) {
+        if (!self)
+            return;
+        EconomicsResult res = r;
+        res.source_id = source_id;
+        if (!res.success) {
+            emit self->result_ready(request_id, res);
+            return;
+        }
+        if (fresh) {
             // Persist to disk so the next launch hydrates this series
             // immediately. We store the dispatch params alongside the data
             // so the constructor can rebuild dispatch_records_ for hub
             // refresh replay.
-            {
-                const auto it = self->dispatch_records_.constFind(EconomicsService::hub_topic(source_id, request_id));
-                if (it != self->dispatch_records_.constEnd()) {
-                    const auto& rec = it.value();
-                    QJsonObject root;
-                    root.insert("source_id", rec.source_id);
-                    root.insert("script", rec.script);
-                    root.insert("command", rec.command);
-                    QJsonArray args_arr;
-                    for (const auto& a : rec.args)
-                        args_arr.append(a);
-                    root.insert("args", args_arr);
-                    root.insert("request_id", rec.request_id);
-                    root.insert("data", res.data);
-                    disk_cache().save(
-                        file_for_dispatch(rec.source_id, rec.script, rec.command, rec.args, rec.request_id),
-                        QJsonDocument(root));
-                }
+            const auto it = self->dispatch_records_.constFind(topic);
+            if (it != self->dispatch_records_.constEnd()) {
+                const auto& rec = it.value();
+                QJsonObject root;
+                root.insert("source_id", rec.source_id);
+                root.insert("script", rec.script);
+                root.insert("command", rec.command);
+                QJsonArray args_arr;
+                for (const auto& a : rec.args)
+                    args_arr.append(a);
+                root.insert("args", args_arr);
+                root.insert("request_id", rec.request_id);
+                root.insert("data", res.data);
+                disk_cache().save(file_for_dispatch(rec.source_id, rec.script, rec.command, rec.args, rec.request_id),
+                                  QJsonDocument(root));
             }
             LOG_INFO("EconomicsService", "Result ready: " + request_id);
-            emit self->result_ready(request_id, res);
-            if (self->hub_registered_) {
-                const QString topic = EconomicsService::hub_topic(source_id, request_id);
-                finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
-            }
-        });
+        }
+        emit self->result_ready(request_id, res);
+        if (self->hub_registered_)
+            finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
+    });
+}
+
+void EconomicsService::fetch(const QString& script, const QString& command, const QStringList& args,
+                             ResultCallback cb) {
+    QPointer<EconomicsService> self = this;
+    run(script, command, args, [self, cb = std::move(cb)](const EconomicsResult& res, bool) {
+        if (!self)
+            return;
+        // Queued even when the run already finished asynchronously: one rule
+        // for the caller, whatever the cache held.
+        QMetaObject::invokeMethod(self, [cb, res]() { cb(res); }, Qt::QueuedConnection);
+    });
 }
 
 // ── DataHub producer wiring ─────────────────────────────────────────────────

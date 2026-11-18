@@ -162,13 +162,6 @@ QJsonArray candles_to_json(const QVector<services::equity::Candle>& cs) {
     return arr;
 }
 
-QJsonArray financials_section_to_json(const QVector<QPair<QString, QJsonObject>>& xs) {
-    QJsonArray arr;
-    for (const auto& kv : xs)
-        arr.append(QJsonObject{{"period", kv.first}, {"items", kv.second}});
-    return arr;
-}
-
 const char* tech_signal_str(services::equity::TechSignal s) {
     using TS = services::equity::TechSignal;
     switch (s) {
@@ -262,20 +255,6 @@ QJsonArray peers_to_json(const QVector<services::equity::PeerData>& ps) {
             {"beta", p.beta},
             {"price", p.price},
             {"change_pct", p.change_pct},
-        });
-    }
-    return arr;
-}
-
-QJsonArray news_to_json(const QVector<services::equity::NewsArticle>& xs) {
-    QJsonArray arr;
-    for (const auto& a : xs) {
-        arr.append(QJsonObject{
-            {"title", a.title},
-            {"description", a.description},
-            {"url", a.url},
-            {"publisher", a.publisher},
-            {"published_date", a.published_date},
         });
     }
     return arr;
@@ -670,9 +649,9 @@ std::vector<ToolDef> get_equity_research_tools() {
                                          // description: an agent reading these columns
                                          // has no other way to tell years from quarters.
                                          {"basis", "annual"},
-                                         {"income_statement", financials_section_to_json(f.income_statement)},
-                                         {"balance_sheet", financials_section_to_json(f.balance_sheet)},
-                                         {"cash_flow", financials_section_to_json(f.cash_flow)},
+                                         {"income_statement", services::equity::EquityResearchService::statement_json(f.income_statement)},
+                                         {"balance_sheet", services::equity::EquityResearchService::statement_json(f.balance_sheet)},
+                                         {"cash_flow", services::equity::EquityResearchService::statement_json(f.cash_flow)},
                                          {"ttm_revenue", f.ttm_revenue},
                                          {"ttm_net_income", f.ttm_net_income},
                                          {"ttm_operating_income", f.ttm_operating_income},
@@ -832,7 +811,7 @@ std::vector<ToolDef> get_equity_research_tools() {
                                          return;
                                      resolve(ToolResult::ok_data(QJsonObject{
                                          {"symbol", s},
-                                         {"articles", news_to_json(as)},
+                                         {"articles", services::equity::EquityResearchService::news_json(as)},
                                          {"count", static_cast<int>(as.size())},
                                      }));
                                      holder->deleteLater();

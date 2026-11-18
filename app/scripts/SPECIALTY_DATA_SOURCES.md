@@ -19,7 +19,6 @@ Specialized data sources and tools for specific financial tasks including econom
 
 | Tool | File Name | API Key | Purpose |
 |------|-----------|---------|---------|
-| 🔧 **Technical Indicators** | `compute_technicals.py` | ❌ No | Compute technical indicators from OHLCV data |
 | 📄 **Report Generator** | `financial_report_generator.py` | ❌ No | Generate financial analysis reports |
 | 💼 **FinancePy** | `financepy_wrapper.py` | ❌ No | Financial calculations library wrapper |
 
