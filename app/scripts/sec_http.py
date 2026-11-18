@@ -46,11 +46,15 @@ caller that wants more (the 13F sync re-asking a large submission on 5xx or
 timeout) does it itself, through the same gate.
 
 The one SEC client outside this module is edgartools (scripts/mcp/edgar and
-Analytics' sec_data_adapter): it builds its own httpx client. route_edgartools()
-puts its rate limiter on this gate, so its network requests (cache hits are
-not) are paced with everything else; its User-Agent is its set_identity(),
-and its own retries and a few helper paths that call httpx directly
-(xmlfiling, sgml_common) remain its own.
+Analytics' sec_data_adapter): it builds its own httpx client. Every module
+that imports it calls route_edgartools() (test_identity checks), which
+(1) declares the user's contact as its identity — set_identity(user_agent()),
+unless the user set EDGAR_IDENTITY themselves; without one edgartools PROMPTS
+on stdin for an identity — and (2) puts its rate limiter on this gate, so its
+network requests (cache hits are not) are paced with everything else. Its
+own retries and a few helper paths that call httpx directly (xmlfiling,
+sgml_common) remain its own; the identity reaches whatever host edgartools
+asks, which is SEC except its ticker-icon helper (GitHub), unused here.
 """
 
 from __future__ import annotations
@@ -202,14 +206,33 @@ class _EdgarToolsGate:
         return await asyncio.to_thread(_pace, MIN_GAP_S)
 
 
+_edgar_identity: Optional[str] = None  # the EDGAR_IDENTITY this module set, if any
+
+
 def route_edgartools() -> bool:
-    """Pace edgartools' network requests through this gate (see the module
-    docstring for what stays its own). False when edgartools is absent or
-    its client manager has changed shape."""
+    """Give edgartools the user's contact and pace its network requests
+    through this gate (see the module docstring for what stays its own).
+    Call it from every module that imports edgartools, and again before work
+    if the contact may have changed. False when edgartools is absent or its
+    client manager has changed shape (identity is still set when it can be)."""
+    global _edgar_identity
+    import os
     try:
-        from edgar import httpclient
+        from edgar import httpclient, set_identity
     except Exception:  # noqa: BLE001
         return False
+    current = os.environ.get("EDGAR_IDENTITY")
+    if current is None or current == _edgar_identity:  # not one the user set themselves
+        from finterm_identity import user_agent
+        ua = user_agent()
+        if ua != current:
+            set_identity(ua)
+            _edgar_identity = ua
+            mgr = getattr(httpclient, "HTTP_MGR", None)
+            client = getattr(mgr, "_client", None)
+            if client is not None:  # its User-Agent is fixed when the client is built
+                client.close()
+                mgr._client = None
     mgr = getattr(httpclient, "HTTP_MGR", None)
     if mgr is None or not hasattr(mgr, "rate_limiter"):
         return False

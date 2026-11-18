@@ -10,11 +10,12 @@ except ImportError:
     EDGAR_AVAILABLE = False
 
 if EDGAR_AVAILABLE:
-    try:  # pace edgartools' requests with every other SEC request (scripts/ on PYTHONPATH)
-        import sec_http
-        sec_http.route_edgartools()
-    except ImportError:
-        pass
+    # The user's contact as edgartools' identity (without one SEC refuses it, and
+    # edgartools prompts on stdin), its requests paced with every other SEC request.
+    import os as _os
+    sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", ".."))
+    import sec_http  # noqa: E402  (scripts/)
+    sec_http.route_edgartools()
 
 try:
     import yfinance as yf

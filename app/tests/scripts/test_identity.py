@@ -54,11 +54,6 @@ DECLARED = {  # host each file talks to; every other SEC caller goes through sec
     "sec_http.py",                                               # the one SEC client: refuses any non-*.sec.gov host, redirects included
     "finra_short_volume.py", "finra_short_interest.py",          # FINRA
     "nominatim_data.py", "overpass_api_data.py",                 # OpenStreetMap
-    # EDGAR through edgartools' own httpx client — the one SEC client that is
-    # not sec_http (it builds its own; set_identity is how it takes the
-    # contact). Its rate limiter is sec_http's gate (route_edgartools, checked
-    # below); its retries and a few direct-httpx helper paths stay its own.
-    os.path.join("mcp", "edgar", "base.py"),
 }
 for root, _, files in os.walk(SCRIPTS):
     for fn in files:
@@ -77,6 +72,32 @@ for root, _, files in os.walk(SCRIPTS):
         if leaky and rel not in DECLARED:
             fails.append(f"{rel} can send the user's contact ({', '.join(sorted(leaky))}) "
                          f"to a host the setting does not name")
+
+# edgartools is the one SEC client that is not sec_http (it builds its own httpx
+# client). Every module importing it must call sec_http.route_edgartools() —
+# the contact as its identity (without one SEC refuses it and edgartools
+# prompts on stdin) and its requests on the shared gate — or, inside the
+# mcp/edgar package, import the package's base, which does.
+EDGAR_IMPORT = re.compile(r"^\s*(from\s+edgar(\.\w+)*\s+import|import\s+edgar\b)", re.M)
+edgar_users = 0
+for root, _, files in os.walk(SCRIPTS):
+    for fn in files:
+        if not fn.endswith(".py") or fn == "sec_http.py":
+            continue
+        path = os.path.join(root, fn)
+        rel = os.path.relpath(path, SCRIPTS)
+        src = open(path, encoding="utf-8", errors="replace").read()
+        if not EDGAR_IMPORT.search(src):
+            continue
+        edgar_users += 1
+        routed = "sec_http.route_edgartools()" in src
+        via_base = (rel.startswith(os.path.join("mcp", "edgar") + os.sep)
+                    and re.search(r"^from \.base import", src, re.M))
+        if not (routed or via_base):
+            fails.append(f"{rel} imports edgartools without sec_http.route_edgartools() "
+                         f"(no contact identity, unpaced requests)")
+if edgar_users < 2:
+    fails.append(f"the edgartools import scan found {edgar_users} users: the pattern no longer matches")
 
 # sec_http.get carries the contact: it must refuse every host but *.sec.gov,
 # look-alikes included (redirects are followed by hand through the same test).
@@ -222,8 +243,29 @@ def _check_sec_http():
     finally:
         time.time = real_time
 
-    # edgartools: its rate limiter is this gate
-    if sec_http.route_edgartools():
+    # edgartools: the contact is its identity (a user's own EDGAR_IDENTITY is
+    # kept), and its rate limiter is this gate
+    saved_identity = os.environ.pop("EDGAR_IDENTITY", None)
+    try:
+        routed = sec_http.route_edgartools()
+        if routed and os.environ.get("EDGAR_IDENTITY") != "finterm (me@example.com)":
+            fails.append(f"route_edgartools did not declare the contact: {os.environ.get('EDGAR_IDENTITY')!r}")
+        if routed:
+            os.environ["FINTERM_CONTACT_EMAIL"] = "new@example.com"
+            sec_http.route_edgartools()
+            if os.environ.get("EDGAR_IDENTITY") != "finterm (new@example.com)":
+                fails.append("a changed contact did not reach edgartools")
+            os.environ["EDGAR_IDENTITY"] = "Their Own them@example.org"
+            sec_http.route_edgartools()
+            if os.environ.get("EDGAR_IDENTITY") != "Their Own them@example.org":
+                fails.append("route_edgartools overwrote an EDGAR_IDENTITY the user set")
+    finally:
+        if saved_identity is None:
+            os.environ.pop("EDGAR_IDENTITY", None)
+        else:
+            os.environ["EDGAR_IDENTITY"] = saved_identity
+        sec_http._edgar_identity = None
+    if routed:
         from edgar import httpclient
         lim = httpclient.HTTP_MGR.rate_limiter
         a = time.monotonic()

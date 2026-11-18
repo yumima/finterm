@@ -15,7 +15,6 @@ import json
 from typing import Dict, Any, Optional
 from datetime import datetime
 import traceback
-from finterm_identity import user_agent
 
 # EdgarTools imports
 try:
@@ -30,8 +29,8 @@ except ImportError as e:
     IMPORT_ERROR = str(e)
 
 if EDGAR_AVAILABLE:
-    # edgartools makes its own requests; its rate limiter is put on sec_http's
-    # gate so they are paced with every other SEC request this process makes.
+    # edgartools makes its own requests: sec_http gives it the user's contact
+    # and paces it with every other SEC request this process makes.
     import sec_http
     sec_http.route_edgartools()
 
@@ -73,9 +72,8 @@ def initialize_edgar(identity: Optional[str] = None):
 
     if identity:
         set_identity(identity)
-    elif 'EDGAR_IDENTITY' not in os.environ:
-        # Default identity for finterm
-        set_identity(user_agent())
+    else:
+        sec_http.route_edgartools()  # the user's contact (unless EDGAR_IDENTITY is their own)
 
 
 # ============================================================================
