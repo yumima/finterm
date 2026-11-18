@@ -487,45 +487,65 @@ def _install_session_pin():
 _install_session_pin()
 
 
-def get_orderbook(symbol):
-    """Best-effort live order-book snapshot (bid/ask + sizes) for a single symbol.
+_NASDAQ_INFO_URL = "https://api.nasdaq.com/api/quote/{}/info?assetclass={}"
+_US_TICKER = re.compile(r"^[A-Z]{1,5}(-[A-Z]{1,2})?$")
+_book_asset = {}   # symbol -> "stocks" | "etf": the class Nasdaq answered for it
 
-    Uses `Ticker.info` (Yahoo quoteSummary endpoint), NOT `fast_info`. fast_info
-    advertises `bid`/`ask` attributes but the free-tier feed leaves them at 0
-    for *every* symbol — including liquid US large-caps during regular hours
-    (verified 2026-05-12 against AAPL/MSFT/NVDA/SPY/TSLA). The quoteSummary
-    payload returned by `info` does carry real values (`bid`, `ask`, `bidSize`,
-    `askSize`).
 
-    Trade-off: `info` is ~1-2s per symbol vs fast_info's ~150ms — but bid/ask
-    is only fetched on focus-mode enter (PortfolioPerfChart::fetch_focus_orderbook),
-    never inside the batch-quote hot path. One-off latency is acceptable; an
-    empty spread is not. Returns zeros outside RTH / for illiquid tickers /
-    on exchanges Yahoo can't quote, which consumers treat as "unavailable".
-    """
-    if not symbol:
-        return {"symbol": "", "bid": 0, "ask": 0, "bid_size": 0, "ask_size": 0}
+def _nasdaq_money(v):
+    """Nasdaq's "$352.85" / "352.85" / "N/A" -> 352.85 or 0 (no quote)."""
     try:
-        import io, contextlib
-        # ticker.info chatters to stdout (deprecation notices, progress bars)
-        # which would corrupt the JSON protocol; redirect to a sink.
-        _buf = io.StringIO()
-        with contextlib.redirect_stdout(_buf):
-            info = yf.Ticker(symbol).info
-        bid = float(info.get("bid", 0) or 0)
-        ask = float(info.get("ask", 0) or 0)
-        bid_size = float(info.get("bidSize", 0) or 0)
-        ask_size = float(info.get("askSize", 0) or 0)
-    except Exception:
-        bid = ask = bid_size = ask_size = 0
-    return {
-        "symbol": symbol,
-        "bid": _round_price(bid) if bid > 0 else 0,
-        "ask": _round_price(ask) if ask > 0 else 0,
-        "bid_size": bid_size,
-        "ask_size": ask_size,
-        "timestamp": int(datetime.now().timestamp()),
-    }
+        x = float(str(v).replace("$", "").replace(",", "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return x if x > 0 else 0.0
+
+
+def get_orderbook(symbol):
+    """The best bid and ask (+ sizes) for one US-listed symbol, from Nasdaq's
+    real-time quote — the one free source whose book is current.
+
+    Not Yahoo: its `bid`/`ask` (quoteSummary `info` and the v7 quote alike) sit
+    frozen for hours on Nasdaq-listed names and need not bracket the price at
+    all (2026-11-18 12:10 ET: AAPL 351.02/355.98 unchanged across samples with
+    the last at 352.4; NVDA 151.00/160.00 with the last at 151.8), while
+    Nasdaq's answered AAPL 352.85/352.88 at a 352.85 last. fast_info carries
+    none at all.
+
+    Zeros mean no book to show — a listing Nasdaq does not quote (foreign,
+    futures, FX, crypto), a refusal, or a side with nothing on it; consumers
+    show a dash, never $0.00."""
+    empty = {"symbol": symbol or "", "bid": 0, "ask": 0, "bid_size": 0, "ask_size": 0}
+    sym = (symbol or "").strip().upper()
+    if not _US_TICKER.match(sym):
+        return empty
+    import requests
+    import ipo_calendar as ic   # NASDAQ_HEADERS: the browser-like headers Nasdaq's API wants
+    for asset in ([_book_asset[sym]] if sym in _book_asset else ["stocks", "etf"]):
+        try:
+            r = requests.get(_NASDAQ_INFO_URL.format(sym.replace("-", "."), asset),
+                             headers=ic.NASDAQ_HEADERS, timeout=(3, 6))
+            r.raise_for_status()
+            data = (r.json() or {}).get("data") or {}
+        except Exception:
+            continue
+        p = data.get("primaryData") or {}
+        bid, ask = _nasdaq_money(p.get("bidPrice")), _nasdaq_money(p.get("askPrice"))
+        if not (bid or ask):
+            continue
+        _book_asset[sym] = asset
+        # A crossed book is not a quote to show.
+        if bid and ask and bid > ask:
+            return empty
+        return {
+            "symbol": symbol,
+            "bid": _round_price(bid) if bid else 0,
+            "ask": _round_price(ask) if ask else 0,
+            "bid_size": _nasdaq_money(p.get("bidSize")),
+            "ask_size": _nasdaq_money(p.get("askSize")),
+            "timestamp": int(datetime.now().timestamp()),
+        }
+    return empty
 
 def get_quote(symbol):
     """Fetch real-time quote for a single symbol.

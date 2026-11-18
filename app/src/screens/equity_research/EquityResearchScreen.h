@@ -41,8 +41,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     /// `hosted`: an instance embedded outside the dock (News › WHAT'S ON peek
     /// pane) — it shows only what its host (or its own search) asks for: no
     /// app-wide "equity_research.load_symbol" subscription, no default symbol,
-    /// and it leaves the app's single Finnhub live-tick subscription to the
-    /// docked screen (it still follows the shared Yahoo quote stream).
+    /// (it still follows the shared live quote).
     explicit EquityResearchScreen(QWidget* parent = nullptr, bool hosted = false);
     ~EquityResearchScreen() override;
 

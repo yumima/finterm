@@ -1173,6 +1173,12 @@ if(Python3_Interpreter_FOUND)
         NAME whats_on_calendar
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_whats_on_calendar.py
     )
+    # Bid/ask (get_orderbook): Nasdaq's real-time book; crossed/empty/refused/
+    # non-US → zeros, never Yahoo's frozen quote. Imports the daemon: venv.
+    add_test(
+        NAME orderbook
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_orderbook.py
+    )
     # FRED keyless (fred_data.py): error page ≠ empty series, "." ≠ 0, keyed shape
     add_test(
         NAME fred_data

@@ -267,6 +267,9 @@ class EquityOverviewTab : public QWidget {
     QString current_earnings_key_;
 
     // Trading panel
+    QLabel* current_val_ = nullptr; ///< the hub quote's price — the portfolio's PRICE
+    QLabel* bid_val_ = nullptr;
+    QLabel* ask_val_ = nullptr;
     QLabel* open_val_ = nullptr;
     QLabel* high_val_ = nullptr;
     QLabel* low_val_ = nullptr;
@@ -294,6 +297,19 @@ class EquityOverviewTab : public QWidget {
     bool ext_answered_ = false; ///< the current symbol's sessions have arrived
     ui::LoadingOverlay* ext_loading_ = nullptr; ///< the same waving bars as the other panels
     QTimer* ext_timer_ = nullptr;
+    // Bid/ask: the quote topic carries none (its download has no book), so a
+    // one-shot order-book read, asked again every 30 s while the tab is up.
+    QTimer* book_timer_ = nullptr;
+    bool book_in_flight_ = false;
+    void fetch_book();
+    void show_book(double bid, double ask);
+    void render_current_price();
+    // CURRENT follows the app's one live quote (market:quote:SYM — the topic
+    // the header and the portfolio read), only while the tab is on screen.
+    void follow_live_quote();
+    QString live_topic_;
+    double live_price_ = 0;
+    double live_change_pct_ = 0;
     void fetch_extended_sessions();
     void watch_extended_hours();
     void render_extended_sessions();

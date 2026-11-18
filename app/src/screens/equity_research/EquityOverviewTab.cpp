@@ -1,12 +1,14 @@
 // src/screens/equity_research/EquityOverviewTab.cpp
 #include "screens/equity_research/EquityOverviewTab.h"
 
+#include "datahub/DataHub.h"
 #include "screens/equity_research/PriceRangeStrip.h"
 #include "screens/knowledge/HelpHint.h"
 #include "services/equity/AnalystTargets.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/equity/ReportService.h"
 #include "services/markets/ExtendedHoursService.h"
+#include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -24,6 +26,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPointer>
 #include <QScrollArea>
 #include <QHideEvent>
 #include <QShowEvent>
@@ -812,8 +815,12 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     cached_quote_.valid = false; // {} leaves valid at its default (true); force-clear
                                  // so apply_info_state() genuinely skips re-applying
                                  // this empty quote over the new symbol's "--" labels.
-    if (open_val_)
-        open_val_->setText(QStringLiteral("--"));
+    for (QLabel* l : {current_val_, open_val_})
+        if (l)
+            l->setText(QStringLiteral("--"));
+    show_book(0, 0);
+    live_price_ = 0;
+    live_change_pct_ = 0;
     if (high_val_)
         high_val_->setText(QStringLiteral("--"));
     if (low_val_)
@@ -865,6 +872,15 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
         });
     }
     ext_timer_->start(60 * 1000); // not whatever pace the previous symbol left it at
+
+    if (!book_timer_) {
+        book_timer_ = new QTimer(this);
+        book_timer_->setInterval(30 * 1000);
+        connect(book_timer_, &QTimer::timeout, this, [this]() { fetch_book(); });
+    }
+    book_timer_->start();
+    fetch_book();
+    follow_live_quote();
 
     // Drop every prior subscription before rebinding. Without this, a late
     // resolve for the previous symbol (quote/info/historical) would still
@@ -974,20 +990,30 @@ QWidget* EquityOverviewTab::build_col1() {
         add_info_overlay(p);
     }
     auto* ext = build_extended_panel();
-    // Last, and the stretch of the column: three sessions (pre-market,
-    // after-hours, overnight) need the room; the other panels keep their own
-    // height.
-    vl->addWidget(ext, 1);
+    // Last, at its content's height like the panels above it: the sessions it
+    // has, no more; the column's spare room stays below it.
+    ext->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    vl->addWidget(ext);
     // Its own overlay, not one of the info overlays: it loads on its own fetch.
     // Tall enough for the loading box while there is only a note in it.
     ext->setMinimumHeight(150);
     ext_loading_ = new ui::LoadingOverlay(ext);
     ext_loading_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    vl->addStretch(1);
     return w;
 }
 
 QWidget* EquityOverviewTab::build_trading_panel() {
     auto* p = make_panel("TODAY'S TRADING", ui::colors::AMBER);
+    current_val_ = add_row(p, "CURRENT", ui::colors::TEXT_PRIMARY);
+    current_val_->setTextFormat(Qt::RichText);
+    current_val_->setToolTip(QStringLiteral("The last price and today's move — the same quote the portfolio shows."));
+    bid_val_ = add_row(p, "BID", ui::colors::POSITIVE, "bid-ask-spread");
+    ask_val_ = add_row(p, "ASK", ui::colors::NEGATIVE, "bid-ask-spread");
+    for (QLabel* l : {bid_val_, ask_val_})
+        l->setToolTip(QStringLiteral("Best bid / ask from Nasdaq's real-time quote, refreshed every 30 s.\n"
+                                     "US listings only; a dash when there is no book (other exchanges,\n"
+                                     "futures, FX, crypto) or one side is empty."));
     open_val_ = add_row(p, "OPEN", CYAN);
     high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
@@ -1075,11 +1101,14 @@ void EquityOverviewTab::showEvent(QShowEvent* event) {
     if (!current_symbol_.isEmpty() && !(ext_answered_ && ext_sessions_.unsupported))
         fetch_extended_sessions();
     watch_extended_hours();
+    fetch_book(); // its tick is skipped while hidden: what is shown may be minutes old
+    follow_live_quote();
 }
 
 void EquityOverviewTab::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     watch_extended_hours();
+    follow_live_quote();
 }
 
 void EquityOverviewTab::watch_extended_hours() {
@@ -2553,6 +2582,76 @@ void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::Sta
     low_val_->setText(fmt_price(q.low));
     prev_close_val_->setText(fmt_price(q.prev_close));
     vol_val_->setText(fmt_large(q.volume));
+    render_current_price();
+}
+
+void EquityOverviewTab::render_current_price() {
+    if (!current_val_)
+        return;
+    // The live topic's price when it has spoken; until then the tab's quote.
+    const bool live = live_price_ > 0;
+    const double price = live ? live_price_ : cached_quote_.valid ? cached_quote_.price : 0;
+    const double pct = live ? live_change_pct_ : cached_quote_.valid ? cached_quote_.change_pct : NAN;
+    if (!(price > 0))
+        return;
+    if (!std::isfinite(pct)) {
+        current_val_->setText(fmt_price(price));
+        return;
+    }
+    const char* tone = pct > 0 ? ui::colors::POSITIVE() : pct < 0 ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY();
+    current_val_->setText(QString("%1 <span style='color:%2;'>%3%4%</span>")
+                              .arg(fmt_price(price), tone, pct > 0 ? "+" : "", QString::number(pct, 'f', 2)));
+}
+
+void EquityOverviewTab::follow_live_quote() {
+    auto& hub = datahub::DataHub::instance();
+    const QString want = (isVisible() && !current_symbol_.isEmpty()) ? QStringLiteral("market:quote:") + current_symbol_
+                                                                     : QString();
+    if (want == live_topic_)
+        return;
+    if (!live_topic_.isEmpty())
+        hub.unsubscribe(this, live_topic_);
+    live_topic_ = want;
+    if (live_topic_.isEmpty())
+        return;
+    hub.subscribe(this, live_topic_, [this](const QVariant& v) {
+        if (!v.canConvert<services::QuoteData>())
+            return;
+        const auto q = v.value<services::QuoteData>();
+        if (q.symbol != current_symbol_ || !std::isfinite(q.price) || !(q.price > 0))
+            return;
+        live_price_ = q.price;
+        live_change_pct_ = q.change_pct;
+        render_current_price();
+    });
+}
+
+void EquityOverviewTab::show_book(double bid, double ask) {
+    // 0 is the read's "no quote" (closed market, thin listing): a dash, never $0.00.
+    if (bid_val_)
+        bid_val_->setText(bid > 0 ? fmt_price(bid) : ui::formatting::placeholder());
+    if (ask_val_)
+        ask_val_->setText(ask > 0 ? fmt_price(ask) : ui::formatting::placeholder());
+}
+
+void EquityOverviewTab::fetch_book() {
+    if (book_in_flight_ || current_symbol_.isEmpty() || !isVisible())
+        return;
+    book_in_flight_ = true;
+    const QString want = current_symbol_;
+    QPointer<EquityOverviewTab> self = this;
+    services::MarketDataService::instance().fetch_orderbook(
+        want, [self, want](bool ok, const services::MarketDataService::OrderbookData& ob) {
+            if (!self)
+                return;
+            self->book_in_flight_ = false;
+            if (want != self->current_symbol_) {
+                self->fetch_book(); // the symbol moved on while this was out
+                return;
+            }
+            if (ok) // a failed read keeps what is shown; the next tick asks again
+                self->show_book(ob.bid, ob.ask);
+        });
 }
 
 void EquityOverviewTab::apply_info_state(const services::query::QueryStore::State& s) {
@@ -2596,6 +2695,7 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
         high_val_->setText(fmt_price(cached_quote_.high));
         low_val_->setText(fmt_price(cached_quote_.low));
         prev_close_val_->setText(fmt_price(cached_quote_.prev_close));
+        render_current_price();
     }
     if (!cached_candles_.isEmpty()) {
         candle_canvas_->set_candles(cached_candles_,

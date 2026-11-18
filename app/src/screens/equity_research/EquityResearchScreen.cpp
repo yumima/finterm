@@ -23,7 +23,6 @@
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "services/app_context/AppContextService.h"
 #include "services/equity/EquityResearchService.h"
-#include "services/finnhub/FinnhubLiveTicks.h"
 #include "services/finnhub/FinnhubService.h"
 #include "services/markets/LivePrice.h"
 #include "services/markets/MarketDataService.h"
@@ -225,34 +224,6 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent, bool hosted) : QWidg
     mkt_status_timer_->setInterval(30 * 1000);
     connect(mkt_status_timer_, &QTimer::timeout, this, &EquityResearchScreen::update_market_status_badge);
     mkt_status_timer_->start();
-
-    // Finnhub live-tick stream — pushes price updates in <200ms instead of
-    // the 20s REST poll. Free tier covers US equities; non-US tickers
-    // subscribe successfully but never emit (silent fallback to REST).
-    // Ticks are throttled to ~3 Hz here: liquid US names print dozens of
-    // trades per second and a label setText per tick is wasteful — the
-    // user can't read updates faster than the eye refresh anyway.
-    connect(&services::finnhub::FinnhubLiveTicks::instance(), &services::finnhub::FinnhubLiveTicks::tick, this,
-            [this](QString sym, double price, qint64 /*ts_ms*/, qint64 /*size*/) {
-                if (sym != current_symbol_)
-                    return;
-                if (!price_label_ || !change_label_)
-                    return;
-                // Throttle: skip if a tick landed in the last 300ms.
-                static qint64 s_last_paint_ms = 0;
-                const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-                if (now_ms - s_last_paint_ms < 300)
-                    return;
-                s_last_paint_ms = now_ms;
-
-                const QString cs =
-                    EquityOverviewTab::currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_);
-                price_label_->setText(QString("%1%2").arg(cs).arg(price, 0, 'f', 2));
-                // Deliberately does NOT touch the freshness chip: a live
-                // price tick updates this one label, not the panel's OHLC,
-                // fundamentals or chart. Stamping the chip here told the
-                // user the whole tab was current when only the price was.
-            });
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────────
     // Pro-tool muscle memory: hand on the keyboard, eyes on the chart.
@@ -907,7 +878,7 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
         return;
     current_symbol_ = symbol;
     // Before any tab loads: a cached quote can be delivered synchronously by
-    // the overview tab below and must become the live-tick baseline, not be
+    // the overview tab below and must become the live quote's baseline, not be
     // wiped after it.
     bar_quote_ = {};
     // Make the AI chat aware of what the user is looking at — only while this
@@ -988,17 +959,9 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
     // configured: subscribe_recommendations resolves an empty vector.
     refresh_recommendation_chip();
 
-    // Switch the live-tick websocket subscription to the new symbol. The
-    // service no-ops when no Finnhub key is set, so we don't need to gate
-    // the call here.
-    // The service holds ONE subscription for the app: a hosted instance must
-    // not take it from the docked screen.
-    if (!hosted_)
-        services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
-
-    // Follow the shared live quote too (the Yahoo price stream moves it between
-    // polls) — works without a Finnhub key and moves change/change% with the
-    // price, not the price label alone. Only while on screen (see showEvent).
+    // Follow the shared live quote (the Yahoo price stream moves it between
+    // polls): the app's one price, so the header shows what the portfolio
+    // shows. Only while on screen (see showEvent).
     follow_live_quote(isVisible());
 
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
