@@ -272,19 +272,21 @@ QMetaObject::Connection DataHub::subscribe(QObject* owner, const QString& topic,
     bool needs_cold_start_fetch = false;
     {
         QMutexLocker lock(&mutex_);
+        // Make sure the topic state exists with correct policy.
+        auto& st = state_for(topic);
+
         Subscription sub;
         sub.owner = owner;
         sub.slot = slot;
         sub.is_pattern = false;
+        // deliver_initial_value() below hands it the value on the same rule.
+        sub.primed = st.value.isValid() && (st.policy.push_only || (now_ms() - st.last_publish_ms) < st.policy.ttl_ms);
 
         auto& bucket = subscriptions_[topic];
         if (bucket.isEmpty())
             became_active = true;
         bucket.append(std::move(sub));
         owner_topics_[owner].insert(topic);
-
-        // Make sure the topic state exists with correct policy.
-        auto& st = state_for(topic);
 
         // Cold-start fetch: if we have no cached value AND nothing is in flight,
         // request a forced refresh so the widget gets data on the first scheduler
@@ -385,16 +387,25 @@ void DataHub::unsubscribe(QObject* owner, const QString& topic) {
 
 // ── Publishing ─────────────────────────────────────────────────────────────
 
-void DataHub::emit_to_subscribers(const QString& topic, const QVariant& value) {
+void DataHub::emit_to_subscribers(const QString& topic, const QVariant& value, bool only_unprimed) {
     // Snapshot slots under the lock, invoke without.
     QVector<std::function<void(const QVariant&)>> direct_slots;
     QVector<std::function<void(const QString&, const QVariant&)>> pattern_slots;
     {
         QMutexLocker lock(&mutex_);
         if (auto it = subscriptions_.find(topic); it != subscriptions_.end()) {
-            for (const auto& s : it.value())
-                if (s.owner)
-                    direct_slots.append(s.slot);
+            for (auto& s : it.value()) {
+                if (!s.owner || (only_unprimed && s.primed))
+                    continue;
+                s.primed = true;
+                direct_slots.append(s.slot);
+            }
+        }
+        if (only_unprimed) {
+            lock.unlock();
+            for (const auto& s : direct_slots)
+                s(value);
+            return; // a value they already have: no pattern fan-out, no topic_updated
         }
         for (auto it = pattern_subscriptions_.begin(); it != pattern_subscriptions_.end(); ++it) {
             if (!pattern_matches(it.key(), topic))
@@ -458,8 +469,12 @@ void DataHub::do_publish(const QString& topic, const QVariant& value, std::chron
     }
     if (pending_state.changed)
         emit topic_state_changed(topic, pending_state.to);
-    if (unchanged)
-        return; // freshness recorded above; identical value needs no fan-out
+    if (unchanged) {
+        // Freshness recorded above; subscribers that show this value need no
+        // fan-out — one that joined while it was stale is still waiting for it.
+        emit_to_subscribers(topic, value, /*only_unprimed=*/true);
+        return;
+    }
     if (coalesce_ms > 0) {
         if (defer) {
             // Arm a one-shot timer. Runs on hub thread (we're already there

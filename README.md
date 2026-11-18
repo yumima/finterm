@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`7329a5846`](https://github.com/yumima/finterm/commit/7329a5846) social, code editor: the last Python processes started by screens move to services
 - [`f60880ce4`](https://github.com/yumima/finterm/commit/f60880ce4) screener: ScreenerService owns the screener's runs and its saved scans
 - [`fe868d88a`](https://github.com/yumima/finterm/commit/fe868d88a) economics, calendar: What's On and the World board read their data through owners
 - [`f44df6d76`](https://github.com/yumima/finterm/commit/f44df6d76) market data: the options surface and IPO pop quotes go through MarketDataService
