@@ -3,25 +3,25 @@
   "schema-version": 2,
   "updates": {
     "windows-x64": {
-      "latest-version": "4.0.8",
-      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-windows-x64-setup.exe",
-      "sha256": "c0f65f4362ba590939cbfc371c1a614d50618cea62be7b7f895dc82b6ecbe25c",
-      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.8",
-      "changelog": "finterm v4.0.8 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.8"
+      "latest-version": "4.0.9",
+      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-windows-x64-setup.exe",
+      "sha256": "64d2664a66de9c77be93e4012859ca169789d5636990528b62dec3cea87ece7a",
+      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.9",
+      "changelog": "finterm v4.0.9 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.9"
     },
     "linux-x64": {
-      "latest-version": "4.0.8",
-      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-linux-x64-setup.run",
-      "sha256": "064d620387eda88a2794f1c0d80a62a3c0e5a5501747a65c82d2118ad639cd58",
-      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.8",
-      "changelog": "finterm v4.0.8 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.8"
+      "latest-version": "4.0.9",
+      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-linux-x64-setup.run",
+      "sha256": "9c0b5af9e10b6f002068dd4b4fbd848256886c704ead6abaf4094f87e6d98725",
+      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.9",
+      "changelog": "finterm v4.0.9 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.9"
     },
     "macos-arm64": {
-      "latest-version": "4.0.8",
-      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-macos-arm64-setup.dmg",
-      "sha256": "3158ce35e0d2aa2c5cf31f72f44ccb78a4d22f1048def796e5a733e0b3d26025",
-      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.8",
-      "changelog": "finterm v4.0.8 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.8"
+      "latest-version": "4.0.9",
+      "download-url": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-macos-arm64-setup.dmg",
+      "sha256": "b363af6956bd78fe91d79001024b70633b97f0dfb7f9cc6ec27a5c14e8298631",
+      "open-url": "https://github.com/yumima/finterm/releases/tag/v4.0.9",
+      "changelog": "finterm v4.0.9 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.0.9"
     }
   }
 }

@@ -1,7 +1,7 @@
 {
-  "version": "4.0.8",
-  "page": "https://github.com/yumima/finterm/releases/tag/v4.0.8",
-  "linux": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-linux-x64-setup.run",
-  "windows": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-windows-x64-setup.exe",
-  "macos": "https://github.com/yumima/finterm/releases/download/v4.0.8/finterm-4.0.8-macos-arm64-setup.dmg"
+  "version": "4.0.9",
+  "page": "https://github.com/yumima/finterm/releases/tag/v4.0.9",
+  "linux": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-linux-x64-setup.run",
+  "windows": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-windows-x64-setup.exe",
+  "macos": "https://github.com/yumima/finterm/releases/download/v4.0.9/finterm-4.0.9-macos-arm64-setup.dmg"
 }
