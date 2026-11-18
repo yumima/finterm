@@ -29,51 +29,19 @@ Two sources, because neither has the whole picture:
 
 Each session carries its own reference close, so nothing here depends on what
 time it is now — the pairing rules that invert in yfinance_data's
-get_extended_hours_quotes (one row, one `regular`) do not arise:
-
-  * after-hours of day D is measured against D's official close;
-  * pre-market of day D against the close of the trading day before D.
-
-Daily bar labels are calendar dates and are read as written (tz-naive); minute
-bars are real instants and are converted to ET.
+get_extended_hours_quotes (one row, one `regular`) do not arise. Which close
+that is, the session windows, which close is official and what counts as a
+print are extended_rules' — shared with that function, so the two never
+disagree about the same session.
 """
 
 import re
-from datetime import datetime, time as _time
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
-ET = ZoneInfo("America/New_York")
-
-PRE_OPEN = _time(4, 0)
-REG_OPEN = _time(9, 30)
-REG_CLOSE = _time(16, 0)
-POST_CLOSE = _time(20, 0)
-
-EARLY_CLOSE = _time(13, 0)
-EARLY_POST_CLOSE = _time(17, 0)
-
-
-def is_early_close(day):
-    """The same three occasions as is_early_close() in
-    src/services/calendar/MarketCalendar.h — change them together.
-
-    NYSE/Nasdaq 13:00 closes: the day after Thanksgiving, Christmas Eve and
-    3 July, when they are trading days. After-hours then runs 13:00-17:00."""
-    if day.weekday() >= 5:
-        return False
-    if day.month == 11 and day.weekday() == 4:
-        first = day.replace(day=1)
-        fourth_thursday = 1 + (3 - first.weekday()) % 7 + 21
-        return day.day == fourth_thursday + 1
-    if (day.month, day.day) == (12, 24):
-        return day.weekday() != 4   # a Friday 24th is the observed holiday itself
-    if (day.month, day.day) == (7, 3):
-        return day.weekday() != 4   # likewise when the 4th falls on a Saturday
-    return False
-
-
-def post_window(day):
-    return (EARLY_CLOSE, EARLY_POST_CLOSE) if is_early_close(day) else (REG_CLOSE, POST_CLOSE)
+from extended_rules import (  # noqa: F401  (re-exported: tests and callers read them here)
+    ET, has_us_extended_session, is_early_close, post_window, pre_window,
+)
+import extended_rules as xr
 
 
 AVG_VOLUME_DAYS = 20
@@ -87,20 +55,6 @@ STRAY_PRINT = 0.02
 
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])}
-
-
-def has_us_extended_session(symbol):
-    """Only plain US tickers trade these sessions (and only they are on
-    Nasdaq's feed): no exchange suffix, index, future, FX pair or crypto."""
-    s = str(symbol or "").strip().upper()
-    if not s or s.startswith("^") or "=" in s:
-        return False
-    if s.endswith("-USD") or s.endswith("-USDT"):
-        return False
-    # A share class is BRK-B on Yahoo and BRK.B on Nasdaq and at most brokers.
-    # A dot is otherwise an exchange suffix (.L, .TO, .HK) — no exchange uses
-    # .A, .B or .C, so those three read as classes.
-    return re.fullmatch(r"[A-Z]{1,5}(?:-[A-Z]{1,2}|\.[ABC])?", s) is not None
 
 
 def yahoo_symbol(symbol):
@@ -130,18 +84,6 @@ def _daily_rows(daily):
             out.append((d, c, _num(v)))
     out.sort(key=lambda r: r[0])
     return out
-
-
-def _session(bars, window):
-    """The most recent ET date with bars inside its own window, as (date,
-    frame) or None. `window(day)` gives that day's (start, end)."""
-    bars = bars[bars["Close"].notna()]
-    for day in sorted(set(bars["_d"]), reverse=True):
-        lo, hi = window(day)
-        part = bars[(bars["_d"] == day) & (bars["_t"] >= lo) & (bars["_t"] < hi)]
-        if not part.empty:
-            return day, part
-    return None
 
 
 def _without_stray_prints(part):
@@ -178,11 +120,12 @@ def _without_stray_prints(part):
     return part[keep] if keep.any() else part
 
 
-def _summary(day, part, ref, daily_rows, live):
+def _summary(day, part, ref_date, ref, daily_rows, live):
+    """One session's summary. `ref` is (close, ts) for `ref_date`, or None."""
     part = _without_stray_prints(part)
-    last = _num(part["Close"].iloc[-1])
-    if last is None:
-        return None
+    # The newest minute is never dropped as stray, so this is the same last
+    # print get_extended_hours_quotes reports for the session.
+    last, last_ts = xr.last_print(part)
     # A bar's own high/low can be a stray print inside an otherwise sound
     # minute, so each is held to the same distance from that minute's close.
     close = part["Close"]
@@ -193,14 +136,14 @@ def _summary(day, part, ref, daily_rows, live):
         "live": bool(live),
         "ref_close": None, "ref_date": None,
         "last": last,
-        "last_ts": int(part.index[-1].timestamp()),
+        "last_ts": last_ts,
         "change": None, "pct": None,
         "high": high, "low": low,
         "minutes": int(len(part)),
         "volume": None, "volume_partial": False, "avg_volume": None,
     }
     if ref is not None:
-        ref_date, ref_close = ref
+        ref_close = ref[0]
         out["ref_close"] = ref_close
         out["ref_date"] = ref_date.isoformat()
         out["change"] = last - ref_close
@@ -216,56 +159,33 @@ def _summary(day, part, ref, daily_rows, live):
 def summarise(bars, daily, now_et):
     """(after_hours, pre_market) from a 1-minute prepost frame and a daily frame.
 
-    Pure: no network, no clock but `now_et`."""
-    if bars is None or getattr(bars, "empty", True) or "Close" not in bars.columns:
+    Pure: no network, no clock but `now_et`. Each session is the most recent
+    one with prints, measured against the close extended_rules pairs it with —
+    a day without that close gives prices and no percentage, never another
+    day's close."""
+    m = xr.minute_frame(bars)
+    if m is None:
         return None, None
-    idx = bars.index
-    if idx.tz is None:
-        idx = idx.tz_localize("UTC")
-    bars = bars.copy()
-    bars.index = idx
-    et_idx = idx.tz_convert(ET)
-    bars["_d"] = et_idx.date
-    bars["_t"] = et_idx.time
+    officials = xr.official_closes(daily)
     rows = _daily_rows(daily)
     today = now_et.date()
     now_t = now_et.time()
 
     after = None
-    got = _session(bars, post_window)
+    got = xr.latest_window(m, post_window)
     if got:
         day, part = got
-        # Measured against that day's own official close. No such bar (the
-        # daily frame lags, or the symbol did not trade the regular session)
-        # means no percentage — never some other day's close.
-        ref = next(((d, c) for d, c, _ in rows if d == day), None)
         lo, hi = post_window(day)
-        after = _summary(day, part, ref, rows, day == today and lo <= now_t < hi)
+        after = _summary(day, part, day, xr.close_for_post(m, day, officials), rows,
+                         day == today and lo <= now_t < hi)
 
     pre = None
-    got = _session(bars, lambda _day: (PRE_OPEN, REG_OPEN))
+    got = xr.latest_window(m, pre_window)
     if got:
         day, part = got
-        before = [(d, c) for d, c, _ in rows if d < day]
-        ref = before[-1] if before else None
-        # It has to be the close of the trading day just before. The minute
-        # bars know which day that was; a daily frame that has not caught up
-        # would hand over an older close and fold a whole day's move into
-        # "pre-market".
-        earlier = [d for d in set(bars["_d"]) if d < day]
-        if ref is not None and earlier and ref[0] != max(earlier):
-            ref = None
-        if ref is not None and not earlier:
-            # No earlier day among the minute bars (a thin listing): then at
-            # least the weekday before. Around a holiday that gives a dash
-            # where a percentage was possible — the cheaper mistake.
-            from datetime import timedelta
-            prev = day - timedelta(days=1)
-            while prev.weekday() >= 5:
-                prev -= timedelta(days=1)
-            if ref[0] != prev:
-                ref = None
-        pre = _summary(day, part, ref, rows, day == today and PRE_OPEN <= now_t < REG_OPEN)
+        lo, hi = pre_window(day)
+        ref_day, ref = xr.close_for_pre(m, day, officials)
+        pre = _summary(day, part, ref_day, ref, rows, day == today and lo <= now_t < hi)
     return after, pre
 
 
@@ -510,7 +430,7 @@ def fetch(symbol):
     # takes a while to become official: a copy is good for two minutes in the
     # first hour, a quarter of an hour after that.
     import time as _clock
-    close_at = datetime.combine(now_et.date(), post_window(now_et.date())[0], tzinfo=ET)
+    close_at = xr.bell_instant(now_et.date())
     since_close = (now_et - close_at).total_seconds()
     max_age = None if since_close < 0 else (120 if since_close < 3600 else 900)
     dkey = (symbol, now_et.date(), since_close >= 0)
@@ -544,7 +464,7 @@ def fetch(symbol):
     for session, market in ((after, "post"), (pre, "pre")):
         if session:
             day = datetime.strptime(session["date"], "%Y-%m-%d").date()
-            end = post_window(day)[1] if market == "post" else REG_OPEN
+            end = (post_window if market == "post" else pre_window)(day)[1]
             ended = datetime.combine(day, end, tzinfo=ET)
             add_volume(symbol, market, session,
                        ask=lambda s_, m_: _nasdaq(s_, m_, deadline),
