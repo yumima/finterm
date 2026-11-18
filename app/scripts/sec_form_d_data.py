@@ -15,8 +15,6 @@ Pipeline:
 Actions (PythonRunner):
   all_data      — combined {form_d_companies, recent_form_d, s1_filings}
                   for PreIpoService::parse_sec_summary().
-  form_d_recent — flat list of recent filings only.
-  company_rounds — primary rounds for a single CIK (payload: {"cik": "0001234567"}).
   resolve_cik    — company name -> the CIK that files its own Form D.
   company_dossier— one company's whole EDGAR footprint: every Form D round, the
                    officers and directors named on them, the issuer's stated
@@ -1258,32 +1256,6 @@ def handle_action(action, payload):
             spv_parse_max=payload.get("spv_parse_max", 40),
             prev_cursor=payload.get("prev_cursor"),
         )
-    if action == "form_d_recent":
-        days = payload.get("days_back", 30)
-        max_filings = payload.get("max_filings", 60)
-        _, recent = build_form_d_companies(days_back=days, max_filings=max_filings, parse_xml_max=0)
-        return recent
-    if action == "company_rounds":
-        cik = payload.get("cik")
-        if not cik:
-            return {"error": "cik required"}
-        days = payload.get("days_back", 3 * 365)
-        filings = search_filings(["D", "D/A"], days_back=days, max_hits=60)
-        rounds = []
-        for f in filings:
-            ciks = f.get("ciks") or []
-            if not ciks or _cik_padded(ciks[0]) != _cik_padded(cik):
-                continue
-            x = fetch_form_d_xml(cik, f["adsh"])
-            if x:
-                rounds.append({
-                    "filed_date": f.get("filed_date", ""),
-                    "amount_m": _usd_to_m(x.get("total_sold_usd")),
-                    "exemption": ", ".join(x.get("federal_exemptions", []) or []),
-                    "related_persons": x.get("related_persons", []),
-                    "edgar_url": x.get("edgar_url", ""),
-                })
-        return rounds
     if action == "resolve_cik":
         return resolve_cik(payload.get("name", ""),
                            days_back=payload.get("days_back", 9000),
@@ -1295,8 +1267,6 @@ def handle_action(action, payload):
                                max_rounds=payload.get("max_rounds", 12),
                                spv_parse_max=payload.get("spv_parse_max", 10),
                                spv_hits=payload.get("spv_hits", 60))
-    if action == "ipo_pipeline":
-        return fetch_ipo_pipeline(days_back=payload.get("days_back", 120), max_hits=payload.get("max_hits", 80))
     return {"error": f"Unknown action: {action}"}
 
 

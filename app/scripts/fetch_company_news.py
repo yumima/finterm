@@ -125,47 +125,6 @@ def fetch_news_by_topic(topic, max_results=10):
         })
 
 
-def get_full_article(url):
-    """
-    Get full article content from URL
-
-    Args:
-        url: Article URL
-
-    Returns:
-        JSON string with article content
-    """
-    try:
-        google_news = GNews()
-        article = google_news.get_full_article(url)
-
-        if article:
-            return json.dumps({
-                "success": True,
-                "data": {
-                    "title": article.title if hasattr(article, 'title') else 'N/A',
-                    "text": article.text if hasattr(article, 'text') else 'N/A',
-                    "authors": article.authors if hasattr(article, 'authors') else [],
-                    "publish_date": str(article.publish_date) if hasattr(article, 'publish_date') else 'Unknown',
-                    "top_image": article.top_image if hasattr(article, 'top_image') else None,
-                    "url": url
-                }
-            })
-        else:
-            return json.dumps({
-                "success": False,
-                "error": "Could not fetch article content",
-                "url": url
-            })
-
-    except Exception as e:
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-            "url": url
-        })
-
-
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(json.dumps({
@@ -174,7 +133,6 @@ if __name__ == "__main__":
             "commands": {
                 "search": "python fetch_company_news.py search <query> [max_results] [period] [language] [country]",
                 "topic": "python fetch_company_news.py topic <topic> [max_results]",
-                "article": "python fetch_company_news.py article <url>",
                 "help": "python fetch_company_news.py help"
             }
         }))
@@ -258,18 +216,6 @@ if __name__ == "__main__":
             max_results = int(sys.argv[3]) if len(sys.argv) > 3 else 10
 
             result = fetch_news_by_topic(topic, max_results)
-            print(result)
-
-        elif command == "article":
-            if len(sys.argv) < 3:
-                print(json.dumps({
-                    "success": False,
-                    "error": "Usage: python fetch_company_news.py article <url>"
-                }))
-                sys.exit(1)
-
-            url = sys.argv[2]
-            result = get_full_article(url)
             print(result)
 
         else:

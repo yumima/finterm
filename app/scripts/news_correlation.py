@@ -15,8 +15,6 @@ import time
 from collections import Counter, defaultdict
 
 
-# ── Signal Types ─────────────────────────────────────────────────────────────
-
 # ── Threat keywords by category ──────────────────────────────────────────────
 
 CATEGORY_KEYWORDS = {
@@ -307,11 +305,6 @@ def main(args=None):
     if command == "detect_signals":
         market = resolve_arg(args[2]) if len(args) > 2 else None
         result = detect_signals(resolve_arg(args[1]), market)
-    elif command == "compute_instability":
-        # Removed: the "instability index" was hardcoded tier-1/other floors
-        # (10/25) plus ad-hoc weights, presented as a measured score.
-        result = {"success": False,
-                  "error": "compute_instability is not available: no real country instability data source"}
     elif command == "baseline_update":
         if len(args) < 3:
             result = {"success": False, "error": "Usage: baseline_update <current> <existing>"}
