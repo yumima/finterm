@@ -647,14 +647,18 @@ def _sub_ttl(hot):
 
 def _fetch_submissions_net(cik):
     url = SEC_SUBMISSIONS.format(str(cik).zfill(10))
+    # A failed request is not an answer — the caller keeps stale; the log says why.
     r, status = sec_http.get(url, timeout=20)
+    if r is None:
+        why = f"HTTP {status}" if status else "no answer"
+        print(f"ipo_calendar: sec fetch failed: {url} ({why})", file=sys.stderr)
+        return None
     try:
-        doc = r.json() if r is not None else None
+        doc = r.json()
     except ValueError:
         doc = None
     if not isinstance(doc, dict):
-        # a failed request is not an answer — caller keeps stale
-        print(f"ipo_calendar: sec fetch failed: {url} (HTTP {status})", file=sys.stderr)
+        print(f"ipo_calendar: sec fetch failed: {url} (HTTP {status} but not a JSON object)", file=sys.stderr)
         return None
     # keep only what the ladder needs — submissions JSON can be megabytes
     rec = (doc.get("filings") or {}).get("recent") or {}

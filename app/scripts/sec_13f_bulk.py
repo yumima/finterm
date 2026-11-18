@@ -52,11 +52,6 @@ import zipfile
 import sec_http  # the one SEC client: contact identity, shared pacing, 404 vs refusal
 from finterm_paths import market_data_path
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
 DATASET_INDEX = "https://www.sec.gov/dera/data/form-13f"
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 # Optional and per-user. Keyless OpenFIGI allows 25 requests a minute, which
@@ -422,8 +417,6 @@ def available_datasets():
 
 def ingest(url=None, progress=None):
     """Download one quarterly data set and index it. Returns a summary."""
-    if requests is None:
-        return {"error": "requests not available"}
     if not url:
         urls = available_datasets()
         if not urls:
@@ -2556,8 +2549,6 @@ def backfill_filed_dates():
 def sync(progress=None, max_filings=None, ciks=None):
     """Bring the index up to the newest filing SEC has. Safe to run often:
     everything already in is skipped."""
-    if requests is None:
-        return {"error": "requests not available"}
     # SEC refuses automated requests that do not name a contact (since
     # 2026-10). Without one every step below fails, and quietly: say so.
     if not sec_http.has_contact():
@@ -2638,8 +2629,9 @@ def sync(progress=None, max_filings=None, ciks=None):
                     break
                 r, code = sec_http.get(f"https://www.sec.gov/Archives/{path}", timeout=60, gap=EDGAR_GAP)
                 for wait in (3, 10):
-                    # A large submission file times out now and then; that is
-                    # the network, not SEC refusing — try it again first.
+                    # A large submission file times out now and then (a read
+                    # timeout or a 5xx, which sec_http does not retry: it
+                    # retries only connection failures) — try it again first.
                     if r is not None or code not in (None, 429, 500, 502, 503, 504):
                         break
                     time.sleep(wait)

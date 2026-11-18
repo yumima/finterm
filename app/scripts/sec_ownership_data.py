@@ -37,11 +37,6 @@ from datetime import date, datetime, timedelta
 from xml.etree import ElementTree
 import sec_http  # the one SEC client: contact identity, shared pacing, 404 vs refusal
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
 # Form 4 transaction codes. Only P and S are open-market decisions; the rest are
 # compensation mechanics or administrative. Splitting them is the whole point —
 # a grant vesting is not a director choosing to buy.
@@ -459,8 +454,6 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     call — no symbol at all — and resolving "" to a CIK fails for a caller that
     already told us exactly which company it meant.
     """
-    if requests is None:
-        return {"error": "requests not available", "symbol": symbol}
     try:
         cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
     except Exception as e:  # sec_directory.Unavailable — SEC refused, ask again
@@ -590,10 +583,9 @@ def _filing_parties(cik, accession):
     headers = {"Range": "bytes=0-6000", "Accept-Encoding": "identity"}
     r, _ = sec_http.get(url, headers=headers)
     if r is None:
-        # One retry. These run on top of the Form 4 fetches against the same
-        # 10 req/s budget, so a transient 403 is expected — and treating it as
-        # an answer would drop a real 13D from the list.
-        time.sleep(sec_http.MIN_GAP_S)
+        # One retry (sec_http's gate spaces it). These run on top of the Form 4
+        # fetches against the same 10 req/s budget, so a transient 403 is
+        # expected — and treating it as an answer would drop a real 13D.
         r, _ = sec_http.get(url, headers=headers)
     if r is None:
         return None
@@ -624,8 +616,6 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     prose would produce a number that looks authoritative and is sometimes
     wrong. The document link is provided instead.
     """
-    if requests is None:
-        return {"error": "requests not available", "symbol": symbol}
     try:
         cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
     except Exception as e:  # sec_directory.Unavailable — SEC refused, ask again

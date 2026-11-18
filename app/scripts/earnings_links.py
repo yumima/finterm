@@ -64,11 +64,12 @@ def _get(url, as_json=True, limit=None, final_url=False):
     project's identity. `final_url` also returns where redirects ended
     (amazon.com/ir → ir.aboutamazon.com)."""
     if sec_http.is_sec_host(url):
-        r, status = sec_http.get(url, timeout=_TIMEOUT_SEC, headers={"Accept-Encoding": "identity"})
+        r, status = sec_http.get(url, timeout=_TIMEOUT_SEC, headers={"Accept-Encoding": "identity"},
+                                 max_bytes=limit)
         if r is None:
             what = f"HTTP {status}" if status else "no answer"
             raise _FetchFailed(f"{what} on {url.rstrip('/').rsplit('/', 1)[-1]}")
-        raw, where = (r.content[:limit] if limit else r.content), r.url
+        raw, where = r.content, r.url
     else:
         req = urllib.request.Request(url, headers={"User-Agent": project_user_agent(),
                                                    "Accept-Encoding": "identity"})

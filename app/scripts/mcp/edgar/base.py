@@ -29,6 +29,12 @@ except ImportError as e:
     EDGAR_AVAILABLE = False
     IMPORT_ERROR = str(e)
 
+if EDGAR_AVAILABLE:
+    # edgartools makes its own requests; its rate limiter is put on sec_http's
+    # gate so they are paced with every other SEC request this process makes.
+    import sec_http
+    sec_http.route_edgartools()
+
 
 class EdgarError:
     """Custom error class for Edgar API errors"""
