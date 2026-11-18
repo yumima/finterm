@@ -235,12 +235,10 @@ void ExcelScreen::on_import() {
 
     // Update file info
     file_name_ = QFileInfo(path).fileName();
-    file_path_ = path;
     auto* fname = findChild<QLabel*>("excelFileName");
     if (fname)
         fname->setText(file_name_);
 
-    sheet_counter_ = sheet_names.size() + 1;
     update_status();
     LOG_INFO("ExcelScreen", QString("Imported %1 sheets from %2").arg(sheet_names.size()).arg(file_name_));
 
@@ -302,7 +300,6 @@ void ExcelScreen::on_export() {
 
     if (xlsx.saveAs(path)) {
         file_name_ = QFileInfo(path).fileName();
-        file_path_ = path;
         auto* fname = findChild<QLabel*>("excelFileName");
         if (fname)
             fname->setText(file_name_);

@@ -23,10 +23,6 @@
 //     actually supplied (NaN-gated). Upstream str.format()s absent finnhub
 //     fields straight into the prompt; printing "nan" into a model prompt is
 //     the vendor-null-becomes-garbage bug this repo keeps re-fixing.
-//   - The sentiment voting templates offer {positive, negative, neutral}.
-//     Upstream's multi-template eval dropped neutral rows from the DATASET and
-//     offered two options; arbitrary live headlines are routinely neutral and
-//     need the third class.
 
 #include "core/util/BarTime.h"
 #include "services/equity/EquityResearchModels.h"
@@ -343,23 +339,6 @@ inline QString sentiment_instruction_canonical(const QString& text_type = QStrin
         .arg(text_type);
 }
 
-/// The 5 multi-template voting instructions (sentiment_templates.txt), each
-/// suffixed with an Options line as in the benchmark harness — ours includes
-/// neutral (see header comment).
-inline QStringList sentiment_vote_instructions(const QString& text_type = QStringLiteral("news")) {
-    static const char* kTemplates[] = {
-        "What is the sentiment of the input %1 from financial perspective?",
-        "Assign a sentiment category to this %1 related to finance.",
-        "Categorize the input %1's emotional tone into one of three groups.",
-        "Determine the sentiment expressed in the %1 from financial perspective.",
-        "Characterize the %1's sentiment using the following options.",
-    };
-    QStringList out;
-    for (const char* t : kTemplates)
-        out << QString::fromLatin1(t).arg(text_type) + QStringLiteral("\nOptions: positive, negative, neutral");
-    return out;
-}
-
 /// FinGPT's "Instruction:/Input:/Answer: " completion frame (format_example).
 inline QString sentiment_frame(const QString& instruction, const QString& input) {
     return QStringLiteral("Instruction: %1\nInput: %2\nAnswer: ").arg(instruction, input);
@@ -372,23 +351,6 @@ inline QString parse_sentiment_label(const QString& output) {
     if (s.contains(QStringLiteral("positive")))
         return QStringLiteral("positive");
     if (s.contains(QStringLiteral("negative")))
-        return QStringLiteral("negative");
-    return QStringLiteral("neutral");
-}
-
-/// Majority vote across template runs — port of vote_output(): positive vs
-/// negative head-to-head, ties (and all-neutral) resolve neutral.
-inline QString vote_sentiment(const QStringList& labels) {
-    int pos = 0, neg = 0;
-    for (const QString& l : labels) {
-        if (l == QStringLiteral("positive"))
-            ++pos;
-        else if (l == QStringLiteral("negative"))
-            ++neg;
-    }
-    if (pos > neg)
-        return QStringLiteral("positive");
-    if (neg > pos)
         return QStringLiteral("negative");
     return QStringLiteral("neutral");
 }

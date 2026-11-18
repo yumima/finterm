@@ -59,9 +59,6 @@ class AuditLogger : public QObject {
                                       AuditAction action_filter = AuditAction::OrderPlaced,
                                       bool filter_by_action = false) const;
 
-    /// Query logs for a specific workflow.
-    Result<QVector<AuditEntry>> by_workflow(const QString& workflow_id) const;
-
     /// Get recent entries (last N).
     Result<QVector<AuditEntry>> recent(int limit = 50) const;
 

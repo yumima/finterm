@@ -383,24 +383,6 @@ void DataHub::unsubscribe(QObject* owner, const QString& topic) {
     }
 }
 
-void DataHub::unsubscribe_pattern(QObject* owner, const QString& pattern) {
-    QMutexLocker lock(&mutex_);
-    auto sub_it = pattern_subscriptions_.find(pattern);
-    if (sub_it != pattern_subscriptions_.end()) {
-        auto& vec = sub_it.value();
-        vec.erase(std::remove_if(vec.begin(), vec.end(),
-                                 [owner](const Subscription& s) { return dead_or_owned_by(s, owner); }),
-                  vec.end());
-        if (vec.isEmpty())
-            pattern_subscriptions_.erase(sub_it);
-    }
-    if (auto it = owner_patterns_.find(owner); it != owner_patterns_.end()) {
-        it.value().remove(pattern);
-        if (it.value().isEmpty())
-            owner_patterns_.erase(it);
-    }
-}
-
 // ── Publishing ─────────────────────────────────────────────────────────────
 
 void DataHub::emit_to_subscribers(const QString& topic, const QVariant& value) {
@@ -580,23 +562,6 @@ void DataHub::unsubscribe_errors(QObject* owner, const QString& topic) {
         it.value().remove(topic);
         if (it.value().isEmpty())
             error_owner_topics_.erase(it);
-    }
-}
-
-void DataHub::unsubscribe_pattern_errors(QObject* owner, const QString& pattern) {
-    QMutexLocker lock(&mutex_);
-    if (auto it = error_pattern_subscriptions_.find(pattern); it != error_pattern_subscriptions_.end()) {
-        auto& vec = it.value();
-        vec.erase(
-            std::remove_if(vec.begin(), vec.end(), [owner](const ErrorSub& e) { return dead_or_owned_by(e, owner); }),
-            vec.end());
-        if (vec.isEmpty())
-            error_pattern_subscriptions_.erase(it);
-    }
-    if (auto it = error_owner_patterns_.find(owner); it != error_owner_patterns_.end()) {
-        it.value().remove(pattern);
-        if (it.value().isEmpty())
-            error_owner_patterns_.erase(it);
     }
 }
 

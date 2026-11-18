@@ -106,10 +106,6 @@ bool DataStreamManager::has_stream(const QString& account_id) const {
     return streams_.contains(account_id);
 }
 
-QStringList DataStreamManager::active_stream_ids() const {
-    return QStringList(streams_.keys().begin(), streams_.keys().end());
-}
-
 // ── Signal wiring ───────────────────────────────────────────────────────────
 
 void DataStreamManager::wire_stream_signals(AccountDataStream* stream) {

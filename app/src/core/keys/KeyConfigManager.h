@@ -26,9 +26,6 @@ class KeyConfigManager : public QObject {
     /// Current key sequence for this action.
     QKeySequence key(KeyAction a) const;
 
-    /// Default key sequence for this action.
-    QKeySequence default_key(KeyAction a) const;
-
     /// Human-readable name shown in the Settings UI.
     QString display_name(KeyAction a) const;
 

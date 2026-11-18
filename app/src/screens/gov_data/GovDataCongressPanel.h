@@ -57,15 +57,10 @@ class GovDataCongressPanel : public QWidget {
     QStackedWidget* content_stack_ = nullptr;
     QTableWidget* bills_table_ = nullptr;
     QTextBrowser* detail_browser_ = nullptr;
-    QWidget* summary_widget_ = nullptr;
     QLabel* status_label_ = nullptr;
 
     // Summary sub-widgets
     QTableWidget* summary_table_ = nullptr;
-
-    // Pagination
-    int current_offset_ = 0;
-    int page_size_ = 50;
 };
 
 } // namespace finterm::screens

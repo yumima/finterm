@@ -34,10 +34,6 @@ void WebSocketClient::send(const QString& message) {
     socket_.sendTextMessage(message);
 }
 
-void WebSocketClient::send_binary(const QByteArray& data) {
-    socket_.sendBinaryMessage(data);
-}
-
 bool WebSocketClient::is_connected() const {
     return socket_.state() == QAbstractSocket::ConnectedState;
 }
@@ -94,7 +90,6 @@ void WebSocketClient::connect_to(const QString& /*url*/) {
 }
 void WebSocketClient::disconnect() {}
 void WebSocketClient::send(const QString& /*message*/) {}
-void WebSocketClient::send_binary(const QByteArray& /*data*/) {}
 bool WebSocketClient::is_connected() const {
     return false;
 }

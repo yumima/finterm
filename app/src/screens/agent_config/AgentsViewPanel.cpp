@@ -819,10 +819,6 @@ void AgentsViewPanel::run_query() {
     }
 }
 
-void AgentsViewPanel::toggle_json_editor() {
-    json_toggle_btn_->setChecked(!json_toggle_btn_->isChecked());
-}
-
 void AgentsViewPanel::apply_tools_selection(const QStringList& /*tools*/) {
     // Reload the currently-selected agent's tools directly from the repository
     // so we always show the persisted state, not stale in-memory AgentInfo.config.

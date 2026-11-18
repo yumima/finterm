@@ -459,8 +459,7 @@ void PolymarketScreen::install_presentation(const polymarket::ExchangePresentati
         order_blotter_->setVisible(has_creds);
         if (a) {
             const auto caps = a->capabilities();
-            order_blotter_->set_capabilities(caps.supports_decrease_order, // amend ≈ Kalshi-only
-                                             caps.supports_batch_orders);
+            order_blotter_->set_capabilities(caps.supports_decrease_order); // amend ≈ Kalshi-only
             order_blotter_->set_presentation(p);
             if (has_creds)
                 a->fetch_open_orders();

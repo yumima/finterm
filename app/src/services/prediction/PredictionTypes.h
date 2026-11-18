@@ -34,8 +34,6 @@ struct MarketKey {
     QString market_id;
     QString event_id;
     QStringList asset_ids;
-
-    bool is_empty() const noexcept { return exchange_id.isEmpty() && market_id.isEmpty() && event_id.isEmpty(); }
 };
 
 struct Outcome {

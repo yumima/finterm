@@ -163,23 +163,6 @@ void AlgoTradingService::delete_strategy(const QString& id) {
                });
 }
 
-// ── Deployment lifecycle ──────────────────────────────────────────────────────
-void AlgoTradingService::deploy_strategy(const QString& strategy_id, const QString& symbol, const QString& mode,
-                                         const QString& timeframe, double quantity) {
-    auto deploy_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    // algo_live_runner is a long-running process — start and don't wait for completion
-    run_python("algo_trading/algo_live_runner.py",
-               {"--deploy-id", deploy_id, "--strategy-id", strategy_id, "--symbol", symbol, "--mode", mode,
-                "--timeframe", timeframe, "--quantity", QString::number(quantity), "--db", algo_db_path()},
-               "deploy", [this, deploy_id](bool ok, const QString& out) {
-                   if (!ok) {
-                       emit error_occurred("deploy", out);
-                       return;
-                   }
-                   emit deployment_started(deploy_id);
-               });
-}
-
 void AlgoTradingService::stop_deployment(const QString& deployment_id) {
     run_python("algo_trading/algo_manager.py", {"stop", deployment_id, "--db", algo_db_path()}, "stop_deployment",
                [this, deployment_id](bool ok, const QString& out) {

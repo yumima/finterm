@@ -42,8 +42,6 @@ class DataSourcesScreen : public QWidget, public finterm::screens::IStatefulScre
     void on_connector_clicked(const QString& connector_id);
     void on_connection_add();
     void on_connection_edit(const QString& conn_id);
-    void on_connection_delete(const QString& conn_id);
-    void on_connection_duplicate(const QString& conn_id);
     void on_connection_test(const QString& conn_id);
     void on_connection_enabled_changed(const QString& conn_id, bool enabled);
     void on_connector_selection_changed();
@@ -59,7 +57,6 @@ class DataSourcesScreen : public QWidget, public finterm::screens::IStatefulScre
     void on_download_template();
     void on_stat_box_clicked(int stat_index);
     void on_connections_search_changed(const QString& text);
-    void on_view_mode_toggle();
     void on_poll_timer();
     void refresh_connections();
     void update_clock();
@@ -67,7 +64,6 @@ class DataSourcesScreen : public QWidget, public finterm::screens::IStatefulScre
   private:
     // ── UI build ──────────────────────────────────────────────────────────────
     void setup_ui();
-    void apply_screen_styles();
     QWidget* build_screen_header();
     QWidget* build_command_bar(); // stub — kept for compat
     QWidget* build_stats_strip();

@@ -352,11 +352,6 @@ void CryptoOrderEntry::on_pct_clicked(int pct) {
     qty_edit_->setText(QString::number(qty, 'f', 6));
 }
 
-void CryptoOrderEntry::set_futures_mode(bool is_futures) {
-    is_futures_ = is_futures;
-    futures_section_->setVisible(is_futures);
-}
-
 void CryptoOrderEntry::update_cost_preview() {
     const double qty = qty_edit_->text().toDouble();
     double price = current_price_;

@@ -13,9 +13,6 @@ class NodePalette : public QWidget {
   public:
     explicit NodePalette(QWidget* parent = nullptr);
 
-  signals:
-    void node_type_selected(const QString& type_id);
-
   private:
     void build_ui();
     void rebuild_categories(const QString& filter = {});

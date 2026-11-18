@@ -36,9 +36,7 @@ class NewsCommandBar : public QWidget {
     // empty feed (rather than a greyed-out button). Shows an inline count
     // badge ("PTF 7") when active, or a preview of would-be matches when
     // inactive.
-    void set_portfolio_available(bool available);
     void set_portfolio_match_count(int count);
-    bool is_portfolio_active() const { return portfolio_active_; }
 
     // TL;DR — disable/enable while a summary is in flight.
     void set_tldr_busy(bool busy);
@@ -127,7 +125,6 @@ class NewsCommandBar : public QWidget {
     // inline ("PTF 7") and needs to survive across set_portfolio_match_count
     // calls that happen on every feed refresh.
     bool portfolio_active_ = false;
-    bool portfolio_available_ = false;
     int portfolio_match_count_ = 0;
     void refresh_portfolio_pill();
 

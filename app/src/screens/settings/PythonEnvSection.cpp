@@ -414,8 +414,6 @@ void PythonEnvSection::load_packages() {
     all_packages_.clear();
     installed_v1_.clear();
     installed_v2_.clear();
-    v1_loaded_ = false;
-    v2_loaded_ = false;
     pkg_table_->setRowCount(0);
     show_status("Loading...");
 
@@ -483,10 +481,8 @@ void PythonEnvSection::on_list_finished(const QString& venv_name, int exit_code)
     list_stdout_buf_.clear();
 
     if (venv_name == "venv-numpy1") {
-        v1_loaded_ = true;
         start_list_venv("venv-numpy2");
     } else {
-        v2_loaded_ = true;
         merge_and_populate_table();
     }
 }

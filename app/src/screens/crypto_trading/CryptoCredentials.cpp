@@ -188,12 +188,6 @@ QString CryptoCredentials::password() const {
     return password_edit_->text().trimmed();
 }
 
-void CryptoCredentials::set_values(const QString& key, const QString& secret, const QString& pw) {
-    key_edit_->setText(key);
-    secret_edit_->setText(secret);
-    password_edit_->setText(pw);
-}
-
 void CryptoCredentials::on_save() {
     if (api_key().isEmpty() || api_secret().isEmpty()) {
         set_status("API key and secret are required", "credStatusErr");

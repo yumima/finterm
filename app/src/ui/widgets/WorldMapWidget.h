@@ -27,18 +27,9 @@ class WorldMapWidget : public QWidget {
     explicit WorldMapWidget(QWidget* parent = nullptr);
 
     void set_pins(const QVector<MapPin>& pins);
-    void add_pin(const MapPin& pin);
-    void clear_pins();
-    int pin_count() const { return pins_.size(); }
-
-    /// Fly the camera to show a specific region
-    void fly_to(double lat, double lng, int zoom = 5);
 
     /// Auto-zoom to fit all current pins with padding
     void fit_to_pins();
-
-  signals:
-    void pin_clicked(const QString& label, double lat, double lng);
 
   private:
     void rebuild_markers();

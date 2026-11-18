@@ -56,7 +56,6 @@ class ExchangeSession : public QObject {
     /// `crypto:<exchange>:{api_key,secret,password}` so the next app launch
     /// picks them up automatically. Pass an empty-fields struct to clear.
     void set_credentials(const ExchangeCredentials& creds);
-    ExchangeCredentials get_credentials() const;
 
     /// Load any previously-persisted credentials for this exchange from
     /// SecureStorage and install them on the session. Idempotent — missing
@@ -109,7 +108,6 @@ class ExchangeSession : public QObject {
 
     // ── Cache ──────────────────────────────────────────────────────────────
     TickerData get_cached_price(const QString& symbol) const;
-    QHash<QString, TickerData> snapshot_price_cache() const;
 
     ExchangeSession(const ExchangeSession&) = delete;
     ExchangeSession& operator=(const ExchangeSession&) = delete;
@@ -138,7 +136,6 @@ class ExchangeSession : public QObject {
     QProcess* ws_process_ = nullptr;
     std::atomic<bool> ws_connected_{false};
     QString ws_primary_symbol_;
-    QStringList ws_all_symbols_;
     QHash<QString, QString> ws_symbol_map_; // exchange_symbol → requested_symbol
 
     QHash<QString, TickerData> price_cache_;

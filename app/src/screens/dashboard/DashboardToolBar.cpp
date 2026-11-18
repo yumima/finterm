@@ -197,12 +197,4 @@ void DashboardToolBar::set_widget_count(int count) {
     widget_count_->setText(QString("%1 WIDGETS").arg(count));
 }
 
-void DashboardToolBar::set_connected(bool connected) {
-    connected_ = connected;
-    status_text_->setText(connected ? "LIVE" : "OFFLINE");
-    // refresh_theme handles the base color; override just this label dynamically
-    status_text_->setStyleSheet(QString("color:%1;font-weight:bold;background:transparent;")
-                                    .arg(connected ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
-}
-
 } // namespace finterm::screens

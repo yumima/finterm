@@ -117,8 +117,6 @@ class SurfaceControlPanel : public QWidget {
     QGroupBox* dates_box_ = nullptr;
     QGroupBox* options_box_ = nullptr;
     QGroupBox* basket_box_ = nullptr;
-    QGroupBox* metrics_box_ = nullptr;
-    QGroupBox* lineage_box_ = nullptr;
 
     // ── Asset section ──────────────────────────────────────────────────────
     QLineEdit* symbol_edit_ = nullptr;

@@ -2093,24 +2093,6 @@ void AgentService::get_trade_decisions(const QString& competition_id, const QStr
 
 // ── LRU Response Cache ───────────────────────────────────────────────────────
 
-QString AgentService::make_cache_key(const QString& action, const QJsonObject& params) const {
-    return action + "|" + QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact));
-}
-
-bool AgentService::get_cached_response(const QString& key, QJsonObject& out) const {
-    const QVariant cv = finterm::CacheManager::instance().get("agents:resp:" + key);
-    if (cv.isNull())
-        return false;
-    out = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
-    return true;
-}
-
-void AgentService::set_cached_response(const QString& key, const QJsonObject& data) {
-    finterm::CacheManager::instance().put(
-        "agents:resp:" + key, QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))),
-        kResponseCacheTtlSec, "agents");
-}
-
 void AgentService::clear_response_cache() {
     finterm::CacheManager::instance().remove_prefix("agents:resp:");
     LOG_INFO("AgentService", "Response cache cleared");
@@ -2342,13 +2324,6 @@ void AgentService::publish_routing_result(const RoutingResult& r) {
         {"score_basis", r.score_basis},
     };
     finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));
-}
-
-void AgentService::publish_agent_error(const QString& context, const QString& message) {
-    if (!hub_registered_)
-        return;
-    QJsonObject obj{{"context", context}, {"message", message}};
-    finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:error:") + context, QVariant(obj));
 }
 
 } // namespace finterm::services

@@ -36,7 +36,6 @@ class CryptoBottomPanel : public QWidget {
 
     // New live tabs
     void update_my_trades(const QJsonObject& data);
-    void update_fees(const QJsonObject& data);
 
     // New widget forwarding
     void add_trade_entry(const TradeEntry& trade);
@@ -45,7 +44,6 @@ class CryptoBottomPanel : public QWidget {
 
   signals:
     void cancel_order_requested(const QString& order_id);
-    void close_position_requested(const QString& symbol);
 
   private:
     void setup_positions_tab();

@@ -69,7 +69,6 @@ class CellWidget : public QWidget {
     void set_running(bool running);
     void set_outputs(const QVector<CellOutput>& outputs, int exec_count);
     void set_selected(bool selected);
-    void set_index(int index);
     QString cell_id() const { return cell_id_; }
 
   signals:
@@ -119,7 +118,6 @@ class CellWidget : public QWidget {
 
     // Output area
     QWidget* output_area_ = nullptr;
-    QVBoxLayout* output_layout_ = nullptr;
     QPushButton* output_toggle_ = nullptr;
     QWidget* output_content_ = nullptr;
     QVBoxLayout* output_content_layout_ = nullptr;

@@ -1179,7 +1179,6 @@ QWidget* EquityOverviewTab::build_share_stats_panel() {
 
 QWidget* EquityOverviewTab::build_chart_panel() {
     auto* p = new QFrame;
-    chart_panel_ = p;
     p->setStyleSheet(QString("QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
                          .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
 

@@ -407,7 +407,6 @@ void GovDataHKPanel::on_result(const QString& request_id, const services::GovDat
             show_status("Dataset list loaded. Type a search term and click FETCH.");
 
     } else if (request_id == "hk_resources") {
-        current_resources_ = payload;
         populate_resources(payload);
         current_view_ = Resources;
         content_stack_->setCurrentIndex(Resources);

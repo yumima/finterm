@@ -23,7 +23,6 @@ class ComponentCard : public QFrame {
     explicit ComponentCard(ComponentMeta meta, QWidget* parent = nullptr);
 
     const ComponentMeta& meta() const { return meta_; }
-    bool is_selected() const { return selected_; }
     void set_selected(bool s);
 
   signals:

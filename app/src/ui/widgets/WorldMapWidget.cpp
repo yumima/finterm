@@ -127,25 +127,6 @@ void WorldMapWidget::set_pins(const QVector<MapPin>& pins) {
     rebuild_markers();
 }
 
-void WorldMapWidget::add_pin(const MapPin& pin) {
-    pins_.append(pin);
-    rebuild_markers();
-}
-
-void WorldMapWidget::clear_pins() {
-    pins_.clear();
-    rebuild_markers();
-}
-
-void WorldMapWidget::fly_to(double lat, double lng, int zoom) {
-    Q_UNUSED(zoom);
-    if (!map_ready_)
-        return;
-    double d = 5.0;
-    auto target = QGV::GeoRect(QGV::GeoPos(lat + d, lng - d * 1.5), QGV::GeoPos(lat - d, lng + d * 1.5));
-    map_->flyTo(QGVCameraActions(map_).scaleTo(target));
-}
-
 void WorldMapWidget::fit_to_pins() {
     if (!map_ready_ || pins_.isEmpty())
         return;

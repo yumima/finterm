@@ -15,10 +15,6 @@ inline constexpr std::array<const char*, 7> EQUITY_UNDERLYINGS = {"SPY", "QQQ", 
 // via SurfaceControlPanel state.
 inline constexpr std::array<const char*, 8> RISK_BASKET = {"SPY", "QQQ", "IWM", "DIA", "GLD", "TLT", "IEF", "HYG"};
 
-// Default commodity roots used for futures-curve surfaces. The control panel
-// shows these in the asset combo when the active surface is commodity-backed.
-inline constexpr std::array<const char*, 5> COMMODITY_ROOTS = {"CL", "NG", "GC", "ZC", "ZS"};
-
 // Default historical lookback (days) for equities OHLCV-driven surfaces.
 inline constexpr int LOOKBACK_DAYS = 60;
 

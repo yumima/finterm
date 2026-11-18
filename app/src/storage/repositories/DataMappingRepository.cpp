@@ -37,16 +37,6 @@ Result<QVector<DataMapping>> DataMappingRepository::list_all() {
     return query_list(QString("SELECT %1 FROM data_mappings ORDER BY name").arg(kDmCols), {}, map_row);
 }
 
-Result<QVector<DataMapping>> DataMappingRepository::list_by_source(const QString& source_id) {
-    return query_list(QString("SELECT %1 FROM data_mappings WHERE source_id = ? ORDER BY name").arg(kDmCols),
-                      {source_id}, map_row);
-}
-
-Result<QVector<DataMapping>> DataMappingRepository::list_by_schema(const QString& schema_name) {
-    return query_list(QString("SELECT %1 FROM data_mappings WHERE schema_name = ? ORDER BY name").arg(kDmCols),
-                      {schema_name}, map_row);
-}
-
 Result<DataMapping> DataMappingRepository::get(const QString& id) {
     return query_one(QString("SELECT %1 FROM data_mappings WHERE id = ?").arg(kDmCols), {id}, map_row);
 }

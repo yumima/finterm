@@ -30,8 +30,6 @@ class DashboardCanvas : public QWidget {
     /// on every viewport resize so the dashboard always fills the window.
     void fit_rows_to_viewport(int vp_h);
 
-    int tile_count() const { return tiles_.size(); }
-
   signals:
     void layout_changed(GridLayout layout);
     void widget_count_changed(int count);
@@ -57,7 +55,6 @@ class DashboardCanvas : public QWidget {
     void update_canvas_height();
     void update_placeholder(const GridCell& cell);
     void hide_placeholder();
-    void rebuild_grid_cache();
     void connect_tile(WidgetTile* tile);
     WidgetTile* tile_for_id(const QString& instance_id) const;
     GridItem* item_for_id(const QString& instance_id);

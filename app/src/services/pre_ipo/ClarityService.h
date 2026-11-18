@@ -99,7 +99,6 @@ class ClarityService : public QObject {
     bool unavailable(const QString& slug) const { return unavailable_.contains(slug); }
     /// The last read of this page got no answer (not a 404) — recently.
     bool failed_recently(const QString& slug) const;
-    QDateTime index_fetched_at() const { return index_at_; }
     QStringList errors() const { return errors_; }
 
     // Parsers (public for tests): the script's JSON → structs.

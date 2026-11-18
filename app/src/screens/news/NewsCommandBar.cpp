@@ -461,17 +461,6 @@ void NewsCommandBar::update_sentiment(int bullish, int bearish, int neutral) {
 
 // ── PTF pill ───────────────────────────────────────────────────────────────
 
-void NewsCommandBar::set_portfolio_available(bool available) {
-    // The pill is always clickable regardless of this flag — holdings
-    // availability is signalled by the inline count badge (empty filter
-    // result IS the "no holdings" affordance). The flag is kept on the
-    // bar so callers can introspect it via the existing setter contract
-    // and for future UI variants (e.g., subtle tinting) without touching
-    // the click path.
-    portfolio_available_ = available;
-    refresh_portfolio_pill();
-}
-
 void NewsCommandBar::set_portfolio_match_count(int count) {
     portfolio_match_count_ = count;
     refresh_portfolio_pill();

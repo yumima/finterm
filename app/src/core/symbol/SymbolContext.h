@@ -27,7 +27,6 @@ class SymbolContext : public QObject {
     static SymbolContext& instance();
 
     SymbolRef group_symbol(SymbolGroup g) const;
-    bool has_group_symbol(SymbolGroup g) const;
 
     /// Set the active symbol for a group. Emits group_symbol_changed and
     /// active_symbol_changed. If `ref` matches the existing value the

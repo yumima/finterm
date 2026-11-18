@@ -56,8 +56,6 @@ class PortfolioPerfChart : public QWidget {
     /// Feed real benchmark closes for the overlay. The symbol is shown on the
     /// toggle button and used to disambiguate currencies in indexed mode.
     void set_benchmark_history(const QString& symbol, const QStringList& dates, const QVector<double>& closes);
-    /// Legacy shim — same as set_benchmark_history("SPY", dates, closes).
-    void set_spy_history(const QStringList& dates, const QVector<double>& closes);
     void refresh_theme();
 
     // ── Per-symbol focus mode ─────────────────────────────────────────────
@@ -70,7 +68,6 @@ class PortfolioPerfChart : public QWidget {
     /// Feed daily closes for the currently focused symbol. Mismatched symbols
     /// are ignored (race-safe against stale fetches).
     void set_focus_history(const QString& symbol, const QStringList& dates, const QVector<double>& closes);
-    QString focus_symbol() const { return focus_symbol_; }
 
     // ── 1D intraday ─────────────────────────────────────────────────────────
     /// Feed today's 1-minute close series for the currently focused symbol.
@@ -188,7 +185,6 @@ class PortfolioPerfChart : public QWidget {
     QVector<qint64> intraday_ts_ms_;
     QVector<double> intraday_values_;
     QString intraday_for_symbol_;     // empty = portfolio aggregate
-    bool intraday_requested_ = false; // 1D selected, waiting for data
     // True once the fetch callback has fired for the current request. Lets
     // render_intraday distinguish "still loading" from "loaded but empty"
     // (e.g. weekend, holiday, pre-open) — the latter should show a terminal

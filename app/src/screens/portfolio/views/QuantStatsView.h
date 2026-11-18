@@ -70,12 +70,6 @@ class QuantStatsView : public QWidget {
     QLabel* mc_status_ = nullptr;
     QWidget* mc_results_ = nullptr;      // kept for compat
     QStackedWidget* mc_stack_ = nullptr; // 0 = placeholder, 1 = live content
-    QChartView* mc_chart_ = nullptr;
-
-    // ── Unused chart members (reserved for future time-series data) ───────────
-    QChartView* returns_chart_ = nullptr;
-    QChartView* drawdown_chart_ = nullptr;
-    QChartView* rolling_chart_ = nullptr;
 
     // ── State ─────────────────────────────────────────────────────────────────
     portfolio::PortfolioSummary summary_;

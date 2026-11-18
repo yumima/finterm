@@ -47,7 +47,6 @@ class MarketPulsePanel : public QWidget {
     QWidget* build_global_snapshot_section();
     QWidget* build_market_hours_section();
     QWidget* build_stat_row(const QString& label, const QString& value, const QString& change, const QString& color);
-    QWidget* build_breadth_bar(const QString& label, int advancing, int declining);
 
     /// Re-apply all token-based styles so a theme switch updates every child widget.
     void refresh_theme();

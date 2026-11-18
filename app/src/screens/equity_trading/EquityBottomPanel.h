@@ -32,10 +32,8 @@ class EquityBottomPanel : public QWidget {
     void set_funds(const trading::BrokerFunds& funds);
     void set_calendar(const QVector<trading::MarketCalendarDay>& days);
     void set_clock(const trading::MarketClock& clock);
-    void set_auctions(const QVector<trading::BrokerAuction>& auctions);
     void set_time_sales(const QVector<trading::BrokerTrade>& trades); // bulk load
     void prepend_trade(const trading::BrokerTrade& trade);            // live append at top
-    void set_condition_codes(const QMap<QString, QString>& codes);
 
     void set_mode(bool is_paper);
 
@@ -70,7 +68,6 @@ class EquityBottomPanel : public QWidget {
     QTableWidget* orders_table_ = nullptr;
     QTableWidget* calendar_table_ = nullptr;
     QTableWidget* time_sales_table_ = nullptr;
-    QString time_sales_symbol_;              // track last symbol to detect change
     QMap<QString, QString> condition_codes_; // code → description cache
     QTableWidget* auctions_table_ = nullptr;
 

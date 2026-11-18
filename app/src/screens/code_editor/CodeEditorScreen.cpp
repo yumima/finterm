@@ -496,11 +496,6 @@ void CellWidget::set_selected(bool selected) {
     }
 }
 
-void CellWidget::set_index(int index) {
-    index_ = index;
-    update_gutter();
-}
-
 void CellWidget::update_gutter() {
     if (running_) {
         gutter_number_->setText("[*]");

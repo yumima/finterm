@@ -123,26 +123,6 @@ void AccountDataStream::set_selected_symbol(const QString& symbol, const QString
 
 // ── Cached data access ──────────────────────────────────────────────────────
 
-QVector<BrokerPosition> AccountDataStream::cached_positions() const {
-    return positions_;
-}
-QVector<BrokerHolding> AccountDataStream::cached_holdings() const {
-    return holdings_;
-}
-QVector<BrokerOrderInfo> AccountDataStream::cached_orders() const {
-    return orders_;
-}
-BrokerFunds AccountDataStream::cached_funds() const {
-    return funds_;
-}
-
-BrokerQuote AccountDataStream::cached_quote(const QString& symbol) const {
-    // peek_or — don't promote on a read, since unrelated UI repaints (e.g.
-    // a status bar that reads every cached symbol once per second) would
-    // otherwise keep stale entries pinned at the MRU end forever.
-    return quote_cache_.peek_or(symbol);
-}
-
 // ── Timer callbacks ─────────────────────────────────────────────────────────
 
 void AccountDataStream::on_quote_timer() {
@@ -573,33 +553,6 @@ void AccountDataStream::fetch_time_sales(const QString& symbol) {
                 if (!self)
                     return;
                 emit self->time_sales_fetched(acct_id, data);
-            },
-            Qt::QueuedConnection);
-    });
-}
-
-void AccountDataStream::fetch_latest_trade(const QString& symbol) {
-    const QString acct_id = account_id_;
-    const QString bid = broker_id_;
-    QPointer<AccountDataStream> self = this;
-
-    auto creds = AccountManager::instance().load_credentials(acct_id);
-    if (creds.api_key.isEmpty())
-        return;
-
-    (void)QtConcurrent::run([self, acct_id, bid, symbol, creds]() {
-        auto* broker = BrokerRegistry::instance().get(bid);
-        if (!broker)
-            return;
-        auto result = broker->get_latest_trade(creds, symbol);
-        if (!result.success || !result.data)
-            return;
-        QMetaObject::invokeMethod(
-            self,
-            [self, acct_id, data = *result.data]() {
-                if (!self)
-                    return;
-                emit self->latest_trade_fetched(acct_id, data);
             },
             Qt::QueuedConnection);
     });

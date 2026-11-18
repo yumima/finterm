@@ -94,24 +94,6 @@ struct AgentModelsInfo {
 
 // ── Team configuration ──────────────────────────────────────────────────────
 
-struct TeamMember {
-    QString agent_id;
-    QString name;
-    QString role;
-    QJsonObject model_config;
-    QStringList tools;
-    QString instructions;
-};
-
-struct TeamConfig {
-    QString name;
-    QString mode; // "coordinate", "route", "collaborate"
-    QVector<TeamMember> members;
-    QJsonObject coordinator_model;
-    bool show_member_responses = false;
-    int leader_index = 0;
-};
-
 // ── Execution plan ──────────────────────────────────────────────────────────
 
 struct PlanStep {

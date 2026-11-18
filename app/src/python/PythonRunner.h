@@ -78,9 +78,6 @@ class PythonRunner : public QObject {
     /// Check if python is available
     bool is_available() const;
 
-    /// Set max concurrent Python processes (default: 3)
-    void set_max_concurrent(int n) { max_concurrent_ = n; }
-
   public:
     /// Locate the bundled scripts directory (exe-relative, then the dev tree).
     /// Static so startup migrations can find it without constructing the runner.

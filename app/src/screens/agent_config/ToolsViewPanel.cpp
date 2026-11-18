@@ -583,7 +583,6 @@ void ToolsViewPanel::load_assign_targets() {
 void ToolsViewPanel::show_tool_detail(const QString& tool_name) {
     if (tool_name.isEmpty())
         return;
-    current_tool_ = tool_name;
 
     detail_name_->setText(tool_name);
 
@@ -766,10 +765,6 @@ void ToolsViewPanel::assign_to_target() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-QString ToolsViewPanel::current_target_name() const {
-    return target_combo_->currentText();
-}
 
 QStringList ToolsViewPanel::tools_of_target() const {
     if (target_combo_->currentIndex() < 0)

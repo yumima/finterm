@@ -97,9 +97,6 @@ void PreIpoScreen::refresh_theme() {
 void PreIpoScreen::on_data_loaded(PreIpoSummary summary) {
     Q_UNUSED(summary);
 }
-void PreIpoScreen::on_company_selected(const QString& id) {
-    selected_company_id_ = id;
-}
 void PreIpoScreen::on_error(const QString& msg) {
     LOG_WARN("PreIpo", msg);
 }

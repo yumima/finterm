@@ -60,9 +60,6 @@ inline constexpr ColorToken AMBER_DIM{&ThemeTokens::accent_dim};
 inline constexpr ColorToken ORANGE{&ThemeTokens::accent};
 inline constexpr ColorToken TEXT_ON_ACCENT{&ThemeTokens::text_on_accent};
 
-inline constexpr ColorToken ICON_DIM{&ThemeTokens::icon_dim};
-inline constexpr ColorToken ICON_HOVER{&ThemeTokens::icon_hover};
-
 inline constexpr ColorToken POSITIVE{&ThemeTokens::positive};
 inline constexpr ColorToken POSITIVE_DIM{&ThemeTokens::positive_dim};
 inline constexpr ColorToken NEGATIVE{&ThemeTokens::negative};
@@ -100,7 +97,6 @@ struct FontFamilyToken {
 };
 
 inline constexpr FontFamilyToken DATA_FAMILY{};
-inline constexpr FontFamilyToken UI_FAMILY{};
 
 constexpr int TITLE = 20;
 constexpr int HEADER = 16;
@@ -117,26 +113,15 @@ inline int font_px(int offset = 0) {
     return v < 12 ? 12 : v;
 }
 
-/// CSS-ready string helpers — use these in setStyleSheet() so all font sizes
-/// scale consistently when the user adjusts the base font size setting.
+/// CSS-ready string helper — use it in setStyleSheet() so font sizes scale
+/// consistently when the user adjusts the base font size setting.
 ///
-///   ui_px()      — widget title bars, section headers    (base-2, min 12)
-///   content_px() — data labels, row text                 (base-2, min 12)
-///   hint_px()    — secondary / helper text               (base-2, min 12)
+///   ui_px() — widget title bars, section headers (base-2, min 12)
 ///
-/// At the default base (14px) all three return 12px — the app-wide minimum.
-/// At a larger base (e.g. 16px) they return 14px / 14px / 12px respectively,
-/// creating a readable hierarchy while still respecting the floor.
+/// At the default base (14px) it returns 12px — the app-wide minimum.
 inline QString ui_px() {
     return QString::number(font_px(-2)) + "px";
 }
-inline QString content_px() {
-    return QString::number(font_px(-2)) + "px";
-}
-inline QString hint_px() {
-    return QString::number(font_px(-2)) + "px";
-}
-
 } // namespace fonts
 
 /// Returns "#16a34a" for positive values, "#dc2626" for negative.

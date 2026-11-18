@@ -18,8 +18,6 @@ class AlgoTradingService : public QObject {
     void delete_strategy(const QString& id);
 
     // ── Deployment lifecycle ────────────────────────────────────────────────
-    void deploy_strategy(const QString& strategy_id, const QString& symbol, const QString& mode,
-                         const QString& timeframe, double quantity);
     void stop_deployment(const QString& deployment_id);
     void stop_all_deployments();
     void list_deployments();
@@ -36,7 +34,6 @@ class AlgoTradingService : public QObject {
     void strategy_saved(QString id);
     void strategies_loaded(QVector<finterm::services::algo::AlgoStrategy> strategies);
     void strategy_deleted(QString id);
-    void deployment_started(QString deployment_id);
     void deployments_loaded(QVector<finterm::services::algo::AlgoDeployment> deployments);
     void deployment_stopped(QString deployment_id);
     void backtest_result(QJsonObject data);

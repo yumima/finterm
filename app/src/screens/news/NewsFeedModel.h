@@ -24,7 +24,6 @@ enum NewsFeedRole {
     SourceFlagRole,
     LanguageRole,
     HasGeoRole,
-    PulsePhaseRole,
     // Pre-formatted display strings — computed once in set_wire_articles,
     // read directly in paint() to avoid per-frame allocations (P7/Per.19)
     FormattedSourceRole,  // source.left(10).toUpper()
@@ -52,12 +51,8 @@ class NewsFeedModel : public QAbstractListModel {
     void set_monitor_matches(const QMap<QString, QVector<services::NewsArticle>>& matches,
                              const QVector<services::NewsMonitor>& monitors);
 
-    void mark_all_seen();
     void mark_seen(const QString& article_id);
     int unseen_count() const;
-
-    void set_geo_articles(const QSet<QString>& geolocated_ids);
-    void advance_pulse(); // called by timer to animate new-item pulse
 
     QModelIndex index_for_article(const QString& article_id) const;
     services::NewsArticle article_at(int row) const;
@@ -76,7 +71,6 @@ class NewsFeedModel : public QAbstractListModel {
     QHash<QString, int> cluster_id_to_row_;         // O(1) index lookup for CLUSTERS mode
     QHash<QString, QString> article_monitor_color_; // O(1) vs QMap's O(log n)
     QSet<QString> geo_article_ids_;
-    int pulse_phase_ = 0;  // 0-3 for animation cycle
     int unseen_count_ = 0; // incremental counter, avoids O(n) scan
 
     // Per-row pre-formatted display strings — avoids string allocations in paint()

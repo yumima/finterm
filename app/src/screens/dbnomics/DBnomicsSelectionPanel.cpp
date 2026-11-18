@@ -515,7 +515,6 @@ void DBnomicsSelectionPanel::clear_slots() {
 // ── Public data population methods ──────────────────────────────────────────
 
 void DBnomicsSelectionPanel::populate_providers(const QVector<services::DbnProvider>& providers) {
-    all_providers_ = providers;
     provider_list_->clear();
 
     for (const auto& p : providers) {

@@ -28,8 +28,6 @@ class DataMappingRepository : public BaseRepository<DataMapping> {
     static DataMappingRepository& instance();
 
     Result<QVector<DataMapping>> list_all();
-    Result<QVector<DataMapping>> list_by_source(const QString& source_id);
-    Result<QVector<DataMapping>> list_by_schema(const QString& schema_name);
     Result<DataMapping> get(const QString& id);
     Result<void> save(const DataMapping& dm);
     Result<void> remove(const QString& id);

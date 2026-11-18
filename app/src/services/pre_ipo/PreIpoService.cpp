@@ -354,21 +354,6 @@ PrivateCompany PreIpoService::company(const QString& id) const {
     return {};
 }
 
-void PreIpoService::toggle_watch(const QString& id) {
-    // NOTE: the IPO Watch UI does NOT use this — its watchlist is the
-    // SettingsRepository-backed `starred_` set in IpoWatchView, keyed by
-    // company id. PrivateCompany::watched is left here for other callers but is
-    // intentionally not the source of truth for the UI star (avoids two
-    // divergent watch states). See IpoWatchView::toggle_private_star.
-    for (auto& c : companies_) {
-        if (c.id == id) {
-            c.watched = !c.watched;
-            emit company_updated(id);
-            return;
-        }
-    }
-}
-
 QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
     QJsonObject entry = entry_in;
 

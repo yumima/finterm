@@ -16,10 +16,8 @@ class RelationshipPanel : public QWidget {
 
   private:
     void build_ui();
-    void build_network_view();
     QWidget* build_node_card(const finterm::services::geo::RelationshipNode& node, QWidget* parent);
 
-    QVBoxLayout* network_layout_ = nullptr;
     QLabel* selected_label_ = nullptr;
     QWidget* detail_panel_ = nullptr;
 };

@@ -97,7 +97,6 @@ class PolymarketAdapter : public finterm::services::prediction::PredictionExchan
   private:
     void wire_service();
     void wire_ws();
-    void stub_unsupported(const QString& ctx);
 
     /// Ensure we have L2 api_key/secret/passphrase cached; derive from L1
     /// if not. Returns the creds (with api_key populated) or nullopt on

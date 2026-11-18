@@ -165,14 +165,6 @@ inline QStringList world_quote_symbols() {
     return out;
 }
 
-inline const Instrument* find_instrument(const QString& symbol) {
-    for (const auto& s : world_sections())
-        for (const auto& r : s.rows)
-            if (r.symbol == symbol)
-                return &r;
-    return nullptr;
-}
-
 // ── Yields and basis points ─────────────────────────────────────────────────
 
 /// A Cboe yield index (^TNX & co.) as a percent yield. Cboe defines these as

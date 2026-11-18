@@ -12,18 +12,6 @@ void SessionManager::start_session() {
     emit session_started();
 }
 
-qint64 SessionManager::uptime_seconds() const {
-    return elapsed_.elapsed() / 1000;
-}
-
-QString SessionManager::uptime_string() const {
-    qint64 total = uptime_seconds();
-    int h = static_cast<int>(total / 3600);
-    int m = static_cast<int>((total % 3600) / 60);
-    int s = static_cast<int>(total % 60);
-    return QString("%1:%2:%3").arg(h, 2, 10, QChar('0')).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0'));
-}
-
 void SessionManager::save_tab_state(const QString& tab_id, const QVariantMap& state) {
     settings_.beginGroup("tab_state/" + tab_id);
     for (auto it = state.begin(); it != state.end(); ++it) {
@@ -67,10 +55,6 @@ QByteArray SessionManager::load_state(int window_id) const {
 
 void SessionManager::save_window_count(int count) {
     settings_.setValue("window_count", count);
-}
-
-int SessionManager::load_window_count() const {
-    return settings_.value("window_count", 1).toInt();
 }
 
 void SessionManager::save_window_ids(const QList<int>& ids) {

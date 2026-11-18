@@ -26,7 +26,6 @@ struct AlgoStrategy {
     bool is_active = true;
     QString created_at;
     QString updated_at;
-    QJsonObject last_backtest; // in-memory only — populated when backtest runs, not persisted
 };
 
 // ── Deployment ──────────────────────────────────────────────────────────────
@@ -68,18 +67,6 @@ inline QColor deployment_status_color(const QString& status) {
 }
 
 // ── Condition ───────────────────────────────────────────────────────────────
-
-struct ConditionDef {
-    QString indicator;
-    QJsonObject params;
-    QString field;
-    QString op; // >, <, >=, <=, ==, crosses_above, crosses_below
-    double value = 0;
-    QString compare_mode = "value"; // value, indicator
-    QString compare_indicator;
-    QJsonObject compare_params;
-    QString compare_field;
-};
 
 // ── Indicator categories ────────────────────────────────────────────────────
 

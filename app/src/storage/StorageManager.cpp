@@ -58,7 +58,7 @@ QVector<StorageCategoryInfo> StorageManager::all_stats() const {
     QVector<StorageCategoryInfo> stats;
 
     // --- Cache (cache.db) ---
-    stats.append({"cache", "Temporary Cache", "Cache", CacheManager::instance().entry_count(), true});
+    stats.append({"cache", "Temporary Cache", "Cache", CacheManager::instance().entry_count()});
 
     { // each screen's saved UI state (cache.db screen_state)
         int ts_count = 0;
@@ -71,112 +71,58 @@ QVector<StorageCategoryInfo> StorageManager::all_stats() const {
                     ts_count = q.value(0).toInt();
             }
         }
-        stats.append({"screen_state", "Screen State (filters, panes, selections)", "Cache", ts_count, true});
+        stats.append({"screen_state", "Screen State (filters, panes, selections)", "Cache", ts_count});
     }
 
     // --- AI & LLM ---
-    stats.append({"chat_sessions", "Chat Sessions", "AI & LLM", count_table("chat_sessions"), true});
-    stats.append({"chat_messages", "Chat Messages", "AI & LLM", count_table("chat_messages"), true});
-    stats.append({"context_recordings", "Context Recordings", "AI & LLM", count_table("recorded_contexts"), true});
-    stats.append({"agent_configs", "Agent Configurations", "AI & LLM", count_table("agent_configs"), true});
-    stats.append({"llm_configs", "LLM Provider Configs", "AI & LLM", count_table("llm_configs"), true});
-    stats.append({"llm_model_configs", "LLM Model Configs", "AI & LLM", count_table("llm_model_configs"), true});
-    stats.append({"llm_profiles", "LLM Profiles", "AI & LLM", count_table("llm_profiles"), true});
+    stats.append({"chat_sessions", "Chat Sessions", "AI & LLM", count_table("chat_sessions")});
+    stats.append({"chat_messages", "Chat Messages", "AI & LLM", count_table("chat_messages")});
+    stats.append({"context_recordings", "Context Recordings", "AI & LLM", count_table("recorded_contexts")});
+    stats.append({"agent_configs", "Agent Configurations", "AI & LLM", count_table("agent_configs")});
+    stats.append({"llm_configs", "LLM Provider Configs", "AI & LLM", count_table("llm_configs")});
+    stats.append({"llm_model_configs", "LLM Model Configs", "AI & LLM", count_table("llm_model_configs")});
+    stats.append({"llm_profiles", "LLM Profiles", "AI & LLM", count_table("llm_profiles")});
 
     // --- News ---
-    stats.append({"news_articles", "News Articles", "News", count_table("news_articles"), true});
-    stats.append({"news_monitors", "News Monitors", "News", count_table("news_monitors"), true});
-    stats.append({"rss_feeds", "RSS Feeds", "News", count_table("user_rss_feeds"), true});
+    stats.append({"news_articles", "News Articles", "News", count_table("news_articles")});
+    stats.append({"news_monitors", "News Monitors", "News", count_table("news_monitors")});
+    stats.append({"rss_feeds", "RSS Feeds", "News", count_table("user_rss_feeds")});
 
     // --- Notes & Reports ---
-    stats.append({"notes", "Financial Notes", "Notes & Reports", count_table("financial_notes"), true});
-    stats.append({"reports", "Reports", "Notes & Reports", count_table("reports"), true});
+    stats.append({"notes", "Financial Notes", "Notes & Reports", count_table("financial_notes")});
+    stats.append({"reports", "Reports", "Notes & Reports", count_table("reports")});
 
     // --- Portfolio & Trading ---
-    stats.append({"portfolios", "Portfolios", "Portfolio & Trading", count_table("portfolios"), true});
-    stats.append({"transactions", "Transactions", "Portfolio & Trading", count_table("portfolio_transactions"), true});
-    stats.append({"watchlists", "Watchlists", "Portfolio & Trading", count_table("watchlists"), true});
-    stats.append({"custom_indices", "Custom Indices", "Portfolio & Trading", count_table("custom_indices"), true});
+    stats.append({"portfolios", "Portfolios", "Portfolio & Trading", count_table("portfolios")});
+    stats.append({"transactions", "Transactions", "Portfolio & Trading", count_table("portfolio_transactions")});
+    stats.append({"watchlists", "Watchlists", "Portfolio & Trading", count_table("watchlists")});
+    stats.append({"custom_indices", "Custom Indices", "Portfolio & Trading", count_table("custom_indices")});
 
     // --- Paper Trading ---
-    stats.append({"pt_portfolios", "Paper Portfolios", "Paper Trading", count_table("pt_portfolios"), true});
-    stats.append({"pt_orders", "Paper Orders", "Paper Trading", count_table("pt_orders"), true});
-    stats.append({"pt_trades", "Paper Trades", "Paper Trading", count_table("pt_trades"), true});
+    stats.append({"pt_portfolios", "Paper Portfolios", "Paper Trading", count_table("pt_portfolios")});
+    stats.append({"pt_orders", "Paper Orders", "Paper Trading", count_table("pt_orders")});
+    stats.append({"pt_trades", "Paper Trades", "Paper Trading", count_table("pt_trades")});
 
     // --- Workflows ---
-    stats.append({"workflows", "Workflows", "Workflows", count_table("workflows"), true});
+    stats.append({"workflows", "Workflows", "Workflows", count_table("workflows")});
 
     // --- Data Sources & Integration ---
-    stats.append({"data_sources", "Data Sources", "Data & Integration", count_table("data_sources"), true});
-    stats.append({"data_mappings", "Data Mappings", "Data & Integration", count_table("data_mappings"), true});
-    stats.append({"mcp_servers", "MCP Servers", "Data & Integration", count_table("mcp_servers"), true});
+    stats.append({"data_sources", "Data Sources", "Data & Integration", count_table("data_sources")});
+    stats.append({"data_mappings", "Data Mappings", "Data & Integration", count_table("data_mappings")});
+    stats.append({"mcp_servers", "MCP Servers", "Data & Integration", count_table("mcp_servers")});
 
     // --- Dashboard ---
-    stats.append({"dashboard_layouts", "Dashboard Layouts", "Dashboard", count_table("dashboard_layouts"), true});
+    stats.append({"dashboard_layouts", "Dashboard Layouts", "Dashboard", count_table("dashboard_layouts")});
 
     // --- Broker ---
-    stats.append({"instruments", "Broker Instruments", "Broker", count_table("instruments"), true});
+    stats.append({"instruments", "Broker Instruments", "Broker", count_table("instruments")});
 
     // --- Settings & Credentials ---
-    stats.append({"settings", "App Settings", "Settings & Credentials", count_table("settings"), true});
-    stats.append({"credentials", "Stored Credentials", "Settings & Credentials", count_table("credentials"), true});
-    stats.append({"kv_storage", "Key-Value Storage", "Settings & Credentials", count_table("key_value_storage"), true});
+    stats.append({"settings", "App Settings", "Settings & Credentials", count_table("settings")});
+    stats.append({"credentials", "Stored Credentials", "Settings & Credentials", count_table("credentials")});
+    stats.append({"kv_storage", "Key-Value Storage", "Settings & Credentials", count_table("key_value_storage")});
 
     return stats;
-}
-
-int StorageManager::count_for(const QString& category_id) const {
-    // Cache categories go through CacheDatabase
-    if (category_id == "cache")
-        return CacheManager::instance().entry_count();
-
-    if (category_id == "screen_state") {
-        auto& cdb = CacheDatabase::instance();
-        if (!cdb.is_open())
-            return 0;
-        auto r = cdb.execute("SELECT COUNT(*) FROM screen_state", {});
-        if (r.is_err())
-            return 0;
-        auto& q = r.value();
-        return q.next() ? q.value(0).toInt() : 0;
-    }
-
-    // Map category_id → table name
-    static const QHash<QString, QString> table_map = {
-        {"chat_sessions", "chat_sessions"},
-        {"chat_messages", "chat_messages"},
-        {"context_recordings", "recorded_contexts"},
-        {"agent_configs", "agent_configs"},
-        {"llm_configs", "llm_configs"},
-        {"llm_model_configs", "llm_model_configs"},
-        {"llm_profiles", "llm_profiles"},
-        {"news_articles", "news_articles"},
-        {"news_monitors", "news_monitors"},
-        {"rss_feeds", "user_rss_feeds"},
-        {"notes", "financial_notes"},
-        {"reports", "reports"},
-        {"portfolios", "portfolios"},
-        {"transactions", "portfolio_transactions"},
-        {"watchlists", "watchlists"},
-        {"custom_indices", "custom_indices"},
-        {"pt_portfolios", "pt_portfolios"},
-        {"pt_orders", "pt_orders"},
-        {"pt_trades", "pt_trades"},
-        {"workflows", "workflows"},
-        {"data_sources", "data_sources"},
-        {"data_mappings", "data_mappings"},
-        {"mcp_servers", "mcp_servers"},
-        {"dashboard_layouts", "dashboard_layouts"},
-        {"instruments", "instruments"},
-        {"settings", "settings"},
-        {"credentials", "credentials"},
-        {"kv_storage", "key_value_storage"},
-    };
-
-    auto it = table_map.find(category_id);
-    if (it == table_map.end())
-        return 0;
-    return count_table(*it);
 }
 
 Result<void> StorageManager::clear_category(const QString& category_id) {

@@ -35,7 +35,6 @@ class McpManager : public QObject {
     Result<void> start_server(const QString& id);
     Result<void> stop_server(const QString& id);
     Result<void> restart_server(const QString& id);
-    void start_auto_servers();
     void stop_all();
     void shutdown();
 

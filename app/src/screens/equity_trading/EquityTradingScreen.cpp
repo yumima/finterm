@@ -1013,12 +1013,6 @@ void EquityTradingScreen::on_ob_price_clicked(double price) {
     order_entry_->set_current_price(price);
 }
 
-void EquityTradingScreen::refresh_candles() {
-    auto* stream = DataStreamManager::instance().stream_for(focused_account_id_);
-    if (stream)
-        stream->fetch_candles(selected_symbol_, chart_->current_timeframe());
-}
-
 void EquityTradingScreen::async_modify_order(const QString& order_id, double qty, double price) {
     const QString acct_id = focused_account_id_;
     QPointer<EquityTradingScreen> self = this;

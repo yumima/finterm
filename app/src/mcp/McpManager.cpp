@@ -272,22 +272,6 @@ Result<void> McpManager::restart_server(const QString& id) {
     return start_server(id);
 }
 
-void McpManager::start_auto_servers() {
-    QMutexLocker lock(&mutex_);
-    QStringList to_start;
-    for (const auto& cfg : configs_) {
-        if (cfg.auto_start && cfg.enabled)
-            to_start.append(cfg.id);
-    }
-    lock.unlock();
-
-    for (const auto& id : to_start) {
-        auto r = start_server(id);
-        if (r.is_err())
-            LOG_WARN(TAG, "Auto-start failed for " + id + ": " + QString::fromStdString(r.error()));
-    }
-}
-
 void McpManager::stop_all() {
     QMutexLocker lock(&mutex_);
     QStringList ids = clients_.keys();

@@ -48,7 +48,6 @@ class PreIpoService : public QObject {
     /// need an owning snapshot.
     const QVector<pre_ipo::PrivateCompany>& companies_ref() const { return companies_; }
     pre_ipo::PrivateCompany company(const QString& id) const;
-    void toggle_watch(const QString& id);
 
     /// Add (or update) a user-defined private company. `entry` uses the curated
     /// seed schema (id, name, last_valuation_usd, sector, hq_*, founded,

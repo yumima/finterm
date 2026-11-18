@@ -113,11 +113,6 @@ void ExchangeSession::load_stored_credentials() {
     LOG_INFO(kSessionTag, "Restored stored credentials for " + exchange_id_);
 }
 
-ExchangeCredentials ExchangeSession::get_credentials() const {
-    QMutexLocker lock(&mutex_);
-    return credentials_;
-}
-
 // ── Daemon RPC helper ──────────────────────────────────────────────────────
 
 QJsonObject ExchangeSession::daemon_call(const QString& method, const QJsonObject& args, int timeout_ms) {
@@ -159,7 +154,6 @@ bool ExchangeSession::start_ws(const QString& primary_symbol, const QStringList&
     stop_ws();
 
     ws_primary_symbol_ = primary_symbol;
-    ws_all_symbols_ = all_symbols;
 
     const QString python_path = python::PythonRunner::instance().python_path();
     QString script_path;
@@ -641,11 +635,6 @@ QJsonObject ExchangeSession::set_margin_mode(const QString& symbol, const QStrin
 TickerData ExchangeSession::get_cached_price(const QString& symbol) const {
     QMutexLocker lock(&mutex_);
     return price_cache_.value(symbol);
-}
-
-QHash<QString, TickerData> ExchangeSession::snapshot_price_cache() const {
-    QMutexLocker lock(&mutex_);
-    return price_cache_;
 }
 
 } // namespace finterm::trading

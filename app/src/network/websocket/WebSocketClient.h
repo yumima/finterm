@@ -19,7 +19,6 @@ class WebSocketClient : public QObject {
     void connect_to(const QString& url);
     void disconnect();
     void send(const QString& message);
-    void send_binary(const QByteArray& data);
     bool is_connected() const;
 
   signals:

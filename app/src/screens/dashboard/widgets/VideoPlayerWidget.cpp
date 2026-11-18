@@ -2077,7 +2077,6 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     // reset it themselves.
     current_url_ = url;
     current_title_ = title;
-    pending_title_ = title;
     play_in_progress_ = true; // held until PlayingState or error/stop
     now_playing_->setText(QString(QChar(0x25B6)) + " " + title);
     set_channel_title(title);

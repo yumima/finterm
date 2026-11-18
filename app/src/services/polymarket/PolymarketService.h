@@ -25,13 +25,11 @@ class PolymarketService : public QObject {
     void fetch_markets_by_tag(const QString& tag, const QString& sort_by = "volume", int limit = 100, int offset = 0);
     void fetch_market_by_id(int id);
     void search_markets(const QString& query, int limit = 50);
-    void unified_search(const QString& query);
     void fetch_events(const QString& sort_by = "volume", int limit = 100, int offset = 0, bool closed = false);
     void fetch_event_by_id(int id);
     void fetch_related_markets(int event_id);
     void fetch_tags();
     void fetch_comments(const QString& condition_id, int limit = 50);
-    void fetch_teams(const QString& league = "");
 
     // ── CLOB API ─────────────────────────────────────────────────────────
 
@@ -44,8 +42,6 @@ class PolymarketService : public QObject {
     void fetch_trades(const QString& condition_id, int limit = 100);
     void fetch_top_holders(const QString& condition_id, int limit = 20);
     void fetch_leaderboard(int limit = 50);
-    void fetch_activity(const QString& condition_id, int limit = 50);
-    void fetch_live_volume(const QString& event_id);
     void fetch_open_interest(const QStringList& condition_ids);
 
   signals:
@@ -57,7 +53,6 @@ class PolymarketService : public QObject {
     void event_detail_ready(const Event& event);
     void related_markets_ready(const QVector<Market>& markets);
     void comments_ready(const QVector<Comment>& comments);
-    void teams_ready_list(const QVector<Team>& teams);
     void search_results_ready(const QVector<Market>& markets, const QVector<Event>& events);
 
     // CLOB
@@ -69,8 +64,6 @@ class PolymarketService : public QObject {
     void trades_ready(const QVector<Trade>& trades);
     void top_holders_ready(const QVector<TopHolder>& holders);
     void leaderboard_ready(const QVector<LeaderboardEntry>& entries);
-    void activity_ready(const QVector<Activity>& activities);
-    void live_volume_ready(const LiveVolume& vol);
     void open_interest_ready(const QVector<OpenInterest>& oi);
 
     // Errors

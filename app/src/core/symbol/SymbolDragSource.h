@@ -64,10 +64,6 @@ class SymbolDragFilter : public QObject {
 
     SymbolDragFilter(QWidget* source, RefProvider provider, SymbolGroup source_group = SymbolGroup::None);
 
-    /// The group embedded in the drag is read lazily at drag-start via this
-    /// setter — set to follow the screen's current link group.
-    void set_source_group(SymbolGroup g) { source_group_ = g; }
-
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 

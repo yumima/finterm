@@ -15,7 +15,6 @@ class DashboardToolBar : public QWidget {
     explicit DashboardToolBar(QWidget* parent = nullptr);
 
     void set_widget_count(int count);
-    void set_connected(bool connected);
 
   signals:
     void add_widget_clicked();

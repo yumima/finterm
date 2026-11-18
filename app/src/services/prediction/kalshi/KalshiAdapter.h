@@ -78,13 +78,9 @@ class KalshiAdapter : public finterm::services::prediction::PredictionExchangeAd
     /// GET /series/{series_ticker}. Result arrives on series_detail_ready.
     /// Cached per ticker — repeat calls are free.
     void fetch_series_detail(const QString& series_ticker);
-    /// Lookup a cached series fee config without refetching. Returns an
-    /// empty object if we haven't fetched this series yet.
-    QJsonObject cached_series(const QString& series_ticker) const;
     /// GET /historical/markets / candlesticks / trades.
     void fetch_historical_markets(const QString& series_ticker = QString(), int limit = 100,
                                   const QString& cursor = QString());
-    void fetch_historical_candles(const QString& ticker, int period_interval_min, qint64 start_ts, qint64 end_ts);
     void fetch_historical_trades(const QString& ticker = QString(), int limit = 100, const QString& cursor = QString());
 
     // ── Kalshi-specific trading (pass through to Python bridge) ─────────
@@ -123,7 +119,6 @@ class KalshiAdapter : public finterm::services::prediction::PredictionExchangeAd
 
   private:
     void wire();
-    void stub_unsupported(const QString& ctx);
 
     /// Run a command against prediction_kalshi.py with the stored creds
     /// merged into `extra`. Invokes `on_ok` with the parsed JSON on

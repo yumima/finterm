@@ -94,7 +94,6 @@ class GovDataProviderPanel : public QWidget {
     QString selected_dataset_;
     QJsonArray current_orgs_;
     QJsonArray current_datasets_;
-    QJsonArray current_resources_;
 };
 
 // Shared utilities — available to all gov_data panels

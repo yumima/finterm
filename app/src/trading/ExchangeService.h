@@ -53,14 +53,12 @@ class ExchangeService : public QObject {
     void watch_symbol(const QString& symbol, const QString& portfolio_id);
     void unwatch_symbol(const QString& symbol, const QString& portfolio_id);
     void start_price_feed(int interval_seconds = 5);
-    void stop_price_feed();
     bool is_feed_running() const;
 
     // WebSocket streaming (delegated to current session). Data consumers
     // subscribe to DataHub topics — these entry points are for lifecycle
     // control (start/stop/status) only.
     bool start_ws_stream(const QString& primary_symbol, const QStringList& all_symbols);
-    void stop_ws_stream();
     bool is_ws_connected() const;
     /// Process-level check — does the current session already have a running
     /// WS subprocess. Screens use this to skip re-spawning when flipping
@@ -117,7 +115,6 @@ class ExchangeService : public QObject {
     QTimer* feed_timer_ = nullptr;
     std::atomic<bool> feed_running_{false};
     std::atomic<bool> poll_in_progress_{false};
-    int feed_interval_ = 5;
 };
 
 } // namespace finterm::trading

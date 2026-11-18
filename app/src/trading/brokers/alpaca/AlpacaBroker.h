@@ -62,39 +62,12 @@ class AlpacaBroker : public IBroker {
                                                          const QString& end) override;
     ApiResponse<MarketClock> get_clock(const BrokerCredentials& creds) override;
 
-    ApiResponse<QVector<BrokerCandle>> get_latest_bars(const BrokerCredentials& creds,
-                                                       const QVector<QString>& symbols) override;
-    ApiResponse<QVector<BrokerCandle>> get_historical_bars(const BrokerCredentials& creds,
-                                                           const QVector<QString>& symbols, const QString& timeframe,
-                                                           const QString& start, const QString& end) override;
-    ApiResponse<QVector<BrokerQuote>> get_latest_quotes(const BrokerCredentials& creds,
-                                                        const QVector<QString>& symbols) override;
-    ApiResponse<QVector<BrokerTrade>> get_latest_trades(const BrokerCredentials& creds,
-                                                        const QVector<QString>& symbols) override;
-    ApiResponse<QVector<BrokerTrade>> get_historical_trades(const BrokerCredentials& creds,
-                                                            const QVector<QString>& symbols, const QString& start,
-                                                            const QString& end, int limit = 1000) override;
-    ApiResponse<QVector<BrokerAuction>> get_historical_auctions(const BrokerCredentials& creds,
-                                                                const QVector<QString>& symbols, const QString& start,
-                                                                const QString& end) override;
-    ApiResponse<QVector<BrokerMetaEntry>> get_condition_codes(const BrokerCredentials& creds, const QString& ticktype,
-                                                              const QString& tape) override;
-    ApiResponse<QVector<BrokerMetaEntry>> get_exchange_codes(const BrokerCredentials& creds,
-                                                             const QString& asset_class) override;
-
-    ApiResponse<BrokerCandle> get_latest_bar(const BrokerCredentials& creds, const QString& symbol) override;
-    ApiResponse<BrokerQuote> get_latest_quote(const BrokerCredentials& creds, const QString& symbol) override;
-    ApiResponse<BrokerTrade> get_latest_trade(const BrokerCredentials& creds, const QString& symbol) override;
-    ApiResponse<BrokerQuote> get_snapshot(const BrokerCredentials& creds, const QString& symbol) override;
     ApiResponse<QVector<BrokerTrade>> get_historical_trades_single(const BrokerCredentials& creds,
                                                                    const QString& symbol, const QString& start,
                                                                    const QString& end, int limit = 1000) override;
     ApiResponse<QVector<BrokerQuote>> get_historical_quotes_single(const BrokerCredentials& creds,
                                                                    const QString& symbol, const QString& start,
                                                                    const QString& end, int limit = 1000) override;
-    ApiResponse<QVector<BrokerAuction>> get_historical_auctions_single(const BrokerCredentials& creds,
-                                                                       const QString& symbol, const QString& start,
-                                                                       const QString& end) override;
 
   protected:
     QMap<QString, QString> auth_headers(const BrokerCredentials& creds) const override;

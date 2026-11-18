@@ -156,10 +156,6 @@ const QVector<NotificationRecord>& NotificationService::history() const {
     return history_;
 }
 
-int NotificationService::unread_count() const {
-    return unread_;
-}
-
 void NotificationService::mark_read(int id) {
     for (auto& r : history_) {
         if (r.id == id && !r.read) {

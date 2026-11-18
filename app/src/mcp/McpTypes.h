@@ -189,24 +189,6 @@ struct ToolContext {
     /// Convenience — true if cancellation hook is set AND signalled.
     bool cancelled() const { return is_cancelled && is_cancelled(); }
 
-    // Logging convenience.  Branchless when on_log is null.
-    void log_debug(const QString& msg) const {
-        if (on_log)
-            on_log(LogLevel::Debug, msg);
-    }
-    void log_info(const QString& msg) const {
-        if (on_log)
-            on_log(LogLevel::Info, msg);
-    }
-    void log_warn(const QString& msg) const {
-        if (on_log)
-            on_log(LogLevel::Warning, msg);
-    }
-    void log_error(const QString& msg) const {
-        if (on_log)
-            on_log(LogLevel::Error, msg);
-    }
-
     // Sampling / elicitation convenience.  Return an error response
     // when the callback isn't wired so the handler can surface the
     // failure to the model rather than crashing.
@@ -225,31 +207,6 @@ struct ToolContext {
         return r;
     }
 };
-
-/// Render an MCP LogLevel as the canonical lowercase string the spec
-/// uses for `notifications/message.level` (e.g. "debug", "info",
-/// "warning", "error", …).
-inline const char* log_level_str(LogLevel l) {
-    switch (l) {
-        case LogLevel::Debug:
-            return "debug";
-        case LogLevel::Info:
-            return "info";
-        case LogLevel::Notice:
-            return "notice";
-        case LogLevel::Warning:
-            return "warning";
-        case LogLevel::Error:
-            return "error";
-        case LogLevel::Critical:
-            return "critical";
-        case LogLevel::Alert:
-            return "alert";
-        case LogLevel::Emergency:
-            return "emergency";
-    }
-    return "info";
-}
 
 /// Async handler signature. The handler MUST eventually:
 ///   - call promise->addResult(result) followed by promise->finish(); or
@@ -434,39 +391,6 @@ struct ToolDef {
     /// should prompt the user; the AuthChecker is expected to surface a
     /// confirmation dialog when this is set.
     bool is_destructive = false;
-
-    /// Old names this tool used to have. Lets us rename tools without
-    /// breaking existing LLM workflows / saved chats — McpProvider's name
-    /// resolver tries each alias if the canonical name doesn't match.
-    QStringList legacy_aliases;
-};
-
-// ============================================================================
-// Tool Filter — catalogue subsetting (used by format_tools_for_openai)
-// ============================================================================
-//
-// Returning all enabled tools on every LLM turn is expensive (schema
-// bloat + distractor tools confuse the model). ToolFilter lets callers
-// scope the catalogue per-call.
-
-struct ToolFilter {
-    /// Inclusive — only tools whose category matches one of these are kept.
-    /// Empty = no inclusion filter (all categories pass).
-    QStringList categories;
-
-    /// Exclusive — drop tools whose category matches one of these. Applied
-    /// AFTER `categories` inclusion.
-    QStringList exclude_categories;
-
-    /// Regex include filter on tool name. Empty = no include filter.
-    QStringList name_patterns;
-
-    /// Regex exclude filter on tool name. Applied after include.
-    QStringList exclude_name_patterns;
-
-    /// Hard cap on returned tool count. 0 = no cap. Truncation runs after
-    /// all other filters, in registration order.
-    int max_tools = 0;
 };
 
 // ============================================================================
@@ -617,7 +541,7 @@ struct UnifiedTool {
     QString description;
     QJsonObject input_schema;
     bool is_internal = false;
-    QString category = {};       // enables ToolFilter category include/exclude
+    QString category = {};
     bool is_destructive = false; // surfaces mutating tools to UI / RAG
 };
 

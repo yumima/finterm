@@ -220,22 +220,11 @@ void MarketPanel::open_cols_dropdown() {
     menu->deleteLater();
 }
 
-void MarketPanel::update_config(const MarketPanelConfig& cfg) {
-    config_ = cfg;
-    if (config_.column_order.isEmpty())
-        config_.column_order = default_market_columns();
-    title_label_->setText(cfg.title.toUpper());
-    setup_table_columns();
-    if (has_data_)
-        populate(cached_quotes_);
-}
-
 // ---------------------------------------------------------------------------
 // Data population
 // ---------------------------------------------------------------------------
 
 void MarketPanel::refresh() {
-    fetch_failed_ = false;
     title_label_->setText(config_.title.toUpper() + "  ...");
 
     if (!has_data_)

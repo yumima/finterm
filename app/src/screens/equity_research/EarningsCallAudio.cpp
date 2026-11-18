@@ -103,7 +103,6 @@ void EarningsCallAudio::toggle() {
 
 void EarningsCallAudio::stop() {
     active_ = false;
-    resolving_ = false;
     stall_timer_->stop();
     if (proc_) {
         // Its `finished` handler (which would delete it) is disconnected, so
@@ -134,12 +133,10 @@ void EarningsCallAudio::resolve(bool refresh_session) {
     }
     if (proc_)
         return; // one resolve at a time
-    resolving_ = !refresh_session;
     auto* proc = new QProcess(this);
     proc_ = proc;
     connect(proc, &QProcess::finished, this, [this, proc, refresh_session](int code, QProcess::ExitStatus) {
         proc->deleteLater();
-        resolving_ = false;
         if (!active_)
             return;
         const QString out = QString::fromUtf8(proc->readAllStandardOutput()).trimmed().split('\n').value(0).trimmed();

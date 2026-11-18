@@ -727,7 +727,6 @@ void MarketsScreen::refresh_panels() {
                     return;
                 refresh_timeout_->stop();
                 refresh_in_progress_ = false;
-                last_refresh_time_ = QDateTime::currentDateTime();
                 counter->deleteLater();
                 if (status_label_) {
                     status_label_->setText("● READY");

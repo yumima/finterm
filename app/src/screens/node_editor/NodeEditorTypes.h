@@ -16,9 +16,6 @@ enum class PortDirection { Input, Output };
 
 enum class ConnectionType {
     Main,
-    AiLanguageModel,
-    AiMemory,
-    AiTool,
     MarketData,
     PortfolioData,
     PriceData,

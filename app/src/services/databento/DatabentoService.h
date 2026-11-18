@@ -109,9 +109,7 @@ class DatabentoService : public QObject {
 
     // API key management (stored in SecureStorage)
     bool has_api_key() const;
-    void set_api_key(const QString& key);
     QString api_key() const;
-    void clear_api_key();
 
     // Test connection
     void test_connection(); // emits connection_tested(bool ok, QString msg)
@@ -151,14 +149,10 @@ class DatabentoService : public QObject {
     void fetch_crack_spread();
     void fetch_stress_test(const QStringList& symbols);
     void fetch_yield_curve();
-    void fetch_forward_rate();
-    void fetch_rate_path();
-    void fetch_fx_forward_points();
 
     // Cache access (returns last fetched data, empty if never fetched)
     const DatabentoOhlcvResult& last_ohlcv() const { return cached_ohlcv_; }
     const DatabentoVolSurfaceResult& last_vol() const { return cached_vol_; }
-    const DatabentoFuturesResult& last_futures() const { return cached_futures_; }
     QDateTime last_fetch_time() const { return last_fetch_time_; }
 
   signals:
@@ -196,7 +190,6 @@ class DatabentoService : public QObject {
     QHash<QString, QList<DbPublisher>> cached_publishers_;
     QHash<QString, DbDatasetRange> cached_ranges_;
 
-    static constexpr const char* SECURE_KEY = "databento.api_key";
     static constexpr const char* SCRIPT = "databento_provider.py";
 };
 

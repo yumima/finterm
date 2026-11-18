@@ -102,9 +102,7 @@ class MarketsScreen : public QWidget {
     bool auto_update_ = true;
     int update_interval_ms_ = 600000;
     int pending_refreshes_ = 0;
-    QDateTime last_refresh_time_;
 
-    static constexpr int kMinRefreshIntervalSec = 300;
     static constexpr int kRefreshTimeoutMs = 10000;
     static constexpr int kNumColumns = 3;
 };

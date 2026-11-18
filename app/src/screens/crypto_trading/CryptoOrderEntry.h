@@ -19,7 +19,6 @@ class CryptoOrderEntry : public QWidget {
     void set_current_price(double price);
     void set_mode(bool is_paper);
     void set_symbol(const QString& symbol);
-    void set_futures_mode(bool is_futures); // show/hide leverage + margin controls
 
   signals:
     void order_submitted(const QString& side, const QString& order_type, double quantity, double price,
@@ -71,7 +70,6 @@ class CryptoOrderEntry : public QWidget {
     double current_price_ = 0;
     bool is_paper_ = true;
     bool is_buy_side_ = true;
-    bool is_futures_ = false;
     QString current_symbol_ = "BTC/USDT";
 };
 

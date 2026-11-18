@@ -330,15 +330,12 @@ QWidget* MaritimeScreen::build_left_panel() {
     grid->addWidget(sd, 0, 1);
 
     auto* sr = make_stat("ROUTES", dash, ui::colors::INFO);
-    stat_routes_ = sr->findChild<QLabel*>("ROUTES");
     grid->addWidget(sr, 1, 0);
 
     auto* stv = make_stat("TRADE VOL", dash, ui::colors::POSITIVE);
-    stat_volume_ = stv->findChild<QLabel*>("TRADE VOL");
     grid->addWidget(stv, 1, 1);
 
     auto* sp = make_stat("PORTS", dash, ui::colors::WARNING);
-    stat_ports_ = sp->findChild<QLabel*>("PORTS");
     grid->addWidget(sp, 2, 0);
 
     grid->addWidget(make_stat("SATELLITES", dash, ui::colors::AMBER), 2, 1);

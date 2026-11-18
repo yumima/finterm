@@ -112,23 +112,6 @@ inline const QStringList& heading_vocabulary() {
     return kVocab;
 }
 
-/// The category menu offered to the model, in editorial order.
-///
-/// Deliberately NOT category_names(): that order is keyword precedence, chosen
-/// so "bitcoin miner quarterly results" resolves to EARNINGS rather than
-/// CRYPTO. The prompt asks for at most six headings out of eight and position
-/// in a list measurably sways which the model reaches for, so offering them in
-/// precedence order would quietly bias briefs toward EARNINGS and CRYPTO over
-/// MARKETS and TECH. The two orders answer different questions and are kept
-/// apart; a test pins that they hold the same names.
-inline const QStringList& prompt_menu() {
-    static const QStringList kMenu = {QStringLiteral("MARKETS"),     QStringLiteral("TECH"),
-                                      QStringLiteral("GEOPOLITICS"), QStringLiteral("ENERGY"),
-                                      QStringLiteral("ECONOMIC"),    QStringLiteral("CRYPTO"),
-                                      QStringLiteral("DEFENSE"),     QStringLiteral("EARNINGS")};
-    return kMenu;
-}
-
 /// The category a piece of text belongs to, or an empty string if no keyword
 /// matched. `lowered` must already be lowercased — callers classify the same
 /// string they use for every other keyword test, and lowering it here would

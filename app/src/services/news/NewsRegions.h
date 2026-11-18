@@ -55,16 +55,6 @@ inline const RegionPill* find_pill(const QString& code) {
     return nullptr;
 }
 
-inline const QStringList& region_codes() {
-    static const QStringList kCodes = [] {
-        QStringList out;
-        for (const auto& p : kRegionPills)
-            out << QString::fromLatin1(p.code);
-        return out;
-    }();
-    return kCodes;
-}
-
 inline bool is_region_code(const QString& code) {
     return find_pill(code) != nullptr;
 }
@@ -400,7 +390,7 @@ inline constexpr qsizetype kSummaryLedeChars = 200;
 
 /// Whether an article belongs under a region pill.
 ///
-/// `code` is one of region_codes(). `feed_region` is the article's feed tag
+/// `code` is a kRegionPills code. `feed_region` is the article's feed tag
 /// (RSSFeed::region: "US", "CHINA", "EU", "GLOBAL", …). Anything that isn't a
 /// region code returns false.
 inline bool in_region(const QString& code, const QString& feed_region, const QString& headline,

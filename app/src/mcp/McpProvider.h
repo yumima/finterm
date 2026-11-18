@@ -21,9 +21,7 @@ class McpProvider {
 
     // ── Tool Registration ──────────────────────────────────────────────────
 
-    void register_tool(ToolDef tool);
     void register_tools(std::vector<ToolDef> tools);
-    void unregister_tool(const QString& name);
 
     // ── Tool Enable/Disable ────────────────────────────────────────────────
 
@@ -39,7 +37,6 @@ class McpProvider {
     std::vector<UnifiedTool> list_all_tools() const;
 
     std::size_t tool_count() const;
-    bool has_tool(const QString& name) const;
 
     // ── Resource Registration (MCP spec resources) ─────────────────────────
 
@@ -48,7 +45,6 @@ class McpProvider {
     /// a tool-call turn on every fetch.  See plans/ai-stack.md
     /// R8 / Track 5.
     void register_resource(Resource resource);
-    void unregister_resource(const QString& uri);
 
     /// All registered resources, ordered by uri.
     std::vector<Resource> list_resources() const;
@@ -61,15 +57,12 @@ class McpProvider {
     /// tool handlers).
     ResourceContent read_resource(const QString& uri);
 
-    bool has_resource(const QString& uri) const;
-
     // ── Prompt Registration (MCP spec prompts) ─────────────────────────────
 
     /// Register a templated prompt — user-invokable from the slash menu,
     /// expanded by the handler into chat messages.  See Track 5 / R8 and
     /// Track 7's slash-command dispatch.
     void register_prompt(Prompt prompt);
-    void unregister_prompt(const QString& name);
 
     /// All registered prompts, ordered by name.
     std::vector<Prompt> list_prompts() const;
@@ -79,8 +72,6 @@ class McpProvider {
     /// or the handler fails.  Mutex released before calling the handler
     /// (same pattern as read_resource / call_tool).
     PromptResult get_prompt(const QString& name, const QHash<QString, QString>& args);
-
-    bool has_prompt(const QString& name) const;
 
     // ── Tool Execution ─────────────────────────────────────────────────────
 
@@ -127,7 +118,6 @@ class McpProvider {
 
     void set_default_sample_handler(SampleHandler handler);
     void set_default_elicit_handler(ElicitHandler handler);
-    void set_default_log_handler(LogHandler handler);
 
     // ── LLM Integration ────────────────────────────────────────────────────
 

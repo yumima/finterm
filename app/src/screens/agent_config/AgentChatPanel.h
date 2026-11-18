@@ -56,7 +56,6 @@ class AgentChatPanel : public QWidget {
     // Header
     QLabel* hdr_model_lbl_ = nullptr;  // active model pill
     QLabel* hdr_status_lbl_ = nullptr; // Ready / Streaming…
-    QLabel* hdr_agent_lbl_ = nullptr;  // selected agent badge
     QComboBox* agent_selector_ = nullptr;
     QPushButton* route_toggle_ = nullptr;
     QPushButton* clear_btn_ = nullptr;

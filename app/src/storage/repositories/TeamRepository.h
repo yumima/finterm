@@ -47,7 +47,6 @@ class TeamRepository {
 
     Result<QVector<TeamRow>> list_all();
     Result<std::optional<TeamRow>> get(const QString& id);
-    Result<std::optional<TeamRow>> get_by_name(const QString& name);
 
     TeamRepository(const TeamRepository&) = delete;
     TeamRepository& operator=(const TeamRepository&) = delete;

@@ -52,8 +52,6 @@ QVariant NewsFeedModel::data(const QModelIndex& index, int role) const {
                 return article.lang;
             case HasGeoRole:
                 return geo_article_ids_.contains(article.id);
-            case PulsePhaseRole:
-                return (!seen_ids_.contains(article.id)) ? pulse_phase_ : -1;
             // Pre-formatted display strings — no allocation in paint()
             case FormattedSourceRole:
                 return row < formatted_rows_.size() ? formatted_rows_[row].source : QVariant{};
@@ -196,18 +194,6 @@ void NewsFeedModel::set_monitor_matches(const QMap<QString, QVector<services::Ne
     emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {MonitorColorRole});
 }
 
-void NewsFeedModel::mark_all_seen() {
-    if (view_mode_ == "WIRE") {
-        for (const auto& a : std::as_const(articles_))
-            seen_ids_.insert(a.id);
-    } else {
-        for (const auto& c : std::as_const(clusters_))
-            seen_ids_.insert(c.lead_article.id);
-    }
-    unseen_count_ = 0;
-    emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {IsNewRole});
-}
-
 void NewsFeedModel::mark_seen(const QString& article_id) {
     if (seen_ids_.contains(article_id))
         return;
@@ -216,7 +202,7 @@ void NewsFeedModel::mark_seen(const QString& article_id) {
         --unseen_count_;
     const auto idx = index_for_article(article_id);
     if (idx.isValid())
-        emit dataChanged(idx, idx, {IsNewRole, PulsePhaseRole});
+        emit dataChanged(idx, idx, {IsNewRole});
 }
 
 int NewsFeedModel::unseen_count() const {
@@ -258,23 +244,6 @@ services::NewsCluster NewsFeedModel::cluster_at(int row) const {
 QString NewsFeedModel::monitor_color_for(const QString& article_id) const {
     auto it = article_monitor_color_.find(article_id);
     return it != article_monitor_color_.end() ? it.value() : QString();
-}
-
-void NewsFeedModel::set_geo_articles(const QSet<QString>& geolocated_ids) {
-    geo_article_ids_ = geolocated_ids;
-    emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {HasGeoRole});
-}
-
-void NewsFeedModel::advance_pulse() {
-    pulse_phase_ = (pulse_phase_ + 1) % 4;
-    // Only emit for unseen articles (optimization)
-    for (int i = 0; i < rowCount(); ++i) {
-        QString aid = (view_mode_ == "WIRE" && i < articles_.size())
-                          ? articles_[i].id
-                          : (i < clusters_.size() ? clusters_[i].lead_article.id : QString());
-        if (!aid.isEmpty() && !seen_ids_.contains(aid))
-            emit dataChanged(index(i, 0), index(i, 0), {PulsePhaseRole});
-    }
 }
 
 } // namespace finterm::screens

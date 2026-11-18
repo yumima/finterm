@@ -71,15 +71,4 @@ Result<QVector<AgentFeedbackRow>> AgentFeedbackRepository::list_by_request(const
     return Result<QVector<AgentFeedbackRow>>::ok(std::move(rows));
 }
 
-Result<int> AgentFeedbackRepository::count_by_verdict(const QString& verdict) {
-    auto r = Database::instance().execute(QStringLiteral("SELECT COUNT(*) FROM agent_feedback WHERE verdict = ?"),
-                                          {verdict});
-    if (r.is_err())
-        return Result<int>::err(r.error());
-    auto& q = r.value();
-    if (q.next())
-        return Result<int>::ok(q.value(0).toInt());
-    return Result<int>::ok(0);
-}
-
 } // namespace finterm

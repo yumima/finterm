@@ -64,7 +64,6 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
     void on_ob_price_clicked(double price);
     void on_import_holdings_requested(const QVector<trading::BrokerHolding>& holdings);
 
-    void refresh_candles();
     void update_clock();
 
     // DataStreamManager signal handlers

@@ -48,7 +48,7 @@ class ConfirmDeleteDialog : public QDialog {
 class AddAssetDialog : public QDialog {
     Q_OBJECT
   public:
-    explicit AddAssetDialog(QWidget* parent = nullptr, const QString& prefill_symbol = {});
+    explicit AddAssetDialog(QWidget* parent = nullptr);
 
     QString symbol() const;
     double quantity() const;
@@ -135,8 +135,6 @@ class SectorMappingDialog : public QDialog {
     Q_OBJECT
   public:
     explicit SectorMappingDialog(const QVector<portfolio::HoldingWithQuote>& holdings, QWidget* parent = nullptr);
-
-    QHash<QString, QString> sector_map() const;
 
   private:
     QHash<QString, QComboBox*> combos_;

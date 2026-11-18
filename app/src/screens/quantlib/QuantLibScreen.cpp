@@ -446,14 +446,6 @@ void QuantLibScreen::on_module_changed(int index) {
     ScreenStateManager::instance().notify_changed(this);
 }
 
-void QuantLibScreen::on_panel_changed(QListWidgetItem* item) {
-    if (!item)
-        return;
-    active_panel_ = item->text();
-    status_panel_->setText(active_panel_);
-    ScreenStateManager::instance().notify_changed(this);
-}
-
 void QuantLibScreen::on_endpoint_changed(int index) {
     if (index < 0)
         return;
@@ -1388,7 +1380,6 @@ void QuantLibScreen::restore_state(const QVariantMap& state) {
         auto items = module_tree_->findItems(panel, Qt::MatchExactly | Qt::MatchRecursive);
         if (!items.isEmpty()) {
             module_tree_->setCurrentItem(items.first());
-            // on_panel_changed expects QListWidgetItem* — extract text directly
             active_panel_ = items.first()->text(0);
             status_panel_->setText(active_panel_);
             ScreenStateManager::instance().notify_changed(this);

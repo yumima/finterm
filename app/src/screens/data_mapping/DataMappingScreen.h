@@ -80,7 +80,6 @@ class DataMappingScreen : public QWidget, public IStatefulScreen {
     void update_right_panel();
     void populate_json_tree(const QJsonValue& val, QTreeWidgetItem* parent, const QString& key);
     void populate_mapping_list();
-    void refresh_saved_mappings();
     void load_mappings_from_db();
     void build_mapping_config(QJsonObject& config);
 

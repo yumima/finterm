@@ -1198,9 +1198,6 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_screen("help", new screens::HelpScreen);
 }
 
-void MainWindow::setup_app_screens() {}
-void MainWindow::setup_navigation() {}
-
 void MainWindow::on_auth_state_changed() {
     auto& auth = auth::AuthManager::instance();
 
@@ -1347,14 +1344,6 @@ void MainWindow::show_info_terms() {
 }
 void MainWindow::show_info_privacy() {
     info_stack_->setCurrentIndex(2);
-    enter_auth_stack(info_stack_);
-}
-void MainWindow::show_info_trademarks() {
-    info_stack_->setCurrentIndex(3);
-    enter_auth_stack(info_stack_);
-}
-void MainWindow::show_info_help() {
-    info_stack_->setCurrentIndex(4);
     enter_auth_stack(info_stack_);
 }
 

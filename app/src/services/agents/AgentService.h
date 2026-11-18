@@ -142,11 +142,6 @@ class AgentService : public QObject, public finterm::datahub::Producer {
     static constexpr int kToolsCacheTtlSec = 10 * 60;
     static constexpr int kModelsCacheTtlSec = 10 * 60;
     static constexpr int kSysInfoCacheTtlSec = 10 * 60;
-    static constexpr int kResponseCacheTtlSec = 2 * 60;
-
-    QString make_cache_key(const QString& action, const QJsonObject& params) const;
-    bool get_cached_response(const QString& key, QJsonObject& out) const;
-    void set_cached_response(const QString& key, const QJsonObject& data);
 
     // ── Hub publishing helpers ──────────────────────────────────────────────
     // AgentService is a push-only producer — it publishes run outputs, stream
@@ -157,7 +152,6 @@ class AgentService : public QObject, public finterm::datahub::Producer {
     void publish_agent_token(const QString& run_id, const QString& token);
     void publish_agent_status(const QString& run_id, const QString& status);
     void publish_routing_result(const RoutingResult& r);
-    void publish_agent_error(const QString& context, const QString& message);
     bool hub_registered_ = false;
 };
 

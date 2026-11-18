@@ -468,32 +468,6 @@ void PolymarketService::search_markets(const QString& query, int limit) {
         "SearchMarkets");
 }
 
-void PolymarketService::unified_search(const QString& query) {
-    // Use the Gamma search endpoint that returns markets and events
-    QString path = "/search?query=" + QUrl::toPercentEncoding(query) + "&limit=20";
-
-    get_gamma(
-        path,
-        [this](const QJsonDocument& doc) {
-            QVector<Market> markets;
-            QVector<Event> events;
-
-            if (doc.isObject()) {
-                auto obj = doc.object();
-                for (const auto& v : obj["markets"].toArray())
-                    markets.append(Market::from_json(v.toObject()));
-                for (const auto& v : obj["events"].toArray())
-                    events.append(Event::from_json(v.toObject()));
-            } else if (doc.isArray()) {
-                // Fallback: treat as market array
-                for (const auto& v : doc.array())
-                    markets.append(Market::from_json(v.toObject()));
-            }
-            emit search_results_ready(markets, events);
-        },
-        "UnifiedSearch");
-}
-
 void PolymarketService::fetch_events(const QString& sort_by, int limit, int offset, bool closed) {
     const QString cache_key =
         QString("polymarket:events:%1:%2:%3:%4").arg(sort_by).arg(limit).arg(offset).arg(closed ? 1 : 0);
@@ -614,24 +588,6 @@ void PolymarketService::fetch_comments(const QString& condition_id, int limit) {
             emit comments_ready(result);
         },
         "FetchComments");
-}
-
-void PolymarketService::fetch_teams(const QString& league) {
-    QString path = "/teams?limit=50";
-    if (!league.isEmpty())
-        path += "&league=" + QUrl::toPercentEncoding(league);
-
-    get_gamma(
-        path,
-        [this](const QJsonDocument& doc) {
-            QVector<Team> result;
-            QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
-            for (const auto& v : arr)
-                result.append(Team::from_json(v.toObject()));
-            LOG_INFO("Polymarket", "Fetched " + QString::number(result.size()) + " teams");
-            emit teams_ready_list(result);
-        },
-        "FetchTeams");
 }
 
 // ── CLOB API ─────────────────────────────────────────────────────────────────
@@ -793,37 +749,6 @@ void PolymarketService::fetch_leaderboard(int limit) {
             emit leaderboard_ready(result);
         },
         "FetchLeaderboard");
-}
-
-void PolymarketService::fetch_activity(const QString& condition_id, int limit) {
-    QString path = "/activity?market=" + condition_id + "&limit=" + QString::number(limit);
-
-    get_data(
-        path,
-        [this](const QJsonDocument& doc) {
-            QVector<Activity> result;
-            QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
-            if (arr.isEmpty() && doc.isObject() && doc.object().contains("data"))
-                arr = doc.object()["data"].toArray();
-            for (const auto& v : arr)
-                result.append(Activity::from_json(v.toObject()));
-            LOG_INFO("Polymarket", "Fetched " + QString::number(result.size()) + " activities");
-            emit activity_ready(result);
-        },
-        "FetchActivity");
-}
-
-void PolymarketService::fetch_live_volume(const QString& event_id) {
-    QString path = "/live-volume?event_id=" + event_id;
-
-    get_data(
-        path,
-        [this](const QJsonDocument& doc) {
-            if (doc.isObject()) {
-                emit live_volume_ready(LiveVolume::from_json(doc.object()));
-            }
-        },
-        "FetchLiveVolume");
 }
 
 void PolymarketService::fetch_open_interest(const QStringList& condition_ids) {

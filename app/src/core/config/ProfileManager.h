@@ -29,9 +29,6 @@ class ProfileManager {
     /// Returns the active profile name (default: "default").
     QString active() const;
 
-    /// Returns true if a non-default profile is active.
-    bool is_custom_profile() const;
-
     /// Returns all known profile names from the manifest.
     QStringList list_profiles() const;
 
@@ -48,10 +45,6 @@ class ProfileManager {
     QString profile_root() const;
     /// Root of any profile by name (default → AppPaths::root()).
     QString profile_root_for(const QString& name) const;
-
-    /// QSettings group prefix for the active profile — used by AppConfig
-    /// to namespace per-profile settings under a shared Registry key.
-    QString settings_group() const;
 
     /// SecureStorage key prefix — credentials are keyed as "profiles/<name>/<key>"
     /// so different profiles never share credential entries.

@@ -27,9 +27,6 @@ class MigrationRunner {
     /// Apply all pending migrations in order.
     Result<void> run();
 
-    /// Current applied schema version (0 if none).
-    int current_version() const;
-
     /// Register a migration (called at static-init time by each v00N file).
     static void register_migration(Migration m);
 

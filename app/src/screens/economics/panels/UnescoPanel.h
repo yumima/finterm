@@ -25,7 +25,6 @@ class UnescoPanel : public EconPanelBase {
     void on_result(const QString& request_id, const services::EconomicsResult& result) override;
 
   private:
-    void load_indicators();
     void on_theme_changed(int index);
     void on_indicator_filter(const QString& text);
 
@@ -42,7 +41,6 @@ class UnescoPanel : public EconPanelBase {
         QString code;
     };
     QList<IndicatorDef> current_indicators_;
-    bool indicators_loaded_ = false;
 };
 
 } // namespace finterm::screens

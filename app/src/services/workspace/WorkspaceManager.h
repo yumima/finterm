@@ -17,7 +17,7 @@ class ScreenRouter;
 /// Central workspace service — singleton QObject on the UI thread.
 ///
 /// Lifecycle:
-///   MainWindow creates it after setup_app_screens().
+///   MainWindow wires it up via set_main_window() during startup.
 ///   load_last_workspace() is called after auth resolves.
 ///   save_workspace() is called in closeEvent().
 class WorkspaceManager : public QObject {
@@ -27,11 +27,9 @@ class WorkspaceManager : public QObject {
 
     /// Register a window/router. Multiple windows supported (multi-window mode).
     void set_main_window(QMainWindow* w);
-    void set_router(ScreenRouter* r);
 
     /// Unregister a closing window/router to prevent dangling pointers.
     void remove_window(QMainWindow* w);
-    void remove_router(ScreenRouter* r);
 
     // ── Screen participation ──────────────────────────────────────────────────
 
@@ -65,12 +63,6 @@ class WorkspaceManager : public QObject {
     bool has_current_workspace() const { return current_workspace_.has_value(); }
 
     QString current_workspace_name() const;
-
-    QString current_workspace_path() const;
-
-  public slots:
-    /// Connected to ScreenRouter::screen_changed — delivers pending states.
-    void on_screen_changed(const QString& screen_id);
 
   signals:
     void workspace_loaded(const WorkspaceDef& ws);

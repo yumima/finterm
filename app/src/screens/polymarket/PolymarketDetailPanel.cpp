@@ -822,10 +822,6 @@ void PolymarketDetailPanel::set_related_markets(const QVector<PredictionMarket>&
     vl->addStretch(1);
 }
 
-void PolymarketDetailPanel::set_open_interest(double oi) {
-    oi_label_->setText(presentation_.format_volume(oi));
-}
-
 void PolymarketDetailPanel::set_series_tooltip(const QString& tooltip) {
     if (question_label_)
         question_label_->setToolTip(tooltip);

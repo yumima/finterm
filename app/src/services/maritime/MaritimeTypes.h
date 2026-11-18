@@ -34,8 +34,6 @@ struct TradeRoute {
     QString value;  // e.g. "$45B"
     QString status; // active, delayed, critical
     int vessels = 0;
-    double start_lat = 0, start_lng = 0;
-    double end_lat = 0, end_lng = 0;
 };
 
 inline QColor route_status_color(const QString& status) {
@@ -49,13 +47,6 @@ inline QColor route_status_color(const QString& status) {
 }
 
 // ── Intelligence stats ──────────────────────────────────────────────────────
-
-struct IntelligenceData {
-    QString threat_level; // low, medium, high, critical
-    int active_vessels = 0;
-    int monitored_routes = 0; // 0 = unknown (no data source)
-    QString trade_volume;     // empty = unavailable
-};
 
 inline QColor threat_color(const QString& level) {
     if (level == "critical")

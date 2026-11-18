@@ -28,7 +28,6 @@ class AIQuantLabService : public QObject {
 
     // ── RL Trading ──────────────────────────────────────────────────────────
     void train_rl_agent(const QJsonObject& params);
-    void evaluate_rl_agent(const QJsonObject& params);
 
     // ── GS Quant ────────────────────────────────────────────────────────────
     void gs_risk_metrics(const QJsonObject& params);
@@ -40,13 +39,7 @@ class AIQuantLabService : public QObject {
     void gs_statistics(const QJsonObject& params);
 
     // ── CFA Quant ───────────────────────────────────────────────────────────
-    void cfa_trend_analysis(const QJsonObject& params);
     void cfa_stationarity_test(const QJsonObject& params);
-    void cfa_arima(const QJsonObject& params);
-    void cfa_ml_prediction(const QJsonObject& params);
-    void cfa_pattern_discovery(const QJsonObject& params);
-    void cfa_bootstrap(const QJsonObject& params);
-    void cfa_data_quality(const QJsonObject& params);
 
     // ── Deep Agent (LangGraph multi-agent) ──────────────────────────────────
     void run_deep_agent(const QJsonObject& params);
@@ -56,19 +49,14 @@ class AIQuantLabService : public QObject {
     void rd_agent_start_factor_mining(const QJsonObject& params);
     void rd_agent_start_model_optimization(const QJsonObject& params);
     void rd_agent_start_quant_research(const QJsonObject& params);
-    void rd_agent_get_task_status(const QString& task_id);
     void rd_agent_get_discovered_factors(const QString& task_id);
-    void rd_agent_get_optimized_model(const QString& task_id);
     void rd_agent_list_tasks(const QString& status_filter = {});
     void rd_agent_stop_task(const QString& task_id);
     void rd_agent_resume_task(const QString& task_id, const QJsonObject& config = {});
     void rd_agent_start_ui();
     void rd_agent_start_mcp_server(int port = 18765);
-    void rd_agent_mcp_status();
 
     // ── Advanced ────────────────────────────────────────────────────────────
-    void list_advanced_models();
-    void create_advanced_model(const QJsonObject& params);
     void train_advanced_model(const QJsonObject& params);
 
     // ── Factor Discovery ────────────────────────────────────────────────────
@@ -132,7 +120,6 @@ class AIQuantLabService : public QObject {
     // ── Strategy Builder ────────────────────────────────────────────────────
     void strategy_create(const QString& type, const QJsonObject& params);
     void strategy_portfolio_metrics(const QJsonObject& params);
-    void strategy_list();
 
     // ── Data Processors ─────────────────────────────────────────────────────
     void dataproc_list_processors();

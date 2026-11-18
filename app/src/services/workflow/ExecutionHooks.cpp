@@ -68,10 +68,6 @@ void ExecutionHooks::emit_workflow_end(const QString& workflow_id, bool success,
     emit_event({HookEvent::WorkflowEnd, workflow_id, {}, {}, success, {}, duration_ms, {}});
 }
 
-void ExecutionHooks::emit_workflow_error(const QString& workflow_id, const QString& error) {
-    emit_event({HookEvent::WorkflowError, workflow_id, {}, {}, false, error, 0, {}});
-}
-
 void ExecutionHooks::emit_node_start(const QString& workflow_id, const QString& node_id, const QString& node_type) {
     emit_event({HookEvent::NodeStart, workflow_id, node_id, node_type, true, {}, 0, {}});
 }

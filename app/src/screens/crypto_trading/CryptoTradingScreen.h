@@ -60,7 +60,6 @@ class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     void refresh_portfolio();
     void refresh_watchlist();
     void refresh_market_info();
-    void refresh_candles();
     void refresh_live_data();
     void update_clock();
 
@@ -76,8 +75,6 @@ class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     void async_fetch_live_orders();
     void async_fetch_live_balance();
     void async_fetch_my_trades();
-    void async_fetch_trading_fees();
-    void async_fetch_mark_price();
     void async_set_leverage(int leverage);
     void async_set_margin_mode(const QString& mode);
 

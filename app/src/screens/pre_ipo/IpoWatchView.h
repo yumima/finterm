@@ -154,7 +154,6 @@ class IpoWatchView : public QWidget {
         QString deal_size;    // display string ($170M / $1.2B)
         double deal_size_dollars = 0;
         QString bookrunner; // Nasdaq's feed carries none; kept for search
-        QStringList all_bookrunners;
         QString status; // "upcoming" | "filed" | "priced" | "withdrawn"
         bool spac = false;
         // EDGAR (enrich pass)
@@ -434,9 +433,7 @@ class IpoWatchView : public QWidget {
     /// Bare magnitude for quantities that are NOT money (share counts).
     /// Passing a share count to format_money prefixes it with '$'.
     static QString format_count(double n);
-    static QString format_deal_size(const QString& price_range, const QString& shares);
     static double parse_price_mid(const QString& price_range, bool* ok = nullptr);
-    static double parse_shares(const QString& shares);
 
     // ── State ───────────────────────────────────────────────────────────────
     QVector<Entry> entries_;

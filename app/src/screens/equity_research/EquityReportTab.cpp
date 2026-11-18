@@ -193,7 +193,6 @@ void EquityReportTab::reset(const QString& symbol) {
     narrative_model_.clear();
     narrative_written_at_ = {};
     narrative_problem_.clear();
-    rendered_width_ = 0;
     view_->images.clear();
     view_->clear();
 }
@@ -723,7 +722,6 @@ void EquityReportTab::render() {
         return;
     }
     const int width = std::clamp(view_->viewport()->width() - 2 * 20 - 4, kMinWidth, kMaxWidth);
-    rendered_width_ = width;
     QHash<QString, QImage> images;
     const QString html = build_report_html(doc_, Palette::from_theme(), width, devicePixelRatioF(),
                                            [&images](const QString& id, const QImage& img) {

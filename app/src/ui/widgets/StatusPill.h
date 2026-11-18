@@ -50,7 +50,6 @@ class StatusPill : public QWidget {
     void set_loading(const QString& message = QStringLiteral("loading…"));
     void set_stale(const QString& message);
     void set_error(const QString& message, std::function<void()> on_retry = {});
-    void set_empty(const QString& message);
 
   signals:
     /// Emitted when the user clicks the retry button. Most callers will

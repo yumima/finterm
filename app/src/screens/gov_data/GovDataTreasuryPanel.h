@@ -56,7 +56,6 @@ class GovDataTreasuryPanel : public QWidget {
     QStackedWidget* content_stack_ = nullptr;
     QTableWidget* prices_table_ = nullptr;
     QTableWidget* auctions_table_ = nullptr;
-    QWidget* summary_widget_ = nullptr;
     QLabel* status_label_ = nullptr;
 
     // Summary labels

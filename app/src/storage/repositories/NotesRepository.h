@@ -22,15 +22,6 @@ struct FinancialNote {
     int word_count = 0;
 };
 
-struct NoteTemplate {
-    int id = 0;
-    QString name;
-    QString description;
-    QString content;
-    QString category;
-    QString created_at;
-};
-
 class NotesRepository : public BaseRepository<FinancialNote> {
   public:
     static NotesRepository& instance();
@@ -46,14 +37,9 @@ class NotesRepository : public BaseRepository<FinancialNote> {
     Result<void> toggle_favorite(int id);
     Result<void> toggle_archive(int id);
 
-    // Templates
-    Result<QVector<NoteTemplate>> list_templates();
-    Result<qint64> create_template(const NoteTemplate& t);
-
   private:
     NotesRepository() = default;
     static FinancialNote map_note(QSqlQuery& q);
-    static NoteTemplate map_template(QSqlQuery& q);
 };
 
 } // namespace finterm

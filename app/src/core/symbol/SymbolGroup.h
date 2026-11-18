@@ -76,38 +76,6 @@ inline SymbolGroup symbol_group_from_char(QChar c) {
     }
 }
 
-/// Cycle forward through the static slot list, ignoring enabled/disabled
-/// state. GroupBadge uses the enabled-aware variant in SymbolGroupRegistry
-/// for click-cycle; this raw version exists for callers that need a stable
-/// total ordering (tests, deterministic enumeration).
-inline SymbolGroup next_symbol_group(SymbolGroup g) {
-    switch (g) {
-        case SymbolGroup::None:
-            return SymbolGroup::A;
-        case SymbolGroup::A:
-            return SymbolGroup::B;
-        case SymbolGroup::B:
-            return SymbolGroup::C;
-        case SymbolGroup::C:
-            return SymbolGroup::D;
-        case SymbolGroup::D:
-            return SymbolGroup::E;
-        case SymbolGroup::E:
-            return SymbolGroup::F;
-        case SymbolGroup::F:
-            return SymbolGroup::G;
-        case SymbolGroup::G:
-            return SymbolGroup::H;
-        case SymbolGroup::H:
-            return SymbolGroup::I;
-        case SymbolGroup::I:
-            return SymbolGroup::J;
-        case SymbolGroup::J:
-            return SymbolGroup::None;
-    }
-    return SymbolGroup::None;
-}
-
 } // namespace finterm
 
 Q_DECLARE_METATYPE(finterm::SymbolGroup)

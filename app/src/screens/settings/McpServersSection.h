@@ -43,7 +43,6 @@ class McpServersSection : public QWidget {
     void build_ui();
     QWidget* build_servers_tab();
     QWidget* build_tools_tab();
-    QWidget* build_add_server_form();
 
     void load_servers();
     void load_tools();

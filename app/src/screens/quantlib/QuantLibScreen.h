@@ -41,7 +41,6 @@ class QuantLibScreen : public QWidget, public IStatefulScreen {
 
   private slots:
     void on_module_changed(int index);
-    void on_panel_changed(QListWidgetItem* item);
     void on_endpoint_changed(int index);
     void on_execute();
 

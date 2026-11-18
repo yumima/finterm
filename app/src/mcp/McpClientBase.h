@@ -137,8 +137,6 @@ class McpClientBase : public QObject {
 
     using NotificationHandler = std::function<void(const QString& method, const QJsonObject& params)>;
 
-    void set_notification_handler(NotificationHandler handler) { notification_handler_ = std::move(handler); }
-
     // Server-initiated requests — JSON-RPC messages with both an `id`
     // and a `method` field.  Server expects a response on the same
     // connection.  Used for `sampling/createMessage` and

@@ -17,8 +17,6 @@ class SessionManager : public QObject {
     static SessionManager& instance();
 
     void start_session();
-    qint64 uptime_seconds() const;
-    QString uptime_string() const;
 
     // Tab session state
     void save_tab_state(const QString& tab_id, const QVariantMap& state);
@@ -31,7 +29,6 @@ class SessionManager : public QObject {
 
     // Track how many windows were open at last shutdown
     void save_window_count(int count);
-    int load_window_count() const;
 
     // Track the exact set of window IDs that were open at last shutdown.
     // Used on startup to restore every window (not just window 0) so that

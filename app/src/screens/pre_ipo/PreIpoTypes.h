@@ -109,10 +109,7 @@ struct SpvActivity {
 struct SecondaryQuote {
     QString source; // "Hiive50", "News"
     QDate as_of;
-    double bid_pps = 0;
-    double ask_pps = 0;
     double last_pps = 0;
-    double change_90d_pct = 0;
 };
 
 /// One day of a secondary-market model price.
@@ -165,9 +162,6 @@ struct S1Status {
     int amendment_count = 0;
     QStringList form_types;
     int days_since_first_filed = 0;
-    double offering_size_m = 0;
-    double est_price_low = 0;
-    double est_price_high = 0;
     long long shares_outstanding = 0;
     QStringList underwriters;
     QString status_label; // "Filed", "Amended", "Priced", "Withdrawn"
@@ -217,8 +211,6 @@ struct Analytics {
     /// ranking. Absent is the honest answer.
     bool ipo_readiness_available = false;
     int days_to_price_est = 0; // 0 if no S-1
-    double comp_implied_valuation_b = 0;
-    double valuation_gap_pct = 0;
     int smart_money_index = 0;        // count of crossover funds holding name
     double composite_picks_score = 0; // ranks Picks tab
 };
@@ -272,7 +264,6 @@ struct PrivateCompany {
     bool form_d_rounds_complete = true;
     double cumulative_raised_m = 0;
     QStringList key_investors;
-    QStringList public_comps;
     QDate s1_filed_date;
     /// Set once SEC lists the company's shares as traded: its ticker and its
     /// first trading day (invalid when the vendor does not give one). A
@@ -294,15 +285,6 @@ struct PrivateCompany {
     S1Status s1;
     Financials fin;
     Analytics analytics;
-
-    // Legacy back-compat fields used by the old detail panel (kept until the
-    // UI is fully migrated; populated by the service from the layered data).
-    double secondary_market_price = 0;
-    QString secondary_market_source;
-    QDate secondary_market_date;
-    double implied_share_price = 0;
-    int shares_outstanding_k = 0;
-    double form_d_implied_price = 0;
 };
 
 struct FormDFiling {
@@ -321,7 +303,6 @@ struct S1Filing {
     QString cik;
     QDate filed_date;
     int amendment_count = 0;
-    double offering_size_usd = 0;
     QStringList underwriters;
     QString edgar_url;
     bool is_amendment = false;

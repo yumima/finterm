@@ -158,24 +158,6 @@ inline const char* order_type_str(OrderType t) {
     return "market";
 }
 
-inline const char* product_type_str(ProductType p) {
-    switch (p) {
-        case ProductType::Intraday:
-            return "intraday";
-        case ProductType::Delivery:
-            return "delivery";
-        case ProductType::Margin:
-            return "margin";
-        case ProductType::CoverOrder:
-            return "cover_order";
-        case ProductType::BracketOrder:
-            return "bracket_order";
-        case ProductType::MTF:
-            return "mtf";
-    }
-    return "intraday";
-}
-
 struct UnifiedOrder {
     QString symbol;
     QString exchange;
@@ -188,7 +170,6 @@ struct UnifiedOrder {
     QString validity = "DAY";
     double stop_loss = 0;
     double take_profit = 0;
-    bool amo = false;
     QString instrument_token; // broker-specific numeric token
 };
 
@@ -229,7 +210,6 @@ struct BrokerHolding {
 
 struct BrokerOrderInfo {
     QString order_id;
-    QString exchange_order_id;
     QString symbol;
     QString exchange;
     QString side;
@@ -237,7 +217,6 @@ struct BrokerOrderInfo {
     QString product_type;
     double quantity = 0;
     double price = 0;
-    double trigger_price = 0;
     double stop_price = 0;
     double filled_qty = 0;
     double avg_price = 0;
@@ -265,7 +244,6 @@ struct BrokerQuote {
     // and the broker quote response carries OI. Default zero is safe for
     // equity / spot quotes where OI is not applicable.
     qint64 oi = 0;
-    double oi_change_pct = 0;
 };
 
 struct BrokerCandle {
@@ -315,29 +293,6 @@ struct BrokerTrade {
     QString tape; // "A"/"B"/"C"
 };
 
-// Auction print (opening/closing)
-struct BrokerAuction {
-    QString symbol;
-    QString date; // "YYYY-MM-DD"
-    // Each auction entry (can be multiple per day: opening + closing)
-    struct Entry {
-        QString timestamp;
-        QString auction_type; // "O" (opening) or "C" (closing)
-        double price = 0;
-        double size = 0;
-        QString exchange;
-        QStringList conditions;
-    };
-    QVector<Entry> entries;
-};
-
-// Exchange/condition metadata
-struct BrokerMetaEntry {
-    QString code;
-    QString description;
-    QString exchange; // for condition codes: which tape/exchange it applies to
-};
-
 // ── Margin Calculator ─────────────────────────────────────────────────────────
 
 /// Per-order margin breakdown returned by the broker's pre-trade margin API.
@@ -350,21 +305,11 @@ struct OrderMargin {
 
     // Margin components (all in account currency)
     double total = 0.0;      // total margin required
-    double var_margin = 0.0; // VaR margin (equity)
-    double elm = 0.0;        // Extreme Loss Margin
     double additional = 0.0; // additional margin (futures/options)
-    double bo_margin = 0.0;  // bracket order margin
     double cash = 0.0;       // cash component
     double pnl = 0.0;        // unrealised P&L used as collateral
     double leverage = 0.0;   // implied leverage ratio (total / (price * qty))
     QString error;           // per-order error if margin could not be calculated
-};
-
-/// Aggregate margin for a basket of orders (POST /margins/basket).
-struct BasketMargin {
-    double initial_margin = 0.0; // total margin needed to open
-    double final_margin = 0.0;   // total margin needed after netting
-    QVector<OrderMargin> orders; // per-order breakdown
 };
 
 enum class BrokerId { Alpaca, IBKR, Tradier, SaxoBank };
@@ -381,18 +326,6 @@ inline const char* broker_id_str(BrokerId id) {
             return "saxobank";
     }
     return "unknown";
-}
-
-inline std::optional<BrokerId> parse_broker_id(const QString& s) {
-    if (s == "alpaca")
-        return BrokerId::Alpaca;
-    if (s == "ibkr")
-        return BrokerId::IBKR;
-    if (s == "tradier")
-        return BrokerId::Tradier;
-    if (s == "saxobank")
-        return BrokerId::SaxoBank;
-    return std::nullopt;
 }
 
 // ============================================================================
@@ -446,18 +379,6 @@ struct MarketInfo {
     double min_cost = 0.0;
 };
 
-struct ExchangeInfo {
-    QString id;
-    QString name;
-    bool has_fetch_ticker = false;
-    bool has_fetch_order_book = false;
-    bool has_fetch_ohlcv = false;
-    bool has_create_order = false;
-    bool has_fetch_balance = false;
-    bool has_fetch_positions = false;
-    bool has_set_leverage = false;
-};
-
 struct TradeData {
     QString id;
     QString symbol;
@@ -500,25 +421,6 @@ struct ExchangeCredentials {
 // ============================================================================
 // Equity Stream Types
 // ============================================================================
-
-struct EquityTick {
-    QString symbol;
-    QString exchange;
-    double ltp = 0.0;
-    double open = 0.0;
-    double high = 0.0;
-    double low = 0.0;
-    double close = 0.0;
-    double volume = 0.0;
-    double bid = 0.0;
-    double ask = 0.0;
-    int64_t timestamp = 0;
-};
-
-struct EquitySymbol {
-    QString symbol;
-    QString exchange;
-};
 
 // ============================================================================
 // Unified Trading Types

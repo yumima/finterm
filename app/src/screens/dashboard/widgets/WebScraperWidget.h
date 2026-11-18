@@ -104,7 +104,6 @@ class WebScraperWidget : public BaseWidget {
     QPointer<QNetworkReply> pending_reply_;
     QTimer* auto_timer_ = nullptr;
     QVector<ScrapedTable> tables_;
-    QString last_format_;
 };
 
 } // namespace finterm::screens::widgets

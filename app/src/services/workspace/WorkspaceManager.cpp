@@ -39,17 +39,8 @@ void WorkspaceManager::set_main_window(QMainWindow* w) {
         windows_.append(w);
 }
 
-void WorkspaceManager::set_router(ScreenRouter* r) {
-    if (r && !routers_.contains(r))
-        routers_.append(r);
-}
-
 void WorkspaceManager::remove_window(QMainWindow* w) {
     windows_.removeAll(w);
-}
-
-void WorkspaceManager::remove_router(ScreenRouter* r) {
-    routers_.removeAll(r);
 }
 
 // ── Participant registration ──────────────────────────────────────────────────
@@ -263,27 +254,7 @@ QString WorkspaceManager::current_workspace_name() const {
     return current_workspace_.has_value() ? current_workspace_->metadata.name : QString{};
 }
 
-QString WorkspaceManager::current_workspace_path() const {
-    return current_workspace_.has_value() ? workspace_file_path(current_workspace_->metadata.id) : QString{};
-}
-
 // ── Screen changed slot ───────────────────────────────────────────────────────
-
-void WorkspaceManager::on_screen_changed(const QString& screen_id) {
-    if (!current_workspace_.has_value())
-        return;
-    current_workspace_->active_screen = screen_id;
-
-    // Track open screens
-    if (!current_workspace_->open_screens.contains(screen_id))
-        current_workspace_->open_screens.append(screen_id);
-
-    // Deliver pending state if participant is now registered
-    if (pending_states_.contains(screen_id) && participants_.contains(screen_id)) {
-        participants_[screen_id]->restore_state(pending_states_.take(screen_id));
-        LOG_DEBUG("WorkspaceManager", QString("Delivered pending state on navigate: %1").arg(screen_id));
-    }
-}
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 

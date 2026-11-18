@@ -30,10 +30,10 @@ class PolymarketOrderBlotter : public QWidget {
     /// Exchange presentation drives column-visibility (amend hidden on
     /// Polymarket), price formatting, and accent colour.
     void set_presentation(const ExchangePresentation& p);
-    /// `supports_amend` / `supports_batch_cancel` are pulled from the active
-    /// adapter's ExchangeCapabilities so the UI reflects reality. Polymarket
-    /// today answers false; Kalshi answers true.
-    void set_capabilities(bool supports_amend, bool supports_batch_cancel);
+    /// `supports_amend` is pulled from the active adapter's
+    /// ExchangeCapabilities so the UI reflects reality. Polymarket today
+    /// answers false; Kalshi answers true.
+    void set_capabilities(bool supports_amend);
 
   signals:
     /// User clicked the refresh button on a single row — refetch that order.
@@ -59,7 +59,6 @@ class PolymarketOrderBlotter : public QWidget {
     QVector<finterm::services::prediction::OpenOrder> orders_;
     ExchangePresentation presentation_ = ExchangePresentation::for_polymarket();
     bool supports_amend_ = false;
-    bool supports_batch_cancel_ = false;
 };
 
 } // namespace finterm::screens::polymarket

@@ -14,9 +14,6 @@
 
 namespace finterm::trading {
 
-/// Canonical default account id used when the caller has no explicit one.
-inline constexpr const char* kDefaultAccountId = "default";
-
 /// Build `broker:<broker_id>:<account_id>:<channel>` or, when `sym` is
 /// non-empty, `broker:<broker_id>:<account_id>:<channel>:<sym>` (used by
 /// tick channels). `account_id` falls back to `default` when empty.

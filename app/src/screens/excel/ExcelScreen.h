@@ -50,8 +50,6 @@ class ExcelScreen : public QWidget, public IStatefulScreen {
     QTabWidget* sheet_tabs_ = nullptr;
     QLabel* status_label_ = nullptr;
     QString file_name_ = "Untitled.xlsx";
-    QString file_path_;
-    int sheet_counter_ = 1;
 };
 
 } // namespace finterm::screens

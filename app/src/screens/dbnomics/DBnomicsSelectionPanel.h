@@ -95,8 +95,6 @@ class DBnomicsSelectionPanel : public QWidget {
     int series_next_offset_ = 0;
     int search_next_offset_ = 0;
 
-    QVector<services::DbnProvider> all_providers_;
-
     // ── Loading state ──────────────────────────────────────────────────────
     QWidget* prov_content_ = nullptr;
     QWidget* ds_content_ = nullptr;

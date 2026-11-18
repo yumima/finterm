@@ -25,7 +25,6 @@ class NewsMonitorService : public QObject {
 
     QVector<NewsMonitor> get_monitors() const;
     void add_monitor(const QString& label, const QStringList& keywords, const QString& color = {});
-    void update_monitor(const NewsMonitor& monitor);
     void delete_monitor(const QString& id);
     void toggle_monitor(const QString& id);
 

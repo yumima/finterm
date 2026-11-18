@@ -89,7 +89,6 @@ class NotificationService : public QObject {
 
     // ── History ───────────────────────────────────────────────────────────────
     const QVector<NotificationRecord>& history() const;
-    int unread_count() const;
     void mark_read(int id);
     void mark_all_read();
 

@@ -50,8 +50,6 @@ class LlmConfigRepository : public BaseRepository<LlmConfig> {
 
     // Custom models
     Result<QVector<LlmModelConfig>> list_models(const QString& provider = {});
-    Result<void> save_model(const LlmModelConfig& m);
-    Result<void> delete_model(const QString& id);
 
   private:
     LlmConfigRepository() = default;

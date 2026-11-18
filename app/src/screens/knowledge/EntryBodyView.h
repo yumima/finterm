@@ -21,7 +21,6 @@ class EntryBodyView : public QWidget {
 
     /// Swap the displayed entry. Pass an empty optional to show a placeholder.
     void set_entry(const KnowledgeEntry* entry);
-    const KnowledgeEntry* current_entry() const { return current_; }
 
   signals:
     /// Click on a [[id]] cross-reference inside the markdown body.

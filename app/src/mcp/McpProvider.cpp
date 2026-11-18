@@ -27,25 +27,12 @@ McpProvider& McpProvider::instance() {
 // Registration
 // ============================================================================
 
-void McpProvider::register_tool(ToolDef tool) {
-    QMutexLocker lock(&mutex_);
-    QString name = tool.name;
-    tools_.insert(name, std::move(tool));
-    ++generation_;
-}
-
 void McpProvider::register_tools(std::vector<ToolDef> tools) {
     QMutexLocker lock(&mutex_);
     for (auto& t : tools) {
         QString name = t.name;
         tools_.insert(name, std::move(t));
     }
-    ++generation_;
-}
-
-void McpProvider::unregister_tool(const QString& name) {
-    QMutexLocker lock(&mutex_);
-    tools_.remove(name);
     ++generation_;
 }
 
@@ -57,12 +44,6 @@ void McpProvider::register_resource(Resource resource) {
     QMutexLocker lock(&mutex_);
     QString uri = resource.uri;
     resources_.insert(uri, std::move(resource));
-    ++generation_;
-}
-
-void McpProvider::unregister_resource(const QString& uri) {
-    QMutexLocker lock(&mutex_);
-    resources_.remove(uri);
     ++generation_;
 }
 
@@ -108,11 +89,6 @@ ResourceContent McpProvider::read_resource(const QString& uri) {
     return r;
 }
 
-bool McpProvider::has_resource(const QString& uri) const {
-    QMutexLocker lock(&mutex_);
-    return resources_.contains(uri);
-}
-
 // ============================================================================
 // Prompts (MCP spec prompts)
 // ============================================================================
@@ -121,12 +97,6 @@ void McpProvider::register_prompt(Prompt prompt) {
     QMutexLocker lock(&mutex_);
     QString name = prompt.name;
     prompts_.insert(name, std::move(prompt));
-    ++generation_;
-}
-
-void McpProvider::unregister_prompt(const QString& name) {
-    QMutexLocker lock(&mutex_);
-    prompts_.remove(name);
     ++generation_;
 }
 
@@ -158,11 +128,6 @@ PromptResult McpProvider::get_prompt(const QString& name, const QHash<QString, Q
         return r;
     }
     return handler(args);
-}
-
-bool McpProvider::has_prompt(const QString& name) const {
-    QMutexLocker lock(&mutex_);
-    return prompts_.contains(name);
 }
 
 // ============================================================================
@@ -223,11 +188,6 @@ std::size_t McpProvider::tool_count() const {
             ++count;
     }
     return count;
-}
-
-bool McpProvider::has_tool(const QString& name) const {
-    QMutexLocker lock(&mutex_);
-    return tools_.contains(name);
 }
 
 // ============================================================================
@@ -503,11 +463,6 @@ void McpProvider::set_default_sample_handler(SampleHandler handler) {
 void McpProvider::set_default_elicit_handler(ElicitHandler handler) {
     QMutexLocker lock(&mutex_);
     default_elicit_handler_ = std::move(handler);
-}
-
-void McpProvider::set_default_log_handler(LogHandler handler) {
-    QMutexLocker lock(&mutex_);
-    default_log_handler_ = std::move(handler);
 }
 
 // ============================================================================

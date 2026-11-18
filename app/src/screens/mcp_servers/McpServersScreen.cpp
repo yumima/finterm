@@ -629,20 +629,6 @@ void McpServersScreen::on_remove_server() {
     update_status_bar();
 }
 
-void McpServersScreen::on_toggle_autostart() {
-    if (selected_server_id_.isEmpty())
-        return;
-    auto servers = McpManager::instance().get_servers();
-    for (auto& s : servers) {
-        if (s.id != selected_server_id_)
-            continue;
-        s.auto_start = !s.auto_start;
-        McpManager::instance().save_server(s);
-        refresh_installed();
-        break;
-    }
-}
-
 void McpServersScreen::on_server_selected(QListWidgetItem*) {} // unused — cards are self-contained
 
 void McpServersScreen::on_refresh() {
@@ -673,10 +659,6 @@ void McpServersScreen::on_search_changed(const QString& text) {
         populate_marketplace();
     if (active_view_ == 1)
         refresh_installed();
-}
-
-void McpServersScreen::on_view_logs() {
-    // Handled inline per card — this slot kept for compat
 }
 
 void McpServersScreen::on_add_server() {

@@ -47,16 +47,8 @@ class AccountDataStream : public QObject {
     void fetch_candles(const QString& symbol, const QString& timeframe);
     void fetch_orderbook(const QString& symbol);
     void fetch_time_sales(const QString& symbol);
-    void fetch_latest_trade(const QString& symbol);
     void fetch_calendar();
     void fetch_clock();
-
-    // --- Cached data access (main thread only) ---
-    QVector<BrokerPosition> cached_positions() const;
-    QVector<BrokerHolding> cached_holdings() const;
-    QVector<BrokerOrderInfo> cached_orders() const;
-    BrokerFunds cached_funds() const;
-    BrokerQuote cached_quote(const QString& symbol) const;
 
   signals:
     void quote_updated(const QString& account_id, const QString& symbol, const BrokerQuote& quote);

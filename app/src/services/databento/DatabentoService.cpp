@@ -174,7 +174,7 @@ DatabentoService::DatabentoService() {
 
 // ── API key ────────────────────────────────────────────────────────────────
 // DATABENTO_API_KEY is the one key: it is what Settings → Credentials edits and
-// what PythonRunner injects. The legacy SECURE_KEY ("databento.api_key") used
+// what PythonRunner injects. The legacy key "databento.api_key" used
 // to be read FIRST, so a key changed or cleared in Settings was silently
 // overridden by an older one entered from the Futures screen. A legacy value
 // is moved into the canonical key once at startup
@@ -190,19 +190,8 @@ bool DatabentoService::has_api_key() const {
     return !databento_key().isEmpty();
 }
 
-void DatabentoService::set_api_key(const QString& key) {
-    SecureStorage::instance().store(DATABENTO_ENV_KEY, key.trimmed());
-    SecureStorage::instance().remove(SECURE_KEY);
-    LOG_INFO("Databento", "API key stored");
-}
-
 QString DatabentoService::api_key() const {
     return databento_key();
-}
-
-void DatabentoService::clear_api_key() {
-    SecureStorage::instance().remove(SECURE_KEY);
-    SecureStorage::instance().remove(DATABENTO_ENV_KEY);
 }
 
 // ── Core runner — wraps PythonRunner per P4 ────────────────────────────────
@@ -602,96 +591,6 @@ void DatabentoService::fetch_yield_curve() {
                 res.y_axis.push_back(v.toInt());
             for (const auto& v : j["maturities"].toArray())
                 res.x_axis.push_back((float)v.toInt());
-            for (const auto& row : j["z"].toArray()) {
-                std::vector<float> r;
-                for (const auto& v : row.toArray())
-                    r.push_back(z_cell(v));
-                res.z.push_back(r);
-            }
-            self->last_fetch_time_ = QDateTime::currentDateTime();
-        }
-        emit self->surface_ready(res);
-    });
-}
-
-void DatabentoService::fetch_forward_rate() {
-    emit fetch_started("Building forward rate surface...");
-    QPointer<DatabentoService> self = this;
-    run_script({"forward_rate"}, [self](bool ok, const QJsonObject& j) {
-        if (!self)
-            return;
-        DatabentoSurfaceResult res;
-        res.type = "forward_rate";
-        if (!ok || j["error"].toBool(false)) {
-            res.success = false;
-            res.error = ok ? j["message"].toString("Unknown error") : j["error"].toString();
-            emit self->fetch_failed(res.error);
-        } else {
-            res.success = true;
-            for (const auto& v : j["start_tenors"].toArray())
-                res.x_axis.push_back((float)v.toInt());
-            for (const auto& v : j["forward_periods"].toArray())
-                res.y_axis.push_back(v.toInt());
-            for (const auto& row : j["z"].toArray()) {
-                std::vector<float> r;
-                for (const auto& v : row.toArray())
-                    r.push_back(z_cell(v));
-                res.z.push_back(r);
-            }
-            self->last_fetch_time_ = QDateTime::currentDateTime();
-        }
-        emit self->surface_ready(res);
-    });
-}
-
-void DatabentoService::fetch_rate_path() {
-    emit fetch_started("Building monetary policy rate path...");
-    QPointer<DatabentoService> self = this;
-    run_script({"rate_path"}, [self](bool ok, const QJsonObject& j) {
-        if (!self)
-            return;
-        DatabentoSurfaceResult res;
-        res.type = "rate_path";
-        if (!ok || j["error"].toBool(false)) {
-            res.success = false;
-            res.error = ok ? j["message"].toString("Unknown error") : j["error"].toString();
-            emit self->fetch_failed(res.error);
-        } else {
-            res.success = true;
-            for (const auto& v : j["central_banks"].toArray())
-                res.x_labels.push_back(v.toString().toStdString());
-            for (const auto& v : j["meetings_ahead"].toArray())
-                res.y_axis.push_back(v.toInt());
-            for (const auto& row : j["z"].toArray()) {
-                std::vector<float> r;
-                for (const auto& v : row.toArray())
-                    r.push_back(z_cell(v));
-                res.z.push_back(r);
-            }
-            self->last_fetch_time_ = QDateTime::currentDateTime();
-        }
-        emit self->surface_ready(res);
-    });
-}
-
-void DatabentoService::fetch_fx_forward_points() {
-    emit fetch_started("Building FX forward points...");
-    QPointer<DatabentoService> self = this;
-    run_script({"fx_forward_points"}, [self](bool ok, const QJsonObject& j) {
-        if (!self)
-            return;
-        DatabentoSurfaceResult res;
-        res.type = "fx_forward_points";
-        if (!ok || j["error"].toBool(false)) {
-            res.success = false;
-            res.error = ok ? j["message"].toString("Unknown error") : j["error"].toString();
-            emit self->fetch_failed(res.error);
-        } else {
-            res.success = true;
-            for (const auto& v : j["pairs"].toArray())
-                res.x_labels.push_back(v.toString().toStdString());
-            for (const auto& v : j["tenors"].toArray())
-                res.y_axis.push_back(v.toInt());
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())

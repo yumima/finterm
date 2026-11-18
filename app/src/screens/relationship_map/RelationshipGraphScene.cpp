@@ -344,7 +344,6 @@ void RelationshipGraphScene::clear_graph() {
     clear();
     node_positions_.clear();
     nodes_.clear();
-    timer_ticks_ = 0;
 }
 
 // ── build_graph ───────────────────────────────────────────────────────────────
@@ -619,14 +618,6 @@ void RelationshipGraphScene::build_graph(const RelationshipData& data, const Fil
     setSceneRect(bounds);
 }
 
-// ── No-op stubs ───────────────────────────────────────────────────────────────
-void RelationshipGraphScene::start_simulation() {}
-void RelationshipGraphScene::simulation_step() {}
-void RelationshipGraphScene::apply_layout(QVector<GraphNode>&, const QVector<GraphEdge>&, LayoutMode) {}
-void RelationshipGraphScene::place_in_ring(const QVector<int>&, QVector<QPointF>&, double, double, const QPointF&) {}
-void RelationshipGraphScene::add_node_item(const GraphNode&, const QPointF&) {}
-void RelationshipGraphScene::add_edge_item(const QPointF&, const QPointF&, EdgeCategory, const QString&) {}
-
 // ── View ──────────────────────────────────────────────────────────────────────
 RelationshipGraphView::RelationshipGraphView(QGraphicsScene* scene, QWidget* parent) : QGraphicsView(scene, parent) {
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
@@ -651,12 +642,6 @@ void RelationshipGraphView::fit_to_content() {
         return;
     fitInView(scene()->itemsBoundingRect().adjusted(-60, -60, 60, 60), Qt::KeepAspectRatio);
     current_zoom_ = transform().m11();
-}
-
-void RelationshipGraphView::reset_zoom() {
-    resetTransform();
-    current_zoom_ = 1.0;
-    fit_to_content();
 }
 
 void RelationshipGraphView::wheelEvent(QWheelEvent* event) {

@@ -5922,30 +5922,9 @@ QString IpoWatchView::format_money(double dollars) {
     return fmt::money(dollars);
 }
 
-QString IpoWatchView::format_deal_size(const QString& price_range, const QString& shares) {
-    if (price_range.isEmpty() || shares.isEmpty())
-        return {};
-    bool ok = false;
-    const double mid = parse_price_mid(price_range, &ok);
-    if (!ok)
-        return {};
-    const double n = parse_shares(shares);
-    if (n <= 0)
-        return {};
-    return format_money(mid * n);
-}
-
 // Parse "$15.00-$17.00" / "$17.00" / "$15.00 - $17.00" → midpoint.
 double IpoWatchView::parse_price_mid(const QString& price_range, bool* ok_out) {
     return fmt::price_mid(price_range, ok_out);
-}
-
-double IpoWatchView::parse_shares(const QString& shares) {
-    QString s = shares;
-    s.remove(',');
-    bool ok = false;
-    const double n = s.trimmed().toDouble(&ok);
-    return ok ? n : 0;
 }
 
 

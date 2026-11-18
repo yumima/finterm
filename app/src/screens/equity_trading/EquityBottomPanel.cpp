@@ -515,42 +515,6 @@ void EquityBottomPanel::setup_auctions_tab() {
     tabs_->addTab(auctions_table_, "AUCTIONS");
 }
 
-void EquityBottomPanel::set_auctions(const QVector<trading::BrokerAuction>& auctions) {
-    auctions_table_->setUpdatesEnabled(false);
-    auctions_table_->setRowCount(0);
-    for (const auto& auction : auctions) {
-        for (const auto& entry : auction.entries) {
-            const int row = auctions_table_->rowCount();
-            auctions_table_->insertRow(row);
-            const bool is_open = (entry.auction_type == "O");
-            const QColor type_color =
-                is_open ? QColor(finterm::ui::colors::AMBER()) : QColor(finterm::ui::colors::INFO());
-
-            auto set = [&](int col, const QString& text,
-                           const QColor& fg = QColor(finterm::ui::colors::TEXT_PRIMARY())) {
-                auto* item = new QTableWidgetItem(text);
-                item->setForeground(fg);
-                item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-                auctions_table_->setItem(row, col, item);
-            };
-
-            const QString time_str =
-                QDateTime::fromString(entry.timestamp, Qt::ISODateWithMs).toLocalTime().toString("hh:mm:ss");
-            set(0, auction.date, QColor(finterm::ui::colors::TEXT_SECONDARY()));
-            set(1, is_open ? "OPEN" : "CLOSE", type_color);
-            set(2, time_str, QColor(finterm::ui::colors::TEXT_SECONDARY()));
-            set(3, QString::number(entry.price, 'f', 2));
-            set(4, QString::number(entry.size, 'f', 0), QColor(finterm::ui::colors::TEXT_SECONDARY()));
-            set(5, entry.exchange, QColor(finterm::ui::colors::TEXT_SECONDARY()));
-        }
-    }
-    auctions_table_->setUpdatesEnabled(true);
-}
-
-void EquityBottomPanel::set_condition_codes(const QMap<QString, QString>& codes) {
-    condition_codes_ = codes;
-}
-
 // ── Time & Sales Tab ────────────────────────────────────────────────────────
 
 void EquityBottomPanel::setup_time_sales_tab() {

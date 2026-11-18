@@ -237,10 +237,6 @@ void AIQuantLabService::train_rl_agent(const QJsonObject& params) {
     python::PythonRunner::instance().run("ai_quant_lab/qlib_rl.py", {"train", json}, on_finished, on_line);
 }
 
-void AIQuantLabService::evaluate_rl_agent(const QJsonObject& params) {
-    run_module("rl_trading", "evaluate", params);
-}
-
 // ── GS Quant ─────────────────────────────────────────────────────────────────
 void AIQuantLabService::gs_risk_metrics(const QJsonObject& params) {
     auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
@@ -278,43 +274,8 @@ void AIQuantLabService::gs_statistics(const QJsonObject& params) {
     run_python("Analytics/gs_quant_wrapper/gs_quant_service.py", {"statistics", json}, "gs_quant", "statistics");
 }
 
-// ── CFA Quant ────────────────────────────────────────────────────────────────
-void AIQuantLabService::cfa_trend_analysis(const QJsonObject& params) {
-    run_module("cfa_quant", "trend_analysis", params);
-}
-
 void AIQuantLabService::cfa_stationarity_test(const QJsonObject& params) {
     run_module("cfa_quant", "stationarity_test", params);
-}
-
-void AIQuantLabService::cfa_arima(const QJsonObject& params) {
-    run_module("cfa_quant", "arima_model", params);
-}
-
-void AIQuantLabService::cfa_ml_prediction(const QJsonObject& params) {
-    run_module("cfa_quant", "supervised_learning", params);
-}
-
-void AIQuantLabService::cfa_pattern_discovery(const QJsonObject& params) {
-    run_module("cfa_quant", "unsupervised_learning", params);
-}
-
-void AIQuantLabService::cfa_bootstrap(const QJsonObject& params) {
-    run_module("cfa_quant", "resampling_methods", params);
-}
-
-void AIQuantLabService::cfa_data_quality(const QJsonObject& params) {
-    run_module("cfa_quant", "validate_data", params);
-}
-
-// ── Advanced Models ──────────────────────────────────────────────────────────
-void AIQuantLabService::list_advanced_models() {
-    run_python_cached("ai_quant_lab/qlib_advanced_models.py", {"list_models"}, "advanced_models", "list_models",
-                      kListTtlSec);
-}
-
-void AIQuantLabService::create_advanced_model(const QJsonObject& params) {
-    run_module("advanced_models", "create_model", params);
 }
 
 void AIQuantLabService::train_advanced_model(const QJsonObject& params) {
@@ -489,19 +450,9 @@ void AIQuantLabService::rd_agent_start_quant_research(const QJsonObject& params)
     run_python("agents/rdagents/cli.py", {"start_quant_research", json}, "deep_agent", "start_quant_research");
 }
 
-void AIQuantLabService::rd_agent_get_task_status(const QString& task_id) {
-    auto json = QString("{\"task_id\":\"%1\"}").arg(task_id);
-    run_python("agents/rdagents/cli.py", {"get_task_status", json}, "deep_agent", "get_task_status");
-}
-
 void AIQuantLabService::rd_agent_get_discovered_factors(const QString& task_id) {
     auto json = QString("{\"task_id\":\"%1\"}").arg(task_id);
     run_python("agents/rdagents/cli.py", {"get_discovered_factors", json}, "deep_agent", "get_discovered_factors");
-}
-
-void AIQuantLabService::rd_agent_get_optimized_model(const QString& task_id) {
-    auto json = QString("{\"task_id\":\"%1\"}").arg(task_id);
-    run_python("agents/rdagents/cli.py", {"get_optimized_model", json}, "deep_agent", "get_optimized_model");
 }
 
 void AIQuantLabService::rd_agent_list_tasks(const QString& status_filter) {
@@ -530,10 +481,6 @@ void AIQuantLabService::rd_agent_start_ui() {
 void AIQuantLabService::rd_agent_start_mcp_server(int port) {
     auto json = QString("{\"port\":%1}").arg(port);
     run_python("agents/rdagents/cli.py", {"start_mcp_server", json}, "deep_agent", "start_mcp_server");
-}
-
-void AIQuantLabService::rd_agent_mcp_status() {
-    run_python("agents/rdagents/cli.py", {"mcp_status"}, "deep_agent", "mcp_status");
 }
 
 // ── Feature Engineering ──────────────────────────────────────────────────────
@@ -575,15 +522,6 @@ void AIQuantLabService::strategy_create(const QString& type, const QJsonObject& 
 
 void AIQuantLabService::strategy_portfolio_metrics(const QJsonObject& params) {
     run_module("strategy_builder", "portfolio_metrics", params);
-}
-
-void AIQuantLabService::strategy_list() {
-    auto it = script_map_.find("strategy_builder");
-    if (it == script_map_.end()) {
-        emit error_occurred("strategy_builder", "Unknown module");
-        return;
-    }
-    run_python_cached(*it, {"list_strategies", "{}"}, "strategy_builder", "list_strategies", kListTtlSec);
 }
 
 // ── Data Processors ───────────────────────────────────────────────────────────

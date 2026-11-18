@@ -51,7 +51,6 @@ class GovDataUKPanel : public QWidget {
 
     // ── Constants ────────────────────────────────────────────────────────────
     static constexpr const char* kScript = "datagovuk_api.py";
-    static constexpr const char* kColor = "#10B981";
 
     enum View { Publishers = 0, Datasets, Resources, Status };
     View current_view_ = Publishers;
@@ -84,7 +83,6 @@ class GovDataUKPanel : public QWidget {
 
     QJsonArray current_publishers_;
     QJsonArray current_datasets_;
-    QJsonArray current_resources_;
 };
 
 } // namespace finterm::screens

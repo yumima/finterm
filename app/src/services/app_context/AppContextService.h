@@ -46,8 +46,6 @@ class AppContextService {
 
     void set_current_symbol(const QString& sym);
     void set_active_portfolio(const QString& id, const QString& name = QString());
-    void clear_symbol();
-    void clear_portfolio();
     /// Drop the active (or parked) portfolio if it is the one that was deleted.
     void clear_portfolio_if(const QString& id);
     Snapshot snapshot() const;

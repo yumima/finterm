@@ -47,25 +47,6 @@ std::optional<TradingSession> UnifiedTrading::get_session() const {
     return session_;
 }
 
-TradingSession UnifiedTrading::switch_mode(const QString& mode) {
-    QMutexLocker lock(&mutex_);
-
-    if (!session_) {
-        session_ = TradingSession{};
-        session_->broker = "alpaca";
-    }
-
-    session_->mode = (mode == "live") ? "live" : "paper";
-
-    if (session_->mode == "paper" && session_->paper_portfolio_id.isEmpty()) {
-        auto portfolio =
-            pt_create_portfolio(session_->broker + " Paper Trading", 100000.0, "USD", 1.0, "cross", 0.0003);
-        session_->paper_portfolio_id = portfolio.id;
-    }
-
-    return *session_;
-}
-
 // ============================================================================
 // Order Routing
 // ============================================================================
@@ -287,19 +268,5 @@ QVector<UnifiedTrading::BroadcastResult> UnifiedTrading::broadcast_order(const Q
 // ============================================================================
 // Order Bridge (simplified — no detached threads in Qt)
 // ============================================================================
-
-void UnifiedTrading::start_order_bridge() {
-    bridge_running_.store(true);
-    LOG_INFO("UnifiedTrading", "Order signal bridge started");
-}
-
-void UnifiedTrading::stop_order_bridge() {
-    bridge_running_.store(false);
-    LOG_INFO("UnifiedTrading", "Order signal bridge stopping");
-}
-
-bool UnifiedTrading::is_bridge_running() const {
-    return bridge_running_.load();
-}
 
 } // namespace finterm::trading

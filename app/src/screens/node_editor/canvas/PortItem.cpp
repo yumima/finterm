@@ -54,11 +54,6 @@ QRectF PortItem::boundingRect() const {
     return QRectF(-kHitRadius, -kHitRadius, kHitRadius * 2, kHitRadius * 2);
 }
 
-void PortItem::set_connect_highlight(int state) {
-    connect_highlight_ = state;
-    update();
-}
-
 void PortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     painter->setRenderHint(QPainter::Antialiasing);
 

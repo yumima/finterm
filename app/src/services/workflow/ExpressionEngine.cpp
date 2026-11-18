@@ -45,14 +45,6 @@ QJsonValue ExpressionEngine::evaluate(const QJsonValue& param_value, const QJson
     return QJsonValue(result);
 }
 
-QJsonObject ExpressionEngine::resolve_params(const QJsonObject& params, const QJsonObject& context) {
-    QJsonObject resolved;
-    for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
-        resolved[it.key()] = evaluate(it.value(), context);
-    }
-    return resolved;
-}
-
 QJsonValue ExpressionEngine::resolve_expression(const QString& expr, const QJsonObject& context) {
     // Support dotted paths: $input.key.nested
     // The context is the merged upstream output

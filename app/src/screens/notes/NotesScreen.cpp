@@ -335,7 +335,6 @@ QWidget* NotesScreen::build_editor_panel() {
             enter_view_mode();
         } else {
             right_stack_->setCurrentIndex(0);
-            is_editing_ = false;
         }
     });
     edit_toolbar->addWidget(cancel_btn);
@@ -511,7 +510,6 @@ void NotesScreen::on_new_note() {
             edit_category_->setCurrentIndex(idx);
     }
 
-    is_editing_ = true;
     right_stack_->setCurrentIndex(2);
 }
 
@@ -671,7 +669,6 @@ void NotesScreen::clear_editor() {
 }
 
 void NotesScreen::enter_edit_mode() {
-    is_editing_ = true;
     // Find the note and populate editor
     for (const auto& n : notes_) {
         if (n.id == selected_note_id_) {
@@ -691,7 +688,6 @@ void NotesScreen::enter_edit_mode() {
 }
 
 void NotesScreen::enter_view_mode() {
-    is_editing_ = false;
     right_stack_->setCurrentIndex(1);
 }
 

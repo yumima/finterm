@@ -21,10 +21,6 @@ class WorkflowService : public QObject {
     void list_workflows();
     void delete_workflow(const QString& id);
 
-    // ── Import/Export ──────────────────────────────────────────────
-    Result<WorkflowDef> import_from_json(const QString& path);
-    Result<void> export_to_json(const WorkflowDef& wf, const QString& path);
-
     // ── Execution ───────────────────────────────────────────────────
     void execute_workflow(const WorkflowDef& wf);
     void execute_from_node(const WorkflowDef& wf, const QString& start_node_id);

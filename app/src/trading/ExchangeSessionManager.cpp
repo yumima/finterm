@@ -50,15 +50,6 @@ ExchangeSession* ExchangeSessionManager::session(const QString& exchange_id) {
     return s;
 }
 
-QStringList ExchangeSessionManager::active_exchange_ids() const {
-    QMutexLocker lock(&mutex_);
-    QStringList ids;
-    ids.reserve(sessions_.size());
-    for (auto it = sessions_.constBegin(); it != sessions_.constEnd(); ++it)
-        ids << it.key();
-    return ids;
-}
-
 SessionPublisher ExchangeSessionManager::build_publisher() {
     SessionPublisher p;
     p.publish_ticker = [](const QString& exchange, const QString& pair, const TickerData& t) {
