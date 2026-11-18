@@ -2073,15 +2073,6 @@ void MarketDataService::fetch_options_surface(const QString& symbol, OptionsSurf
         later([cb]() { cb({false, {}, QStringLiteral("Options surface: no symbol")}); });
         return;
     }
-    const QString cache_key = QStringLiteral("options_surface:yahoo:") + sym;
-    if (const auto aged = finterm::CacheManager::instance().try_get_aged(cache_key)) {
-        const QJsonDocument doc = QJsonDocument::fromJson(aged->value.toUtf8());
-        if (doc.isObject()) {
-            OptionsSurfaceReply r{true, doc.object(), {}};
-            later([cb, r]() { cb(r); });
-            return;
-        }
-    }
     auto& waiters = options_surface_waiters_[sym];
     waiters.append(std::move(cb));
     if (waiters.size() > 1)
@@ -2090,7 +2081,7 @@ void MarketDataService::fetch_options_surface(const QString& symbol, OptionsSurf
     QPointer<MarketDataService> self = this;
     python::PythonWorker::instance().submit(
         QStringLiteral("options_surface"), QJsonObject{{"symbol", sym}},
-        [self, sym, cache_key](bool ok, QJsonObject result, QString err) {
+        [self, sym](bool ok, QJsonObject result, QString err) {
             if (!self)
                 return;
             OptionsSurfaceReply reply;
@@ -2104,12 +2095,6 @@ void MarketDataService::fetch_options_surface(const QString& symbol, OptionsSurf
             } else {
                 reply.ok = true;
                 reply.surface = result;
-                // A listing that may itself have failed is shown, but is not
-                // this symbol's answer: the next ask goes to Yahoo again.
-                if (!result.contains("listing_error"))
-                    finterm::CacheManager::instance().put(
-                        cache_key, QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)),
-                        kOptionsSurfaceTtlSec, "options");
             }
             const auto waiters = self->options_surface_waiters_.take(sym);
             for (const auto& w : waiters)

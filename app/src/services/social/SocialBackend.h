@@ -21,9 +21,6 @@ enum class Outcome { Answered, NoAnswer, NotStarted };
 /// why there was none) and how the call ended.
 using Done = std::function<void(const QJsonObject& answer, const QString& error, Outcome outcome)>;
 
-/// A plain read's deadline (the runner's default per-process timeout).
-inline constexpr int kDefaultTimeoutMs = 30'000;
-
 /// One call in a process of its own; the payload goes to stdin (it may carry
 /// secrets — never argv). @p done is dropped once @p ctx is gone; the
 /// process is not owned by it (closing a dialog must not kill a publish).

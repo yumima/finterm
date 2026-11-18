@@ -1,6 +1,7 @@
 #include "screens/social/SocialScreen.h"
 
 #include "core/logging/Logger.h"
+#include "python/PythonRunner.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "screens/social/BriefsPanel.h"
 #include "services/social/SocialBackend.h"
@@ -524,7 +525,7 @@ void SocialScreen::load_channels() {
     const int seq = ++channels_seq_;
     channels_busy_ = true;
     render_busy();
-    call_backend(this, QStringLiteral("channels"), {}, services::social_backend::kDefaultTimeoutMs,
+    call_backend(this, QStringLiteral("channels"), {}, python::PythonRunner::kProcessTimeoutMs,
                  [this, seq](const QJsonObject& o, const QString& err, Outcome) {
                      if (seq != channels_seq_)
                          return;
@@ -582,7 +583,7 @@ void SocialScreen::load_history() {
     const int seq = ++history_seq_;
     history_busy_ = true;
     render_busy();
-    call_backend(this, QStringLiteral("history"), {}, services::social_backend::kDefaultTimeoutMs,
+    call_backend(this, QStringLiteral("history"), {}, python::PythonRunner::kProcessTimeoutMs,
                  [this, seq](const QJsonObject& o, const QString& err, Outcome) {
                      if (seq != history_seq_)
                          return;
@@ -608,7 +609,7 @@ void SocialScreen::load_launch() {
     QJsonObject payload;
     if (brief_.loaded)
         payload = {{QStringLiteral("issue"), brief_.issue}, {QStringLiteral("rows"), brief_.rows}};
-    call_backend(this, QStringLiteral("launch"), payload, services::social_backend::kDefaultTimeoutMs,
+    call_backend(this, QStringLiteral("launch"), payload, python::PythonRunner::kProcessTimeoutMs,
                  [this, seq](const QJsonObject& o, const QString& err, Outcome) {
                      if (seq != launch_seq_)
                          return;

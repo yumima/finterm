@@ -351,9 +351,10 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     /// Yahoo's out-of-the-money IV surface for `symbol` — every expiry's
     /// two-sided OTM quotes, the ATM term structure and the spot (the daemon's
     /// options_surface; one Yahoo request per expiry). The ER Options tab's
-    /// read. Cached kOptionsSurfaceTtlSec, concurrent asks coalesced; a
-    /// failure — and an answer whose expiry listing failed — never cached.
-    /// Always answers, after the call returns.
+    /// read. ONE cache layer, the daemon's (5 min, in memory; it keeps out a
+    /// failure and an answer whose expiry listing failed): an app-side copy
+    /// on top of it made a chain up to ~10 min old, across restarts.
+    /// Concurrent asks coalesced. Always answers, after the call returns.
     struct OptionsSurfaceReply {
         bool ok = false;
         QJsonObject surface; ///< {spot, points: [...], atm: [...], as_of, source, expiries_used, …}
@@ -361,7 +362,6 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     };
     using OptionsSurfaceCallback = std::function<void(const OptionsSurfaceReply&)>;
     void fetch_options_surface(const QString& symbol, OptionsSurfaceCallback cb);
-    static constexpr int kOptionsSurfaceTtlSec = 300;       // the daemon's own cache for the action
     static constexpr int kOptionsSurfaceTimeoutMs = 90'000; // one request per expiry
 
     /// Wikipedia summary lookup — used by IPO Watch as a description fallback
