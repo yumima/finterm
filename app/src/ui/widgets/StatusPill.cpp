@@ -58,7 +58,6 @@ void StatusPill::set_error(const QString& message, std::function<void()> on_retr
 }
 
 void StatusPill::apply_state(State s, const QString& message) {
-    state_ = s;
     QString dot_color;
     switch (s) {
         case State::Idle:

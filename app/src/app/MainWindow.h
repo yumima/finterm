@@ -1,6 +1,5 @@
 #pragma once
 #include "ai_chat/AiChatBubble.h"
-#include "app/ScreenRouter.h"
 
 #include <QMainWindow>
 #include <QStackedWidget>

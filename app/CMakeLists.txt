@@ -759,6 +759,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v055_chat_session_context.cpp
     src/storage/sqlite/migrations/v056_ai_prediction_source.cpp
     src/storage/sqlite/migrations/v057_saved_strategies.cpp
+    src/storage/sqlite/migrations/v058_drop_context_recordings.cpp
 )
 
 # Python runner
@@ -877,7 +878,6 @@ set(SERVICE_SOURCES
     src/services/news/NewsClusterService.cpp
     src/services/news/NewsMonitorService.cpp
     src/services/news/NewsNlpService.cpp
-    src/services/news/NewsCorrelationService.cpp
     src/services/databento/DatabentoService.cpp
     src/services/dbnomics/DBnomicsService.cpp
     src/services/gov_data/GovDataService.cpp
@@ -1407,7 +1407,6 @@ set(SCREEN_SOURCES
 set(APP_SOURCES
     src/app/main.cpp
     src/app/MainWindow.cpp
-    src/app/ScreenRouter.cpp
     src/app/DockScreenRouter.cpp
 )
 

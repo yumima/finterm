@@ -79,7 +79,6 @@ void EquityOrderBook::set_data(const QVector<QPair<double, double>>& bids, const
     QMutexLocker lock(&mutex_);
     bids_ = bids.mid(0, MAX_LEVELS);
     asks_ = asks.mid(0, MAX_LEVELS);
-    spread_ = spread;
     cache_dirty_ = true;
 
     spread_label_->setText(QString("Spread: %1 (%2%)").arg(spread, 0, 'f', 2).arg(spread_pct, 0, 'f', 3));

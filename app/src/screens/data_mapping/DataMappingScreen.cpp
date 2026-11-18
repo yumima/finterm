@@ -1713,7 +1713,6 @@ void DataMappingScreen::on_test_mapping() {
     }
 
     test_output_->setPlainText(QJsonDocument(result).toJson(QJsonDocument::Indented));
-    test_result_ = result;
 
     bool success = mappings.size() > 0;
     if (success) {
@@ -1833,7 +1832,6 @@ void DataMappingScreen::on_new_mapping() {
     api_body_->clear();
     api_test_status_->clear();
     sample_data_ = QJsonDocument();
-    test_result_ = QJsonObject();
     test_output_->clear();
     test_status_->setText("Not yet tested");
     save_btn_->setEnabled(false);

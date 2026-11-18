@@ -343,8 +343,7 @@ void NewsScreen::connect_signals() {
     // Variant selector
     connect(command_bar_, &NewsCommandBar::variant_changed, this, [this](const QString& variant) {
         active_variant_ = variant;
-        settings_.setValue("news/variant", variant);
-        schedule_settings_write();
+        ScreenStateManager::instance().notify_changed(this);
         on_refresh();
     });
 
@@ -1674,10 +1673,6 @@ void NewsScreen::compute_deviations() {
             NotificationService::instance().send(req);
         }
     }
-    // The baselines live in baselines_ above. (This used to also send them to
-    // news_correlation.py baseline_update on every render — a Python process
-    // per feed batch, ~20 in a burst, holding the shared Python slots — and
-    // throw the answer away.)
 }
 
 // ── Portfolio holdings (PTF pill) ───────────────────────────────────────────

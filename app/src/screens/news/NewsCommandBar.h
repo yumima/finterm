@@ -118,8 +118,6 @@ class NewsCommandBar : public QWidget {
 
     QString active_category_ = "ALL";
     QString active_time_ = "24H";
-    QString active_sort_ = "RELEVANCE";
-    QString active_view_ = "WIRE";
 
     // PTF pill state — held locally because the count badge is rendered
     // inline ("PTF 7") and needs to survive across set_portfolio_match_count

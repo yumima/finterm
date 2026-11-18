@@ -75,7 +75,6 @@ class PolymarketCommandBar : public QWidget {
     QPushButton* refresh_btn_ = nullptr;
     QLabel* ws_indicator_ = nullptr;
     QLabel* count_label_ = nullptr;
-    QLabel* title_label_ = nullptr;
 
     QString active_view_ = "MARKETS";
     QString active_category_ = "ALL";

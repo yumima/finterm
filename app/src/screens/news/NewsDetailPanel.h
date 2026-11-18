@@ -1,6 +1,5 @@
 #pragma once
 #include "screens/news/NewsBriefFormat.h"
-#include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsMonitorService.h"
 #include "services/news/NewsNlpService.h"
 #include "services/news/NewsService.h"

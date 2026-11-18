@@ -114,9 +114,8 @@ void AccountDataStream::subscribe_symbols(const QStringList& symbols) {
         ws_resubscribe();
 }
 
-void AccountDataStream::set_selected_symbol(const QString& symbol, const QString& exchange) {
+void AccountDataStream::set_selected_symbol(const QString& symbol) {
     selected_symbol_ = symbol;
-    selected_exchange_ = exchange;
     if (ws_active())
         ws_resubscribe();
 }

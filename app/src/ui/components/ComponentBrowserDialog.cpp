@@ -141,7 +141,6 @@ void ComponentBrowserDialog::rebuild_cards() {
             emit component_chosen(id);
             accept();
         });
-        connect(card, &ComponentCard::selected_changed, this, [this](const QString& id) { selected_id_ = id; });
         grid_layout_->addWidget(card, row, col);
         if (++col >= kCardsPerRow) {
             col = 0;

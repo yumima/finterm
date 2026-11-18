@@ -98,7 +98,6 @@ class CellWidget : public QWidget {
     int index_ = 0;
     bool running_ = false;
     bool selected_ = false;
-    bool hovered_ = false;
     bool output_collapsed_ = false;
     bool md_editing_ = false;
     QString title_;

@@ -194,8 +194,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // key either way so the next pass does not ask again.
     bool claim_alert(QSet<QString>& notified, const services::NewsArticle& a, int64_t now);
 
-    // Pulse animation timer
-
     // Debounced DB seen-writes
     QTimer* seen_flush_timer_ = nullptr;
     QSet<QString> pending_seen_ids_;

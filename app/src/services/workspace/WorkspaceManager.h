@@ -12,7 +12,7 @@
 
 namespace finterm {
 
-class ScreenRouter;
+class DockScreenRouter;
 
 /// Central workspace service — singleton QObject on the UI thread.
 ///
@@ -25,11 +25,16 @@ class WorkspaceManager : public QObject {
   public:
     static WorkspaceManager& instance();
 
-    /// Register a window/router. Multiple windows supported (multi-window mode).
+    /// Register a window. Multiple windows supported (multi-window mode).
     void set_main_window(QMainWindow* w);
 
-    /// Unregister a closing window/router to prevent dangling pointers.
+    /// Unregister a closing window to prevent dangling pointers.
     void remove_window(QMainWindow* w);
+
+    /// Register a window's screen router; the first one registered is the
+    /// primary router whose active screen a workspace saves and restores.
+    /// Unregisters itself when the router is destroyed.
+    void set_router(DockScreenRouter* r);
 
     // ── Screen participation ──────────────────────────────────────────────────
 
@@ -87,7 +92,7 @@ class WorkspaceManager : public QObject {
     // Multi-window aware: stores all registered windows and routers.
     // The first registered window is treated as primary for workspace operations.
     QList<QMainWindow*> windows_;
-    QList<ScreenRouter*> routers_;
+    QList<DockScreenRouter*> routers_;
     QTimer* autosave_timer_ = nullptr;
 };
 

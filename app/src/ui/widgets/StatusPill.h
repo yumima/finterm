@@ -65,7 +65,6 @@ class StatusPill : public QWidget {
     QLabel* label_ = nullptr;      // status message
     QWidget* retry_btn_ = nullptr; // ↻ button — hidden unless Error+callback
     std::function<void()> on_retry_;
-    State state_ = State::Idle;
 };
 
 } // namespace finterm::ui

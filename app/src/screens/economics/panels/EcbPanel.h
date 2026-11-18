@@ -23,7 +23,6 @@ class EcbPanel : public EconPanelBase {
 
   private:
     QComboBox* series_combo_ = nullptr;
-    QComboBox* country_combo_ = nullptr; // for exchange_rates currency
 };
 
 } // namespace finterm::screens

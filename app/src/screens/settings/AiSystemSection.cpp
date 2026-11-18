@@ -4,7 +4,6 @@
 #include "services/agents/SkillProposalService.h"
 #include "storage/repositories/AgentFeedbackRepository.h"
 #include "storage/repositories/AgentTraceRepository.h"
-#include "storage/repositories/SettingsRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
 
 #include <QApplication>
@@ -54,26 +53,9 @@ void AiSystemSection::build_ui() {
     refresh_btn_ = new QPushButton(QStringLiteral("Refresh"));
     connect(refresh_btn_, &QPushButton::clicked, this, &AiSystemSection::on_refresh);
 
-    // Track 8 / 107: inline completion toggle.  Reads / writes
-    // SettingsRepository directly.  Nothing reads the flag yet: the
-    // ghost-text controller was never wired into the chat composer.
-    inline_completion_cb_ = new QCheckBox(QStringLiteral("Enable inline (ghost-text) completion in chat composer"));
-    inline_completion_cb_->setToolTip(QStringLiteral("Suggests a continuation as you type · Tab accepts"));
-    {
-        auto r = SettingsRepository::instance().get(QStringLiteral("inline_completion.enabled"));
-        const QString v = r.is_ok() ? r.value().trimmed().toLower() : QString();
-        inline_completion_cb_->setChecked(v == QStringLiteral("true") || v == QStringLiteral("1") ||
-                                          v == QStringLiteral("yes"));
-    }
-    connect(inline_completion_cb_, &QCheckBox::toggled, this, [](bool on) {
-        SettingsRepository::instance().set(QStringLiteral("inline_completion.enabled"),
-                                           on ? QStringLiteral("true") : QStringLiteral("false"), QStringLiteral("ai"));
-    });
-
     auto* hdr_row = new QHBoxLayout;
     hdr_row->addWidget(refresh_btn_);
     hdr_row->addStretch();
-    hdr_row->addWidget(inline_completion_cb_);
     root->addLayout(hdr_row);
 
     // ── Spend summary ────────────────────────────────────────────────

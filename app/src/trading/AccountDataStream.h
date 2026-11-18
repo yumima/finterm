@@ -40,7 +40,7 @@ class AccountDataStream : public QObject {
 
     // --- Symbol management ---
     void subscribe_symbols(const QStringList& symbols);
-    void set_selected_symbol(const QString& symbol, const QString& exchange);
+    void set_selected_symbol(const QString& symbol);
     QString selected_symbol() const { return selected_symbol_; }
 
     // --- On-demand fetches (for chart, orderbook, time & sales) ---
@@ -102,7 +102,6 @@ class AccountDataStream : public QObject {
 
     // Subscriptions
     QString selected_symbol_;
-    QString selected_exchange_;
     QStringList watchlist_symbols_;
 
     // Cached data (main thread only — no mutex needed since all updates are via QueuedConnection)

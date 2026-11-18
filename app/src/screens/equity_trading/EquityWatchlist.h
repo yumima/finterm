@@ -50,7 +50,6 @@ class EquityWatchlist : public QWidget {
     QTableWidget* table_ = nullptr;
 
     QVector<WatchlistEntry> entries_;
-    QString active_symbol_;
     QMutex mutex_;
 };
 

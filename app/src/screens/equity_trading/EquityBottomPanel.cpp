@@ -222,10 +222,6 @@ void EquityBottomPanel::setup_stats_tab() {
 
 // ── Data Setters ───────────────────────────────────────────────────────────
 
-void EquityBottomPanel::set_mode(bool is_paper) {
-    is_paper_ = is_paper;
-}
-
 void EquityBottomPanel::set_paper_positions(const QVector<trading::PtPosition>& positions) {
     positions_table_->setRowCount(positions.size());
     for (int i = 0; i < positions.size(); ++i) {

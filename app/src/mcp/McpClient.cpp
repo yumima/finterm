@@ -429,18 +429,9 @@ void McpClient::handle_line(const QByteArray& line) {
 
     QJsonObject obj = doc.object();
     if (!obj.contains("id")) {
-        // JSON-RPC notification — no `id`, no response expected.  Route
-        // to the registered handler if any.  Common methods:
-        //   `notifications/message`  — server-side structured log
-        //   `notifications/resources/list_changed`
-        //   `notifications/tools/list_changed`
-        //   `notifications/prompts/list_changed`
-        //   `notifications/progress`  — progress updates for in-flight calls
-        if (notification_handler_) {
-            const QString method = obj.value("method").toString();
-            const QJsonObject params = obj.value("params").toObject();
-            notification_handler_(method, params);
-        }
+        // JSON-RPC notification — no `id`, no response expected. Nothing in
+        // the app consumes server notifications (notifications/message,
+        // */list_changed, progress), so they are dropped.
         return;
     }
 

@@ -23,7 +23,6 @@ enum NewsFeedRole {
     ThreatLevelRole,
     SourceFlagRole,
     LanguageRole,
-    HasGeoRole,
     // Pre-formatted display strings — computed once in set_wire_articles,
     // read directly in paint() to avoid per-frame allocations (P7/Per.19)
     FormattedSourceRole,  // source.left(10).toUpper()
@@ -70,7 +69,6 @@ class NewsFeedModel : public QAbstractListModel {
     QHash<QString, int> article_id_to_row_;         // O(1) index lookup for WIRE mode
     QHash<QString, int> cluster_id_to_row_;         // O(1) index lookup for CLUSTERS mode
     QHash<QString, QString> article_monitor_color_; // O(1) vs QMap's O(log n)
-    QSet<QString> geo_article_ids_;
     int unseen_count_ = 0; // incremental counter, avoids O(n) scan
 
     // Per-row pre-formatted display strings — avoids string allocations in paint()

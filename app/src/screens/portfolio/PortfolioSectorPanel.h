@@ -16,7 +16,6 @@ class PortfolioSectorPanel : public QWidget {
     explicit PortfolioSectorPanel(QWidget* parent = nullptr);
 
     void set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings);
-    void set_currency(const QString& currency);
     /// Feed real pairwise Pearson correlation matrix (key = "SYM1|SYM2").
     void set_correlation(const QHash<QString, double>& matrix);
 
@@ -45,7 +44,6 @@ class PortfolioSectorPanel : public QWidget {
 
     // Data
     QVector<portfolio::HoldingWithQuote> holdings_;
-    QString currency_ = "USD";
     QString selected_sector_;            // empty = no filter active
     QHash<QString, double> corr_matrix_; // real Pearson matrix, key="SYM1|SYM2"
 };

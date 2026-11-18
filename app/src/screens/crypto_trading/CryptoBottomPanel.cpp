@@ -351,10 +351,6 @@ void CryptoBottomPanel::set_market_info(const MarketInfoData& info) {
         next_funding_label_->setText(QDateTime::fromSecsSinceEpoch(info.next_funding_time).toString("HH:mm:ss"));
 }
 
-void CryptoBottomPanel::set_mode(bool is_paper) {
-    is_paper_ = is_paper;
-}
-
 void CryptoBottomPanel::set_live_positions(const QJsonArray& positions) {
     const int n = positions.size();
     positions_table_->setUpdatesEnabled(false);

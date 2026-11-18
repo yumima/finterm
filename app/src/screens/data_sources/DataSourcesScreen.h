@@ -152,7 +152,6 @@ class DataSourcesScreen : public QWidget, public finterm::screens::IStatefulScre
     QString selected_connection_id_;
     Category active_category_ = Category::Database;
     bool show_all_categories_ = true;
-    ViewMode view_mode_ = ViewMode::Gallery;
     int stat_filter_ = -1; // -1 = none, 0-3 = stat box index
     QString conn_search_text_;
     QMap<QString, QPair<bool, QString>> live_status_cache_;

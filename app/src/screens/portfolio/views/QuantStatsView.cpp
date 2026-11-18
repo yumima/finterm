@@ -281,9 +281,8 @@ void QuantStatsView::build_ui() {
 
 // ── set_data ──────────────────────────────────────────────────────────────────
 
-void QuantStatsView::set_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
+void QuantStatsView::set_data(const portfolio::PortfolioSummary& summary, const QString& /*currency*/) {
     summary_ = summary;
-    currency_ = currency;
 
     // Populate metrics immediately from live summary data
     update_metrics();

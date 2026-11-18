@@ -84,7 +84,6 @@ class AgentChatPanel : public QWidget {
     // ── State ──────────────────────────────────────────────────────────────────
     bool auto_routing_ = false;
     bool executing_ = false;
-    bool data_loaded_ = false;
     int typing_step_ = 0;
     QString last_query_;
     QString pending_request_id_;

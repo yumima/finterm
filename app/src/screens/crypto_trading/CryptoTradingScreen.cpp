@@ -746,7 +746,6 @@ void CryptoTradingScreen::on_mode_toggled() {
     mode_btn_->style()->unpolish(mode_btn_);
     mode_btn_->style()->polish(mode_btn_);
     order_entry_->set_mode(!is_live);
-    bottom_panel_->set_mode(!is_live);
 
     if (is_live) {
         live_data_timer_->start(5000);

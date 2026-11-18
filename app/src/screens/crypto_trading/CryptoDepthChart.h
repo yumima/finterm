@@ -29,7 +29,6 @@ class CryptoDepthChart : public QWidget {
 
     QVector<QPair<double, double>> bids_;
     QVector<QPair<double, double>> asks_;
-    double spread_ = 0;
     QPixmap cache_;
     QMutex mutex_;
     bool cache_dirty_ = true;

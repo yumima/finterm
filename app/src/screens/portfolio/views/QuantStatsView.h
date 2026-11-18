@@ -73,7 +73,6 @@ class QuantStatsView : public QWidget {
 
     // ── State ─────────────────────────────────────────────────────────────────
     portfolio::PortfolioSummary summary_;
-    QString currency_;
     QJsonObject qs_data_; // parsed result from quantstats_analysis.py
     QJsonObject mc_data_; // parsed result from quantstats_monte_carlo.py
     bool qs_running_ = false;

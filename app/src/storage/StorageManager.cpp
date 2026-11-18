@@ -77,7 +77,6 @@ QVector<StorageCategoryInfo> StorageManager::all_stats() const {
     // --- AI & LLM ---
     stats.append({"chat_sessions", "Chat Sessions", "AI & LLM", count_table("chat_sessions")});
     stats.append({"chat_messages", "Chat Messages", "AI & LLM", count_table("chat_messages")});
-    stats.append({"context_recordings", "Context Recordings", "AI & LLM", count_table("recorded_contexts")});
     stats.append({"agent_configs", "Agent Configurations", "AI & LLM", count_table("agent_configs")});
     stats.append({"llm_configs", "LLM Provider Configs", "AI & LLM", count_table("llm_configs")});
     stats.append({"llm_model_configs", "LLM Model Configs", "AI & LLM", count_table("llm_model_configs")});
@@ -160,16 +159,6 @@ Result<void> StorageManager::clear_category(const QString& category_id) {
         if (r.is_ok())
             emit category_cleared(category_id);
         return r;
-    }
-
-    // --- Context recordings ---
-    if (category_id == "context_recordings") {
-        auto r1 = delete_from("recording_sessions");
-        auto r2 = delete_from("recorded_contexts");
-        if (r2.is_err())
-            return r2;
-        emit category_cleared(category_id);
-        return Result<void>::ok();
     }
 
     // --- Agent configs ---

@@ -138,7 +138,6 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     QString selected_id_;
     QString selected_symbol_;
     portfolio::PortfolioSummary current_summary_;
-    portfolio::ComputedMetrics current_metrics_;
     bool summary_loaded_ = false;
     bool order_panel_visible_ = false;
     bool show_ffn_ = false;

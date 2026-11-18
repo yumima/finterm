@@ -61,7 +61,6 @@ class WorkflowsViewPanel : public QWidget {
 
     // ── State ────────────────────────────────────────────────────────────────
     bool executing_ = false;
-    bool data_loaded_ = false;
     QString pending_request_id_;
     QString current_workflow_type_;
 };

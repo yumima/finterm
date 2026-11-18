@@ -15,7 +15,6 @@
 #include "core/result/Result.h"
 #include "storage/repositories/AgentTraceRepository.h"
 
-#include <QCheckBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
@@ -52,7 +51,6 @@ class AiSystemSection : public QWidget {
     QPushButton* refresh_btn_ = nullptr;
     QPushButton* disable_btn_ = nullptr;
     QPushButton* enable_btn_ = nullptr;
-    QCheckBox* inline_completion_cb_ = nullptr;
     QLabel* status_lbl_ = nullptr;
 
     void build_ui();

@@ -18,8 +18,6 @@ class RelationshipPanel : public QWidget {
     void build_ui();
     QWidget* build_node_card(const finterm::services::geo::RelationshipNode& node, QWidget* parent);
 
-    QLabel* selected_label_ = nullptr;
-    QWidget* detail_panel_ = nullptr;
 };
 
 } // namespace finterm::screens

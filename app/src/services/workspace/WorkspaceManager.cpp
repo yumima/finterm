@@ -1,6 +1,6 @@
 #include "services/workspace/WorkspaceManager.h"
 
-#include "app/ScreenRouter.h"
+#include "app/DockScreenRouter.h"
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "core/symbol/SymbolContext.h"
@@ -41,6 +41,13 @@ void WorkspaceManager::set_main_window(QMainWindow* w) {
 
 void WorkspaceManager::remove_window(QMainWindow* w) {
     windows_.removeAll(w);
+}
+
+void WorkspaceManager::set_router(DockScreenRouter* r) {
+    if (!r || routers_.contains(r))
+        return;
+    routers_.append(r);
+    connect(r, &QObject::destroyed, this, [this, r]() { routers_.removeAll(r); });
 }
 
 // ── Participant registration ──────────────────────────────────────────────────
@@ -254,8 +261,6 @@ QString WorkspaceManager::current_workspace_name() const {
     return current_workspace_.has_value() ? current_workspace_->metadata.name : QString{};
 }
 
-// ── Screen changed slot ───────────────────────────────────────────────────────
-
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 void WorkspaceManager::capture_from_ui() {
@@ -288,9 +293,6 @@ void WorkspaceManager::apply_to_ui() {
     if (!current_workspace_.has_value())
         return;
     const WorkspaceDef& ws = *current_workspace_;
-
-    // Store dashboard profile key so DashboardScreen picks it up
-    SettingsRepository::instance().set("workspace.active_dashboard_profile", ws.metadata.id, "workspace");
 
     // Store dashboard layout as base64 in the settings key DashboardScreen reads
     // We serialize the layout and write it so restore_layout() loads the right grid

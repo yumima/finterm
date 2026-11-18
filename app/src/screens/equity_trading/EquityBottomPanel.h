@@ -35,7 +35,6 @@ class EquityBottomPanel : public QWidget {
     void set_time_sales(const QVector<trading::BrokerTrade>& trades); // bulk load
     void prepend_trade(const trading::BrokerTrade& trade);            // live append at top
 
-    void set_mode(bool is_paper);
 
   signals:
     void cancel_order_requested(const QString& order_id);
@@ -84,7 +83,6 @@ class EquityBottomPanel : public QWidget {
     // Stats labels
     QLabel* stat_values_[5] = {};
 
-    bool is_paper_ = true;
 };
 
 } // namespace finterm::screens::equity

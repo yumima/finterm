@@ -50,8 +50,6 @@ QVariant NewsFeedModel::data(const QModelIndex& index, int role) const {
                 return static_cast<int>(article.source_flag);
             case LanguageRole:
                 return article.lang;
-            case HasGeoRole:
-                return geo_article_ids_.contains(article.id);
             // Pre-formatted display strings — no allocation in paint()
             case FormattedSourceRole:
                 return row < formatted_rows_.size() ? formatted_rows_[row].source : QVariant{};

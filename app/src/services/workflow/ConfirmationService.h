@@ -45,8 +45,6 @@ class ConfirmationService : public QObject {
   private:
     ConfirmationService();
 
-    bool auto_approve_paper_ = true;
-
     struct PendingConfirmation {
         ConfirmationRequest request;
         std::function<void(bool, const QString&)> callback;

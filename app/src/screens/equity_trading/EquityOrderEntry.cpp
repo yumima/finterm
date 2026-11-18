@@ -304,7 +304,6 @@ void EquityOrderEntry::configure_for_broker(const trading::BrokerProfile& profil
         int idx = exchange_combo_->findText(profile.default_exchange);
         if (idx >= 0)
             exchange_combo_->setCurrentIndex(idx);
-        current_exchange_ = profile.default_exchange;
     }
 
     // Update brokerage label
@@ -320,7 +319,6 @@ void EquityOrderEntry::configure_for_broker(const trading::BrokerProfile& profil
         tp_edit_->clear();
     status_label_->clear();
     current_price_ = 0;
-    balance_ = 0;
     update_cost_preview();
 }
 
@@ -353,7 +351,6 @@ void EquityOrderEntry::set_order_type(int idx) {
 }
 
 void EquityOrderEntry::set_balance(double balance) {
-    balance_ = balance;
     balance_label_->setText(QString("%1%2").arg(currency_symbol(current_currency_)).arg(balance, 0, 'f', 2));
     update_cost_preview();
 }
@@ -378,7 +375,6 @@ void EquityOrderEntry::set_symbol(const QString& symbol) {
 }
 
 void EquityOrderEntry::set_exchange(const QString& exchange) {
-    current_exchange_ = exchange;
     for (int i = 0; i < exchange_combo_->count(); ++i) {
         if (exchange_combo_->itemText(i) == exchange) {
             exchange_combo_->setCurrentIndex(i);

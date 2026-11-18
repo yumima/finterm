@@ -181,7 +181,6 @@ class DatabentoService : public QObject {
 
     DatabentoOhlcvResult cached_ohlcv_;
     DatabentoVolSurfaceResult cached_vol_;
-    DatabentoFuturesResult cached_futures_;
     QDateTime last_fetch_time_;
 
     // Metadata caches — populated lazily on first request, valid for app session

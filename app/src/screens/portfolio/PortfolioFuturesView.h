@@ -55,7 +55,6 @@ class PortfolioFuturesView : public QWidget {
     static QString quote_symbol(const QString& symbol);
 
     portfolio::PortfolioSummary summary_;
-    QString currency_ = "USD";
 
     QTableWidget* futures_table_ = nullptr;
     QTableWidget* extended_table_ = nullptr;

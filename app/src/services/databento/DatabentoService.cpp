@@ -134,11 +134,6 @@ DatabentoService::DatabentoService() {
             const QJsonObject root = doc.object();
             const QJsonObject raw = root.value("raw").toObject();
             if (!raw.isEmpty()) {
-                DatabentoFuturesResult res;
-                res.success = true;
-                res.forward = parse_commodity_forward(raw);
-                res.contango = parse_contango(raw);
-                cached_futures_ = res;
                 const QFileInfo fi(disk_cache().path(QString::fromLatin1(kFuturesFile)));
                 if (fi.exists())
                     last_fetch_time_ = fi.lastModified();
@@ -376,7 +371,6 @@ void DatabentoService::fetch_futures_term_structure(const QStringList& commoditi
         res.success = true;
         res.forward = parse_commodity_forward(j);
         res.contango = parse_contango(j);
-        self->cached_futures_ = res;
         self->last_fetch_time_ = QDateTime::currentDateTime();
         {
             QJsonObject root;

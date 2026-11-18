@@ -310,7 +310,6 @@ void CryptoOrderEntry::set_current_price(double price) {
 }
 
 void CryptoOrderEntry::set_mode(bool is_paper) {
-    is_paper_ = is_paper;
     mode_label_->setText(is_paper ? "PAPER" : "LIVE");
     mode_label_->setProperty("mode", is_paper ? "paper" : "live");
     mode_label_->style()->unpolish(mode_label_);

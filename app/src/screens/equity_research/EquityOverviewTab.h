@@ -317,7 +317,6 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_1y_ = nullptr;
     QPushButton* btn_5y_ = nullptr;
     QPushButton* btn_custom_ = nullptr; // opens date-range picker
-    QPushButton* active_period_btn_ = nullptr;
     void open_custom_range_picker();
     /// Refresh the CUSTOM button's tooltip from current_period_. Must be
     /// called from EVERY path that changes current_period_ — see its comment.

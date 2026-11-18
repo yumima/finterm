@@ -68,7 +68,6 @@ class CryptoOrderEntry : public QWidget {
     // State
     double balance_ = 0;
     double current_price_ = 0;
-    bool is_paper_ = true;
     bool is_buy_side_ = true;
     QString current_symbol_ = "BTC/USDT";
 };

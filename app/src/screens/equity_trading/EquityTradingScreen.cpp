@@ -479,7 +479,7 @@ void EquityTradingScreen::init_focused_account() {
     dsm.start_stream(focused_account_id_);
     auto* stream = dsm.stream_for(focused_account_id_);
     if (stream) {
-        stream->set_selected_symbol(selected_symbol_, selected_exchange_);
+        stream->set_selected_symbol(selected_symbol_);
         stream->subscribe_symbols(watchlist_symbols_);
         stream->fetch_candles(selected_symbol_, chart_->current_timeframe());
         stream->fetch_orderbook(selected_symbol_);
@@ -691,7 +691,6 @@ void EquityTradingScreen::on_account_changed(const QString& account_id) {
     mode_btn_->style()->unpolish(mode_btn_);
     mode_btn_->style()->polish(mode_btn_);
     order_entry_->set_mode(!is_live);
-    bottom_panel_->set_mode(!is_live);
 
     exchange_label_->setText(selected_exchange_);
     symbol_input_->setText(selected_symbol_);
@@ -706,7 +705,7 @@ void EquityTradingScreen::on_account_changed(const QString& account_id) {
     dsm.start_stream(account_id);
     auto* stream = dsm.stream_for(account_id);
     if (stream) {
-        stream->set_selected_symbol(selected_symbol_, selected_exchange_);
+        stream->set_selected_symbol(selected_symbol_);
         stream->subscribe_symbols(watchlist_symbols_);
         stream->fetch_candles(selected_symbol_, chart_->current_timeframe());
         stream->fetch_orderbook(selected_symbol_);
@@ -767,7 +766,7 @@ void EquityTradingScreen::switch_symbol(const QString& symbol) {
 
     auto* stream = DataStreamManager::instance().stream_for(focused_account_id_);
     if (stream) {
-        stream->set_selected_symbol(symbol, selected_exchange_);
+        stream->set_selected_symbol(symbol);
         stream->fetch_candles(symbol, chart_->current_timeframe());
         stream->fetch_orderbook(symbol);
 
@@ -788,7 +787,6 @@ void EquityTradingScreen::on_mode_toggled() {
     mode_btn_->style()->unpolish(mode_btn_);
     mode_btn_->style()->polish(mode_btn_);
     order_entry_->set_mode(!is_live);
-    bottom_panel_->set_mode(!is_live);
 
     // Update per-account trading mode
     AccountManager::instance().set_trading_mode(focused_account_id_, is_live ? "live" : "paper");
@@ -857,7 +855,7 @@ void EquityTradingScreen::on_accounts_clicked() {
         DataStreamManager::instance().start_stream(account_id);
         auto* stream = DataStreamManager::instance().stream_for(account_id);
         if (stream && account_id == focused_account_id_) {
-            stream->set_selected_symbol(selected_symbol_, selected_exchange_);
+            stream->set_selected_symbol(selected_symbol_);
             stream->subscribe_symbols(watchlist_symbols_);
         }
         AccountManager::instance().set_connection_state(account_id, ConnectionState::Connected);

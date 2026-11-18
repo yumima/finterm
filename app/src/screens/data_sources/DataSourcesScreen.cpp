@@ -691,7 +691,6 @@ QWidget* DataSourcesScreen::build_tab_bar() {
             btn->style()->polish(btn);
 
             page_stack_->setCurrentIndex(page_idx);
-            view_mode_ = (page_idx == 0) ? ViewMode::Gallery : ViewMode::Connections;
         });
         return btn;
     };

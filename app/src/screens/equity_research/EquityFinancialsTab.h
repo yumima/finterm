@@ -58,7 +58,6 @@ class EquityFinancialsTab : public QWidget {
     /// error path so a failed fetch after a symbol switch repaints empty
     /// instead of leaving (and exporting) the previous symbol's financials.
     QString displayed_symbol_;
-    bool loaded_ = false;
 
     // Statement selector buttons
     QPushButton* btn_income_ = nullptr;

@@ -314,6 +314,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             [this](const QString& msg) { QMessageBox::warning(this, "Workspace Error", msg); });
 
     dock_router_ = new DockScreenRouter(dock_manager_, this);
+    WorkspaceManager::instance().set_router(dock_router_);
     setup_dock_screens();
 
     // Boot prefetch — DEFERRED. Warming the PORTFOLIO caches kicks a
@@ -1621,8 +1622,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
     // Persist the set of still-open windows (this one minus itself, since
     // we're about to be destroyed). On next launch, main.cpp will iterate
-    // this list and restore each secondary window. We also save the count
-    // for legacy callers.
+    // this list and restore each secondary window.
     QList<int> open_ids;
     const auto top_widgets = QApplication::topLevelWidgets();
     for (QWidget* w : top_widgets) {
@@ -1636,7 +1636,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         open_ids.append(window_id_);
     std::sort(open_ids.begin(), open_ids.end());
     SessionManager::instance().save_window_ids(open_ids);
-    SessionManager::instance().save_window_count(static_cast<int>(open_ids.size()));
 
     event->accept();
 }

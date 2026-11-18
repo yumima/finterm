@@ -158,7 +158,6 @@ void CryptoOrderBook::set_data(const QVector<QPair<double, double>>& bids, const
         QMutexLocker lock(&mutex_);
         bids_ = bids;
         asks_ = asks;
-        spread_ = spread;
     }
     spread_label_->setText(QString("SPREAD  %1  (%2%)").arg(spread, 0, 'f', 2).arg(spread_pct, 0, 'f', 4));
     cache_dirty_ = true;

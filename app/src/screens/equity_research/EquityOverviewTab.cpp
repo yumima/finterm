@@ -1220,7 +1220,6 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     make_btn("6M", btn_6m_, "6mo");
     make_btn("1Y", btn_1y_, "1y");
     make_btn("5Y", btn_5y_, "5y");
-    active_period_btn_ = btn_1y_;
 
     // Custom date-range button. Opens a tiny popover with two QDateEdits;
     // confirming routes through switch_period with a "range:start:end"
@@ -1481,7 +1480,6 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
     for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
         if (b)
             b->setStyleSheet(b == btn ? active : inactive);
-    active_period_btn_ = btn;
 
     // Clear the canvas + show the overlay so the user gets immediate visual
     // feedback that the chart is updating. QueryStore takes care of the
@@ -1606,7 +1604,6 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
     for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
         if (b)
             b->setStyleSheet(b == match ? active_ss : inactive_ss);
-    active_period_btn_ = match;
 
     restoring_view_ = false;
 }

@@ -16,7 +16,7 @@ ConfirmationService::ConfirmationService() : QObject(nullptr) {}
 
 void ConfirmationService::request(const ConfirmationRequest& req, std::function<void(bool, const QString&)> callback) {
     // Auto-approve paper trading for non-critical actions
-    if (req.paper_trading && auto_approve_paper_ && req.risk != RiskLevel::Critical) {
+    if (req.paper_trading && req.risk != RiskLevel::Critical) {
         LOG_INFO("Confirmation", QString("Auto-approved (paper): %1").arg(req.title));
         AuditLogger::instance().log(AuditAction::ConfirmationApproved, {}, {}, {}, "Auto-approved (paper trading)",
                                     req.details, true);

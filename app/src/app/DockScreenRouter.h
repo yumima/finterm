@@ -19,8 +19,7 @@ class IGroupLinked;
 struct SymbolRef;
 
 /// ADS-aware screen router. Each screen is wrapped in a CDockWidget that can be
-/// docked, tabbed, floated, or auto-hidden. Mirrors ScreenRouter's API so the
-/// transition is straightforward.
+/// docked, tabbed, floated, or auto-hidden.
 ///
 /// Lazy loading: factories are stored and only called when a screen is first
 /// navigated to (or when ensure_all_registered() pre-creates placeholders for

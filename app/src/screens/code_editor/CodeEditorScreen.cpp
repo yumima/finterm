@@ -663,7 +663,6 @@ void CellWidget::render_markdown() {
 }
 
 void CellWidget::enterEvent(QEnterEvent* /*event*/) {
-    hovered_ = true;
     // Show toolbar buttons
     for (int i = 0; i < toolbar_->layout()->count(); ++i) {
         auto* w = toolbar_->layout()->itemAt(i)->widget();
@@ -675,7 +674,6 @@ void CellWidget::enterEvent(QEnterEvent* /*event*/) {
 }
 
 void CellWidget::leaveEvent(QEvent* /*event*/) {
-    hovered_ = false;
     // Hide toolbar buttons
     for (int i = 0; i < toolbar_->layout()->count(); ++i) {
         auto* w = toolbar_->layout()->itemAt(i)->widget();

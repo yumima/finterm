@@ -870,7 +870,6 @@ void PortfolioScreen::on_summary_error(QString portfolio_id, QString /*error*/) 
 }
 
 void PortfolioScreen::on_metrics_computed(portfolio::ComputedMetrics metrics) {
-    current_metrics_ = metrics;
     stats_ribbon_->set_metrics(metrics);
     if (heatmap_)
         heatmap_->set_metrics(metrics);
@@ -1477,7 +1476,6 @@ void PortfolioScreen::update_main_view_data() {
     perf_chart_->set_currency(currency);
 
     sector_panel_->set_holdings(current_summary_.holdings);
-    sector_panel_->set_currency(currency);
 
     blotter_->set_holdings(current_summary_.holdings);
     if (positions_count_label_)

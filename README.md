@@ -6,6 +6,11 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`952f4d948`](https://github.com/yumima/finterm/commit/952f4d948) python runner: drop the ffn_wrapper venv-routing keyword
+- [`5a4af00dc`](https://github.com/yumima/finterm/commit/5a4af00dc) cleanup: delete functions, members, types and constants nothing uses
+- [`f6ffcb21d`](https://github.com/yumima/finterm/commit/f6ffcb21d) cleanup: delete classes nothing in the app constructs or names
+- [`1c0cf4b2e`](https://github.com/yumima/finterm/commit/1c0cf4b2e) cleanup: delete source files no target compiles or includes
+- [`c30433ca3`](https://github.com/yumima/finterm/commit/c30433ca3) credentials: EDGAR_IDENTITY reaches the scripts (sec_http honours a user-set identity)
 - [`dff029d5e`](https://github.com/yumima/finterm/commit/dff029d5e) sec http: every edgartools user gets the contact identity from one helper
 - [`738690969`](https://github.com/yumima/finterm/commit/738690969) sec http: one retry policy, a deadline, a byte cap; edgartools paced by the gate
 - [`7bb40ed94`](https://github.com/yumima/finterm/commit/7bb40ed94) sec directory: the C++ ticker -> CIK map reads the app's one copy

@@ -54,12 +54,6 @@ DashboardToolBar::DashboardToolBar(QWidget* parent) : QWidget(parent) {
 
     make_sep(ll);
 
-    status_text_ = new QLabel("LIVE");
-    status_text_->setObjectName("dtStatus");
-    ll->addWidget(status_text_);
-
-    make_sep(ll);
-
     clock_btn_ = new QPushButton;
     clock_btn_->setObjectName("dtClock");
     clock_btn_->setFlat(true);
@@ -143,30 +137,28 @@ void DashboardToolBar::refresh_theme() {
                 "#dtLeftContainer, #dtRightContainer { background:%1; }"
                 "#dtSep { color:%3; background:transparent; }"
                 "#dtBrand { color:%4; font-weight:bold; letter-spacing:1px; background:transparent; }"
-                "#dtStatus { color:%5; font-weight:bold; background:transparent; }"
-                "QPushButton#dtClock { color:%6; background:transparent; border:none; padding:0; "
+                "QPushButton#dtClock { color:%5; background:transparent; border:none; padding:0; "
                 "text-align:left; }"
-                "QPushButton#dtClock:hover { color:%10; }"
-                "#dtWidgetCount { color:%7; font-weight:bold; background:transparent; }"
-                "#dtBtn { background:%8; border:1px solid %3; color:%6; padding:0 10px; font-weight:bold; }"
-                "#dtBtn:hover { background:%9; color:%10; border-color:%11; }"
-                "#dtAddBtn { background:%8; border:1px solid %12; color:%4; padding:0 10px; font-weight:bold; }"
-                "#dtAddBtn:hover { background:%9; color:%10; border-color:%11; }"
-                "#dtResetBtn { background:%8; border:1px solid %13; color:%13; padding:0 10px; font-weight:bold; }"
-                "#dtResetBtn:hover { background:%9; color:%10; border-color:%11; }")
+                "QPushButton#dtClock:hover { color:%9; }"
+                "#dtWidgetCount { color:%6; font-weight:bold; background:transparent; }"
+                "#dtBtn { background:%7; border:1px solid %3; color:%5; padding:0 10px; font-weight:bold; }"
+                "#dtBtn:hover { background:%8; color:%9; border-color:%10; }"
+                "#dtAddBtn { background:%7; border:1px solid %11; color:%4; padding:0 10px; font-weight:bold; }"
+                "#dtAddBtn:hover { background:%8; color:%9; border-color:%10; }"
+                "#dtResetBtn { background:%7; border:1px solid %12; color:%12; padding:0 10px; font-weight:bold; }"
+                "#dtResetBtn:hover { background:%8; color:%9; border-color:%10; }")
             .arg(ui::colors::BG_SURFACE())     // %1
             .arg(ui::colors::BORDER_DIM())     // %2
             .arg(ui::colors::BORDER_MED())     // %3
             .arg(ui::colors::AMBER())          // %4
-            .arg(ui::colors::POSITIVE())       // %5
-            .arg(ui::colors::TEXT_SECONDARY()) // %6
-            .arg(ui::colors::CYAN())           // %7
-            .arg(ui::colors::BG_RAISED())      // %8
-            .arg(ui::colors::BG_HOVER())       // %9
-            .arg(ui::colors::TEXT_PRIMARY())   // %10
-            .arg(ui::colors::BORDER_BRIGHT())  // %11
-            .arg(ui::colors::AMBER_DIM())      // %12
-            .arg(ui::colors::NEGATIVE()));     // %13
+            .arg(ui::colors::TEXT_SECONDARY()) // %5
+            .arg(ui::colors::CYAN())           // %6
+            .arg(ui::colors::BG_RAISED())      // %7
+            .arg(ui::colors::BG_HOVER())       // %8
+            .arg(ui::colors::TEXT_PRIMARY())   // %9
+            .arg(ui::colors::BORDER_BRIGHT())  // %10
+            .arg(ui::colors::AMBER_DIM())      // %11
+            .arg(ui::colors::NEGATIVE()));     // %12
 
     // Force child containers to re-evaluate their background after stylesheet change.
     // Without this, Qt may repaint them with the default palette grey on show events.

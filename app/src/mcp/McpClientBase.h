@@ -121,27 +121,13 @@ class McpClientBase : public QObject {
     /// log lines (http).  Last 500 lines max.
     virtual QStringList get_logs() const = 0;
 
-    // ── Server-initiated notifications ─────────────────────────────────
-    //
-    // Servers can fire JSON-RPC notifications (messages without an
-    // `id` field) at the client — `notifications/message` for
-    // structured logs, plus the various `notifications/*/changed`
-    // signals for resource / tool / prompt list updates.  The default
-    // handler is a no-op; concrete transports route incoming
-    // notifications through it.
-    //
-    // Server-initiated *requests* (sampling/createMessage,
-    // elicitation/create) are a separate primitive — they expect a
-    // response.  Stdio implements them via the same dispatcher;
-    // McpHttpClient currently can't (HTTP is request-response).
-
-    using NotificationHandler = std::function<void(const QString& method, const QJsonObject& params)>;
-
     // Server-initiated requests — JSON-RPC messages with both an `id`
     // and a `method` field.  Server expects a response on the same
     // connection.  Used for `sampling/createMessage` and
     // `elicitation/create` (server asks client to invoke LLM / prompt
-    // user).
+    // user).  Stdio implements them via its line dispatcher;
+    // McpHttpClient currently can't (HTTP is request-response).
+    // Server notifications (no `id`) are dropped.
     //
     // Handler returns:
     //   - Result<QJsonObject>::ok(result)   → success, result becomes
@@ -157,7 +143,6 @@ class McpClientBase : public QObject {
     void set_server_request_handler(ServerRequestHandler handler) { server_request_handler_ = std::move(handler); }
 
   protected:
-    NotificationHandler notification_handler_;
     ServerRequestHandler server_request_handler_;
 };
 

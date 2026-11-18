@@ -51,7 +51,6 @@ class ComponentBrowserDialog : public QDialog {
 
     QString active_category_ = "All";
     QString search_query_;
-    QString selected_id_;
 };
 
 } // namespace finterm::ui
