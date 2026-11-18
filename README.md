@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`7a5125703`](https://github.com/yumima/finterm/commit/7a5125703) scripts: delete 278 Python scripts that nothing runs or imports
 - [`dff029d5e`](https://github.com/yumima/finterm/commit/dff029d5e) sec http: every edgartools user gets the contact identity from one helper
 - [`738690969`](https://github.com/yumima/finterm/commit/738690969) sec http: one retry policy, a deadline, a byte cap; edgartools paced by the gate
 - [`7bb40ed94`](https://github.com/yumima/finterm/commit/7bb40ed94) sec directory: the C++ ticker -> CIK map reads the app's one copy
