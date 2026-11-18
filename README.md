@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`79a047341`](https://github.com/yumima/finterm/commit/79a047341) equity research: CURRENT, BID and ASK in Today's Trading; one live price; a real book
 - [`932cf2420`](https://github.com/yumima/finterm/commit/932cf2420) knowledge: the "?" help works before KNOWLEDGE is opened, and Open in KNOWLEDGE goes there
 - [`005d2b5fc`](https://github.com/yumima/finterm/commit/005d2b5fc) equity research: Valuation and Share Stats above Extended Hours; overnight note on one line
 - [`efb44e1fc`](https://github.com/yumima/finterm/commit/efb44e1fc) extended hours: keep overnight prints across a restart; say why there is no Overnight block

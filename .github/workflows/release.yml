@@ -1446,3 +1446,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run website.yml --ref main
+
+      # Policy: one release on GitHub — the current one. After this release
+      # and its metadata are out, delete every release published BEFORE it,
+      # assets included (~300 MB each). Git tags stay, so any version can be
+      # rebuilt. Only older ones: re-running an old tag never deletes a newer
+      # release. Last on purpose — a failure above leaves the previous release
+      # (still what README/updates.json point at) in place.
+      - name: Purge previous releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .published_at)
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.tag_name != \"${TAG}\" and .published_at != null and .published_at < \"${current}\") | .tag_name" |
+          while read -r old; do
+            gh release delete "${old}" --repo "${GITHUB_REPOSITORY}" --yes
+            echo "Deleted release ${old} (tag kept)"
+          done
