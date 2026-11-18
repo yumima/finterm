@@ -260,16 +260,19 @@ class _NoSuch(Exception):
     """SEC answered 404: the thing asked for does not exist (not a failure)."""
 
 
+class _Unavailable(Exception):
+    """SEC refused or did not answer: unknown, not "does not exist"."""
+
+
 def _get(url: str) -> Any:
-    """One short SEC request, declared with sec_xbrl_data's identity but NOT
-    through its session: that session retries three times, which would turn an
-    8-second limit into half a minute of holding statements already in hand."""
-    import requests
-    import sec_xbrl_data as sx
-    r = requests.get(url, headers=dict(sx.session.headers), timeout=TIMEOUT)
-    if r.status_code == 404:
+    """One short SEC request (sec_http: contact identity, shared pacing, no
+    retries — the statements are already in hand; do not hold them long)."""
+    import sec_http
+    r, status = sec_http.get(url, timeout=TIMEOUT)
+    if status == 404:
         raise _NoSuch(url)
-    r.raise_for_status()
+    if r is None:
+        raise _Unavailable(f"HTTP {status}" if status else "SEC did not answer")
     return r.json()
 
 
@@ -311,7 +314,6 @@ def facts_for(symbol: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     back-off so a slow or refusing SEC is paid for once, not on every
     statement; a failure particular to one symbol does not."""
     global _backoff_until
-    import requests
     now = time.monotonic()
     with _lock:
         if now < _backoff_until:
@@ -328,7 +330,7 @@ def facts_for(symbol: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
                 _no_facts_until[symbol.upper()] = now + FACTS_TTL_S
             return None, {"status": "no_facts", "cik": cik_}
         return facts, {"status": "applied", "cik": cik_}
-    except (requests.exceptions.RequestException, fx.SourceUnavailable, _NoSuch, OSError) as e:
+    except (_Unavailable, fx.SourceUnavailable, _NoSuch, OSError) as e:
         with _lock:
             _backoff_until = time.monotonic() + BACKOFF_S
         return None, {"status": "unavailable", "reason": f"{type(e).__name__}: {str(e)[:120]}"}

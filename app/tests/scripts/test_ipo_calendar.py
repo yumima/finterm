@@ -334,8 +334,11 @@ def test_fast_pass_reproduces_the_last_enrich_from_the_cache():
     c.put("ov:9-9", {"cik": "999"})
     c.put("ov:8-8", {"cik": "888"})
     c.put("sub2:999", OPAY)
-    real = ic._http_json
-    ic._http_json = lambda *a: (_ for _ in ()).throw(AssertionError("fast pass made a request"))
+    real, real_sec = ic._http_json, ic.sec_http.get
+
+    def no_request(*a, **k):
+        raise AssertionError("fast pass made a request")
+    ic._http_json = ic.sec_http.get = no_request
 
     def fast():
         return ic.build(today=T, enrich=False, cache=c)
@@ -375,7 +378,7 @@ def test_fast_pass_reproduces_the_last_enrich_from_the_cache():
         c.con.commit()
         assert not fast()["enriched"]
     finally:
-        ic._http_json = real
+        ic._http_json, ic.sec_http.get = real, real_sec
 
 
 def test_enrich_records_what_it_could_not_get():

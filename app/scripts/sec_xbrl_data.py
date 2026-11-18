@@ -6,33 +6,22 @@ balance sheet for all public US companies (no API key required).
 import sys
 import json
 import os
-import requests
 from typing import Dict, Any, Optional, List
-from finterm_identity import user_agent
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 BASE_URL = "https://data.sec.gov/api/xbrl"
 
-session = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=3)
-session.mount('https://', adapter)
-session.mount('http://', adapter)
-session.headers.update({
-    "User-Agent": user_agent("finterm/4.0"),
-    "Accept": "application/json"
-})
-
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:
+    """SEC JSON, or {"error": ...} saying why not — a refusal or no answer is
+    never an empty document."""
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
+    response, status = sec_http.get(url, timeout=30, params=params, headers={"Accept": "application/json"})
+    if response is None:
+        return {"error": f"HTTP {status}: {url}" if status else f"Request failed: SEC did not answer for {url}"}
     try:
-        response = session.get(url, params=params, timeout=30)
-        response.raise_for_status()
         return response.json()
-    except requests.exceptions.HTTPError as e:
-        return {"error": f"HTTP {e.response.status_code}: {str(e)}"}
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
-    except (json.JSONDecodeError, ValueError) as e:
+    except ValueError as e:
         return {"error": f"JSON decode error: {str(e)}"}
 
 
@@ -84,12 +73,10 @@ def search_company(name_or_ticker: str) -> Any:
 
 def get_recent_filings(cik: str) -> Any:
     cik_fmt = _format_cik(cik)
+    data = _make_request(f"https://data.sec.gov/submissions/CIK{cik_fmt}.json")
+    if "error" in data:
+        return data
     try:
-        resp = session.get(
-            f"https://data.sec.gov/submissions/CIK{cik_fmt}.json", timeout=30
-        )
-        resp.raise_for_status()
-        data = resp.json()
         recent = data.get("filings", {}).get("recent", {})
         filings = []
         forms = recent.get("form", [])
@@ -111,12 +98,8 @@ def get_recent_filings(cik: str) -> Any:
             "sic_description": data.get("sicDescription", ""),
             "recent_filings": filings
         }
-    except requests.exceptions.HTTPError as e:
-        return {"error": f"HTTP {e.response.status_code}: {str(e)}"}
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
-    except (json.JSONDecodeError, ValueError) as e:
-        return {"error": f"JSON decode error: {str(e)}"}
+    except (AttributeError, TypeError) as e:
+        return {"error": f"Unexpected submissions document: {str(e)}"}
 
 
 def main(args=None):

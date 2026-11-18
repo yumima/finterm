@@ -6,18 +6,14 @@ Real data sources (no mocks, no demo data):
   3. SEC EDGAR submissions endpoint   (data.sec.gov/submissions/) — per-CIK filing history
 
 The scanner works without any third-party library such as edgartools.
-All HTTP calls use the standard library (urllib) so there are zero extra deps.
+Every SEC request goes through sec_http (the user's contact, shared pacing).
 """
 import sys
-import json
 import re
-import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode, quote
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 scripts_path = Path(__file__).parent.parent.parent.parent
@@ -28,42 +24,34 @@ sys.path.insert(0, str(analytics_path))
 
 from corporateFinance.config import MA_FILING_FORMS, MATERIAL_EVENT_ITEMS
 from corporateFinance.deal_database.database_schema import MADatabase
-from finterm_identity import user_agent
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-_EDGAR_HEADERS = {
-    "User-Agent": user_agent(),   # SEC requires a valid UA
-    "Accept": "application/json",
-}
-
 def _get(url: str, timeout: int = 15) -> Optional[dict]:
-    """GET JSON from a URL, return parsed dict or None on error."""
-    try:
-        req = Request(url, headers=_EDGAR_HEADERS)
-        with urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code != 404:  # 404s are expected for optional index files — suppress
-            print(f"[Scanner] HTTP {exc.code} {url}", file=sys.stderr)
+    """GET JSON from an SEC URL, return parsed dict or None on error."""
+    resp, status = sec_http.get(url, timeout=timeout, headers={"Accept": "application/json"})
+    if resp is None:
+        if status and status != 404:  # 404s are expected for optional index files — suppress
+            print(f"[Scanner] HTTP {status} {url}", file=sys.stderr)
         return None
-    except (URLError, json.JSONDecodeError, Exception):
+    try:
+        return resp.json()
+    except ValueError:
         return None
 
 def _get_text(url: str, timeout: int = 20) -> str:
-    """GET raw text from a URL."""
-    try:
-        req = Request(url, headers={**_EDGAR_HEADERS, "Accept": "text/html,text/plain"})
-        with urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-            try:
-                return raw.decode("utf-8")[:80000]
-            except UnicodeDecodeError:
-                return raw.decode("latin-1")[:80000]
-    except Exception:
+    """GET raw text from an SEC URL."""
+    resp, _ = sec_http.get(url, timeout=timeout, headers={"Accept": "text/html,text/plain"})
+    if resp is None:
         return ""
+    raw = resp.content
+    try:
+        return raw.decode("utf-8")[:80000]
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")[:80000]
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +384,6 @@ class MADealScanner:
             scored = self._score_and_enrich(hit)
             if scored and scored["confidence_score"] >= 0.5:
                 enriched.append(scored)
-            time.sleep(0.05)   # Polite rate limiting for SEC servers
         return enriched
 
     def _score_and_enrich(self, hit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -453,15 +440,12 @@ class MADealScanner:
         if ticker_or_cik.isdigit():
             return ticker_or_cik
 
-        url = f"https://www.sec.gov/cgi-bin/browse-edgar?company={ticker_or_cik}&CIK=&type=&dateb=&owner=include&count=5&search_text=&action=getcompany&output=atom"
-        # Use company tickers JSON — faster and more reliable
-        tickers_url = "https://www.sec.gov/files/company_tickers.json"
-        data = _get(tickers_url)
-        if data:
-            for entry in data.values():
-                if entry.get("ticker", "").upper() == ticker_or_cik.upper():
-                    return str(entry["cik_str"])
-        return None
+        import sec_directory  # the app's one copy of SEC's ticker directory
+        try:
+            return sec_directory.cik(ticker_or_cik)
+        except sec_directory.Unavailable as exc:
+            print(f"[Scanner] {exc}", file=sys.stderr)
+            return None
 
     def _store_filing(self, filing: Dict[str, Any]):
         """Persist filing to sec_filings table (silently skip duplicates)."""

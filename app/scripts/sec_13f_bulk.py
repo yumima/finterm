@@ -49,16 +49,13 @@ import sys
 import time
 import urllib.request
 import zipfile
-from finterm_identity import user_agent
+import sec_http  # the one SEC client: contact identity, shared pacing, 404 vs refusal
 from finterm_paths import market_data_path
 
 try:
     import requests
 except ImportError:
     requests = None
-
-UA = {"User-Agent": user_agent(),
-      "Accept-Encoding": "gzip, deflate"}
 
 DATASET_INDEX = "https://www.sec.gov/dera/data/form-13f"
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
@@ -68,30 +65,10 @@ OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 # bundled — read from the environment the app injects.
 OPENFIGI_KEY = os.environ.get("OPENFIGI_API_KEY", "")
 
-_LAST_REQ = 0.0
-_MIN_REQ_GAP = 0.4
-
 
 def db_path():
     """Where the index lives: the app's market_data folder (finterm_paths)."""
     return market_data_path("form13f.sqlite")
-
-
-def _get(url, timeout=300):
-    global _LAST_REQ
-    if requests is None:
-        return None
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, timeout=timeout, headers=UA)
-        _LAST_REQ = time.time()
-        r.raise_for_status()
-        return r
-    except Exception:
-        _LAST_REQ = time.time()
-        return None
 
 
 def _pad_cik(cik):
@@ -436,7 +413,7 @@ def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
 def available_datasets():
     """Quarterly data-set URLs published by SEC, newest first."""
     import re
-    r = _get(DATASET_INDEX, timeout=60)
+    r, _ = sec_http.get(DATASET_INDEX, timeout=60)
     if r is None:
         return []
     hits = re.findall(r'href="([^"]*form-13f-data-sets/[^"]*\.zip)"', r.text)
@@ -453,7 +430,7 @@ def ingest(url=None, progress=None):
             return {"error": "could not list SEC 13F data sets"}
         url = urls[0]
 
-    r = _get(url, timeout=600)
+    r, _ = sec_http.get(url, timeout=600)
     if r is None:
         return {"error": f"download failed: {url}"}
 
@@ -1302,7 +1279,7 @@ def parse_information_table(xml_bytes):
 
 def _newest_13f(cik, after_quarter):
     """The filer's newest 13F-HR reporting a quarter later than `after_quarter`."""
-    r = _get(f"https://data.sec.gov/submissions/CIK{_pad_cik(cik)}.json", timeout=30)
+    r, _ = sec_http.get(f"https://data.sec.gov/submissions/CIK{_pad_cik(cik)}.json", timeout=30)
     if r is None:
         return None
     try:
@@ -1329,7 +1306,7 @@ def _information_table_url(cik, accession):
     """Locate the info table inside an accession — its filename is assigned by
     the filing agent, so the directory listing is the only way to find it."""
     a = accession.replace("-", "")
-    r = _get(f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{a}/index.json", timeout=30)
+    r, _ = sec_http.get(f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{a}/index.json", timeout=30)
     if r is None:
         return None
     try:
@@ -1384,7 +1361,7 @@ def ingest_current(top=400, progress=None, ciks=None):
             if not url:
                 failed += 1
                 continue
-            r = _get(url, timeout=45)
+            r, _ = sec_http.get(url, timeout=45)
             if r is None:
                 failed += 1
                 continue
@@ -2460,29 +2437,19 @@ def parse_submission(text):
     return f"{p[:4]}-{p[4:6]}-{p[6:]}", (name.group(1).strip() if name else ""), tab.group(0).encode()
 
 
-def missing_archive_object(body):
-    """EDGAR's archive answers a file that does not exist (the daily index of a
-    day SEC was closed) with a 403 S3 AccessDenied document; a refusal for
-    going too fast is an HTML page. Same rule as sec_ownership_data's."""
-    b = body or ""
-    return "<Code>AccessDenied</Code>" in b and "<Error>" in b
-
-
 def _day_13f(d):
     """13F-HR originals filed on one day: [(cik, path)]; [] on a day with no
     index (404: weekend, holiday, not yet published); None when the index could
     not be read — the day is then not recorded and is asked again."""
     q = (d.month - 1) // 3 + 1
     url = f"https://www.sec.gov/Archives/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx"
-    try:
-        r = requests.get(url, timeout=60, headers=UA)
-    except Exception:
-        return None
-    if r.status_code == 404 or (r.status_code == 403 and missing_archive_object(r.text)):
-        # No index for the day: a day SEC was closed — or one not published
-        # yet, which only a day a few days back can rule out.
+    r, code = sec_http.get(url, timeout=60, gap=EDGAR_GAP)
+    if code == 404:
+        # No index for the day (sec_http reads EDGAR's S3 AccessDenied as 404):
+        # a day SEC was closed — or one not published yet, which only a day a
+        # few days back can rule out.
         return [] if (_date.today() - d).days >= 3 else None
-    if r.status_code != 200:
+    if r is None:
         return None
     out = []
     for line in r.text.splitlines():
@@ -2564,7 +2531,7 @@ def backfill_filed_dates():
     for y, q in sorted(wanted):
         if _date(y, (q - 1) * 3 + 1, 1) > _date.today():
             continue
-        r = _get(f"https://www.sec.gov/Archives/edgar/full-index/{y}/QTR{q}/form.idx", timeout=300)
+        r, _ = sec_http.get(f"https://www.sec.gov/Archives/edgar/full-index/{y}/QTR{q}/form.idx", timeout=300)
         if r is None:
             continue
         for line in r.text.splitlines():
@@ -2593,8 +2560,7 @@ def sync(progress=None, max_filings=None, ciks=None):
         return {"error": "requests not available"}
     # SEC refuses automated requests that do not name a contact (since
     # 2026-10). Without one every step below fails, and quietly: say so.
-    from finterm_identity import contact_email
-    if not contact_email():
+    if not sec_http.has_contact():
         return {"error": "SEC needs a contact email for automated access — set \"Contact email\" "
                          "in Settings › API keys (Your identity)", "transient": False}
     out = {"datasets": [], "days": 0, "filings": 0, "failed": 0, "quarters": {}}
@@ -2643,8 +2609,7 @@ def sync(progress=None, max_filings=None, ciks=None):
         out["datasets"].append({"name": name, "quarter": r["quarter"], "filers": r["filers"]})
 
     # 2. EDGAR, day by day, from the day after that window to yesterday.
-    global _MIN_REQ_GAP
-    saved_gap, _MIN_REQ_GAP = _MIN_REQ_GAP, EDGAR_GAP
+    # Paced at EDGAR_GAP (sec_http's per-request `gap`), not the 0.4 s default.
     con = connect()
     try:
         start = (_date.fromisoformat(newest_in) + _td(days=1)) if newest_in else _date.today() - _td(days=90)
@@ -2659,7 +2624,6 @@ def sync(progress=None, max_filings=None, ciks=None):
                 d += _td(days=1)
                 continue
             day = _day_13f(d)
-            _LAST_REQ_SET()
             if day is None:
                 out["warning"] = f"EDGAR's index for {d} could not be read; it is asked again next time"
                 out["refused"] = True
@@ -2672,15 +2636,15 @@ def sync(progress=None, max_filings=None, ciks=None):
                     stored_all = False
                     out["more"] = True  # a pass is capped; the next one carries on
                     break
-                r, code = _get_status(f"https://www.sec.gov/Archives/{path}")
+                r, code = sec_http.get(f"https://www.sec.gov/Archives/{path}", timeout=60, gap=EDGAR_GAP)
                 for wait in (3, 10):
                     # A large submission file times out now and then; that is
                     # the network, not SEC refusing — try it again first.
                     if r is not None or code not in (None, 429, 500, 502, 503, 504):
                         break
                     time.sleep(wait)
-                    r, code = _get_status(f"https://www.sec.gov/Archives/{path}", timeout=120)
-                if r is None and not (code in (404, 410) or code == "missing"):
+                    r, code = sec_http.get(f"https://www.sec.gov/Archives/{path}", timeout=120, gap=EDGAR_GAP)
+                if r is None and code not in (404, 410):
                     stored_all = False  # refused or offline: this day is not finished
                     out["failed"] += 1
                     out["refused"] = True  # asked again soon, not in six hours
@@ -2722,7 +2686,6 @@ def sync(progress=None, max_filings=None, ciks=None):
             out["quarters"][period] = {"filers": filers, "complete": complete}
         con.commit()
     finally:
-        _MIN_REQ_GAP = saved_gap
         con.close()
 
     # 3. Name the new holdings, and correct tickers picked before us_listing().
@@ -2777,29 +2740,6 @@ def sync(progress=None, max_filings=None, ciks=None):
         out["transient"] = True
     return out
 
-
-def _get_status(url, timeout=60):
-    """A paced GET that says why it failed: (response, 200), (None, status),
-    (None, "missing") for an archive object that does not exist, or
-    (None, None) when nothing came back."""
-    global _LAST_REQ
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, timeout=timeout, headers=UA)
-    except Exception:
-        _LAST_REQ = time.time()
-        return None, None
-    _LAST_REQ = time.time()
-    if r.status_code == 403 and missing_archive_object(r.text):
-        return None, "missing"
-    return (r, 200) if r.ok else (None, r.status_code)
-
-
-def _LAST_REQ_SET():
-    global _LAST_REQ
-    _LAST_REQ = time.time()
 
 def fund_filings(ciks):
     """Each fund's newest 13F: when it was filed, for which quarter, and its

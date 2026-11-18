@@ -44,17 +44,14 @@ import os
 import re
 import sqlite3
 import sys
-import time
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sec_ownership_data import _get_status, parse_form4  # noqa: E402
+import sec_http  # noqa: E402  (the one SEC client)
+from sec_ownership_data import parse_form4  # noqa: E402
 from finterm_paths import market_data_path
 
 BASE = "https://www.sec.gov/Archives"
-# EDGAR asks for <=10 req/s across everything using this User-Agent, and other
-# finterm scripts can be scanning at the same time, so this sits well under it.
-REQ_PAUSE = 0.13
 
 
 def db_path():
@@ -147,7 +144,7 @@ def day_index(d):
     """
     q = (d.month - 1) // 3 + 1
     url = f"{BASE}/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx"
-    r, status = _get_status(url)
+    r, status = sec_http.get(url)
     if r is None:
         return {} if status == 404 else None
     out = {}
@@ -253,8 +250,7 @@ def scan(days=3, limit=None, max_new_days=None):
                 todo = todo[:int(limit)]
             day_failed = 0
             for n, (acc, path) in enumerate(todo, 1):
-                r, status = _get_status(f"{BASE}/{path}")
-                time.sleep(REQ_PAUSE)
+                r, status = sec_http.get(f"{BASE}/{path}")
                 fetched += 1
                 # Commit in small batches. One transaction per day held the
                 # write lock for minutes at a time, and any other process

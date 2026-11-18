@@ -4,14 +4,12 @@
 
 import sys
 import json
-import requests
 import pandas as pd
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
 import traceback
 import re
-import time
-from finterm_identity import user_agent
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 
 class SECError:
@@ -38,15 +36,6 @@ class SECDataWrapper:
     def __init__(self):
         self.base_url = "https://www.sec.gov"
         self.data_url = "https://data.sec.gov"
-        self.session = requests.Session()
-
-        # SEC requires specific headers to avoid blocking
-        self.session.headers.update({
-            'User-Agent': user_agent(),
-            'Accept-Encoding': 'gzip, deflate',
-            'Accept': 'application/json'
-        })
-
 
         # Form types list (simplified from full SEC list)
         self.common_form_types = [
@@ -90,27 +79,21 @@ class SECDataWrapper:
         }
 
     def _make_request(self, url: str, use_cache: bool = True) -> Dict[str, Any]:
-        """Make HTTP request with proper headers and error handling"""
+        """GET an SEC JSON document (sec_http: contact identity, shared pacing)."""
+        response, status = sec_http.get(url, timeout=30, headers={"Accept": "application/json"})
+        if response is None:
+            raise Exception(f"HTTP request failed: HTTP {status}" if status
+                            else "HTTP request failed: SEC did not answer")
         try:
-            # Add delay to respect SEC rate limits
-            time.sleep(0.1)
-
-            response = self.session.get(url, timeout=30)
-            response.raise_for_status()
-
-            # Parse JSON response
             data = response.json()
-
-            # Check for API errors
-            if isinstance(data, dict) and "error" in data:
-                raise Exception(f"SEC API error: {data['error']}")
-
-            return data
-
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"HTTP request failed: {str(e)}")
-        except json.JSONDecodeError as e:
+        except ValueError as e:
             raise Exception(f"JSON decode error: {str(e)}")
+
+        # Check for API errors
+        if isinstance(data, dict) and "error" in data:
+            raise Exception(f"SEC API error: {data['error']}")
+
+        return data
 
     def _normalize_cik(self, cik: Union[str, int]) -> str:
         """Normalize CIK to 10-digit format with leading zeros"""

@@ -27,46 +27,11 @@ Free, public, no API key. Polite rate-limited User-Agent.
 import json
 import re
 import sys
-import time
 from xml.etree import ElementTree as ET
-from finterm_identity import user_agent
-
-try:
-    import requests
-except ImportError:
-    requests = None
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 SUBMISSIONS = "https://data.sec.gov/submissions"
 ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
-UA = {
-    "User-Agent": user_agent(),
-    "Accept-Encoding": "gzip, deflate",
-}
-
-_LAST_REQ = 0.0
-
-# SEC asks for ≤10 req/s shared across User-Agent. PreIpoService runs up to 3
-# SEC scripts concurrently, so per-process throttle must be ≥0.34s to stay
-# under the shared ceiling. A tiny safety margin makes it 0.4s.
-_MIN_REQ_GAP = 0.4
-
-
-def _get(url, params=None, headers=None, timeout=15):
-    global _LAST_REQ
-    if requests is None:
-        return None
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, params=params, timeout=timeout, headers=headers or UA)
-        _LAST_REQ = time.time()
-        r.raise_for_status()
-        return r
-    except Exception:
-        return None
-
-
 def _cik_padded(cik):
     return str(cik).zfill(10)
 
@@ -173,7 +138,7 @@ def list_nport_accessions(fund_cik, limit=4):
     """Recent N-PORT-P accession numbers for a fund (newest first)."""
     cik_pad = _cik_padded(fund_cik)
     url = f"{SUBMISSIONS}/CIK{cik_pad}.json"
-    r = _get(url, headers={**UA, "Host": "data.sec.gov"})
+    r, _ = sec_http.get(url, timeout=15)
     if r is None:
         return []
     try:
@@ -208,7 +173,7 @@ def fetch_nport_xml(fund_cik, adsh):
     cik_u = _cik_unpadded(fund_cik)
     adsh_clean = adsh.replace("-", "")
     url = f"{ARCHIVE}/{cik_u}/{adsh_clean}/primary_doc.xml"
-    r = _get(url, headers={**UA, "Host": "www.sec.gov"})
+    r, _ = sec_http.get(url, timeout=15)
     if r is None:
         return None
     try:

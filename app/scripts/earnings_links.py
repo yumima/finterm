@@ -38,7 +38,8 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from urllib.parse import urljoin, urlparse
 
-from finterm_identity import project_user_agent, user_agent
+import sec_http  # the one SEC client: the user's contact, *.sec.gov only, shared pacing
+from finterm_identity import project_user_agent
 
 # A release exhibit is a few hundred KB; anything far larger is not a release.
 _MAX_DOC_BYTES = 3_000_000
@@ -56,41 +57,27 @@ class _FetchFailed(Exception):
     not empty, and must not be cached as an answer."""
 
 
-def _is_sec(url):
-    host = (urlparse(url).hostname or "").lower()
-    return host == "sec.gov" or host.endswith(".sec.gov")
-
-
-class _ContactStaysOnSec(urllib.request.HTTPRedirectHandler):
-    """urllib copies the request's headers onto a redirect: a sec.gov URL
-    that redirects elsewhere would carry the user's contact there. The hop
-    off SEC is made as the project instead."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        new = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if new is not None and not _is_sec(newurl):
-            new.add_header("User-Agent", project_user_agent())
-        return new
-
-
-_OPENER = urllib.request.build_opener(_ContactStaysOnSec)
-
-
-def _get(url, as_json=True, limit=None, sec=True, final_url=False):
-    """GET `url`. SEC requests carry the user's declared contact; anything
-    else (IR sites) the project's identity. `final_url` also returns where
-    redirects ended (amazon.com/ir → ir.aboutamazon.com)."""
-    # The contact is declared to SEC only: decided by the host itself, so an
-    # exhibit link parsed out of a filing that points elsewhere never gets it.
-    ua = user_agent() if sec and _is_sec(url) else project_user_agent()
-    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Encoding": "identity"})
-    try:
-        with _OPENER.open(req, timeout=_TIMEOUT_SEC) as r:
-            raw = r.read(limit) if limit else r.read()
-            where = r.geturl()
-    except Exception as e:  # noqa: BLE001
-        tail = url.rstrip("/").rsplit("/", 1)[-1] if sec else urlparse(url).netloc
-        raise _FetchFailed(f"{type(e).__name__} on {tail}") from None
+def _get(url, as_json=True, limit=None, final_url=False):
+    """GET `url`. SEC requests go through sec_http (the user's declared
+    contact, decided by the host — an exhibit link parsed out of a filing that
+    points elsewhere never gets it); anything else (IR sites) carries the
+    project's identity. `final_url` also returns where redirects ended
+    (amazon.com/ir → ir.aboutamazon.com)."""
+    if sec_http.is_sec_host(url):
+        r, status = sec_http.get(url, timeout=_TIMEOUT_SEC, headers={"Accept-Encoding": "identity"})
+        if r is None:
+            what = f"HTTP {status}" if status else "no answer"
+            raise _FetchFailed(f"{what} on {url.rstrip('/').rsplit('/', 1)[-1]}")
+        raw, where = (r.content[:limit] if limit else r.content), r.url
+    else:
+        req = urllib.request.Request(url, headers={"User-Agent": project_user_agent(),
+                                                   "Accept-Encoding": "identity"})
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_SEC) as resp:
+                raw = resp.read(limit) if limit else resp.read()
+                where = resp.geturl()
+        except Exception as e:  # noqa: BLE001
+            raise _FetchFailed(f"{type(e).__name__} on {urlparse(url).netloc}") from None
     text = raw.decode("utf-8", "replace")
     body = json.loads(text) if as_json else text
     return (body, where) if final_url else body
@@ -355,7 +342,7 @@ def _find_call(ir_url, d, deadline):
     site; {ir_error} when the site would not answer."""
     found = {}
     try:
-        page, where = _get(ir_url, as_json=False, limit=_MAX_DOC_BYTES, sec=False, final_url=True)
+        page, where = _get(ir_url, as_json=False, limit=_MAX_DOC_BYTES, final_url=True)
     except _FetchFailed as e:
         return {"ir_error": str(e)}
     where = re.sub(r"^(https://[^/:]+):443(?=/|$)", r"\1", where)  # redirects keep the default port
@@ -371,7 +358,7 @@ def _find_call(ir_url, d, deadline):
         if time.monotonic() > deadline:
             return found
         try:
-            xml = _get(f, as_json=False, limit=_MAX_DOC_BYTES, sec=False)
+            xml = _get(f, as_json=False, limit=_MAX_DOC_BYTES)
         except _FetchFailed:
             continue
         if "<rss" not in xml[:2000] and "<item>" not in xml:
@@ -388,7 +375,7 @@ def _find_call(ir_url, d, deadline):
         if len(pages) >= 3 or time.monotonic() > deadline:
             break
         try:
-            pages.append((h, _get(h, as_json=False, limit=_MAX_DOC_BYTES, sec=False)))
+            pages.append((h, _get(h, as_json=False, limit=_MAX_DOC_BYTES)))
         except _FetchFailed:
             continue
     for u, p in pages:

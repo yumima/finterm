@@ -43,17 +43,11 @@ import sys
 import time
 import zipfile
 from datetime import date, datetime, timedelta
-from finterm_identity import user_agent
 from finterm_paths import market_data_path
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sec_http  # noqa: E402  (the one SEC client)
 
-UA = {"User-Agent": user_agent(), "Accept-Encoding": "gzip, deflate"}
 INDEX_URL = "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
 CLUSTER_WINDOW_DAYS = 30
 CLUSTER_MIN_OWNERS = 2
@@ -85,17 +79,6 @@ def connect():
     return con
 
 
-def _get(url, timeout=300):
-    if requests is None:
-        return None
-    try:
-        r = requests.get(url, headers=UA, timeout=timeout)
-        r.raise_for_status()
-        return r
-    except Exception:
-        return None
-
-
 def _iso(d):
     """'31-JUL-2025' -> '2025-07-31'; already-ISO strings pass through."""
     if not d:
@@ -113,7 +96,7 @@ def _iso(d):
 
 def available_datasets():
     """[(name, url), ...] newest first, from SEC's index page."""
-    r = _get(INDEX_URL, timeout=60)
+    r, _ = sec_http.get(INDEX_URL, timeout=60)
     if r is None:
         return []
     out = {}
@@ -140,7 +123,7 @@ def ingest_dataset(name, url, con=None, data=None):
         if con.execute("SELECT 1 FROM datasets WHERE name=?", (name,)).fetchone():
             return {"name": name, "skipped": True}
         if data is None:
-            r = _get(url)
+            r, _ = sec_http.get(url, timeout=300)
             if r is None:
                 return {"name": name, "error": "download failed"}
             data = r.content
