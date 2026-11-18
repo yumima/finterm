@@ -91,6 +91,7 @@ class WhatsOnPanel : public QWidget {
 
     // Rates
     QString policy_range_, effr_, effr_date_, y2_, y10_, yields_date_;
+    QDateTime yields_asked_; ///< UTC; when the held yields were last asked for (invalid: ask now)
 
     QSet<QString> mine_; ///< watchlist + portfolio symbols, normalised
     whats_on::Impact min_impact_ = whats_on::Impact::High; ///< impact selector; HIGH by default

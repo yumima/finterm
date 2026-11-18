@@ -1744,6 +1744,8 @@ bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& sp
     return filled > 0;
 }
 
+constexpr const char* kSurfaceEconSource = "surface_analytics"; ///< EconomicsService source_id of this screen
+
 } // namespace
 
 void SurfaceAnalyticsScreen::load_rates_from_fred() {
@@ -1762,16 +1764,20 @@ void SurfaceAnalyticsScreen::load_rates_from_fred() {
     for (const auto& j : jobs) {
         QStringList args = series_ids(*j.specs);
         args << start << end;
-        econ.execute(QStringLiteral("surface_analytics"), QStringLiteral("fred_data.py"), QStringLiteral("multiple"),
-                     args, QString::fromUtf8(j.rid));
+        econ.execute(QString::fromLatin1(kSurfaceEconSource), QStringLiteral("fred_data.py"),
+                     QStringLiteral("multiple"), args, QString::fromUtf8(j.rid));
     }
 }
 
 void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id, const finterm::services::EconomicsResult& r) {
+    // result_ready is a broadcast to every economics consumer: take only this
+    // screen's own requests, or another panel's failure lands in the inspector.
+    if (r.source_id != QLatin1String(kSurfaceEconSource) || !request_id.startsWith(QLatin1String("surface_")))
+        return;
     if (!r.success) {
         // FRED needs a key. Say which surfaces are empty because of it rather
         // than leaving three panels blank with no reason.
-        if (request_id.startsWith(QStringLiteral("surface_")) && data_inspector_)
+        if (data_inspector_)
             data_inspector_->set_error(QStringLiteral("FRED fetch failed (%1). Set FRED_API_KEY to fill the curve, "
                                                       "real-yield and breakeven surfaces.")
                                            .arg(r.error.left(120)));

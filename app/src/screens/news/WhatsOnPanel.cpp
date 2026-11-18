@@ -54,12 +54,13 @@ constexpr int kSectionSource = -3; ///< a section header (click folds it)
 constexpr const char* kCollapsedKey = "news/whats_on_collapsed";
 constexpr const char* kMineOnlyKey = "news/whats_on_mine_only";
 constexpr const char* kMinImpactKey = "news/whats_on_min_impact"; ///< 2 HIGH, 1 MED+, 0 ALL
-// EconomicsService dispatch for the H.15 yields. Same script/command/args as
-// the Federal Reserve panel's "Treasury Rates" so both read one cache entry.
-constexpr const char* kFedSourceId = "federal_reserve";
+// EconomicsService fetch for the H.15 yields: the Federal Reserve panel's
+// script and command, with a two-week start date (its own cache key — the
+// panel charts a year, What's On reads only the latest print).
 constexpr const char* kFedScript = "federal_reserve_data.py";
 constexpr const char* kYieldsCommand = "treasury_rates";
-constexpr const char* kYieldsRequestId = "whatson_treasury_rates";
+constexpr int kYieldsWindowDays = 14;
+constexpr int kYieldsRefreshSec = 3 * 3600;
 
 QString kind_color(const QString& kind) {
     if (kind == QLatin1String("FED"))
@@ -178,16 +179,6 @@ WhatsOnPanel::WhatsOnPanel(QWidget* parent) : QWidget(parent) {
             [this](bool enrich, bool ok, const QJsonObject&, const QString& why) {
                 if (!ok && !enrich && !services::IpoDealsFeed::instance().loaded())
                     set_error(QStringLiteral("IPOs"), why.isEmpty() ? QStringLiteral("IPO calendar unavailable") : why);
-            });
-    // 2y / 10y yields come from EconomicsService, the owner of
-    // federal_reserve_data.py. Its result_ready is a broadcast: take only the
-    // answers to What's On's own request id (the Economics screen's Federal
-    // Reserve panel asks with "fed_*" ids and ignores this one).
-    connect(&services::EconomicsService::instance(), &services::EconomicsService::result_ready, this,
-            [this](const QString& request_id, const services::EconomicsResult& r) {
-                if (request_id != QLatin1String(kYieldsRequestId) || r.source_id != QLatin1String(kFedSourceId))
-                    return;
-                apply_yields_result(r);
             });
     bar->addWidget(refresh_btn);
     root->addLayout(bar);
@@ -466,22 +457,34 @@ void WhatsOnPanel::fetch_rates(bool force) {
             });
     }
     // 2y / 10y: H.15 from federal_reserve_data.py treasury_rates, through its
-    // owner EconomicsService (and its cache). The answer — synchronous on a
-    // cache hit — arrives via result_ready, filtered in the constructor.
+    // owner EconomicsService (cache + one in-flight run per key). fetch()
+    // answers this caller alone — no result_ready broadcast. The last two
+    // weeks are enough for the latest print; H.15 posts once a day, so a held
+    // answer is re-asked only after kYieldsRefreshSec (or on REFRESH).
+    if (!force && yields_asked_.isValid() && yields_asked_.secsTo(QDateTime::currentDateTimeUtc()) < kYieldsRefreshSec)
+        return;
+    yields_asked_ = QDateTime::currentDateTimeUtc();
+    const QString script = QString::fromLatin1(kFedScript);
+    const QString command = QString::fromLatin1(kYieldsCommand);
+    const QStringList args{QDate::currentDate().addDays(-kYieldsWindowDays).toString(Qt::ISODate)};
     auto& econ = services::EconomicsService::instance();
     if (force)
-        econ.invalidate(QString::fromLatin1(kFedScript), QString::fromLatin1(kYieldsCommand), {});
-    econ.execute(QString::fromLatin1(kFedSourceId), QString::fromLatin1(kFedScript),
-                 QString::fromLatin1(kYieldsCommand), {}, QString::fromLatin1(kYieldsRequestId));
+        econ.invalidate(script, command, args);
+    econ.fetch(script, command, args, [self](const services::EconomicsResult& r) {
+        if (self)
+            self->apply_yields_result(r);
+    });
 }
 
 void WhatsOnPanel::apply_yields_result(const services::EconomicsResult& r) {
     if (!r.success) {
+        yields_asked_ = {}; // a failure is not an answer to hold: ask again next refresh
         set_error(QStringLiteral("Treasury yields"), r.error.isEmpty() ? QStringLiteral("script failed") : r.error);
         return;
     }
     if (apply_yields(r.data.value("data").toArray()))
         return;
+    yields_asked_ = {};
     set_error(QStringLiteral("Treasury yields"), r.data.value("error").toString(QStringLiteral("no recent H.15 data")));
 }
 
