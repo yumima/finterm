@@ -10,11 +10,9 @@ Modules:
 - ft_indicators: All 90+ FINTA TA indicators + transformer map + inputvalidator
 - ft_data: Data loading, preparation, archive (Binance/Coinbase/DB)
 - ft_summary: Performance metrics, trade analysis, risk metrics, drawdowns
-- ft_analysis: Trade execution logic (enter/exit, fees, position management)
 - ft_evaluate: Rule evaluation engine for post-backtest filtering
 - ft_utils: Utilities (resample, trend detection, data conversion)
 - ft_strategies: 20+ pre-built strategy templates
-- ft_cli: CLI entry points and helpers (backtest_helper, create_plot, save)
 
 The provider class is intentionally not re-exported here. See backtestingpy
 __init__.py for the rationale (avoids RuntimeWarning when fasttrade_provider

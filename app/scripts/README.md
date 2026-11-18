@@ -24,7 +24,7 @@ scripts/
 
 | Category | Description | Link |
 |----------|-------------|------|
-| 📊 **Analytics** | 80+ modules - equity, portfolio, derivatives, economics | [Analytics/README.md](./Analytics/README.md) |
+| 📊 **Analytics** | Corporate finance, alternatives, backtesting, quant wrappers | [Analytics/README.md](./Analytics/README.md) |
 | 🤖 **AI Agents** | 30+ agents - hedge funds, investors, geopolitics | [agents/README.md](./agents/README.md) |
 | 🔬 **AI Quant Lab** | Qlib + RDAgent - automated strategy research | [ai_quant_lab/README.md](./ai_quant_lab/README.md) |
 | 🚀 **Agno Trading** | Multi-agent trading framework (used by Alpha Arena) | `agno_trading/` |
@@ -39,13 +39,10 @@ scripts/
 - **International**: AkShare (China), Eurostat (EU), data.gov variants
 
 ### Analytics Modules
-- **Equity Investment**: DCF, DDM, multiples valuation, fundamental analysis
-- **Portfolio Management**: Optimization, risk management, ETF analytics
-- **Derivatives**: Options pricing, Greeks, forward commitments
-- **Economics**: Growth analysis, policy analysis, trade & geopolitics
+- **Corporate Finance**: DCF, comps, precedent transactions, LBO, merger models
+- **Economics**: Trade & geopolitics
 - **Alternative Investments**: Real estate, hedge funds, private capital, crypto
-- **Quantitative**: CFA quant models, rate calculations
-- **Financial Analysis**: Statement analysis, quality metrics, tax analysis
+- **Quantitative**: CFA quant models, statsmodels, gs-quant, forecasting wrappers
 
 ### AI & Machine Learning
 - **Geopolitical Agents**: Grand Chessboard, Prisoners of Geography frameworks
@@ -54,10 +51,10 @@ scripts/
 - **Quant Lab**: Qlib integration, RDAgent for hypothesis generation
 
 ### Backtesting Frameworks
-- **LEAN Engine**: Institutional-grade algorithmic trading
-- **Backtrading.py**: Flexible Python backtesting
+- **Backtesting.py**: Flexible Python backtesting
 - **VectorBT**: High-performance vectorized backtesting
 - **FastTrade**: Lightweight backtesting library
+- **bt**, **Zipline**
 
 ## Usage Pattern
 

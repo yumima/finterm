@@ -2,7 +2,7 @@
 Derivatives Pricing Bridge Script
 ==================================
 CLI bridge for the QT terminal to invoke derivatives pricing calculations.
-Wraps the Analytics/derivatives modules and returns JSON results.
+Self-contained (NumPy/SciPy); returns JSON results.
 
 Usage:
     python derivatives_pricing.py <command> [--param value ...]

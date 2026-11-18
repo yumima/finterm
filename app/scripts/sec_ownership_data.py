@@ -6,7 +6,7 @@ Powers the OWNERSHIP screen. Everything here comes from EDGAR: public, free, no
 API key. EDGAR asks for a descriptive User-Agent and <=10 req/s shared across it.
 
 WHY THIS SCRIPT EXISTS
-    sec_data.py already had get_insider_trading() and get_institutional_ownership(),
+    sec_data.py (since deleted) had get_insider_trading() and get_institutional_ownership(),
     but both were placeholders that returned FABRICATED rows — a hardcoded
     transaction_type of "P", zeroed prices, and the literal string
     "Extracted from filing" for every name — while reporting success: True.
@@ -450,9 +450,9 @@ def find_clusters(transactions):
 def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     """Form 4 transactions for one issuer over the trailing `months`.
 
-    `cik` short-circuits the ticker lookup. sec_data.py supports a CIK-only
-    call — no symbol at all — and resolving "" to a CIK fails for a caller that
-    already told us exactly which company it meant.
+    `cik` short-circuits the ticker lookup: a caller may pass a CIK and no
+    symbol at all, and resolving "" to a CIK fails for a caller that already
+    told us exactly which company it meant.
     """
     try:
         cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
