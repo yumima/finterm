@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extended-hours (AFT%) correctness in scripts/yfinance_data.py.
+"""Extended-hours (EXT%) correctness in scripts/yfinance_data.py.
 
 Every case here comes from a number that was on screen and wrong:
 
@@ -96,8 +96,8 @@ def check(name, cond, detail=""):
 # separately — miss that and previous_session_end_utc keeps answering from the
 # real clock while everything else is frozen.
 
-def _freeze(hour, minute=0):
-    frozen_now = datetime(*TRADING_DAY, hour, minute, tzinfo=ET)
+def _freeze(hour, minute=0, day=None):
+    frozen_now = datetime(*(day or TRADING_DAY), hour, minute, tzinfo=ET)
 
     class FrozenDatetime(_datetime_mod.datetime):
         @classmethod
@@ -373,13 +373,13 @@ def test_serializer_is_idempotent():
 
 
 def test_download_failure_raises():
-    """A failed fetch must not look like a successful empty answer."""
+    """A failed bar fetch must not look like a successful empty answer."""
     _, unfreeze = _freeze(18)
     restore = _stub_downloads(None, fail=True)
     try:
         raised = None
         try:
-            yd.get_extended_hours_quotes(["MSFT"])
+            yd.get_extended_hours_quotes(["ES=F"])
         except Exception as exc:  # noqa: BLE001 — the point is that it raises
             raised = exc
         check("download failure propagates", raised is not None,
@@ -410,47 +410,20 @@ def test_missing_rules_module_raises():
 def test_flat_frame_is_not_shared_across_symbols():
     """One ticker's frame must never answer for a whole book."""
     flat = _minute_frame([(_et(15, 59), 100.0), (_et(18, 0), 93.0)])  # -7%
-    rows = _quote(["MSFT", "AAPL", "NVDA"], flat)
-    pcts = [r["ext_change_pct"] for r in rows]
+    rows = _quote(["ES=F", "NQ=F", "CL=F"], flat)
     check("flat frame is not fanned out to every symbol",
-          all(p is None for p in pcts), f"got {pcts}")
-
-
-def test_official_close_is_the_denominator():
-    """The 16:00 daily close, not the last 1-minute bar, is the reference."""
-    minute = _multi({"MSFT": _minute_frame([
-        (_et(15, 59), 499.58),   # last regular 1m bar
-        (_et(19, 0), 495.87),    # post-market print
-    ])})
-    daily = _multi({"MSFT": _minute_frame([(_et(16, 0), 499.99)])})  # official
-    row = _quote(["MSFT"], minute, daily)[0]
-    check("regular is the official close", row["regular"] == 499.99,
-          f"got {row['regular']}")
-    expected = (495.87 - 499.99) / 499.99 * 100.0
-    check("pct is measured against the official close",
-          row["ext_change_pct"] is not None
-          and abs(row["ext_change_pct"] - expected) < 1e-9,
-          f"got {row['ext_change_pct']} want {expected}")
+          all(r["post"] is None for r in rows), f"got {[r['post'] for r in rows]}")
 
 
 def test_stale_reference_yields_no_move():
-    """No regular-hours trade today ⇒ no after-hours move, not a multi-day one."""
-    minute = _multi({"FNILX": _minute_frame([
-        (_et(15, 59, day_offset=-6), 30.0),   # last trade: nearly a week ago
+    """No regular trade in the last session ⇒ no move, not a multi-day one."""
+    minute = _multi({"ES=F": _minute_frame([
+        (_et(15, 59, day_offset=-6), 30.0),   # last bar: nearly a week ago
         (_et(18, 0), 27.9),                  # a fresh extended print
     ])})
-    row = _quote(["FNILX"], minute)[0]
-    check("a days-old reference reports no move",
-          row["ext_change_pct"] is None and row["ext_price"] is None,
-          f"got pct={row['ext_change_pct']} ext={row['ext_price']}")
-    # The prints have to go too. ExtendedHoursMath.h::quote_from_row rebuilds
-    # the percentage from post_market/regular and never reads ext_price, so
-    # leaving them in the row let the dashboard and the heatmap compute the
-    # exact number this guard withheld — here, (27.9-30.0)/30.0 = -7%.
-    check("the unpairable prints are withheld with it",
-          row["post_market"] is None and row["pre_market"] is None
-          and row["post_market_ts"] is None and row["pre_market_ts"] is None,
-          f"got pre={row['pre_market']} post={row['post_market']}")
+    row = _quote(["ES=F"], minute)[0]
+    check("a days-old reference reports no session",
+          row["post"] is None and row["pre"] is None, f"got {row}")
     check("a stale reference is flagged declined", row.get("declined") is True,
           f"got {row.get('declined')}")
 
@@ -460,99 +433,282 @@ class _RateLimited(Exception):
 
 
 def test_refusal_is_unavailable_not_declined():
-    """A 429 says nothing about the prints: ask again, and let a live print in.
-
-    2026-11-17, app start: Yahoo rate-limited the bulk download and the retry,
-    the rows came back empty, and the heatmap read every empty row as a
-    deliberate refusal — tiles blank for good, live prints shut out, while the
-    dashboard (which re-polls) showed them all a minute later.
-    """
-    minute = _multi({"MSFT": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
-    rows = {r["symbol"]: r for r in _quote(["MSFT", "AMZN"], minute, retry_error=_RateLimited("429"))}
-    check("a symbol the source refused is unavailable", rows["AMZN"].get("unavailable") is True,
-          f"got {rows['AMZN']}")
-    check("a refusal is not a decline", rows["AMZN"].get("declined") is not True,
-          f"got {rows['AMZN'].get('declined')}")
-    check("an answered symbol is neither", not rows["MSFT"].get("unavailable")
-          and rows["MSFT"].get("declined") is False, f"got {rows['MSFT']}")
+    """A 429 says nothing about the prints: ask again, and let a live print in."""
+    minute = _multi({"ES=F": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
+    rows = {r["symbol"]: r for r in _quote(["ES=F", "NQ=F"], minute, retry_error=_RateLimited("429"))}
+    check("a symbol the source refused is unavailable", rows["NQ=F"].get("unavailable") is True,
+          f"got {rows['NQ=F']}")
+    check("a refusal is not a decline", rows["NQ=F"].get("declined") is not True,
+          f"got {rows['NQ=F'].get('declined')}")
+    check("an answered symbol is neither", not rows["ES=F"].get("unavailable")
+          and rows["ES=F"].get("declined") is False, f"got {rows['ES=F']}")
 
 
 def test_no_bars_is_an_answer():
-    """A fund with no intraday bars (empty frame, no exception) is answered."""
-    minute = _multi({"MSFT": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
-    rows = {r["symbol"]: r for r in _quote(["MSFT", "VMRXX"], minute)}
-    check("no price data is not 'unavailable'", not rows["VMRXX"].get("unavailable"),
-          f"got {rows['VMRXX']}")
+    """No intraday bars (empty frame, no exception) is answered."""
+    minute = _multi({"ES=F": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
+    rows = {r["symbol"]: r for r in _quote(["ES=F", "CL=F"], minute)}
+    check("no price data is not 'unavailable'", not rows["CL=F"].get("unavailable"),
+          f"got {rows['CL=F']}")
 
 
 def test_empty_download_is_unavailable():
     """Nothing at all back (a rate-limited burst) marks every row unavailable."""
-    rows = _quote(["MSFT", "AAPL"], pd.DataFrame())
+    rows = _quote(["ES=F", "GC=F"], pd.DataFrame())
     check("every row of an empty download is unavailable",
           all(r.get("unavailable") is True for r in rows), f"got {rows}")
 
 
-def test_post_market_move_is_reported():
-    """The guards must not suppress the number the column exists for."""
-    minute = _multi({"MSFT": _minute_frame([
-        (_et(15, 59), 500.0),   # last regular minute: the close (no daily frame)
-        (_et(19, 0), 465.0),    # -7% after hours
-    ])})
-    row = _quote(["MSFT"], minute)[0]
-    check("a real post-market move survives",
-          row["ext_change_pct"] is not None
-          and abs(row["ext_change_pct"] + 7.0) < 1e-9,
-          f"got {row['ext_change_pct']}")
-    check("post-market print is carried", row["post_market"] == 465.0,
-          f"got {row['post_market']}")
+# ── US stocks: Yahoo's batch quote ───────────────────────────────────────────
+#
+# Each stub is the v7 /finance/quote row shape (formatted=false), with the
+# marketState Yahoo reports at that hour. The pairing under test: after-hours
+# of day D against D's close, pre-market of D against the close before D,
+# regularMarketPrice a close only once its bell has rung.
+
+def _t(hour, minute=0, day_offset=0, day=None):
+    base = datetime(*(day or TRADING_DAY), hour, minute, tzinfo=ET)
+    return int((base + timedelta(days=day_offset)).timestamp())
 
 
-def test_pre_market_is_not_paired_with_todays_close():
-    """After the bell, no post-market print means no number — never pre."""
-    minute = _multi({"MSFT": _minute_frame([
-        (_et(8, 0), 460.0),     # this morning's pre-market, vs YESTERDAY's close
-        (_et(15, 59), 500.0),   # today's close (last regular minute)
-    ])})
-    row = _quote(["MSFT"], minute, hour=18)[0]
-    check("pre-market is not measured against today's close",
-          row["ext_change_pct"] is None and row["ext_price"] is None,
-          f"got pct={row['ext_change_pct']} ext={row['ext_price']}")
-    # Not even as a raw print: the payload's `regular` is today's close now,
-    # and any consumer pairing the two would invert the day's move.
-    check("this morning's pre-market print is not in the payload after the bell",
-          row["pre_market"] is None and row["pre_market_ts"] is None,
-          f"got {row['pre_market']}")
+def _v7(rows=None, fail=None):
+    """Point the batch quote at canned rows (or a refusal); returns a restore
+    callable. yf.download is made to blow up meanwhile: a US-only request
+    must never touch the bar path (or its process-wide lock)."""
+    real_v7 = yd._v7_quotes
+    yf = sys.modules["yfinance"]
+    real_download = getattr(yf, "download", None)
+    asked = []
+
+    def fake(symbols, fields, chunk=50):
+        asked.append(list(symbols))
+        if fail is not None:
+            raise fail
+        return [r for r in (rows or []) if r.get("symbol") in symbols]
+
+    def no_download(*a, **kw):
+        raise AssertionError("a US-only request reached yf.download")
+
+    yd._v7_quotes = fake
+    yf.download = no_download
+
+    def restore():
+        yd._v7_quotes = real_v7
+        if real_download is None:
+            yf.__dict__.pop("download", None)
+        else:
+            yf.download = real_download
+    return restore, asked
 
 
-def test_regular_session_shows_this_mornings_pre_market():
-    """Mid-session the last extended move is today's pre-market, not yesterday's post."""
-    minute = _multi({"MSFT": _minute_frame([
-        (_et(15, 59, day_offset=-1), 500.0),   # yesterday's close  = the reference
-        (_et(18, 0, day_offset=-1), 490.0),   # yesterday's post-market
-        (_et(8, 0), 505.0),                   # today's pre-market
-    ])})
-    row = _quote(["MSFT"], minute, hour=12)[0]
-    check("regular session prefers today's pre-market",
-          row["ext_price"] == 505.0, f"got {row['ext_price']}")
-    check("measured against yesterday's close", row["regular"] == 500.0,
-          f"got {row['regular']}")
-    check("and the sign follows the market",
-          row["ext_change_pct"] is not None and abs(row["ext_change_pct"] - 1.0) < 1e-9,
-          f"got {row['ext_change_pct']}")
+def _us(symbols, rows, hour, minute=0, day=None, fail=None):
+    _, unfreeze = _freeze(hour, minute, day=day)
+    restore, asked = _v7(rows, fail)
+    try:
+        return {r["symbol"]: r for r in yd.get_extended_hours_quotes(symbols)}, asked
+    finally:
+        restore()
+        unfreeze()
 
 
-def test_pre_session_falls_back_to_the_prior_post_market():
-    """Before the open both prints reference the same close, so the fallback is sound."""
-    minute = _multi({"MSFT": _minute_frame([
-        (_et(15, 59, day_offset=-1), 500.0),   # yesterday's close
-        (_et(18, 0, day_offset=-1), 490.0),   # yesterday's post-market
-    ])})
-    row = _quote(["MSFT"], minute, hour=8)[0]
-    check("pre session falls back to the prior post-market",
-          row["ext_price"] == 490.0, f"got {row['ext_price']}")
-    check("against the same close it was struck from",
-          row["ext_change_pct"] is not None and abs(row["ext_change_pct"] + 2.0) < 1e-9,
-          f"got {row['ext_change_pct']}")
+def _close_ts(day_offset=0, day=None, bell=(16, 0)):
+    return _t(*bell, day_offset=day_offset, day=day) - 1
+
+
+def test_v7_post_session_pairs_each_print_with_its_own_close():
+    """18:00, marketState POST: after-hours against today's close, this
+    morning's pre-market against yesterday's — both kept, never crossed."""
+    q = {"symbol": "MSFT", "marketState": "POST",
+         "regularMarketPrice": 499.99, "regularMarketTime": _t(16, 0),
+         "regularMarketPreviousClose": 495.0,
+         "postMarketPrice": 495.87, "postMarketTime": _t(17, 59),
+         "preMarketPrice": 497.0, "preMarketTime": _t(9, 0)}
+    rows, _ = _us(["MSFT"], [q], 18)
+    r = rows["MSFT"]
+    check("POST: the last close is today's official one", r["regular"] == 499.99
+          and r["regular_ts"] == _close_ts(), f"got {r}")
+    p = r["post"]
+    check("POST: after-hours against today's close",
+          p and p["price"] == 495.87 and p["ref"] == 499.99 and p["ref_date"] == "2026-08-13", f"got {p}")
+    pre = r["pre"]
+    check("POST: this morning's pre-market against YESTERDAY's close, not today's",
+          pre and pre["ref"] == 495.0 and pre["ref_date"] == "2026-08-12", f"got {pre}")
+    check("POST: not declined", r["declined"] is False and r["unavailable"] is False, f"got {r}")
+
+
+def test_v7_pre_session():
+    """08:00, marketState PRE: regularMarketPrice is yesterday's close."""
+    q = {"symbol": "MSFT", "marketState": "PRE",
+         "regularMarketPrice": 500.0, "regularMarketTime": _t(16, 0, day_offset=-1),
+         "regularMarketPreviousClose": 490.0,
+         "postMarketPrice": 505.0, "postMarketTime": _t(19, 0, day_offset=-1),
+         "preMarketPrice": 510.0, "preMarketTime": _t(7, 59)}
+    r = _us(["MSFT"], [q], 8)[0]["MSFT"]
+    check("PRE: last close is yesterday's", r["regular"] == 500.0 and r["regular_ts"] == _close_ts(-1), f"got {r}")
+    check("PRE: pre-market against yesterday's close",
+          r["pre"] and r["pre"]["ref"] == 500.0 and r["pre"]["price"] == 510.0, f"got {r['pre']}")
+    check("PRE: yesterday's after-hours against the same close",
+          r["post"] and r["post"]["ref"] == 500.0 and r["post"]["day"] == "2026-08-12", f"got {r['post']}")
+
+
+def test_v7_regular_session_never_takes_the_live_price_as_a_close():
+    """12:00, marketState REGULAR: regularMarketPrice is the live price."""
+    q = {"symbol": "MSFT", "marketState": "REGULAR",
+         "regularMarketPrice": 520.0, "regularMarketTime": _t(11, 59),
+         "regularMarketPreviousClose": 500.0,
+         "preMarketPrice": 505.0, "preMarketTime": _t(9, 0)}
+    r = _us(["MSFT"], [q], 12)[0]["MSFT"]
+    check("REGULAR: the last close is the previous close, not the live price",
+          r["regular"] == 500.0 and r["regular_ts"] == _close_ts(-1), f"got {r}")
+    check("REGULAR: this morning's pre-market against it",
+          r["pre"] and r["pre"]["ref"] == 500.0, f"got {r['pre']}")
+    check("REGULAR: no after-hours", r["post"] is None, f"got {r['post']}")
+
+
+def test_v7_prepre_after_20():
+    """22:00, marketState PREPRE: today's after-hours is still the session."""
+    q = {"symbol": "NVDA", "marketState": "PREPRE",
+         "regularMarketPrice": 155.46, "regularMarketTime": _t(16, 0),
+         "regularMarketPreviousClose": 156.14,
+         "postMarketPrice": 162.94, "postMarketTime": _t(19, 59)}
+    r = _us(["NVDA"], [q], 22)[0]["NVDA"]
+    p = r["post"]
+    check("PREPRE: after-hours against today's close",
+          p and abs((p["price"] - p["ref"]) / p["ref"] * 100 - 4.81) < 0.01, f"got {p}")
+    check("PREPRE: session label CLOSED", r["session"] == "CLOSED", f"got {r['session']}")
+
+
+def test_v7_weekend():
+    """Saturday, marketState CLOSED: Friday's after-hours against Friday's close."""
+    q = {"symbol": "AAPL", "marketState": "CLOSED",
+         "regularMarketPrice": 230.0, "regularMarketTime": _t(16, 0, day_offset=1),
+         "regularMarketPreviousClose": 228.0,
+         "postMarketPrice": 231.0, "postMarketTime": _t(19, 50, day_offset=1)}
+    r = _us(["AAPL"], [q], 11, day=(2026, 8, 15))[0]["AAPL"]
+    check("weekend: Friday's after-hours is current", r["post"] and r["post"]["ref"] == 230.0
+          and r["declined"] is False, f"got {r}")
+
+
+def test_v7_early_close():
+    """The day after Thanksgiving closes at 13:00; after-hours runs 13:00-17:00."""
+    day = (2026, 11, 27)
+    q = {"symbol": "AAPL", "marketState": "POST",
+         "regularMarketPrice": 240.0, "regularMarketTime": _t(13, 0, day=day),
+         "regularMarketPreviousClose": 238.0,
+         "postMarketPrice": 241.0, "postMarketTime": _t(13, 30, day=day)}
+    r = _us(["AAPL"], [q], 14, day=day)[0]["AAPL"]
+    check("early close: 13:00 price is the close by 14:00",
+          r["regular"] == 240.0 and r["regular_ts"] == _close_ts(day=day, bell=(13, 0)), f"got {r}")
+    check("early close: 13:30 print is after-hours of that close",
+          r["post"] and r["post"]["ref"] == 240.0, f"got {r['post']}")
+    # Previous session before Black Friday is Wednesday (Thursday is the holiday).
+    check("early close: the previous close is Wednesday's",
+          _xr_quote_closes(q, (2026, 11, 27, 14)).get(datetime(2026, 11, 25).date(), (None,))[0] == 238.0,
+          "")
+
+
+def _xr_quote_closes(q, at):
+    import extended_rules as xr
+    return xr.quote_closes(q, datetime(*at, tzinfo=ET))
+
+
+def test_v7_missing_fields_are_absent_not_zero():
+    """A field Yahoo leaves out is absent — never a 0 that reads as a price."""
+    base = {"symbol": "MSFT", "regularMarketPrice": 499.99, "regularMarketTime": _t(16, 0)}
+    rows, _ = _us(["MSFT"], [dict(base, postMarketPrice=495.0)], 18)
+    check("no postMarketTime → no after-hours", rows["MSFT"]["post"] is None, f"got {rows['MSFT']}")
+    rows, _ = _us(["MSFT"], [dict(base, preMarketPrice=497.0, preMarketTime=_t(9, 0))], 18)
+    check("no previous close → pre-market cannot be paired", rows["MSFT"]["pre"] is None,
+          f"got {rows['MSFT']['pre']}")
+    rows, _ = _us(["MSFT"], [dict(base, postMarketPrice=0, postMarketTime=_t(17, 0))], 18)
+    check("a zero price is not a print", rows["MSFT"]["post"] is None, f"got {rows['MSFT']['post']}")
+    rows, _ = _us(["MSFT"], [{"symbol": "MSFT", "regularMarketPrice": 499.99,
+                              "postMarketPrice": 495.0, "postMarketTime": _t(17, 0)}], 18)
+    r = rows["MSFT"]
+    check("no regularMarketTime → no close, no session, not declined",
+          r["regular"] is None and r["post"] is None and r["declined"] is False, f"got {r}")
+
+
+def test_v7_print_at_or_before_its_close_is_not_after_hours():
+    q = {"symbol": "MSFT", "regularMarketPrice": 499.99, "regularMarketTime": _t(16, 0),
+         "regularMarketPreviousClose": 495.0, "postMarketPrice": 499.0, "postMarketTime": _t(15, 59)}
+    r = _us(["MSFT"], [q], 18)[0]["MSFT"]
+    check("a print before the bell is not after-hours", r["post"] is None, f"got {r['post']}")
+
+
+def test_v7_stale_close_is_declined():
+    """A fund with no trade in the last session: its close is days old."""
+    q = {"symbol": "FNILX", "regularMarketPrice": 30.0, "regularMarketTime": _t(16, 0, day_offset=-3),
+         "regularMarketPreviousClose": 29.0, "postMarketPrice": 27.9, "postMarketTime": _t(17, 0)}
+    r = _us(["FNILX"], [q], 18)[0]["FNILX"]
+    check("stale close → declined, no sessions",
+          r["declined"] is True and r["post"] is None and r["pre"] is None, f"got {r}")
+
+
+def test_v7_refusal_is_unavailable():
+    rows, _ = _us(["MSFT", "AAPL"], [], 18, fail=RuntimeError("429 Too Many Requests"))
+    check("refused batch quote → every row unavailable, none declined",
+          all(r["unavailable"] is True and r["declined"] is False for r in rows.values()), f"got {rows}")
+
+
+def test_v7_symbol_left_out_is_asked_again():
+    """A row missing from the batch (dropped, or an unknown ticker) is not an
+    answer: unavailable, so the service asks again on its back-off."""
+    q = {"symbol": "MSFT", "regularMarketPrice": 499.99, "regularMarketTime": _t(16, 0)}
+    rows, _ = _us(["MSFT", "ZZZZQ"], [q], 18)
+    r = rows["ZZZZQ"]
+    check("a symbol left out of the batch is unavailable, not declined",
+          r["unavailable"] is True and r["declined"] is False and r["post"] is None, f"got {r}")
+    check("the others are answered", rows["MSFT"]["unavailable"] is False, f"got {rows['MSFT']}")
+
+
+def test_v7_waits_for_the_official_close():
+    """16:00:20: regularMarketPrice is still the last trade before the closing
+    auction. After-hours is not paired with it, and nothing is declined."""
+    import extended_rules as xr
+    q = {"symbol": "MSFT", "marketState": "POST",
+         "regularMarketPrice": 499.58, "regularMarketTime": _t(15, 59) + 58,
+         "regularMarketPreviousClose": 495.0,
+         "postMarketPrice": 498.0, "postMarketTime": _t(16, 0) + 15}
+    r = xr.quote_sessions(q, datetime(*TRADING_DAY, 16, 0, 20, tzinfo=ET))
+    check("before the auction print: no after-hours pairing", r["post"] is None, f"got {r}")
+    check("before the auction print: the last close is still yesterday's, not declined",
+          r["regular"] == 495.0 and r["declined"] is False, f"got {r}")
+    # The auction print lands, stamped at the bell.
+    q2 = dict(q, regularMarketPrice=499.99, regularMarketTime=_t(16, 0))
+    r2 = xr.quote_sessions(q2, datetime(*TRADING_DAY, 16, 0, 40, tzinfo=ET))
+    check("auction print in: after-hours against the official close",
+          r2["post"] and r2["post"]["ref"] == 499.99, f"got {r2}")
+    # A thin name with no auction print: its last trade is the close after the settle time.
+    r3 = xr.quote_sessions(q, datetime(*TRADING_DAY, 16, 11, tzinfo=ET))
+    check("no auction print: the last trade is the close after 10 minutes",
+          r3["regular"] == 499.58 and r3["post"] and r3["post"]["ref"] == 499.58, f"got {r3}")
+
+
+def test_v7_one_stale_name_does_not_close_the_market():
+    """A single-name request (the ER tab) whose quote lags is judged by the
+    calendar, not taken as evidence that today was closed."""
+    q = {"symbol": "THIN", "regularMarketPrice": 10.0, "regularMarketTime": _t(15, 30, day_offset=-1),
+         "regularMarketPreviousClose": 9.9}
+    rows, _ = _us(["THIN"], [q], 10, 30)
+    check("one lagging name: today is still a session", rows["THIN"]["session"] == "REGULAR",
+          f"got {rows['THIN']['session']}")
+
+
+def test_v7_share_class_is_asked_in_yahoo_form():
+    q = {"symbol": "BRK-B", "regularMarketPrice": 586.76, "regularMarketTime": _t(16, 0),
+         "regularMarketPreviousClose": 592.85, "postMarketPrice": 584.09, "postMarketTime": _t(19, 0)}
+    rows, asked = _us(["BRK.B"], [q], 20, 30)
+    check("BRK.B asked as BRK-B, answered under BRK.B",
+          asked == [["BRK-B"]] and rows["BRK.B"]["post"] and rows["BRK.B"]["post"]["price"] == 584.09,
+          f"asked={asked} got={rows}")
+
+
+def test_v7_one_request_for_the_book():
+    qs = [{"symbol": s, "regularMarketPrice": 100.0, "regularMarketTime": _t(16, 0)} for s in ("A", "B", "C")]
+    _, asked = _us(["A", "B", "C"], qs, 18)
+    check("one batch quote for the whole book", len(asked) == 1 and sorted(asked[0]) == ["A", "B", "C"],
+          f"asked={asked}")
 
 
 # ── Index futures ────────────────────────────────────────────────────────────

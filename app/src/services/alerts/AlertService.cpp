@@ -36,7 +36,7 @@ QString session_name(int market_hours) {
         case 0:
             return QStringLiteral("pre-market print");
         case 2:
-            return QStringLiteral("post-market print");
+            return QStringLiteral("after-hours print");
         case 4:
             return QStringLiteral("overnight print");
         default:

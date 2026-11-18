@@ -1,15 +1,16 @@
 """The rules of a US stock's extended-hours sessions, in ONE place.
 
-Two computations read Yahoo's 1-minute prepost bars for these sessions and
-present them differently:
+Two computations read these sessions:
 
-  * yfinance_data.get_extended_hours_quotes — the AFT% column: one row per
-    symbol, the latest extended print against the last completed close;
-  * extended_sessions.summarise — the ER Overview box: the latest after-hours
-    and pre-market session, each against its own close, with range and volume.
+  * yfinance_data.get_extended_hours_quotes — the EXT% surfaces' source: each
+    session's latest print against its own close, from Yahoo's batch quote
+    (quote_sessions below);
+  * extended_sessions.summarise — the ER Overview box's range, volume and
+    minutes for the latest pre-market and after-hours session, from 1-minute
+    prepost bars. (Its headline price comes from the same EXT% source on the
+    C++ side, so the two cannot show different numbers for one session.)
 
-They are different views, but they must not disagree about the facts, so both
-take them from here:
+They must not disagree about the facts, so both take them from here:
 
   * the windows (ET): pre-market 04:00-09:30, regular 09:30-bell, after-hours
     bell-20:00; the bell is 16:00, or 13:00 on an early close (after-hours then
@@ -296,17 +297,108 @@ def close_for_pre(m, day, officials, seen=None):
     return prev, reference_close(m, prev, officials)
 
 
-def latest_close(m, officials, upto_day):
-    """(day, (close, ts)) for the most recent day <= upto_day with a close, or
-    None. Used only to report a reference that is NOT the one wanted."""
-    ref = reference_close(m, upto_day, officials)
-    if ref is not None:
-        return upto_day, ref   # the usual case: no need to list the frame's days
-    days = set(officials or {})
-    if m is not None:
-        days |= m.days()
-    for d in sorted((d for d in days if d <= upto_day), reverse=True):
-        ref = reference_close(m, d, officials)
-        if ref is not None:
-            return d, ref
-    return None
+# ── the quote: one snapshot's prints and closes ──────────────────────────────
+#
+# Yahoo's batch quote (v7) carries the latest pre-market and after-hours print
+# with their times, the last regular price with its time and the close before
+# it — one snapshot, one request (~0.1 s for a whole book) that never waits
+# behind a bar download. The EXT% surfaces read it for plain US stocks. The
+# pairing is the bars' own: after-hours of day D against D's close, pre-market
+# of D against the close of the session before D.
+
+QUOTE_FIELDS = ("regularMarketPrice,regularMarketTime,regularMarketPreviousClose,"
+                "preMarketPrice,preMarketTime,postMarketPrice,postMarketTime,marketState,currency")
+
+
+def _epoch(v):
+    try:
+        t = int(v)
+    except (TypeError, ValueError):
+        return None
+    return t if t > 0 else None
+
+
+def quote_day(q):
+    """The ET date of the quote's last regular price, or None."""
+    t = _epoch(q.get("regularMarketTime"))
+    return datetime.fromtimestamp(t, ET).date() if t is not None else None
+
+
+# After the bell, how long regularMarketPrice may still be the last trade
+# before the closing auction rather than the official close. The auction print
+# stamps regularMarketTime at the bell; a name without one (a thin listing)
+# has its last trade taken as the close once this has passed.
+CLOSE_SETTLE = timedelta(minutes=10)
+
+
+def _close_pending(q, now_et):
+    """Today's bell has rung but the quote does not carry the official close
+    yet: regularMarketPrice is still the last trade before the auction (off
+    by ~0.1% — a third of a typical after-hours move)."""
+    day, t = quote_day(q), _epoch(q.get("regularMarketTime"))
+    if day is None or day != now_et.date() or now_et.time() < bell(day):
+        return False
+    bell_at = datetime.combine(day, bell(day), tzinfo=ET)
+    return t < int(bell_at.timestamp()) and now_et < bell_at + CLOSE_SETTLE
+
+
+def quote_closes(q, now_et, seen=None):
+    """{day: (close, close instant)} the quote vouches for.
+
+    regularMarketPrice is a close only once its day's bell has rung (before
+    then it is the live price) and the closing auction is in (_close_pending);
+    regularMarketPreviousClose is the close of the session before that day.
+    Without regularMarketTime neither can be placed."""
+    day = quote_day(q)
+    out = {}
+    if day is None:
+        return out
+    reg, prev = price(q.get("regularMarketPrice")), price(q.get("regularMarketPreviousClose"))
+    done = day < now_et.date() or now_et.time() >= bell(day)
+    if reg is not None and done and not _close_pending(q, now_et):
+        out[day] = (reg, int(close_instant(day).timestamp()))
+    if prev is not None:
+        before = previous_session(day, seen)
+        out[before] = (prev, int(close_instant(before).timestamp()))
+    return out
+
+
+def quote_sessions(q, now_et, seen=None):
+    """One US stock's extended-hours readings from its v7 quote row:
+
+        {regular, regular_ts, declined, pre, post}
+
+    `regular` is the most recent close the quote vouches for — what the latest
+    move is measured against. `declined`: that close is older than the last
+    completed session (a fund with no trade today, a halted listing), so no
+    session is reported — a print against it would be a multi-day return.
+    `pre` / `post` are {price, ts, day, ref, ref_ts, ref_date} or None: the
+    print with the close it belongs to, only when the quote has that close and
+    the print came after it. An absent field is absent — never a 0."""
+    closes = quote_closes(q, now_et, seen)
+    out = {"regular": None, "regular_ts": None, "declined": False, "pre": None, "post": None}
+    if not closes:
+        return out
+    latest = max(closes)
+    out["regular"], out["regular_ts"] = closes[latest]
+    # Minutes after the bell, before the official close is in, the last close
+    # is still the previous one: not stale, just not rolled yet.
+    if latest < last_closed_day(now_et, seen) and not _close_pending(q, now_et):
+        out["declined"] = True
+        return out
+
+    def reading(price_key, time_key, ref_day_of):
+        p, t = price(q.get(price_key)), _epoch(q.get(time_key))
+        if p is None or t is None:
+            return None
+        day = datetime.fromtimestamp(t, ET).date()
+        ref_day = ref_day_of(day)
+        ref = closes.get(ref_day)
+        if ref is None or t <= ref[1]:
+            return None
+        return {"price": p, "ts": t, "day": day.isoformat(),
+                "ref": ref[0], "ref_ts": ref[1], "ref_date": ref_day.isoformat()}
+
+    out["pre"] = reading("preMarketPrice", "preMarketTime", lambda d: previous_session(d, seen))
+    out["post"] = reading("postMarketPrice", "postMarketTime", lambda d: d)
+    return out

@@ -70,41 +70,39 @@ class TestLiveTick : public QObject {
     }
     void ext_side_by_session() {
         namespace ex = finterm::screens::widgets::exthours;
-        QVERIFY(ex::live_ext_side(0, 100.0, 101.0, 1.0) == ex::ExtSide::Pre);
-        QVERIFY(ex::live_ext_side(2, 100.0, 99.0, -1.0) == ex::ExtSide::Post);
-        // overnight (20:00–04:00 ET), measured against the same close
-        QVERIFY(ex::live_ext_side(4, 100.0, 101.0, 1.0) == ex::ExtSide::Overnight);
-        QVERIFY(!ex::live_ext_side(1, 100.0, 101.0, 1.0)); // regular session: not an extended print
-        QVERIFY(!ex::live_ext_side(2, 100.0, 101.0, 2.0)); // measured against another close
+        QVERIFY(ex::side_of_market_hours(0) == ex::ExtSide::Pre);
+        QVERIFY(ex::side_of_market_hours(2) == ex::ExtSide::Post);
+        QVERIFY(ex::side_of_market_hours(4) == ex::ExtSide::Overnight); // 20:00-04:00 ET
+        QVERIFY(!ex::side_of_market_hours(1)); // regular session: not an extended print
     }
-    void ext_tick_moves_only_forward() {
+    void ext_print_moves_only_forward() {
         namespace ex = finterm::screens::widgets::exthours;
-        double price = 101.0, pct = 1.0;
-        qint64 ts = 1000;
+        QHash<QString, ex::SymbolExt> all;
+        QVERIFY(ex::apply_print(all, "X", 2, 101.0, 1.0, 1'000'000, 2000));
         // older print (a reconnect replay): ignored
-        QVERIFY(!ex::apply_ext_tick(100.0, price, pct, ts, 2, 99.0, -1.0, 999'000));
-        QCOMPARE(price, 101.0);
-        // same price: nothing to do
-        QVERIFY(!ex::apply_ext_tick(100.0, price, pct, ts, 2, 101.0, 1.0, 1'001'000));
-        // newer post print against this close
-        const auto side = ex::apply_ext_tick(100.0, price, pct, ts, 2, 98.0, -2.0, 1'002'000);
-        QVERIFY(side == ex::ExtSide::Post);
-        QCOMPARE(price, 98.0);
-        QCOMPARE(pct, -2.0);
-        QCOMPARE(ts, qint64(1002));
+        QVERIFY(!ex::apply_print(all, "X", 2, 99.0, -1.0, 999'000, 2000));
+        QCOMPARE(all["X"].at(ex::ExtSide::Post)->price, 101.0);
+        // same price: nothing to repaint
+        QVERIFY(!ex::apply_print(all, "X", 2, 101.0, 1.0, 1'001'000, 2000));
+        // newer print against this close
+        QVERIFY(ex::apply_print(all, "X", 2, 98.0, -2.0, 1'002'000, 2000));
+        QCOMPARE(all["X"].at(ex::ExtSide::Post)->pct(), -2.0);
+        QCOMPARE(all["X"].at(ex::ExtSide::Post)->print_ts, qint64(1002));
         // a print AT the close arrives with change 0 (proto3 omits it; the service reads 0)
-        QVERIFY(ex::apply_ext_tick(100.0, price, pct, ts, 2, 100.0, 0.0, 1'003'000));
-        QCOMPARE(pct, 0.0);
+        QVERIFY(ex::apply_print(all, "X", 2, 100.0, 0.0, 1'003'000, 2000));
+        QCOMPARE(all["X"].at(ex::ExtSide::Post)->pct(), 0.0);
     }
-    void ext_quote_from_one_print() {
+    void ext_reading_from_one_print() {
         namespace ex = finterm::screens::widgets::exthours;
         // AAPL overnight: 355.90, Yahoo's change +1.02 against the 354.88 close
-        const auto f = ex::ext_from_tick(4, 355.9, 1.02, 1794538210000);
-        QVERIFY(f && f->side == ex::ExtSide::Overnight);
-        QVERIFY(std::abs(f->regular - 354.88) < 1e-9);
-        QVERIFY(std::abs(f->pct - 1.02 / 354.88 * 100.0) < 1e-12);
-        QVERIFY(!ex::ext_from_tick(1, 355.9, 1.02, 0));  // regular session: not this column
-        QVERIFY(!ex::ext_from_tick(2, 355.9, kNaN, 0)); // no change: no pair
+        QHash<QString, ex::SymbolExt> all;
+        QVERIFY(ex::apply_print(all, "AAPL", 4, 355.9, 1.02, 1794538210000, 1794538300));
+        const auto q = ex::latest(all["AAPL"]);
+        QVERIFY(q && q->side == ex::ExtSide::Overnight);
+        QVERIFY(std::abs(q->regular - 354.88) < 1e-9);
+        QVERIFY(std::abs(q->pct - 1.02 / 354.88 * 100.0) < 1e-12);
+        QVERIFY(!ex::apply_print(all, "MSFT", 1, 355.9, 1.02, 0, 0)); // regular session: not this column
+        QVERIFY(!ex::apply_print(all, "MSFT", 2, 355.9, kNaN, 0, 0)); // no change: no pair
     }
     void future_tick_needs_its_contract_and_close() {
         finterm::services::IndexFutureQuote q;

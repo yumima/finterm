@@ -88,8 +88,10 @@ void PortfolioHeatmap::build_ui() {
     pnl_btn_ = make_mode_btn("PNL");
     weight_btn_ = make_mode_btn("WT");
     day_btn_ = make_mode_btn("DAY");
-    aft_btn_ = make_mode_btn("AFT");
-    aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change"));
+    // "EXT", not "AFT": the tiles show pre-market and overnight prints too.
+    aft_btn_ = make_mode_btn(QStringLiteral("EXT"));
+    aft_btn_->setToolTip(screens::widgets::exthours::ext_definition() +
+                         QStringLiteral("\nEach tile shows its latest print, tagged PRE / AH / ON."));
     pnl_btn_->setChecked(true);
 
     connect(pnl_btn_, &QPushButton::clicked, this, [this]() { set_mode(portfolio::HeatmapMode::Pnl); });
@@ -461,9 +463,10 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
     // Content. Each mode needs its own value source — falling through to
     // `weight` for Aft (the prior bug) made the tile display "+12.3%"
     // (weight, always positive prefix) on a color computed from the
-    // after-hours change. We now read the shared extended-hours quote for Aft and render
-    // "—" when the daemon hasn't returned a quote for that symbol.
+    // extended-hours change. Aft (shown as EXT) reads the shared extended-hours
+    // quote, tagged with its session, and renders "—" when there is none.
     QString chg_str;
+    QString tip;
     switch (mode_) {
         case portfolio::HeatmapMode::DayChange:
             chg_str = ui::formatting::format_percent(h.day_change_percent, 1, true);
@@ -479,14 +482,16 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
             if (!it) {
                 chg_str = QStringLiteral("—"); // matches gray tile from block_color
             } else {
-                const double v = it->pct;
-                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+                chg_str = screens::widgets::exthours::ext_cell_text(*it, 1);
+                tip = screens::widgets::exthours::ext_quote_line(*it);
             }
             break;
         }
     }
 
     block->setText(QString("%1\n%2").arg(h.symbol, chg_str));
+    if (block->toolTip() != tip)
+        block->setToolTip(tip);
 }
 
 void PortfolioHeatmap::refresh_block_appearances() {
@@ -844,12 +849,12 @@ void PortfolioHeatmap::update_aft_status() {
     switch (ext.state()) {
         case State::Loading:
             if (!any) {
-                set_aft_status(QStringLiteral("loading ext hours…"), ui::colors::TEXT_SECONDARY());
+                set_aft_status(QStringLiteral("loading extended hours…"), ui::colors::TEXT_SECONDARY());
                 return;
             }
             break;
         case State::Failed:
-            set_aft_status(QStringLiteral("ext hours unavailable — click AFT to retry"), ui::colors::NEGATIVE(),
+            set_aft_status(QStringLiteral("extended hours unavailable — click EXT to retry"), ui::colors::NEGATIVE(),
                            /*is_error=*/true);
             return;
         case State::Idle:

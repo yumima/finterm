@@ -208,7 +208,7 @@ QString PortfolioFuturesView::quote_symbol(const QString& symbol) {
 
 PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     build_ui();
-    // The extended-hours table renders the one source every AFT surface
+    // The extended-hours table renders the one source every EXT surface
     // shares (fetch, live prints, merge rules, last-known snapshot).
     auto& ext = services::ExtendedHoursService::instance();
     connect(&ext, &services::ExtendedHoursService::quotes_changed, this, [this](const QSet<QString>& syms) {
@@ -275,7 +275,8 @@ void PortfolioFuturesView::build_ui() {
     // ── Section 2: Extended hours ───────────────────────────────────────────
     {
         auto* hdr = new QHBoxLayout;
-        auto* title = new QLabel("EXTENDED HOURS · PRE / POST MARKET");
+        auto* title = new QLabel("EXTENDED HOURS · PRE-MARKET / AFTER-HOURS / OVERNIGHT");
+        title->setToolTip(screens::widgets::exthours::ext_definition());
         title->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(1)));
         hdr->addWidget(title);
         hdr->addStretch();
@@ -427,7 +428,7 @@ void PortfolioFuturesView::populate_extended() {
         const double ext = have ? it->price : 0.0;
         const double chg = have ? it->price - it->regular : 0.0;
         const double pct = have ? it->pct : 0.0;
-        const QString session = have ? it->session : QString("—");
+        const QString session = have ? screens::widgets::exthours::ext_side_name(it->side) : QString("—");
         const double mv_delta = have ? (chg * h.quantity) : 0.0;
 
         // Reuse the row's items: live prints re-run this up to 4×/s.
@@ -474,10 +475,10 @@ void PortfolioFuturesView::update_ext_status() {
     const QDateTime at = ext.last_answer();
     switch (ext.state()) {
         case State::Loading:
-            extended_status_->setText("loading ext hours…");
+            extended_status_->setText("loading extended hours…");
             break;
         case State::Failed:
-            extended_status_->setText("ext hours error");
+            extended_status_->setText("extended hours unavailable");
             break;
         case State::Idle:
             extended_status_->setText(at.isValid() ? QString("yfinance · %1").arg(at.toString("HH:mm:ss"))

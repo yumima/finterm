@@ -6,6 +6,7 @@
 #include "services/equity/AnalystTargets.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/equity/ReportService.h"
+#include "services/markets/ExtendedHoursService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -24,6 +25,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollArea>
+#include <QHideEvent>
 #include <QShowEvent>
 #include <QSizePolicy>
 #include <QTimeZone>
@@ -31,10 +33,13 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 
 namespace finterm::screens {
+
+namespace exthours = widgets::exthours;
 
 namespace {
 constexpr double kNoPrice = std::numeric_limits<double>::quiet_NaN();
@@ -80,8 +85,10 @@ QFrame* make_panel(const QString& title, const char* title_color) {
     return f;
 }
 
-// entry_id: if non-empty, appends a HelpHint "?" button after the key label
-QLabel* add_row(QFrame* panel, const QString& key, const char* val_color, const QString& entry_id = {}) {
+// entry_id: if non-empty, appends a HelpHint "?" button after the key label.
+// row_out: if given, the row is wrapped in its own widget (so it can be hidden).
+QLabel* add_row(QFrame* panel, const QString& key, const char* val_color, const QString& entry_id = {},
+                QWidget** row_out = nullptr) {
     auto* hl = new QHBoxLayout;
     hl->setSpacing(4);
     hl->setContentsMargins(0, 0, 0, 0);
@@ -104,7 +111,15 @@ QLabel* add_row(QFrame* panel, const QString& key, const char* val_color, const 
         hl->addWidget(hint);
     }
     hl->addWidget(v, 1);
-    static_cast<QVBoxLayout*>(panel->layout())->addLayout(hl);
+    if (row_out) {
+        auto* row = new QWidget;
+        row->setStyleSheet(QStringLiteral("background:transparent;border:0;"));
+        row->setLayout(hl);
+        static_cast<QVBoxLayout*>(panel->layout())->addWidget(row);
+        *row_out = row;
+    } else {
+        static_cast<QVBoxLayout*>(panel->layout())->addLayout(hl);
+    }
     return v;
 }
 
@@ -838,6 +853,7 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // extended session moves, and the regular quote does not carry it.
     ext_sessions_ = {};
     ext_answered_ = false;
+    watch_extended_hours();
     render_extended_sessions();
     fetch_extended_sessions();
     if (!ext_timer_) {
@@ -952,7 +968,9 @@ QWidget* EquityOverviewTab::build_col1() {
     vl->setSpacing(6);
     vl->addWidget(build_trading_panel());
     auto* ext = build_extended_panel();
-    vl->addWidget(ext);
+    // The stretch of the column: three sessions (pre-market, after-hours,
+    // overnight) need the room; the other panels keep their own height.
+    vl->addWidget(ext, 1);
     // Its own overlay, not one of the info overlays: it loads on its own fetch.
     // Tall enough for the loading box while there is only a note in it.
     ext->setMinimumHeight(150);
@@ -974,13 +992,22 @@ QWidget* EquityOverviewTab::build_trading_panel() {
     low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     prev_close_val_ = add_row(p, "PREV CLOSE", ui::colors::TEXT_PRIMARY);
     vol_val_ = add_row(p, "VOLUME", YELLOW, "volume");
-    static_cast<QVBoxLayout*>(p->layout())->addStretch();
+    // Its own height, tight rows, no stretch: the spare space goes to Extended Hours.
+    static_cast<QVBoxLayout*>(p->layout())->setSpacing(2);
+    p->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     return p;
 }
 
 QWidget* EquityOverviewTab::build_extended_panel() {
     auto* p = make_panel("EXTENDED HOURS", ui::colors::AMBER);
+    p->setToolTip(exthours::ext_definition());
     auto* pl = static_cast<QVBoxLayout*>(p->layout());
+    // The portfolio's EXT% readings (fetch and live stream) move the headlines.
+    connect(&services::ExtendedHoursService::instance(), &services::ExtendedHoursService::quotes_changed, this,
+            [this](const QSet<QString>& syms) {
+                if (isVisible() && syms.contains(current_symbol_))
+                    render_extended_sessions();
+            });
 
     ext_note_ = new QLabel(ui::formatting::placeholder());
     ext_note_->setWordWrap(true);
@@ -995,7 +1022,7 @@ QWidget* EquityOverviewTab::build_extended_panel() {
         b.box->setStyleSheet(QStringLiteral("QFrame{background:transparent;border:0;}"));
         auto* bl = new QVBoxLayout(b.box);
         bl->setContentsMargins(0, 2, 0, 2);
-        bl->setSpacing(4);
+        bl->setSpacing(1);
 
         auto* head = new QHBoxLayout;
         head->setContentsMargins(0, 0, 0, 0);
@@ -1005,25 +1032,21 @@ QWidget* EquityOverviewTab::build_extended_panel() {
         b.title->setStyleSheet(
             QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;background:transparent;border:0;")
                 .arg(CYAN));
-        b.when = new QLabel;
-        b.when->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        b.when->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;border:0;")
-                                  .arg(ui::colors::TEXT_SECONDARY()));
+        // The session's ET window. No "ET": the 220px column cut it off.
+        b.window = new QLabel;
+        b.window->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        b.window->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;border:0;")
+                                    .arg(ui::colors::TEXT_SECONDARY()));
         head->addWidget(b.title);
-        head->addWidget(b.when, 1);
+        head->addWidget(b.window, 1);
         bl->addLayout(head);
 
         b.price = add_row(b.box, "PRICE", ui::colors::TEXT_PRIMARY);
         b.price->setTextFormat(Qt::RichText);
-        b.range = add_row(b.box, "RANGE", ui::colors::TEXT_PRIMARY);
-        b.volume = add_row(b.box, "VOLUME", YELLOW);
-        b.volume_share = add_row(b.box, "% OF AVG DAY", YELLOW);
-        b.volume_share->setToolTip(
-            QStringLiteral("This session's volume as a share of an average full trading day\n"
-                           "(the 20 sessions before it). Extended hours are thin: a move on\n"
-                           "a fraction of a percent of a day's volume is a handful of orders.\n"
-                           "After-hours volume includes closing-auction and late-reported\n"
-                           "trades that print after 16:00, so a large share is not unusual."));
+        b.last = add_row(b.box, "LAST", ui::colors::TEXT_PRIMARY);
+        b.last->setTextFormat(Qt::RichText);
+        b.range = add_row(b.box, "RANGE", ui::colors::TEXT_PRIMARY, {}, &b.bar_rows[0]);
+        b.volume = add_row(b.box, "VOLUME", YELLOW, {}, &b.bar_rows[1]);
         b.box->hide();
         pl->addWidget(b.box);
     }
@@ -1038,6 +1061,22 @@ void EquityOverviewTab::showEvent(QShowEvent* event) {
     // Also when the first fetch never answered: its retry tick was skipped too.
     if (!current_symbol_.isEmpty() && !(ext_answered_ && ext_sessions_.unsupported))
         fetch_extended_sessions();
+    watch_extended_hours();
+}
+
+void EquityOverviewTab::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    watch_extended_hours();
+}
+
+void EquityOverviewTab::watch_extended_hours() {
+    // The headline prices are the portfolio's EXT% readings, overnight
+    // included — watched (fetched + streamed) only while the tab is up, and
+    // only for an instrument that has US extended sessions at all.
+    QStringList syms;
+    if (isVisible() && exthours::has_us_extended_session(current_symbol_))
+        syms << current_symbol_;
+    services::ExtendedHoursService::instance().watch(this, syms);
 }
 
 void EquityOverviewTab::fetch_extended_sessions() {
@@ -1053,7 +1092,7 @@ void EquityOverviewTab::fetch_extended_sessions() {
             if (!ext_answered_ && ext_note_) {
                 if (ext_loading_)
                     ext_loading_->hide_loading(); // a failure is said, not animated
-                ext_note_->setText(QStringLiteral("Extended-hours data did not arrive \u2014 trying again shortly."));
+                ext_note_->setText(QStringLiteral("Extended-hours data did not arrive — trying again shortly."));
             }
             // What is shown stays, but not as LIVE: nothing vouches for that
             // any more, and the session may have ended since.
@@ -1080,75 +1119,117 @@ void EquityOverviewTab::fetch_extended_sessions() {
     });
 }
 
-void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::ExtSession& s, bool pre) {
+void EquityOverviewTab::render_ext_block(ExtBlock& b, const services::equity::ExtSession& s, exthours::ExtSide side,
+                                         bool latest) {
     b.box->setVisible(s.valid);
     if (!s.valid)
         return;
-    const QString name = pre ? QStringLiteral("PRE-MARKET") : QStringLiteral("AFTER HOURS");
-    // Live is a green dot (tooltip says so): the 200px column has no room
-    // for the word beside the time.
-    b.title->setText(s.live ? QString("%1 <span style='color:%2;'>\u25cf</span>").arg(name, ui::colors::POSITIVE())
+    // Live is a green dot (tooltip says so): the column has no room for the word.
+    const QString name = exthours::ext_side_name(side).toUpper();
+    b.title->setText(s.live ? QString("%1 <span style='color:%2;'>●</span>").arg(name, ui::colors::POSITIVE())
                             : name);
     b.title->setToolTip(s.live ? QStringLiteral("Trading now") : QString());
+    b.window->setText(exthours::ext_side_window(side));
+    b.window->setToolTip(QString("%1 session, Eastern time%2.")
+                             .arg(exthours::ext_side_name(side),
+                                  side == exthours::ExtSide::Post ? QStringLiteral(" (13:00–17:00 on an early close)")
+                                                                  : QString()));
 
-    // EVENT-STAMP: the last extended-hours print — a real instant, read in ET.
-    const QDateTime at = QDateTime::fromSecsSinceEpoch(s.last_ts, QTimeZone("America/New_York"));
     const QLocale en = QLocale::c();
-    // No "ET" on the label: the column is 200px and it was the part cut off.
-    // No weekday: "PRE-MARKET ●" leaves no room for it beside the time.
-    b.when->setText(s.last_ts > 0 ? en.toString(s.date, "d MMM") + at.toString(" HH:mm")
-                                  : en.toString(s.date, "ddd d MMM"));
-    b.when->setToolTip(QString("The session's last print, Eastern time. It traded in %1 of the session's %2 minutes.")
-                           .arg(s.minutes)
-                           .arg(pre ? 330 : 240));
-
     if (std::isfinite(s.pct)) {
         const char* tone = s.pct > 0 ? ui::colors::POSITIVE() : s.pct < 0 ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY();
         b.price->setText(QString("%1 <span style='color:%2;'>%3%4%</span>")
                              .arg(fmt_price(s.last), tone, s.pct > 0 ? "+" : "", QString::number(s.pct, 'f', 2)));
-        b.price->setToolTip(QString("%1 the close of %2 on %3.")
-                                .arg(pre ? "Against the previous close:" : "Against that day's close:",
-                                     fmt_price(s.ref_close), en.toString(s.ref_date, "ddd d MMM")));
+        const QString against = side == exthours::ExtSide::Pre ? QStringLiteral("Against the previous close:")
+                                                               : QStringLiteral("Against that day's close:");
+        b.price->setToolTip(s.ref_date.isValid()
+                                ? QString("%1 %2 on %3.").arg(against, fmt_price(s.ref_close),
+                                                              en.toString(s.ref_date, "ddd d MMM"))
+                                : QString("%1 %2.").arg(against, fmt_price(s.ref_close)));
     } else {
         b.price->setText(fmt_price(s.last));
         b.price->setToolTip(QStringLiteral("No close to measure this session against."));
     }
-    b.range->setText(std::isfinite(s.low) && std::isfinite(s.high)
-                         ? QString("%1 \u2013 %2").arg(fmt_price(s.low), fmt_price(s.high))
-                         : ui::formatting::placeholder());
+
+    // EVENT-STAMP: the session's last print — a real instant, read in ET.
+    const QDateTime at = QDateTime::fromSecsSinceEpoch(s.last_ts, QTimeZone("America/New_York"));
+    const QString when = s.last_ts > 0 ? en.toString(at.date(), "d MMM") + at.toString(" HH:mm")
+                                       : en.toString(s.date, "ddd d MMM");
+    b.last->setText(latest ? QString("<span style='color:%1;'>LATEST</span> %2").arg(ui::colors::AMBER(), when)
+                           : when);
+    b.last->setToolTip(QString("The session's last print, Eastern time.%1%2")
+                           .arg(s.minutes > 0 ? QString(" It traded in %1 of the session's minutes.").arg(s.minutes)
+                                              : QString(),
+                                latest ? QStringLiteral("\nLATEST: the print the portfolio's EXT% shows.")
+                                       : QString()));
+
+    // Range and volume come from the bars; a session they do not cover (the
+    // overnight one, or a newer print than the bars have) shows neither —
+    // omitted, never a 0.
+    const bool has_range = std::isfinite(s.low) && std::isfinite(s.high);
+    const bool has_volume = std::isfinite(s.volume);
+    b.bar_rows[0]->setVisible(has_range);
+    b.bar_rows[1]->setVisible(has_volume);
+    if (has_range)
+        b.range->setText(QString("%1 – %2").arg(fmt_price(s.low), fmt_price(s.high)));
     // A partial reading is a floor, and is shown as one.
-    const QString more = s.volume_partial && std::isfinite(s.volume) ? QStringLiteral("+") : QString();
-    b.volume->setText(fmt_large(s.volume) + more);
-    b.volume->setToolTip(s.volume_partial
-                             ? QStringLiteral("At least this much: read while the session was still trading,\n"
-                                              "and its total was gone from the source by the next look.")
-                             : QString());
+    const QString more = s.volume_partial && has_volume ? QStringLiteral("+") : QString();
     const double share = s.volume_pct_of_day();
-    b.volume_share->setText(std::isfinite(share) ? QString::number(share, 'f', share < 10 ? 2 : 1) + "%" + more
-                                                 : ui::formatting::placeholder());
+    b.volume->setText(fmt_large(s.volume) + more +
+                      (std::isfinite(share) ? QString(" (%1%)").arg(QString::number(share, 'f', share < 10 ? 2 : 1))
+                                            : QString()));
+    QString tip = QStringLiteral(
+        "In brackets: this session's volume as a share of an average full trading day\n"
+        "(the 20 sessions before it). Extended hours are thin: a move on a fraction of\n"
+        "a percent of a day's volume is a handful of orders. After-hours volume includes\n"
+        "closing-auction and late-reported trades that print after 16:00.");
+    if (s.volume_partial)
+        tip += QStringLiteral("\n\nAt least this much: read while the session was still trading,\n"
+                              "and its total was gone from the source by the next look.");
+    b.volume->setToolTip(tip);
 }
 
 void EquityOverviewTab::render_extended_sessions() {
     if (!ext_note_)
         return;
+    const auto& svc = services::ExtendedHoursService::instance();
+    const auto live = svc.sessions(current_symbol_);
+    const auto shown = services::equity::with_live_readings(ext_sessions_, live, QDateTime::currentSecsSinceEpoch());
+    const auto latest = svc.quote(current_symbol_);
+    const bool any = shown.after_hours.valid || shown.pre_market.valid || shown.overnight.valid;
     if (ext_loading_) {
-        if (ext_answered_)
+        if (ext_answered_ || any)
             ext_loading_->hide_loading();
         else
-            ext_loading_->show_loading(QStringLiteral("LOADING\u2026"));
+            ext_loading_->show_loading(QStringLiteral("LOADING…"));
     }
-    const auto& x = ext_sessions_;
-    const bool any = x.after_hours.valid || x.pre_market.valid;
     ext_note_->setVisible(!any);
     if (!any) {
-        ext_note_->setText(!ext_answered_ ? QString() // the overlay's bars say it: a few seconds, two sources
-                           : x.unsupported ? QStringLiteral("No US pre-market or after-hours session for this instrument.")
-                                           : QStringLiteral("No pre-market or after-hours trades in the last five sessions."));
+        ext_note_->setText(!ext_answered_ ? QString() // the overlay's bars say it
+                           : shown.unsupported
+                               ? QStringLiteral("No US pre-market, after-hours or overnight session for this instrument.")
+                               : QStringLiteral("No pre-market, after-hours or overnight trades in the last five sessions."));
     }
-    // The more recent session on top.
-    const bool pre_first = x.pre_is_latest();
-    render_ext_block(ext_blocks_[0], pre_first ? x.pre_market : x.after_hours, pre_first);
-    render_ext_block(ext_blocks_[1], pre_first ? x.after_hours : x.pre_market, !pre_first);
+    // Most recent first.
+    struct Item {
+        const services::equity::ExtSession* s;
+        exthours::ExtSide side;
+    };
+    std::array<Item, 3> items{{{&shown.pre_market, exthours::ExtSide::Pre},
+                               {&shown.after_hours, exthours::ExtSide::Post},
+                               {&shown.overnight, exthours::ExtSide::Overnight}}};
+    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) {
+        if (a.s->valid != b.s->valid)
+            return a.s->valid;
+        return a.s->last_ts > b.s->last_ts;
+    });
+    for (int i = 0; i < 3; ++i) {
+        const auto& it = items[static_cast<size_t>(i)];
+        // LATEST marks the session whose print the portfolio's EXT% shows —
+        // the same reading, so the same price.
+        const bool is_latest = latest && latest->side == it.side && it.s->valid && it.s->last == latest->price;
+        render_ext_block(ext_blocks_[i], *it.s, it.side, is_latest);
+    }
 }
 
 QWidget* EquityOverviewTab::build_valuation_panel() {
@@ -1160,7 +1241,8 @@ QWidget* EquityOverviewTab::build_valuation_panel() {
     pb_val_ = add_row(p, "P/B RATIO", CYAN, "pb-ratio");
     div_val_ = add_row(p, "DIV YIELD", ui::colors::POSITIVE, "dividend-yield");
     beta_val_ = add_row(p, "BETA", ui::colors::TEXT_PRIMARY, "beta");
-    static_cast<QVBoxLayout*>(p->layout())->addStretch();
+    static_cast<QVBoxLayout*>(p->layout())->setSpacing(2);
+    p->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     return p;
 }
 
@@ -1171,7 +1253,9 @@ QWidget* EquityOverviewTab::build_share_stats_panel() {
     insiders_val_ = add_row(p, "INSIDERS", YELLOW);
     institutions_val_ = add_row(p, "INSTITUTIONS", YELLOW);
     short_pct_val_ = add_row(p, "SHORT %", ui::colors::NEGATIVE, "short-interest");
-    static_cast<QVBoxLayout*>(p->layout())->addStretch();
+    // Compact: tighter rows, no stretch — the height goes to Extended Hours.
+    static_cast<QVBoxLayout*>(p->layout())->setSpacing(2);
+    p->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     return p;
 }
 

@@ -16,7 +16,10 @@ namespace finterm::services {
 
 struct StreamTick;
 
-/// The one source of every holding's extended-hours move (AFT%).
+/// The one source of every extended-hours (EXT%) number: per symbol, the latest
+/// reading of each session (pre-market, after-hours, overnight), each against
+/// its own close. The portfolio surfaces show the latest and name its session;
+/// the ER Overview panel shows every session from the same readings.
 ///
 /// The dashboard's Portfolio Summary, the Portfolio heatmap and the Portfolio
 /// futures view used to fetch `extended_hours` each on their own — three 5-day
@@ -30,6 +33,7 @@ class ExtendedHoursService : public QObject {
     Q_OBJECT
   public:
     using Quote = finterm::screens::widgets::exthours::HeldQuote;
+    using Sessions = finterm::screens::widgets::exthours::SymbolExt;
     enum class State { Idle, Loading, Failed };
 
     static ExtendedHoursService& instance();
@@ -38,11 +42,13 @@ class ExtendedHoursService : public QObject {
     /// Symbols nobody has asked for yet are fetched straight away.
     void watch(QObject* owner, const QStringList& symbols);
 
-    /// The shown move for `symbol`, if there is one.
+    /// The latest extended move since the last close, named by its session.
     std::optional<Quote> quote(const QString& symbol) const;
+    /// Every session's reading (empty when none is known).
+    Sessions sessions(const QString& symbol) const { return ext_.value(symbol); }
     /// The last regular close the fetch reported, or 0 — a row with no move
     /// still has a close to show.
-    double regular_close(const QString& symbol) const { return regular_.value(symbol, 0.0); }
+    double regular_close(const QString& symbol) const { return ext_.value(symbol).regular; }
 
     State state() const { return state_; }
     QString error() const { return error_; }
@@ -73,11 +79,15 @@ class ExtendedHoursService : public QObject {
     QSet<QObject*> hooked_;        // owners whose destroyed() is connected (once)
     QStringList watched_;          // sorted union of owners_
     QSet<QString> watched_set_;
-    QSet<QString> covered_;        // symbols the last good fetch answered
+    // When each symbol was last answered. A symbol shown again within
+    // kCoveredSecs (a tab switched away and back) is not fetched afresh — the
+    // whole book would be; after that it is, rather than trusted to an answer
+    // from another session.
+    QHash<QString, qint64> answered_at_;
+    QSet<QString> uncovered(const QSet<QString>& symbols) const;
+    bool logged_first_answer_ = false;
     QSet<QString> owed_;           // refused last time: ask again
-    QHash<QString, Quote> quotes_;
-    QHash<QString, double> regular_;
-    QSet<QString> declined_;
+    QHash<QString, Sessions> ext_;
     State state_ = State::Idle;
     QString error_;
     QDateTime last_answer_;
