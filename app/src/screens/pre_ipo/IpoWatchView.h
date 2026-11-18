@@ -442,6 +442,8 @@ class IpoWatchView : public QWidget {
     bool calendar_inflight_ = false;
     bool enrich_inflight_ = false;
     bool enriched_ = false;          // EDGAR stage present in entries_
+    bool enriched_from_cache_ = false; // ...from the script's cache: the last enrich's picture
+    QDateTime enriched_at_;            // when that EDGAR picture was read
     quint64 calendar_gen_ = 0;       // bumped per refresh; stale fast replies dropped
     quint64 enrich_applied_gen_ = 0; // gen at which the last enrich reply was applied
     ChunkPump quote_pump_, profile_pump_;

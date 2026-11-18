@@ -18,7 +18,6 @@
 #include "screens/pre_ipo/IpoWatchView.h"
 #include "screens/social/SocialScreen.h"
 #include "services/news/NewsCategories.h"
-#include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
 #include "services/news/NewsRegions.h"
 #include "services/notifications/NotificationService.h"
@@ -1706,10 +1705,10 @@ void NewsScreen::compute_deviations() {
             NotificationService::instance().send(req);
         }
     }
-
-    // Persist baselines
-    services::NewsCorrelationService::instance().update_baseline(
-        current_counts, [](bool /*ok*/, QMap<QString, services::CategoryBaseline> /*baselines*/) {});
+    // The baselines live in baselines_ above. (This used to also send them to
+    // news_correlation.py baseline_update on every render — a Python process
+    // per feed batch, ~20 in a burst, holding the shared Python slots — and
+    // throw the answer away.)
 }
 
 int64_t NewsScreen::time_window_seconds() const {

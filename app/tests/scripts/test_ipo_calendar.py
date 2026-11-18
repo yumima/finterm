@@ -300,6 +300,80 @@ def test_pending_overview_is_reread_once_the_deal_prices():
         ic._fetch_overview_net = real
 
 
+def test_fast_pass_reproduces_the_last_enrich_from_the_cache():
+    # The fast pass is what the reader waits on; the enrich pass can wait
+    # minutes for a Python slot. When the cache can give the last enrich's
+    # answer, the fast pass is that answer — with no request at all.
+    # Otherwise it stays a plain calendar (no mix of verdicts and blanks).
+    import tempfile
+    c = ic.Cache(os.path.join(tempfile.mkdtemp(), "c.sqlite"))
+    for m in ic.months_to_read(T):
+        c.put(f"month:{m}", month())
+    oct_filed = [{"dealID": "9-9", "companyName": "Opay Inc", "filedDate": "10/9/2026"},
+                 {"dealID": "8-8", "companyName": "Other Inc", "filedDate": "10/12/2026"}]
+    c.put("month:2026-10", month(filed=oct_filed))
+    c.put("ov:9-9", {"cik": "999"})
+    c.put("ov:8-8", {"cik": "888"})
+    c.put("sub2:999", OPAY)
+    real = ic._http_json
+    ic._http_json = lambda *a: (_ for _ in ()).throw(AssertionError("fast pass made a request"))
+
+    def fast():
+        return ic.build(today=T, enrich=False, cache=c)
+    try:
+        # never enriched: nothing to reproduce
+        c.put("sub2:888", sub([("S-1", "2026-10-12")]))
+        r = fast()
+        assert not r["enriched"] and r["enriched_from"] is None, r
+        assert all("stage" not in d for d in r["deals"]), r["deals"]
+        # the last enrich had everything
+        c.put(ic.ENRICH_RUN_KEY, {"ov": [], "sub": []})
+        r = fast()
+        assert r["enriched"] and r["enriched_from"] == "cache" and r["enriched_at"], r
+        stages = {d["deal_id"]: d.get("stage") for d in r["deals"]}
+        assert stages == {"9-9": "effective", "8-8": "on_file"}, stages
+        # SEC refused 888 in the last enrich too: still that run's answer
+        c.con.execute("DELETE FROM kv WHERE k LIKE '%sub2:888'")
+        c.put(ic.ENRICH_RUN_KEY, {"ov": [], "sub": ["888"]})
+        r = fast()
+        assert r["enriched"], r
+        assert {d["deal_id"]: d.get("edgar_failed") for d in r["deals"]} == {"9-9": False, "8-8": True}
+        # …but a deal filed since that run is not in the cached picture
+        c.put("month:2026-10", month(filed=oct_filed + [
+            {"dealID": "7-7", "companyName": "New Inc", "filedDate": "10/30/2026"}]))
+        assert not fast()["enriched"]
+        c.put("month:2026-10", month(filed=oct_filed))
+        # a priced deal whose overview was cached while pending (no lock-up yet)
+        c.put("month:2026-10", month(filed=oct_filed, priced=[
+            {"dealID": "6-6", "companyName": "Priced Inc", "pricedDate": "10/20/2026",
+             "proposedSharePrice": "10.00"}]))
+        c.put("ov:6-6", {"cik": "666"})  # no _final
+        assert not fast()["enriched"]
+        c.put("ov:6-6", {"cik": "666", "lockup_days": 180, "_final": True})
+        assert fast()["enriched"]
+        # a run older than a week: wait for a real enrich
+        c.con.execute("UPDATE kv SET at=at-8*86400 WHERE k LIKE ?", (f"%{ic.ENRICH_RUN_KEY}",))
+        c.con.commit()
+        assert not fast()["enriched"]
+    finally:
+        ic._http_json = real
+
+
+def test_enrich_records_what_it_could_not_get():
+    import tempfile
+    c = ic.Cache(os.path.join(tempfile.mkdtemp(), "c.sqlite"))
+    deals = {"9-9": {"deal_id": "9-9", "company": "A", "status": "filed", "filed_date": T - timedelta(days=20)},
+             "8-8": {"deal_id": "8-8", "company": "B", "status": "filed", "filed_date": T - timedelta(days=20)}}
+    real_ov, real_sub = ic._fetch_overview_net, ic._fetch_submissions_net
+    ic._fetch_overview_net = lambda did: {"cik": "999"} if did == "9-9" else None
+    ic._fetch_submissions_net = lambda cik: None
+    try:
+        assert ic.enrich_deals(deals, c, T, errors=[])
+        assert c.get(ic.ENRICH_RUN_KEY, None) == {"ov": ["8-8"], "sub": ["999"]}
+    finally:
+        ic._fetch_overview_net, ic._fetch_submissions_net = real_ov, real_sub
+
+
 def test_ladder_floor_uses_the_as_of_date():
     d = {"deal_id": "u", "company": "U", "status": "filed", "filed_date": None, "expected_date": None}
     # As of 2026-06-01 the floor is 2025-06-01: a 2025-07 S-1 is in the

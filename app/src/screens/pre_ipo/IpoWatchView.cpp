@@ -1110,59 +1110,68 @@ void IpoWatchView::load_calendar(bool enrich) {
     inflight = true;
     QPointer<IpoWatchView> self = this;
     const quint64 gen = calendar_gen_;
-    python::PythonRunner::instance().run( // D1-exempt: one-shot calendar scrape, no producer
-        QStringLiteral("ipo_calendar.py"), {enrich ? QStringLiteral("enrich") : QStringLiteral("calendar")},
-        [self, gen, enrich](python::PythonResult r) {
-            if (!self)
-                return;
-            (enrich ? self->enrich_inflight_ : self->calendar_inflight_) = false;
-            // A stale FAST reply is dropped; an enrich reply is applied
-            // whenever it lands (it is the newest full answer), and a fast
-            // reply arriving after it must not overwrite it.
-            if (!enrich && (gen != self->calendar_gen_ || self->enrich_applied_gen_ >= gen))
-                return;
-            const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8());
-            const QJsonObject root = doc.isObject() ? doc.object() : QJsonObject();
-            if (!r.success || root.isEmpty() || root.contains("error")) {
-                // A failed run is not an empty calendar: keep what is shown
-                // and say what failed.
-                const QString why = root.value("error").toString(r.success ? QStringLiteral("unreadable output")
-                                                                           : QStringLiteral("script failed"));
-                LOG_WARN("IpoWatch", QString("ipo_calendar %1 failed: %2").arg(enrich ? "enrich" : "calendar", why));
-                self->calendar_errors_.removeDuplicates();
-                self->calendar_errors_ << (enrich ? QStringLiteral("EDGAR stage unavailable (%1)").arg(why)
-                                                  : QStringLiteral("Nasdaq calendar unavailable (%1)").arg(why));
-                if (self->status_lbl_)
-                    self->status_lbl_->setText(self->status_text());
-                if (!enrich && self->entries_.isEmpty())
-                    self->render();
-                if (!enrich)
-                    self->load_calendar(true); // EDGAR may still answer
-                return;
-            }
-            // Once EDGAR has been applied, a calendar-only answer would take
-            // it away (EDGAR verdicts, stages, imminent windows) for the
-            // minutes until enrich lands. Keep the enriched rows; re-quote.
-            if (!enrich && self->enriched_) {
-                self->enrich_priced_with_quotes();
-                self->load_calendar(true);
-                return;
-            }
-            if (enrich)
-                self->enrich_applied_gen_ = self->calendar_gen_;
-            self->apply_calendar(root, enrich);
-            // The fast pass is shown; now the slow one (a no-op while one
-            // is already in flight). Say so: the STAGE column reads "…" for
-            // the minute or more EDGAR takes, and nothing said why.
-            if (!enrich) {
-                self->load_calendar(true);
-                if (self->status_lbl_)
-                    self->status_lbl_->setText(self->status_text());
-            }
-        },
+    // The fast pass is what the reader waits on (a second; it also carries
+    // the cached EDGAR picture), so it takes the interactive lane rather
+    // than queueing behind the SEC scrapers this screen starts. The enrich
+    // pass can take minutes cold and stays in the ordinary queue.
+    auto on_done = [self, gen, enrich](python::PythonResult r) {
+        if (!self)
+            return;
+        (enrich ? self->enrich_inflight_ : self->calendar_inflight_) = false;
+        // A stale FAST reply is dropped; an enrich reply is applied
+        // whenever it lands (it is the newest full answer), and a fast
+        // reply arriving after it must not overwrite it.
+        if (!enrich && (gen != self->calendar_gen_ || self->enrich_applied_gen_ >= gen))
+            return;
+        const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8());
+        const QJsonObject root = doc.isObject() ? doc.object() : QJsonObject();
+        if (!r.success || root.isEmpty() || root.contains("error")) {
+            // A failed run is not an empty calendar: keep what is shown
+            // and say what failed.
+            const QString why = root.value("error").toString(r.success ? QStringLiteral("unreadable output")
+                                                                       : QStringLiteral("script failed"));
+            LOG_WARN("IpoWatch", QString("ipo_calendar %1 failed: %2").arg(enrich ? "enrich" : "calendar", why));
+            self->calendar_errors_.removeDuplicates();
+            self->calendar_errors_ << (enrich ? QStringLiteral("EDGAR stage unavailable (%1)").arg(why)
+                                              : QStringLiteral("Nasdaq calendar unavailable (%1)").arg(why));
+            if (self->status_lbl_)
+                self->status_lbl_->setText(self->status_text());
+            if (!enrich && self->entries_.isEmpty())
+                self->render();
+            if (!enrich)
+                self->load_calendar(true); // EDGAR may still answer
+            return;
+        }
+        // Once EDGAR has been applied, a calendar-only answer would take
+        // it away (EDGAR verdicts, stages, imminent windows) for the
+        // minutes until enrich lands. Keep the enriched rows; re-quote.
+        if (!enrich && self->enriched_) {
+            self->enrich_priced_with_quotes();
+            self->load_calendar(true);
+            return;
+        }
+        if (enrich)
+            self->enrich_applied_gen_ = self->calendar_gen_;
+        // A fast answer may already be enriched — from the cache.
+        self->apply_calendar(root, enrich || root.value("enriched").toBool());
+        // The fast pass is shown; now the slow one (a no-op while one
+        // is already in flight). Say so: the STAGE column reads "…" for
+        // the minute or more EDGAR takes, and nothing said why.
+        if (!enrich) {
+            self->load_calendar(true);
+            if (self->status_lbl_)
+                self->status_lbl_->setText(self->status_text());
+        }
+    };
+    if (enrich) {
         // Cold enrich is ~4–5 min (overviews, then SEC at 2.5 req/s); each
         // answer is cached as it lands, so a killed run still warms the next.
-        {}, enrich ? 600'000 : 90'000);
+        python::PythonRunner::instance().run( // D1-exempt: one-shot calendar scrape, no producer
+            QStringLiteral("ipo_calendar.py"), {QStringLiteral("enrich")}, std::move(on_done), {}, 600'000);
+    } else {
+        python::PythonRunner::instance().run_interactive( // D1-exempt: one-shot calendar read, no producer
+            QStringLiteral("ipo_calendar.py"), {QStringLiteral("calendar")}, std::move(on_done), 90'000);
+    }
 }
 
 IpoWatchView::Entry IpoWatchView::entry_from_json(const QJsonObject& o) {
@@ -1288,6 +1297,10 @@ void IpoWatchView::apply_calendar(const QJsonObject& root, bool enriched) {
     ++entries_version_;
     services::IpoDealsFeed::instance().ingest(root); // takes enriched answers only
     calendar_loaded_ = true;
+    // A fast pass enriched from the script's cache is the LAST enrich's
+    // picture; say how old it is until a real enrich replaces it.
+    enriched_from_cache_ = root.value("enriched_from").toString() == QLatin1String("cache");
+    enriched_at_ = QDateTime::fromString(root.value("enriched_at").toString(), Qt::ISODate);
     if (enriched) {
         enriched_ = true;
         lockups_.clear();
@@ -1324,8 +1337,16 @@ QString IpoWatchView::status_text() const {
             ++priced;
     }
     QString s = QString("%1 scheduled · %2 on file · %3 priced").arg(scheduled).arg(filed).arg(priced);
-    s +=
-        enriched_ ? QStringLiteral(" · EDGAR ✓") : (enrich_inflight_ ? QStringLiteral(" · reading EDGAR…") : QString());
+    if (enriched_ && enriched_from_cache_) {
+        // The cached picture, not a fresh read — also when the refresh failed.
+        s += QStringLiteral(" · EDGAR as of %1").arg(enriched_at_.isValid() ? enriched_at_.toString("MMM d HH:mm")
+                                                                            : QStringLiteral("?"));
+        if (enrich_inflight_)
+            s += QStringLiteral(", refreshing…");
+    } else if (enriched_)
+        s += QStringLiteral(" · EDGAR ✓");
+    else if (enrich_inflight_)
+        s += QStringLiteral(" · reading EDGAR…");
     if (!calendar_errors_.isEmpty())
         s += QString(" · ⚠ %1").arg(calendar_errors_.size());
     return s + " · " + QDateTime::currentDateTime().toString("HH:mm");

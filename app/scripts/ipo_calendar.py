@@ -40,12 +40,16 @@ This script:
      used only where Nasdaq has none, and the row says so.
 
 Actions:
-  calendar — merged deals + comparables stats (Nasdaq only, fast).
+  calendar — merged deals + comparables stats (Nasdaq only, fast), carrying
+             the cached EDGAR stage / overviews when the cache can give the
+             last enrich's answer, ≤7 days old (enriched_from: "cache",
+             enriched_at: when it was read; no SEC or overview request).
   enrich   — calendar + EDGAR stage + projection for pending deals, lock-ups.
              Cold: ~2–3 minutes (one Nasdaq overview + one SEC submissions
              read per pending deal); warm: seconds.
 """
 
+import copy
 import json
 import os
 import re
@@ -578,20 +582,21 @@ def _fetch_overview_net(deal_id):
     return parse_overview(po) if isinstance(po, dict) else None
 
 
-def overviews(cache, wanted):
+def overviews(cache, wanted, offline=False):
     """{deal_id: overview|None} for [(deal_id, final)], misses fetched
-    concurrently; a failed fetch falls back to the stale copy."""
+    concurrently; a failed fetch falls back to the stale copy. `offline`
+    reads the cache only (None where nothing usable is cached)."""
     out, miss = {}, []
     for did, final in wanted:
         if did.startswith("name:"):
             out[did] = None
             continue
-        hit = cache.get(f"ov:{did}", _ov_ttl(final))
+        hit = cache.stale(f"ov:{did}") if offline else cache.get(f"ov:{did}", _ov_ttl(final))
         # A copy taken while the deal was pending is not settled: the lock-up
         # term, final shares and over-allotment arrive with the prospectus.
         if hit is not None and final and not hit.get("_final"):
             hit = None
-        if hit is not None:
+        if hit is not None or offline:
             out[did] = hit
         else:
             miss.append(did)
@@ -647,11 +652,14 @@ def _fetch_submissions_net(cik):
                                        if i < len(rec.get(k) or [])] for k in cols}}}
 
 
-def submissions_many(cache, wanted):
-    """{cik: slim submissions|None} for [(cik, hot)]."""
+def submissions_many(cache, wanted, offline=False):
+    """{cik: slim submissions|None} for [(cik, hot)]; `offline` as overviews()."""
     out, miss = {}, []
     for cik, hot in wanted:
         if cik in out or cik in miss:
+            continue
+        if offline:
+            out[cik] = cache.stale(f"sub2:{cik}")
             continue
         hit = cache.get(f"sub2:{cik}", _sub_ttl(hot))
         if hit is not None:
@@ -712,6 +720,56 @@ def _ser(d):
     return {k: (v.isoformat() if isinstance(v, date) else v) for k, v in d.items()}
 
 
+# What the last full enrich could NOT get (no Nasdaq overview, SEC refused):
+# the offline pass reproduces that run, so those gaps are part of its answer,
+# while a deal it never saw (filed since) makes the cached picture incomplete.
+ENRICH_RUN_KEY = "enrich:run"
+CACHED_ENRICH_MAX_AGE = 7 * 86400  # older than this, wait for a real enrich
+
+
+def enrich_deals(deals, cache, today, errors, offline=False):
+    """Nasdaq overviews + the EDGAR ladder onto the pending deals (and
+    overviews onto recently priced ones, for lock-ups). `offline` reads the
+    cache only and changes nothing unless it can give the answer the last
+    enrich (≤ CACHED_ENRICH_MAX_AGE old) gave; returns whether the deals were
+    enriched."""
+    run = cache.get(ENRICH_RUN_KEY, CACHED_ENRICH_MAX_AGE) if offline else None
+    if offline and run is None:
+        return False
+    horizon = today - timedelta(days=DORMANT_DAYS * 3)
+    pending = [d for d in deals.values() if d["status"] in ("upcoming", "filed")
+               and (d.get("filed_date") or today) >= horizon]
+    recent_priced = [d for d in deals.values() if d.get("priced_date") and not d.get("spac")
+                     and (today - d["priced_date"]).days <= LOCKUP_LOOKBACK]
+    ovs = overviews(cache, [(d["deal_id"], False) for d in pending] +
+                           [(d["deal_id"], True) for d in recent_priced], offline=offline)
+    missing_ov = [did for did, ov in ovs.items() if ov is None and not did.startswith("name:")]
+    if offline and not set(missing_ov) <= set(run["ov"]):
+        return False
+    for d in deals.values():
+        if d["status"] in ("upcoming", "filed") and (d.get("filed_date") or today) < horizon:
+            d["edgar_skipped"] = True
+    for d in pending + recent_priced:
+        apply_overview(d, ovs.get(d["deal_id"]))
+    subs = submissions_many(cache, [(d["cik"], d["status"] == "upcoming")
+                                    for d in pending if d.get("cik")], offline=offline)
+    failed = subs.pop("__failed__", [])
+    missing_sub = [cik for cik, sub in subs.items() if sub is None]
+    if offline and not set(missing_sub) <= set(run["sub"]):
+        return False
+    if not offline:
+        cache.put(ENRICH_RUN_KEY, {"ov": missing_ov, "sub": missing_sub})
+    for d in pending:
+        if d.get("cik"):
+            sub = subs.get(d["cik"])
+            apply_submissions(d, sub, today)
+            d["edgar_failed"] = sub is None
+    if failed and errors is not None:
+        errors.append(f"SEC EDGAR unavailable for {len(failed)} issuer(s) — their stage is "
+                      "unknown (SEC refuses clients without Settings › Credentials › Contact email)")
+    return True
+
+
 def build(today=None, enrich=False, cache=None):
     today = today or date.today()
     cache = cache or Cache()
@@ -719,32 +777,21 @@ def build(today=None, enrich=False, cache=None):
     docs, errors = fetch_months(cache, months, today)
     deals = merge_months(docs)
 
-    lockups = []
+    enriched_from = enriched_at = None
     if enrich:
-        horizon = today - timedelta(days=DORMANT_DAYS * 3)
-        pending = [d for d in deals.values() if d["status"] in ("upcoming", "filed")
-                   and (d.get("filed_date") or today) >= horizon]
-        for d in deals.values():
-            if d["status"] in ("upcoming", "filed") and (d.get("filed_date") or today) < horizon:
-                d["edgar_skipped"] = True
-        recent_priced = [d for d in deals.values() if d.get("priced_date") and not d.get("spac")
-                         and (today - d["priced_date"]).days <= LOCKUP_LOOKBACK]
-        ovs = overviews(cache, [(d["deal_id"], False) for d in pending] +
-                               [(d["deal_id"], True) for d in recent_priced])
-        for d in pending + recent_priced:
-            apply_overview(d, ovs.get(d["deal_id"]))
-        subs = submissions_many(cache, [(d["cik"], d["status"] == "upcoming")
-                                        for d in pending if d.get("cik")])
-        failed = subs.pop("__failed__", [])
-        for d in pending:
-            if d.get("cik"):
-                sub = subs.get(d["cik"])
-                apply_submissions(d, sub, today)
-                d["edgar_failed"] = sub is None
-        if failed:
-            errors.append(f"SEC EDGAR unavailable for {len(failed)} issuer(s) — their stage is "
-                          "unknown (SEC refuses clients without Settings › Credentials › Contact email)")
-        lockups = lockup_rows(deals, today)
+        enrich_deals(deals, cache, today, errors)
+        enriched_from, enriched_at = "edgar", time.time()
+    else:
+        # The fast pass carries the last EDGAR picture when the cache holds
+        # ALL of it (a partial one would mix verdicts with blanks): the
+        # calendar is whole at once, and the enrich pass only refreshes it.
+        # Without this the table read "…" until enrich got a Python slot —
+        # minutes, behind the SEC scrapers the screen starts.
+        trial = copy.deepcopy(deals)
+        if enrich_deals(trial, cache, today, errors=None, offline=True):
+            deals, enriched_from = trial, "cache"
+            enriched_at = cache.written_at(ENRICH_RUN_KEY)
+    lockups = lockup_rows(deals, today) if enriched_from else []
 
     # Project only after every stage is known: comparables read the others.
     # Terminal deals return before reading comparables — don't build them.
@@ -752,7 +799,11 @@ def build(today=None, enrich=False, cache=None):
         live = d["status"] in ("upcoming", "filed") and d.get("stage") not in ("priced", "withdrawn")
         d["projection"] = project(d, comparables(deals, d, today) if live else None, today)
 
-    return {"as_of": today.isoformat(), "enriched": enrich,
+    return {"as_of": today.isoformat(), "enriched": enriched_from is not None,
+            "enriched_from": enriched_from,
+            # when the EDGAR picture was read (a cached one says how old it is)
+            "enriched_at": (datetime.fromtimestamp(enriched_at).isoformat(timespec="seconds")
+                            if enriched_at else None),
             "deals": sorted((_ser(d) for d in deals.values()), key=lambda r: r["deal_id"]),
             "lockups": lockups, "errors": errors, "months": months}
 

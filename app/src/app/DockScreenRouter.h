@@ -213,8 +213,25 @@ class DockScreenRouter : public QObject {
     // split next to Portfolio) come back. In-memory only — the existing
     // SessionManager::save_dock_layout already handles cross-restart state
     // for whichever primary was active at quit.
+    //
+    // restoreState() is the slow path: it rebuilds the splitter tree and
+    // re-parents every screen, and a re-parent re-polishes the whole subtree
+    // against its stylesheets (3-5 s for Portfolio + ER). An exclusive
+    // navigate only CLOSES the other panes, and ADS keeps a closed pane's
+    // area hidden in place, so the arrangement is usually still there:
+    // `panes` records which dock widget sat in which area, and coming back
+    // just re-opens them. restoreState() runs only when that no longer holds.
+    struct PrimaryLayout {
+        QByteArray state;
+        QVector<QPair<QPointer<ads::CDockWidget>, QPointer<ads::CDockAreaWidget>>> panes;
+        QVector<QPointer<ads::CDockWidget>> current_tabs; // each area's front tab
+    };
     QString current_primary_id_;
-    QHash<QString, QByteArray> layout_snapshots_;
+    QHash<QString, PrimaryLayout> layout_snapshots_;
+
+    // The snapshot for `id` when its panes still sit, closed, in the areas
+    // they were left in — i.e. re-opening them reproduces the layout.
+    const PrimaryLayout* reopenable_layout(const QString& id, ads::CDockWidget* primary) const;
 
     ads::CDockWidget* create_dock_widget(const QString& id);
     void materialize_screen(const QString& id);

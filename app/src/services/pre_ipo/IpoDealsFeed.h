@@ -61,8 +61,9 @@ class IpoDealsFeed : public QObject {
     /// Read the calendar (enriched) unless an answer under 30 min old is held.
     void load();
     /// An ipo_calendar.py answer obtained elsewhere (the screen's own load).
-    /// Only an ENRICHED answer is taken: the fast pass has no projections,
-    /// and taking it would wipe every projected date.
+    /// Only an ENRICHED answer is taken (from EDGAR, or the fast pass when the
+    /// script's cache holds the whole EDGAR picture): a plain fast pass has
+    /// no EDGAR stages, and taking it would wipe every stage-based date.
     void ingest(const QJsonObject& root);
 
     const QVector<IpoDeal>& deals() const { return deals_; }
@@ -79,6 +80,7 @@ class IpoDealsFeed : public QObject {
 
   private:
     explicit IpoDealsFeed(QObject* parent = nullptr);
+    void read(bool enrich);
     QVector<IpoDeal> deals_;
     IpoDealIndex index_;
     QDateTime at_;

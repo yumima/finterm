@@ -469,8 +469,9 @@ void WhatsOnPanel::fetch_ipos(bool force) {
         }
     }
     QPointer<WhatsOnPanel> self = this;
-    // The same calendar IPO Watch shows (fast pass: Nasdaq calendar only).
-    python::PythonRunner::instance().run(
+    // The same calendar IPO Watch shows (fast pass: Nasdaq calendar plus the
+    // cached EDGAR picture when there is one).
+    python::PythonRunner::instance().run( // D1-exempt: one-shot calendar read, no producer
         QStringLiteral("ipo_calendar.py"), {QStringLiteral("calendar")}, [self](python::PythonResult r) {
             if (!self)
                 return;

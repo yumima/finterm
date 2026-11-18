@@ -284,7 +284,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
         const int opened_area_count = manager_->openedDockAreas().size();
         if (opened_area_count > 1) {
-            layout_snapshots_[current_primary_id_] = manager_->saveState();
+            PrimaryLayout snap;
+            snap.state = manager_->saveState();
+            for (auto* area : manager_->openedDockAreas()) {
+                for (auto* w : area->openedDockWidgets())
+                    snap.panes.append({w, area});
+                snap.current_tabs.append(area->currentDockWidget());
+            }
+            layout_snapshots_[current_primary_id_] = snap;
         } else {
             // Outgoing primary now solo — invalidate any stale multi-pane
             // snapshot the user has since dismissed.
@@ -320,6 +327,10 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     }
 
     materialize_screen(id);
+
+    // Coming back to a split this primary was left in: re-open its panes in
+    // place (see PrimaryLayout). Decided before anything is moved.
+    const PrimaryLayout* reopen = exclusive && !needs_add ? reopenable_layout(id, dw) : nullptr;
 
     if (exclusive) {
         for (auto* area : manager_->openedDockAreas()) {
@@ -399,7 +410,7 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
         // anyway forces ADS to tear down the layout and rebuild it from
         // scratch — measured at 800-1500ms per warm nav and the dominant
         // cost of the post-1af16b67 nav-tab lag the user reports.
-        if (must_place) {
+        if (must_place && !reopen) {
             auto* area = manager_->addDockWidget(ads::CenterDockWidgetArea, dw);
             grid_top_left_ = area;
         } else {
@@ -484,9 +495,21 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // is harmlessly overridden by the saved arrangement. The user's pre-leave
     // layout (e.g. Portfolio + ER side-by-side) is back in one paint.
     if (exclusive) {
-        auto it = layout_snapshots_.constFind(id);
-        if (it != layout_snapshots_.constEnd()) {
-            manager_->restoreState(*it);
+        if (reopen) {
+            for (const auto& [pane, area] : reopen->panes) {
+                if (pane == dw)
+                    continue;
+                pane->toggleView(true);
+                if (auto* tab = pane->tabWidget(); tab && tab->isHidden())
+                    tab->setVisible(true);
+            }
+            for (const auto& front : reopen->current_tabs) {
+                if (front)
+                    front->setAsCurrentTab();
+            }
+            sync_grid_from_reality();
+        } else if (auto it = layout_snapshots_.constFind(id); it != layout_snapshots_.constEnd()) {
+            manager_->restoreState(it->state);
             sync_grid_from_reality();
             apply_ads_theme();
         }
@@ -504,6 +527,23 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     SessionManager::instance().set_last_screen(id);
     LOG_INFO("DockRouter", "Navigated to: " + id);
     emit screen_changed(id);
+}
+
+const DockScreenRouter::PrimaryLayout* DockScreenRouter::reopenable_layout(const QString& id,
+                                                                          ads::CDockWidget* primary) const {
+    auto it = layout_snapshots_.constFind(id);
+    if (it == layout_snapshots_.constEnd() || it->panes.isEmpty())
+        return nullptr;
+    bool has_primary = false;
+    for (const auto& [pane, area] : it->panes) {
+        // A pane that was closed, deleted, dragged elsewhere, floated or
+        // auto-hidden since: only restoreState() can put it back.
+        if (!pane || !area || pane->dockAreaWidget() != area || area->dockContainer() != manager_ ||
+            area->isAutoHide())
+            return nullptr;
+        has_primary = has_primary || pane == primary;
+    }
+    return has_primary ? &*it : nullptr;
 }
 
 void DockScreenRouter::tab_into(const QString& id) {
