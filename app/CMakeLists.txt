@@ -862,6 +862,7 @@ set(TRADING_SOURCES
 # Services
 set(SERVICE_SOURCES
     src/services/calendar/CompanyEventsFeed.cpp
+    src/services/screener/ScreenerService.cpp
     src/services/calendar/EarningsCalendarFeed.cpp
     src/services/calendar/MacroCalendarFeed.cpp
     src/services/akshare/AkShareService.cpp
@@ -1509,6 +1510,7 @@ set_source_files_properties(
     src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
     src/screens/dashboard/widgets/EconomicCalendarWidget.cpp
     src/services/calendar/CompanyEventsFeed.cpp
+    src/services/screener/ScreenerService.cpp
     src/services/calendar/EarningsCalendarFeed.cpp
     src/services/calendar/MacroCalendarFeed.cpp
     src/screens/dashboard/widgets/IpoCalendarWidget.cpp

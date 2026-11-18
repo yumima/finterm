@@ -107,7 +107,6 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void render_inline();
     void leave_inline();
     double min_mcap() const;
-    QString cache_name() const;
     // A finished scan has lists even when every one is empty ("no stock passes
     // today"); only a strategies-only (meta) result is still waiting.
     bool has_lists() const { return !result_.meta_only; }
@@ -190,9 +189,6 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     static bool close_since(const QDateTime& when);
     bool panes_set_ = false;
     int scan_gen_ = 0; // a reply for a universe no longer selected is dropped
-    // Newest scan generation saved per cache file: a superseded scan that
-    // finishes late must not overwrite a newer result for its universe.
-    QHash<QString, int> saved_gen_;
     // Generation of the result on screen (-1 = a disk cache), so a superseded
     // scan for the universe selected NOW can still replace an older view.
     int displayed_gen_ = -1;
