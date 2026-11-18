@@ -28,12 +28,12 @@ permalink: /
 
 ## What's in it
 
-- **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history and after-hours moves.
+- **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history and after-hours moves, and each earnings call playable in the app.
 - **Company report** — one investor report per company from filings, estimates, prices and news: what changed, segments, valuation against its own past, risks; export to PDF.
 - **Futures** — the forward curve for 57 contracts, calendar spreads, trader positioning, and a paper account with working stops and targets.
 - **Fund moves** — the largest stake changes by every 13F filer, corrected for splits and CUSIP changes and linked to the filing; 5% stakes (13D / 13G) as they are filed.
 - **Insider buying** — every SEC Form 4 scanned as it lands; clusters of insiders buying their own stock surface on their own.
-- **IPO Watch** — deals from filing to pricing, with the SEC filing stage each projected date rests on.
+- **Private market** — marketplace prices and funding rounds for private companies, and IPO deals from filing to pricing with the SEC filing stage each projected date rests on.
 - **Your portfolio** — import holdings from a broker CSV; nothing is uploaded anywhere.
 - **Quant Lab, backtesting, screeners, news, maps** — and more screens, all in one window.
 - **Bring your own data** — works on free data out of the box; plug in a Tiingo, Polygon, Alpaca, Finnhub or FMP key for prices if you have one.

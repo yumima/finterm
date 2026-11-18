@@ -28,6 +28,11 @@
     <binary>finterm</binary>
   </provides>
   <releases>
+    <release version="4.0.9" date="2026-11-17">
+      <description>
+        <p>Version 4.0.9 — IPO Watch becomes Private Market: marketplace prices, funding rounds and the road to IPO on a dashboard of movable widgets. Earnings links each print's call webcast and release, and plays the call in finterm. Screens reopen as you left them, with pane sizes and filters remembered. Dashboard quotes appear at once; tab switches and the IPO calendar are fast again.</p>
+      </description>
+    </release>
     <release version="4.0.8" date="2026-11-16">
       <description>
         <p>Version 4.0.8 — Ownership: the largest moves by every 13F filer, corrected for splits and CUSIP changes, dated and linked to the filing, with the price range each traded in; 5% stakes (13D / 13G) market-wide, with alerts; the 13F index keeps itself current from EDGAR. Equity Research shows the latest after-hours and pre-market session with range and volume. Reports print or save as PDF through the system dialog. Helper processes start and stop with the app.</p>

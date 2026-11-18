@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`d9df6c999`](https://github.com/yumima/finterm/commit/d9df6c999) earnings links: the SEC contact goes to sec.gov hosts only, redirects included
 - [`516a812b3`](https://github.com/yumima/finterm/commit/516a812b3) performance: back to a split in 0.1 s, the IPO calendar whole in a second
 - [`22f4a9d04`](https://github.com/yumima/finterm/commit/22f4a9d04) earnings call player: actually paints on hybrid-GPU Linux; a call link outlives the host's feed
 - [`637f4d6a7`](https://github.com/yumima/finterm/commit/637f4d6a7) earnings: ▶ LISTEN plays every call in finterm — host's own player when there's no public stream
@@ -81,9 +82,10 @@ The report says `"ok": true`, or names the stage that failed (setup or data) and
 - **Markets, Watchlist, Dashboard** — live global quotes, charts, sector heatmap, extended-hours and futures moves.
 - **News** — a deduplicated feed with region and portfolio filters, reader-mode articles, an AI TL;DR, and read-aloud.
 - **Futures** — index, rates, energy, metals, grains, softs, livestock, FX and crypto futures: the forward curve of every listed month against a week and a month ago, calendar-spread history and roll yield, CFTC positioning, contract terms, and a paper ticket sized in dollars ([guide](docs/how-to/futures.md)).
-- **Equity Research** — financials, earnings, analyst targets, technicals, peers, ownership and sentiment per ticker, and a **Report** tab that assembles them into a quarterly investor report (charts, segment and geography revenue and the company's own words from its SEC filings, an AI-written summary) exportable as PDF or HTML ([guide](docs/how-to/company-report.md)).
+- **Equity Research** — financials, earnings (each print's release and call, playable in the app), analyst targets, technicals, peers, ownership and sentiment per ticker, and a **Report** tab that assembles them into a quarterly investor report (charts, segment and geography revenue and the company's own words from its SEC filings, an AI-written summary) exportable as PDF or HTML ([guide](docs/how-to/company-report.md)).
 - **Portfolio** — multi-account holdings, performance, heatmap, blotter, CSV/JSON import and export.
-- **Screener, Ownership, IPO Watch, Pre-IPO** — screens and insider, institutional and IPO-pipeline views built on public SEC EDGAR filings.
+- **Screener, Ownership** — screens, and insider (Form 4), institutional (13F) and 5% (13D/13G) views built on public SEC EDGAR filings.
+- **Private Market** — private-company marketplace prices, funding rounds and the C50 index on a dashboard of movable widgets, plus the IPO calendar from filing to pricing with the SEC stage each projected date rests on.
 - **AI chat** — text or live voice conversation with the provider you choose, cloud or local.
 - **Knowledge** — a markets and quant curriculum with calculators and a 47-strategy catalogue.
 - **Workspaces** — multi-window docking with saved layouts, and local multi-user profiles behind a PIN.
