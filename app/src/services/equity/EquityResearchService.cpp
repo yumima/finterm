@@ -7,7 +7,6 @@
 #include "services/equity/EarningsRefresh.h"
 #include "services/equity/TechnicalRating.h"
 #include "services/markets/MarketDataService.h"
-#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
 #include <QDir>
@@ -65,99 +64,6 @@ double num(const QJsonObject& o, const char* key) {
 
 
 
-// Persistent on-disk cache so the equity research panels can paint the
-// most-recently-viewed symbol immediately on next launch. One file per
-// symbol holds every category (quote, info, candles by period, financials,
-// technicals by period, peers, news) — keeps the directory bounded by the
-// universe the user has actually browsed.
-finterm::services::util::DiskCache& disk_cache() {
-    static finterm::services::util::DiskCache c(QStringLiteral("equity_research"));
-    return c;
-}
-
-// Sanitize a symbol into an alnum-only filename stem. Tickers can include
-// dots (BRK.B) or hyphens (BRK-B) which would break case-insensitive FAT
-// lookups on cross-platform mounts. ".json" is appended by the caller.
-QString symbol_filename(const QString& symbol) {
-    QString s;
-    s.reserve(symbol.size());
-    for (const QChar c : symbol)
-        if (c.isLetterOrNumber())
-            s.append(c.toUpper());
-    return s + QStringLiteral(".json");
-}
-
-// When each section of the per-symbol file was fetched, kept inside the file
-// under "_at" (epoch seconds per section; "candles/<period>" for the nested
-// ones). The file's modification time cannot say: the quote rewrites the file
-// about every minute, and with one mtime for everything a week-old company
-// profile — analyst targets included — was restored on the next launch as if
-// it had just been fetched, and served as fresh for a full TTL.
-void stamp_section(QJsonObject& root, const QString& tag) {
-    QJsonObject at = root.value("_at").toObject();
-    at.insert(tag, double(QDateTime::currentSecsSinceEpoch()));
-    root.insert("_at", at);
-}
-
-/// Age of a section in seconds, or -1 when the file does not say (written
-/// before sections were stamped): unknown age is never restored as fresh.
-qint64 section_age(const QJsonObject& root, const QString& tag) {
-    const QJsonValue v = root.value("_at").toObject().value(tag);
-    if (!v.isDouble())
-        return -1;
-    // A stamp in the future (clock corrected, VM resumed) is an unknown age,
-    // not "just fetched": clamping it to 1 s restored old data as fresh on
-    // every launch until real time caught up.
-    const qint64 age = QDateTime::currentSecsSinceEpoch() - qint64(v.toDouble());
-    return age < 0 ? -1 : std::max<qint64>(1, age);
-}
-
-// Load the per-symbol blob (or empty obj) and update one category key,
-// then save back. We do this rather than keep a process-wide in-memory
-// mirror because each fetch path can complete independently and we want
-// the on-disk file to always reflect the latest of every category.
-void update_symbol_cache(const QString& symbol, const QString& key, const QJsonValue& value) {
-    if (symbol.isEmpty())
-        return;
-    const QString fname = symbol_filename(symbol);
-    QJsonObject root = disk_cache().load(fname).object();
-    root.insert("symbol", symbol); // what the startup restore keys on — every save writes it
-    root.insert(key, value);
-    if (key != QLatin1String("symbol") && key != QLatin1String("peers_key"))
-        stamp_section(root, key);
-    // Sections MarketDataService now owns (quote, info, candles: one cache
-    // each, app-wide) — nothing reads them here any more; drop them rather
-    // than re-serialise dead data on every save.
-    QJsonObject at_dead = root.value("_at").toObject();
-    for (const char* dead : {"quote", "info", "info_v2", "info_v3", "candles"}) {
-        root.remove(QLatin1String(dead));
-        at_dead.remove(QLatin1String(dead));
-    }
-    for (auto it = at_dead.begin(); it != at_dead.end();)
-        it = it.key().startsWith(QLatin1String("candles/")) ? at_dead.erase(it) : std::next(it);
-    root.insert("_at", at_dead);
-    // A versioned sub-key leaves its predecessors behind: nothing reads them
-    // once the hydrator moves to "<base>_vN", but every save would keep
-    // re-serialising payloads that can never be used again. Drop the whole
-    // lineage — the unversioned original and every earlier version — rather
-    // than only the immediate predecessor, so a second bump does not strand
-    // the one before it.
-    static const QRegularExpression kVersioned(QStringLiteral("^(.*)_v(\\d+)$"));
-    if (const auto m = kVersioned.match(key); m.hasMatch()) {
-        const QString base = m.captured(1);
-        const int ver = m.captured(2).toInt();
-        QJsonObject at = root.value("_at").toObject();
-        root.remove(base);
-        at.remove(base);
-        for (int v = 2; v < ver; ++v) {
-            root.remove(base + QStringLiteral("_v") + QString::number(v));
-            at.remove(base + QStringLiteral("_v") + QString::number(v));
-        }
-        root.insert("_at", at);
-    }
-    disk_cache().save(fname, QJsonDocument(root));
-}
-
 } // namespace
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
@@ -172,85 +78,9 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
     search_debounce_->setInterval(kDebounceMs);
     connect(search_debounce_, &QTimer::timeout, this, [this]() { search_symbols(pending_query_); });
 
-    // Trim the cache dir before hydrating: an active user can browse
-    // hundreds of distinct tickers over months, and each writes its own
-    // file. Cap at 200 most-recently-touched symbols so ctor hydration
-    // stays bounded and the dir doesn't grow without limit.
-    disk_cache().trim_to(200);
-
-    // Hydrate the in-memory CacheManager from every cached per-symbol file
-    // so subsequent load_symbol() / fetch_*() calls hit warm cache and emit
-    // immediately. The data_loaded-style signals fired by the per-category
-    // emits below go to no listeners (UI wires up later) — load_symbol()
-    // will re-emit when a panel subscribes, hitting CacheManager again.
-    const QStringList files = disk_cache().files();
-    for (const QString& fname : files) {
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject())
-            continue;
-        const QJsonObject root = doc.object();
-        const QString symbol = root.value("symbol").toString();
-        if (symbol.isEmpty())
-            continue;
-        auto repopulate = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
-            if (!root.contains(sub))
-                return;
-            // Each section by ITS OWN fetch time (section_age), never the
-            // file's: refuse to repopulate entries that would already be
-            // expired against their normal TTL, or whose age is unknown.
-            const qint64 age = section_age(root, sub);
-            if (age < 0 || age >= ttl_sec)
-                return;
-            const int age_sec = int(age);
-            const QJsonValue v = root.value(sub);
-            const QJsonDocument doc_for_blob = v.isArray() ? QJsonDocument(v.toArray()) : QJsonDocument(v.toObject());
-            const QString blob = QString::fromUtf8(doc_for_blob.toJson(QJsonDocument::Compact));
-            // Full TTL + explicit age: the entry expires on the original
-            // schedule and try_get_aged reports the original write time
-            // instead of claiming the blob was fetched at app launch.
-            finterm::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
-        };
-        // financials / news live in the root, peers as array. (Quote, info
-        // and candles are MarketDataService's — one cache each, app-wide.)
-        if (root.contains("financials"))
-            repopulate("financials", "equity:financials:", kFinancialsTtlSec);
-        if (root.contains("news"))
-            repopulate("news", "equity:news:", kNewsTtlSec);
-        // peer cache key includes the basket symbols — re-key by what we
-        // stored under "peers_key" so the next fetch_peers() with the same
-        // basket hits warm cache. If the user requests a different basket
-        // we just take the network miss.
-        if (root.contains("peers") && root.contains("peers_key")) {
-            const QJsonValue v = root.value("peers");
-            const qint64 peers_age = section_age(root, QStringLiteral("peers"));
-            const int age_sec = int(peers_age);
-            if (v.isArray() && peers_age >= 0 && peers_age < kPeersTtlSec) {
-                const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                finterm::CacheManager::instance().put(root.value("peers_key").toString(), QVariant(blob), kPeersTtlSec,
-                                                      "equity", age_sec);
-            }
-        }
-        // candles + technicals are nested per-period objects
-        const auto repopulate_periodic = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
-            const QJsonObject by_period = root.value(sub).toObject();
-            for (auto it = by_period.constBegin(); it != by_period.constEnd(); ++it) {
-                const qint64 age = section_age(root, sub + QStringLiteral("/") + it.key());
-                if (age < 0 || age >= ttl_sec)
-                    continue;
-                const int age_sec = int(age);
-                const QJsonValue v = it.value();
-                if (!v.isArray())
-                    continue;
-                const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                finterm::CacheManager::instance().put(cache_prefix + symbol + ":" + it.key(), QVariant(blob), ttl_sec,
-                                                      "equity", age_sec);
-            }
-        };
-        repopulate_periodic("technicals", "equity:technicals:" + QString(kTechnicalsSchemaTag) + ":",
-                            kTechnicalsTtlSec);
-    }
-    if (!files.isEmpty())
-        LOG_INFO("EquityResearch", QString("Hydrated %1 symbol caches from disk").arg(files.size()));
+    // One store: cache.db (CacheManager persists across restarts, each entry
+    // with its own TTL and write time). The per-symbol JSON copy this used to
+    // keep — and replay into the cache at launch — duplicated it.
 }
 
 // ── Python helper ─────────────────────────────────────────────────────────────
@@ -608,7 +438,6 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
                     "equity:earnings:" + symbol,
                     QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kEarningsTtlSec,
                     "equity");
-                update_symbol_cache(symbol, "earnings", arr);
                 resolve(QVariant::fromValue(parse_earnings(arr)));
             });
     };
@@ -786,8 +615,6 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
             "equity:financials:" + symbol,
             QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kFinancialsTtlSec,
             "equity");
-        update_symbol_cache(symbol, "financials", obj);
-        update_symbol_cache(symbol, "symbol", symbol);
         emit financials_loaded(parse_financials(obj));
     });
 }
@@ -843,7 +670,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 return;
             self->release_inflight(inflight_key);
             // A failure, or a success with no rows, must not be pinned under
-            // the shared tech key nor written to disk.
+            // the shared tech key.
             if (!ok) {
                 emit self->error_occurred(symbol, "Technicals", err);
                 return;
@@ -851,16 +678,6 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
             // Cache the computed series so re-opens are <100ms.
             const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
             finterm::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
-            {
-                const QString fname = symbol_filename(symbol);
-                QJsonObject root = disk_cache().load(fname).object();
-                root.insert("symbol", symbol);
-                QJsonObject by_period = root.value("technicals").toObject();
-                by_period.insert(interval + ":" + period, data);
-                root.insert("technicals", by_period);
-                stamp_section(root, QStringLiteral("technicals/") + interval + ":" + period);
-                disk_cache().save(fname, QJsonDocument(root));
-            }
             emit self->technicals_loaded(self->parse_technicals(symbol, period, interval, data));
         });
     };
@@ -929,9 +746,6 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
         finterm::CacheManager::instance().put(
             cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kPeersTtlSec,
             "equity");
-        update_symbol_cache(symbol, "peers", arr);
-        update_symbol_cache(symbol, "peers_key", cache_key);
-        update_symbol_cache(symbol, "symbol", symbol);
         emit peers_loaded(symbol, parse_peers(arr));
     });
 }
@@ -972,8 +786,6 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
         finterm::CacheManager::instance().put(
             "equity:news:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kNewsTtlSec, "equity");
-        update_symbol_cache(symbol, "news", arr);
-        update_symbol_cache(symbol, "symbol", symbol);
         emit news_loaded(symbol, parse_news(arr));
     });
 }

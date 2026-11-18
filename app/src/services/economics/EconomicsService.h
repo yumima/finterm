@@ -79,6 +79,10 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     Q_DISABLE_COPY(EconomicsService)
 
     static constexpr int kCacheTtlSec = 10 * 60; // 10 min — passed to CacheManager
+    // Which script + args answer each hub topic, kept across sessions so a
+    // refresh can replay it (cache.db "econ_dispatch:<topic>").
+    static constexpr const char* kDispatchPrefix = "econ_dispatch:";
+    static constexpr int kDispatchTtlSec = 90 * 24 * 3600;
 
     QString cache_key(const QString& script, const QString& command, const QStringList& args) const;
 

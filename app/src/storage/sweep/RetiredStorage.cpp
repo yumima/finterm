@@ -18,6 +18,8 @@ struct RetiredDir {
 };
 constexpr RetiredDir kRetiredDirs[] = {
     {"relationship_map", "per-ticker JSON copy of the relmap: cache entry (cache.db is the one store)"},
+    {"economics", "per-query JSON copy of EconomicsService's cache.db entries (dispatch records now in cache.db)"},
+    {"equity_research", "per-symbol JSON copy of Equity Research's cache.db entries (cache.db is the one store)"},
     {"futures", "pre-Databento futures quotes (Databento writes cache/databento)"},
     {"futures_cot", "COT positioning is held in memory by FuturesService"},
     {"power_trader", "the Power Trader cache has no reader"},

@@ -5,7 +5,6 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
-#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
 #include <QCryptographicHash>
@@ -20,39 +19,6 @@ namespace finterm::services {
 
 namespace {
 
-// Persistent on-disk cache for economic timeseries. One file per
-// (script, command, args) tuple so cold launches can re-emit the last-known
-// series for any panel that re-issues the same execute() call. Survives
-// across runs; refreshes overwrite atomically.
-finterm::services::util::DiskCache& disk_cache() {
-    static finterm::services::util::DiskCache c(QStringLiteral("economics"));
-    return c;
-}
-
-// Sanitize a logical key (source_id:script:command:args) into an alnum
-// filename. We hash to keep the path bounded for long arg lists (some
-// dbnomics queries serialize to >150 chars). request_id is intentionally
-// EXCLUDED from the hash — it's a per-session identifier, so including
-// it would make identical reruns from new sessions write fresh files and
-// the cache dir would grow without bound.
-QString file_for_dispatch(const QString& source_id, const QString& script, const QString& command,
-                          const QStringList& args, const QString& /*request_id, unused on purpose*/) {
-    const QString combined = source_id + "|" + script + "|" + command + "|" + args.join(",");
-    const QByteArray digest = QCryptographicHash::hash(combined.toUtf8(), QCryptographicHash::Sha1).toHex();
-    // Keep the script base + a short hash for some grep-ability in the
-    // cache dir. Strip extension.
-    QString script_stem = script;
-    const int dot = script_stem.lastIndexOf('.');
-    if (dot > 0)
-        script_stem.truncate(dot);
-    QString clean_stem;
-    for (const QChar c : script_stem)
-        if (c.isLetterOrNumber() || c == '_')
-            clean_stem.append(c);
-    if (clean_stem.isEmpty())
-        clean_stem = QStringLiteral("econ");
-    return clean_stem + QStringLiteral("_") + QString::fromLatin1(digest.left(16)) + QStringLiteral(".json");
-}
 
 // Why an answer without a top-level error still holds nothing usable, or
 // empty. fred_economic_data.py's composite commands (the yield curve: one
@@ -92,27 +58,14 @@ EconomicsService& EconomicsService::instance() {
 }
 
 EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
-    // Cap the cache dir at 500 distinct queries (per-(source, script,
-    // command, args) tuple). Heavy users of the economics screen browse
-    // dozens of series per session; 500 entries cover months of activity
-    // and the ctor hydration stays bounded.
-    disk_cache().trim_to(500);
-
-    // Hydrate the dispatch_records_ map and CacheManager from every file on
-    // disk. Deferred to the next event-loop tick so the synchronous file I/O
-    // (up to 500 JSON files) stays off the startup path — that cold-cache read
-    // is what hurts launch under memory pressure. Nothing reads these records
-    // before a panel navigates, which can't happen before the event loop runs.
+    // Hydrate dispatch_records_ (which script + args answer each hub topic)
+    // from cache.db, so a hub refresh can replay a request made in an earlier
+    // session. The answers themselves are cache.db entries with their own TTL
+    // and write time — there is no second copy to restore.
     QTimer::singleShot(0, this, [this]() {
-        const QStringList files = disk_cache().files();
-        int hydrated = 0;
-        for (const QString& fname : files) {
-            const QJsonDocument doc = disk_cache().load(fname);
-            if (!doc.isObject())
-                continue;
-            const QJsonObject root = doc.object();
-            // Expected schema written by execute(): { "source_id", "script",
-            // "command", "args" (array), "request_id", "data" (the parsed obj) }
+        const auto stored = finterm::CacheManager::instance().get_prefix(QString::fromLatin1(kDispatchPrefix));
+        for (auto it = stored.cbegin(); it != stored.cend(); ++it) {
+            const QJsonObject root = QJsonDocument::fromJson(it.value().toUtf8()).object();
             DispatchRecord rec;
             rec.source_id = root.value("source_id").toString();
             rec.script = root.value("script").toString();
@@ -120,30 +73,10 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
             for (const auto& v : root.value("args").toArray())
                 rec.args << v.toString();
             rec.request_id = root.value("request_id").toString();
-            const QJsonObject data = root.value("data").toObject();
-            if (rec.script.isEmpty() || rec.request_id.isEmpty() || data.isEmpty())
+            if (rec.script.isEmpty() || rec.request_id.isEmpty())
                 continue;
-
-            const QString topic = hub_topic(rec.source_id, rec.request_id);
-            dispatch_records_.insert(topic, rec);
-
-            // Repopulate CacheManager only while the record is inside its TTL,
-            // with its real age, so a hit answers with the time FRED was asked
-            // and an old series is fetched again instead of served as fresh.
-            // A record without a fetch time (written by an older build) has no
-            // age to trust: it only keeps its dispatch for hub replay.
-            const qint64 fetched_at = static_cast<qint64>(root.value("fetched_at").toDouble(0));
-            const qint64 age = QDateTime::currentSecsSinceEpoch() - fetched_at;
-            if (fetched_at <= 0 || age < 0 || age >= kCacheTtlSec)
-                continue;
-            finterm::CacheManager::instance().put(
-                cache_key(rec.script, rec.command, rec.args),
-                QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
-                "economics", static_cast<int>(age));
-            ++hydrated;
+            dispatch_records_.insert(hub_topic(rec.source_id, rec.request_id), rec);
         }
-        if (hydrated > 0)
-            LOG_INFO("EconomicsService", QString("Hydrated %1 series from disk cache").arg(hydrated));
     });
 }
 
@@ -251,26 +184,21 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             return;
         }
         if (fresh) {
-            // Persist to disk so the next launch hydrates this series
-            // immediately. We store the dispatch params alongside the data
-            // so the constructor can rebuild dispatch_records_ for hub
-            // refresh replay.
+            // Remember which script + args answer this topic, for a hub
+            // refresh in a later session (the answer is already cached).
             const auto it = self->dispatch_records_.constFind(topic);
             if (it != self->dispatch_records_.constEnd()) {
                 const auto& rec = it.value();
-                QJsonObject root;
-                root.insert("source_id", rec.source_id);
-                root.insert("script", rec.script);
-                root.insert("command", rec.command);
                 QJsonArray args_arr;
                 for (const auto& a : rec.args)
                     args_arr.append(a);
-                root.insert("args", args_arr);
-                root.insert("request_id", rec.request_id);
-                root.insert("fetched_at", static_cast<double>(res.as_of.toSecsSinceEpoch()));
-                root.insert("data", res.data);
-                disk_cache().save(file_for_dispatch(rec.source_id, rec.script, rec.command, rec.args, rec.request_id),
-                                  QJsonDocument(root));
+                const QJsonObject root{{"source_id", rec.source_id}, {"script", rec.script},
+                                       {"command", rec.command},     {"args", args_arr},
+                                       {"request_id", rec.request_id}};
+                finterm::CacheManager::instance().put(
+                    QString::fromLatin1(kDispatchPrefix) + topic,
+                    QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), kDispatchTtlSec,
+                    "economics");
             }
             LOG_INFO("EconomicsService", "Result ready: " + request_id);
         }
