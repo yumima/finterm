@@ -6,6 +6,7 @@
 #include "python/PythonWorker.h"
 #include "services/markets/MarketDataService.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -71,6 +72,16 @@ ExtendedHoursService::ExtendedHoursService() {
     connect(&timer_, &QTimer::timeout, this, [this] { fetch(); });
     connect(&MarketDataService::instance(), &MarketDataService::stream_ticks, this,
             &ExtendedHoursService::on_ticks);
+    save_timer_.setSingleShot(true);
+    save_timer_.setInterval(60 * 1000);
+    connect(&save_timer_, &QTimer::timeout, this, [this] { save_snapshot(); });
+    if (QCoreApplication::instance())
+        connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this] {
+            if (save_timer_.isActive()) {
+                save_timer_.stop();
+                save_snapshot();
+            }
+        });
     load_snapshot();
 }
 
@@ -284,8 +295,11 @@ void ExtendedHoursService::on_ticks(const QVector<StreamTick>& ticks) {
         if (exthours::apply_print(ext_, t.symbol, t.market_hours, t.price, t.change, t.time_ms, now))
             changed.insert(t.symbol);
     }
-    if (!changed.isEmpty())
-        emit quotes_changed(changed);
+    if (changed.isEmpty())
+        return;
+    if (!save_timer_.isActive())
+        save_timer_.start();
+    emit quotes_changed(changed);
 }
 
 // ── Snapshot ────────────────────────────────────────────────────────────────

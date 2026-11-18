@@ -98,6 +98,10 @@ class ExtendedHoursService : public QObject {
     QDateTime last_attempt_;
     bool kick_pending_ = false;
     QTimer timer_;
+    // Stream prints are saved too, at most once a minute: the overnight
+    // session (20:00–04:00 ET) has no fetch and no other source, so a
+    // restart would otherwise lose every overnight print seen.
+    QTimer save_timer_;
 };
 
 } // namespace finterm::services

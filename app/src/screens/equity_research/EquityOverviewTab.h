@@ -288,6 +288,7 @@ class EquityOverviewTab : public QWidget {
         QWidget* bar_rows[2] = {}; ///< range / volume rows: hidden when the bars have none
     };
     ExtBlock ext_blocks_[3];
+    QLabel* ext_on_note_ = nullptr; ///< why there is no Overnight block
     QLabel* ext_note_ = nullptr; ///< shown instead of the blocks when there is no session to show
     services::equity::ExtSessions ext_sessions_;
     bool ext_answered_ = false; ///< the current symbol's sessions have arrived

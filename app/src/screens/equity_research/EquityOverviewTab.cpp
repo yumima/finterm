@@ -1050,6 +1050,17 @@ QWidget* EquityOverviewTab::build_extended_panel() {
         b.box->hide();
         pl->addWidget(b.box);
     }
+    // Overnight prints reach finterm only as they happen (Yahoo's quote and
+    // bars carry none): with none seen since the last close, say why the
+    // block is missing rather than leave it to look like an omission.
+    ext_on_note_ = new QLabel(QStringLiteral(
+        "OVERNIGHT 20:00–04:00 — none received since the last close. Yahoo sends overnight trades only "
+        "live, while a finterm screen showing this symbol is open."));
+    ext_on_note_->setWordWrap(true);
+    ext_on_note_->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;border:0;")
+                                    .arg(ui::colors::TEXT_SECONDARY()));
+    ext_on_note_->hide();
+    pl->addWidget(ext_on_note_);
     pl->addStretch();
     return p;
 }
@@ -1230,6 +1241,9 @@ void EquityOverviewTab::render_extended_sessions() {
         const bool is_latest = latest && latest->side == it.side && it.s->valid && it.s->last == latest->price;
         render_ext_block(ext_blocks_[i], *it.s, it.side, is_latest);
     }
+    if (ext_on_note_)
+        ext_on_note_->setVisible(any && !shown.overnight.valid && !shown.unsupported &&
+                                 exthours::has_us_extended_session(current_symbol_));
 }
 
 QWidget* EquityOverviewTab::build_valuation_panel() {
