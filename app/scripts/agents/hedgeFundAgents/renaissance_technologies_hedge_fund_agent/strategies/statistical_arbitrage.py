@@ -89,26 +89,6 @@ def detect_market_regime(
     return (regime, max(0.3, min(0.95, confidence)))
 
 
-def calculate_regime_duration(
-    prices: List[float],
-    current_regime: MarketRegime,
-    window: int = 20
-) -> int:
-    """Calculate how long the current regime has persisted."""
-    if len(prices) < window * 2:
-        return window
-
-    duration = 0
-    for i in range(0, len(prices) - window, window // 2):
-        regime, _ = detect_market_regime(prices[i:i + window * 2], window)
-        if regime == current_regime:
-            duration += window // 2
-        else:
-            break
-
-    return max(duration, window // 2)
-
-
 def detect_statistical_mispricing(
     current_price: float,
     intrinsic_estimates: List[float],

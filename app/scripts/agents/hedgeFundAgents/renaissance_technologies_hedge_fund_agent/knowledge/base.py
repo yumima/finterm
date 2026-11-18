@@ -9,7 +9,6 @@ from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
-import json
 import os
 
 # Agno imports - conditional
@@ -369,28 +368,3 @@ def reset_knowledge_base():
 # =============================================================================
 # KNOWLEDGE LOADER UTILITIES
 # =============================================================================
-
-def load_knowledge_from_dict(data: Dict[str, Any]) -> KnowledgeDocument:
-    """Load a knowledge document from a dictionary"""
-    return KnowledgeDocument(
-        id=data["id"],
-        category=KnowledgeCategory(data["category"]),
-        title=data["title"],
-        content=data["content"],
-        metadata=data.get("metadata", {}),
-        tags=data.get("tags", []),
-        importance=data.get("importance", 0.5),
-    )
-
-
-def load_knowledge_from_json(json_path: str) -> List[KnowledgeDocument]:
-    """Load knowledge documents from a JSON file"""
-    with open(json_path, 'r') as f:
-        data = json.load(f)
-
-    docs = []
-    for item in data:
-        doc = load_knowledge_from_dict(item)
-        docs.append(doc)
-
-    return docs

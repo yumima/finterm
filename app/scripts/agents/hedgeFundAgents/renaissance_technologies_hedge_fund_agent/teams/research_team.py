@@ -138,9 +138,3 @@ def get_research_team() -> Team:
     if _research_team is None:
         _research_team = create_research_team()
     return _research_team
-
-
-def reset_research_team():
-    """Reset the global Research Team instance"""
-    global _research_team
-    _research_team = None

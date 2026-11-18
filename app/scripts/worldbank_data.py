@@ -266,49 +266,6 @@ def get_sources() -> Dict[str, Any]:
             "error": f"Error fetching sources: {str(e)}"
         }
 
-def get_all_indicators(per_page: int = 5000) -> Dict[str, Any]:
-    """
-    Get list of all available indicators from World Bank database
-
-    Args:
-        per_page: Number of results per page (default: 5000)
-
-    Returns:
-        JSON response with all indicator information
-    """
-    try:
-        endpoint = "indicators"
-        params = {"per_page": per_page}
-
-        result = _make_request(endpoint, params)
-
-        if result["error"]:
-            return result
-
-        # Enhance indicator data
-        enhanced_data = []
-        for indicator in result.get("data", []):
-            enhanced_indicator = {
-                "id": indicator.get("id"),
-                "name": indicator.get("name"),
-                "source": indicator.get("source"),
-                "sourceNote": indicator.get("sourceNote"),
-                "sourceOrganization": indicator.get("sourceOrganization")
-            }
-            enhanced_data.append(enhanced_indicator)
-
-        result["data"] = enhanced_data
-        result["metadata"]["count"] = len(enhanced_data)
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": f"Error fetching all indicators: {str(e)}"
-        }
-
 def get_indicators(country_code: str = "all", indicator: str = GDP_PER_CAPITA,
                   date_range: Optional[str] = None, per_page: int = 1000) -> Dict[str, Any]:
     """
@@ -459,142 +416,6 @@ def get_commodity_prices(commodity_code: str = CRUDE_OIL_BRENT, years: int = 10)
             "error": f"Error fetching commodity prices: {str(e)}"
         }
 
-def get_economic_snapshot(country_code: str = "USA") -> Dict[str, Any]:
-    """
-    Get comprehensive economic snapshot for a country
-
-    Args:
-        country_code: World Bank country code
-
-    Returns:
-        JSON response with multiple economic indicators
-    """
-    try:
-        # Key economic indicators
-        indicators = [
-            GDP_PER_CAPITA,
-            GDP_GROWTH,
-            INFLATION,
-            UNEMPLOYMENT,
-            POPULATION,
-            LIFE_EXPECTANCY
-        ]
-
-        # Get recent data (last 5 years)
-        current_year = datetime.now().year
-        start_year = current_year - 5
-        date_range = f"{start_year}:{current_year}"
-
-        snapshot_data = {}
-        errors = []
-
-        for indicator in indicators:
-            try:
-                result = get_indicators(country_code, indicator, date_range, 100)
-                if result["error"]:
-                    errors.append(f"{indicator}: {result['error']}")
-                else:
-                    # Get the most recent value
-                    data = result.get("data", [])
-                    if data:
-                        latest = data[0]  # Data is typically returned in descending date order
-                        snapshot_data[indicator] = {
-                            "name": latest.get("indicator_name"),
-                            "value": latest.get("value"),
-                            "date": latest.get("date"),
-                            "unit": latest.get("unit")
-                        }
-            except Exception as e:
-                errors.append(f"{indicator}: {str(e)}")
-
-        return {
-            "data": snapshot_data,
-            "metadata": {
-                "country_code": country_code,
-                "date_range": date_range,
-                "indicators_requested": len(indicators),
-                "indicators_success": len(snapshot_data),
-                "last_updated": datetime.now().isoformat()
-            },
-            "error": "; ".join(errors) if errors else None
-        }
-
-    except Exception as e:
-        return {
-            "data": {},
-            "metadata": {},
-            "error": f"Error fetching economic snapshot: {str(e)}"
-        }
-
-def get_regional_comparison(region_code: str, indicator: str = GDP_PER_CAPITA, years: int = 5) -> Dict[str, Any]:
-    """
-    Get indicator data for all countries in a region
-
-    Args:
-        region_code: World Bank region code
-        indicator: Indicator code to compare
-        years: Number of years to look back
-
-    Returns:
-        JSON response with regional comparison data
-    """
-    try:
-        # First get all countries in the region
-        countries_result = get_countries(region=region_code)
-
-        if countries_result["error"]:
-            return countries_result
-
-        countries = countries_result.get("data", [])
-        country_codes = [country["id"] for country in countries]
-
-        if not country_codes:
-            return {
-                "data": [],
-                "metadata": {},
-                "error": f"No countries found for region: {region_code}"
-            }
-
-        # Get indicator data for all countries in the region
-        current_year = datetime.now().year
-        start_year = current_year - years
-        date_range = f"{start_year}:{current_year}"
-
-        # World Bank API has limits on country codes per request, so we'll batch them
-        batch_size = 20
-        all_data = []
-        errors = []
-
-        for i in range(0, len(country_codes), batch_size):
-            batch = country_codes[i:i + batch_size]
-            country_batch = ";".join(batch)
-
-            result = get_indicators(country_batch, indicator, date_range, 2000)
-            if result["error"]:
-                errors.append(f"Batch {i//batch_size + 1}: {result['error']}")
-            else:
-                all_data.extend(result.get("data", []))
-
-        return {
-            "data": all_data,
-            "metadata": {
-                "region_code": region_code,
-                "indicator": indicator,
-                "date_range": date_range,
-                "countries_in_region": len(country_codes),
-                "observation_count": len(all_data),
-                "last_updated": datetime.now().isoformat()
-            },
-            "error": "; ".join(errors) if errors else None
-        }
-
-    except Exception as e:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": f"Error fetching regional comparison: {str(e)}"
-        }
-
 def main():
     """CLI interface for World Bank Data Fetcher"""
 
@@ -604,12 +425,8 @@ def main():
             "available_commands": [
                 "countries [region_code]",
                 "sources",
-                "all_indicators",
                 "indicators <country_code> <indicator_code> [date_range]",
                 "gdp_per_capita <country_codes> [years]",
-                "commodity_prices <commodity_code> [years]",
-                "economic_snapshot <country_code>",
-                "regional_comparison <region_code> <indicator_code> [years]"
             ]
         }))
         sys.exit(1)
@@ -623,9 +440,6 @@ def main():
 
         elif command == "sources":
             result = get_sources()
-
-        elif command == "all_indicators":
-            result = get_all_indicators()
 
         elif command == "indicators":
             if len(sys.argv) < 3:
@@ -642,25 +456,6 @@ def main():
             years = int(sys.argv[3]) if len(sys.argv) > 3 else 20
             result = get_gdp_per_capita(countries, years)
 
-        elif command == "commodity_prices":
-            commodity = sys.argv[2] if len(sys.argv) > 2 else CRUDE_OIL_BRENT
-            years = int(sys.argv[3]) if len(sys.argv) > 3 else 10
-            result = get_commodity_prices(commodity, years)
-
-        elif command == "economic_snapshot":
-            country = sys.argv[2] if len(sys.argv) > 2 else "USA"
-            result = get_economic_snapshot(country)
-
-        elif command == "regional_comparison":
-            if len(sys.argv) < 3:
-                print(json.dumps({"error": "Usage: regional_comparison <region_code> <indicator_code> [years]"}))
-                sys.exit(1)
-
-            region = sys.argv[2]
-            indicator = sys.argv[3]
-            years = int(sys.argv[4]) if len(sys.argv) > 4 else 5
-            result = get_regional_comparison(region, indicator, years)
-
         else:
             result = {
                 "error": f"Unknown command: {command}",
@@ -669,9 +464,6 @@ def main():
                     "sources",
                     "indicators <country_code> <indicator_code> [date_range]",
                     "gdp_per_capita <country_codes> [years]",
-                    "commodity_prices <commodity_code> [years]",
-                    "economic_snapshot <country_code>",
-                    "regional_comparison <region_code> <indicator_code> [years]"
                 ]
             }
 

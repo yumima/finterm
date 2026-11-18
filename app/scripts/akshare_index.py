@@ -273,10 +273,6 @@ def get_index_option_300index_qvix():
     """Get CSI 300 Index option QVIX"""
     return safe_call(ak.index_option_300index_qvix)
 
-def get_index_option_500etf_min_qvix():
-    """Get 500ETF option QVIX minute data"""
-    return safe_call(ak.index_option_500etf_min_qvix)
-
 def get_index_option_1000index_qvix():
     """Get CSI 1000 Index option QVIX"""
     return safe_call(ak.index_option_1000index_qvix)
@@ -376,10 +372,6 @@ def get_index_neei_cx():
     """Get New Energy Economy Index (Caixin)"""
     return safe_call(ak.index_neei_cx)
 
-def get_index_neaw_cx():
-    """Get New Economy Asset Wealth Index (Caixin)"""
-    return safe_call(ak.index_neaw_cx)
-
 def get_index_qli_cx():
     """Get Quality of Life Index (Caixin)"""
     return safe_call(ak.index_qli_cx)
@@ -387,11 +379,6 @@ def get_index_qli_cx():
 def get_index_ai_cx():
     """Get AI Index (Caixin)"""
     return safe_call(ak.index_ai_cx)
-
-def get_index_awpr_cx():
-    """Get Asset-Weighted Price Return Index (Caixin)"""
-    return safe_call(ak.index_awpr_cx)
-
 
 # ==================== COMMODITY/INDUSTRY INDICES ====================
 
@@ -434,10 +421,6 @@ def get_index_kq_fashion():
     """Get KQ Fashion Index"""
     return safe_call(ak.index_kq_fashion)
 
-def get_index_kq_fz():
-    """Get KQ FZ Index"""
-    return safe_call(ak.index_kq_fz)
-
 def get_index_news_sentiment_scope():
     """Get news sentiment scope index"""
     return safe_call(ak.index_news_sentiment_scope)
@@ -445,11 +428,6 @@ def get_index_news_sentiment_scope():
 def get_index_bloomberg_billionaires():
     """Get Bloomberg Billionaires Index"""
     return safe_call(ak.index_bloomberg_billionaires)
-
-def get_index_bloomberg_billionaires_hist(symbol="�马化腾"):
-    """Get Bloomberg Billionaires historical data"""
-    return safe_call(ak.index_bloomberg_billionaires_hist, symbol=symbol)
-
 
 # ==================== ENDPOINT REGISTRY ====================
 

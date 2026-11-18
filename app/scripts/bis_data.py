@@ -246,68 +246,7 @@ class BISAPI:
         endpoint = f"data/{encoded_flow}/{encoded_key}/all"
         return await self._make_request(endpoint, params)
 
-    async def get_available_constraints(
-        self,
-        flow: str,
-        key: str,
-        component_id: str,
-        mode: str = "exact",
-        references: str = "none",
-        start_period: Optional[str] = None,
-        end_period: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get information about data availability for specific constraints
-
-        Args:
-            flow: Statistical domain
-            key: Data key
-            component_id: Dimension ID for availability info
-            mode: 'exact' for current selection, 'available' for remaining valid options
-            references: References to include ('none', 'all', etc.)
-            start_period: Start period filter
-            end_period: End period filter
-        """
-        params = {"mode": mode, "references": references}
-        if start_period:
-            params["startPeriod"] = start_period
-        if end_period:
-            params["endPeriod"] = end_period
-
-        encoded_flow = quote(flow, safe='')
-        encoded_key = quote(key, safe='')
-
-        endpoint = f"availableconstraint/{encoded_flow}/{encoded_key}/all/{component_id}"
-        return await self._make_request(endpoint, params, "structure")
-
     # STRUCTURE QUERY ENDPOINTS
-
-    async def get_data_structures(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """
-        Get data structure definitions
-
-        Args:
-            agency_id: Maintenance agency (e.g., 'BIS', 'all')
-            resource_id: Resource ID or 'all'
-            version: Version or 'latest' or 'all'
-            references: References to include
-            detail: Structure detail level
-        """
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"datastructure/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
 
     async def get_dataflows(
         self,
@@ -325,114 +264,6 @@ class BISAPI:
         version = quote(version, safe='')
 
         endpoint = f"dataflow/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_categorisations(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get categorisation definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"categorisation/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_content_constraints(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get content constraint definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"contentconstraint/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_actual_constraints(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get actual constraint definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"actualconstraint/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_allowed_constraints(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get allowed constraint definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"allowedconstraint/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_structures(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get general structure definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"structure/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_concept_schemes(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get concept scheme definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"conceptscheme/{agency_id}/{resource_id}/{version}"
         return await self._make_request(endpoint, params, "structure")
 
     async def get_codelists(
@@ -453,101 +284,7 @@ class BISAPI:
         endpoint = f"codelist/{agency_id}/{resource_id}/{version}"
         return await self._make_request(endpoint, params, "structure")
 
-    async def get_category_schemes(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get category scheme definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"categoryscheme/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_hierarchical_codelists(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get hierarchical codelist definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"hierarchicalcodelist/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_agency_schemes(
-        self,
-        agency_id: str = "all",
-        resource_id: str = "all",
-        version: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get agency scheme definitions"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-
-        endpoint = f"agencyscheme/{agency_id}/{resource_id}/{version}"
-        return await self._make_request(endpoint, params, "structure")
-
     # ITEM QUERY ENDPOINTS
-
-    async def get_concepts(
-        self,
-        agency_id: str,
-        resource_id: str,
-        version: str,
-        item_id: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get specific concepts from concept schemes"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-        item_id = quote(item_id, safe='')
-
-        endpoint = f"conceptscheme/{agency_id}/{resource_id}/{version}/{item_id}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_codes(
-        self,
-        agency_id: str,
-        resource_id: str,
-        version: str,
-        item_id: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get specific codes from codelists"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-        item_id = quote(item_id, safe='')
-
-        endpoint = f"codelist/{agency_id}/{resource_id}/{version}/{item_id}"
-        return await self._make_request(endpoint, params, "structure")
 
     async def get_categories(
         self,
@@ -567,26 +304,6 @@ class BISAPI:
         item_id = quote(item_id, safe='')
 
         endpoint = f"categoryscheme/{agency_id}/{resource_id}/{version}/{item_id}"
-        return await self._make_request(endpoint, params, "structure")
-
-    async def get_hierarchies(
-        self,
-        agency_id: str,
-        resource_id: str,
-        version: str,
-        item_id: str = "all",
-        references: str = "none",
-        detail: str = "full"
-    ) -> Dict[str, Any]:
-        """Get specific hierarchies from hierarchical codelists"""
-        params = {"references": references, "detail": detail}
-
-        agency_id = quote(agency_id, safe='')
-        resource_id = quote(resource_id, safe='')
-        version = quote(version, safe='')
-        item_id = quote(item_id, safe='')
-
-        endpoint = f"hierarchicalcodelist/{agency_id}/{resource_id}/{version}/{item_id}"
         return await self._make_request(endpoint, params, "structure")
 
     # CONVENIENCE METHODS FOR COMMON DATA TYPES
@@ -750,30 +467,6 @@ class BISAPI:
             detail=detail
         )
 
-    async def get_house_prices(
-        self,
-        countries: Optional[List[str]] = None,
-        start_period: Optional[str] = None,
-        end_period: Optional[str] = None,
-        detail: str = "dataonly"
-    ) -> Dict[str, Any]:
-        """Get house price indices (WS_HP)"""
-        key = "all"
-        if countries:
-            key = f"Q.{'+'.join(countries)}"
-
-        return await self.get_data(
-            flow="WS_HP",
-            key=key,
-            start_period=start_period,
-            end_period=end_period,
-            detail=detail
-        )
-
-    async def get_available_datasets(self) -> Dict[str, Any]:
-        """Get overview of all available dataflows (datasets)"""
-        return await self.get_dataflows(agency_id="BIS", detail="allstubs")
-
     async def search_datasets(
         self,
         query: str,
@@ -865,49 +558,6 @@ class BISAPI:
             "endpoint": "economic_overview"
         }
 
-    async def get_dataset_metadata(
-        self,
-        flow: str
-    ) -> Dict[str, Any]:
-        """
-        Get comprehensive metadata for a specific dataset
-
-        Args:
-            flow: Data flow identifier (e.g., 'WS_EER')
-        """
-        results = {}
-
-        try:
-            # Get dataflow information
-            dataflows = await self.get_dataflows(resource_id=flow)
-            results["dataflow"] = dataflows
-
-            # Get data structure
-            structures = await self.get_data_structures(resource_id=flow)
-            results["structure"] = structures
-
-            # Get sample data to understand the format
-            sample_data = await self.get_data(flow=flow, detail="serieskeysonly", last_n_observations=5)
-            results["sample_keys"] = sample_data
-
-            return {
-                "success": True,
-                "data": {
-                    "flow": flow,
-                    "metadata": results,
-                    "description": self.known_flows.get(flow, "Unknown dataset")
-                },
-                "endpoint": "dataset_metadata"
-            }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "endpoint": "dataset_metadata"
-            }
-
-
 # CLI Interface
 async def main():
     """CLI interface for BIS API"""
@@ -918,18 +568,7 @@ async def main():
             "error": "Usage: python bis_data.py <command> [args...]",
             "available_commands": [
                 "get_data <flow> [key] [start_period] [end_period]",
-                "get_effective_exchange_rates [countries...] [start_period] [end_period]",
-                "get_central_bank_policy_rates [countries...] [start_period] [end_period]",
-                "get_long_term_interest_rates [countries...] [start_period] [end_period]",
-                "get_short_term_interest_rates [countries...] [start_period] [end_period]",
-                "get_exchange_rates [currencies...] [start_period] [end_period]",
-                "get_credit_to_non_financial_sector [countries...] [sectors...] [start_period] [end_period]",
-                "get_house_prices [countries...] [start_period] [end_period]",
-                "get_available_datasets",
-                "get_data_structures [agency_id] [resource_id] [version]",
                 "search_datasets <query>",
-                "get_economic_overview [countries...] [start_period] [end_period]",
-                "get_dataset_metadata <flow>"
             ]
         }))
         return
@@ -1077,204 +716,11 @@ async def main():
 
                 result = await bis.get_data(flow, key, start_period, end_period)
 
-            elif command == "get_effective_exchange_rates":
-                countries = []
-                other_args = []
-
-                # Parse arguments - country codes are 2-letter, others are dates
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_effective_exchange_rates(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_central_bank_policy_rates":
-                countries = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_central_bank_policy_rates(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_long_term_interest_rates":
-                countries = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_long_term_interest_rates(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_short_term_interest_rates":
-                countries = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_short_term_interest_rates(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_exchange_rates":
-                currencies = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 3 and arg.isalpha():
-                        currencies.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_exchange_rates(
-                    currency_pairs=currencies if currencies else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_credit_to_non_financial_sector":
-                countries = []
-                sectors = []
-                other_args = []
-
-                # Parse arguments - need to distinguish countries from sectors
-                # This is simplified - in practice, you might need more sophisticated parsing
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        sectors.append(arg)
-
-                # Last two arguments might be dates
-                if len(other_args) >= 2:
-                    start_period = other_args[-2]
-                    end_period = other_args[-1]
-                    sectors = sectors[:-2]
-                elif len(other_args) == 1:
-                    start_period = other_args[0]
-                    end_period = None
-                    sectors = sectors[:-1]
-                else:
-                    start_period = None
-                    end_period = None
-
-                result = await bis.get_credit_to_non_financial_sector(
-                    countries=countries if countries else None,
-                    sectors=sectors if sectors else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_house_prices":
-                countries = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_house_prices(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_available_datasets":
-                result = await bis.get_available_datasets()
-
-            elif command == "get_data_structures":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-
-                result = await bis.get_data_structures(agency_id, resource_id, version)
-
             elif command == "search_datasets":
                 if len(args) < 3:
                     raise ValueError("Usage: search_datasets <query>")
                 query = args[1]
                 result = await bis.search_datasets(query)
-
-            elif command == "get_economic_overview":
-                countries = []
-                other_args = []
-
-                for arg in sys.argv[2:]:
-                    if len(arg) == 2 and arg.isalpha():
-                        countries.append(arg)
-                    else:
-                        other_args.append(arg)
-
-                start_period = other_args[0] if len(other_args) > 0 else None
-                end_period = other_args[1] if len(other_args) > 1 else None
-
-                result = await bis.get_economic_overview(
-                    countries=countries if countries else None,
-                    start_period=start_period,
-                    end_period=end_period
-                )
-
-            elif command == "get_dataset_metadata":
-                if len(args) < 3:
-                    raise ValueError("Usage: get_dataset_metadata <flow>")
-                flow = args[1]
-                result = await bis.get_dataset_metadata(flow)
-
-            elif command == "get_available_constraints":
-                if len(args) < 5:
-                    raise ValueError("Usage: get_available_constraints <flow> <key> <component_id> [mode] [references]")
-                flow = args[1]
-                key = args[2]
-                component_id = args[3]
-                mode = args[4] if len(args) > 5 else "exact"
-                references = sys.argv[6] if len(args) > 6 else "none"
-                result = await bis.get_available_constraints(flow, key, component_id, mode, references)
 
             elif command == "get_dataflows":
                 agency_id = args[1] if len(args) > 2 else "all"
@@ -1284,54 +730,6 @@ async def main():
                 detail = sys.argv[6] if len(args) > 6 else "full"
                 result = await bis.get_dataflows(agency_id, resource_id, version, references, detail)
 
-            elif command == "get_categorisations":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_categorisations(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_content_constraints":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_content_constraints(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_actual_constraints":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_actual_constraints(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_allowed_constraints":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_allowed_constraints(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_structures":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_structures(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_concept_schemes":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_concept_schemes(agency_id, resource_id, version, references, detail)
-
             elif command == "get_codelists":
                 agency_id = args[1] if len(args) > 2 else "all"
                 resource_id = args[2] if len(args) > 3 else "all"
@@ -1339,52 +737,6 @@ async def main():
                 references = args[4] if len(args) > 5 else "none"
                 detail = sys.argv[6] if len(args) > 6 else "full"
                 result = await bis.get_codelists(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_category_schemes":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_category_schemes(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_hierarchical_codelists":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_hierarchical_codelists(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_agency_schemes":
-                agency_id = args[1] if len(args) > 2 else "all"
-                resource_id = args[2] if len(args) > 3 else "all"
-                version = args[3] if len(args) > 4 else "all"
-                references = args[4] if len(args) > 5 else "none"
-                detail = sys.argv[6] if len(args) > 6 else "full"
-                result = await bis.get_agency_schemes(agency_id, resource_id, version, references, detail)
-
-            elif command == "get_concepts":
-                if len(args) < 4:
-                    raise ValueError("Usage: get_concepts <agency_id> <resource_id> <version> [item_id] [references] [detail]")
-                agency_id = args[1]
-                resource_id = args[2]
-                version = args[3]
-                item_id = args[4] if len(args) > 5 else "all"
-                references = sys.argv[6] if len(args) > 6 else "none"
-                detail = sys.argv[7] if len(args) > 7 else "full"
-                result = await bis.get_concepts(agency_id, resource_id, version, item_id, references, detail)
-
-            elif command == "get_codes":
-                if len(args) < 4:
-                    raise ValueError("Usage: get_codes <agency_id> <resource_id> <version> [item_id] [references] [detail]")
-                agency_id = args[1]
-                resource_id = args[2]
-                version = args[3]
-                item_id = args[4] if len(args) > 5 else "all"
-                references = sys.argv[6] if len(args) > 6 else "none"
-                detail = sys.argv[7] if len(args) > 7 else "full"
-                result = await bis.get_codes(agency_id, resource_id, version, item_id, references, detail)
 
             elif command == "get_categories":
                 if len(args) < 4:
@@ -1397,32 +749,16 @@ async def main():
                 detail = sys.argv[7] if len(args) > 7 else "full"
                 result = await bis.get_categories(agency_id, resource_id, version, item_id, references, detail)
 
-            elif command == "get_hierarchies":
-                if len(args) < 4:
-                    raise ValueError("Usage: get_hierarchies <agency_id> <resource_id> <version> [item_id] [references] [detail]")
-                agency_id = args[1]
-                resource_id = args[2]
-                version = args[3]
-                item_id = args[4] if len(args) > 5 else "all"
-                references = sys.argv[6] if len(args) > 6 else "none"
-                detail = sys.argv[7] if len(args) > 7 else "full"
-                result = await bis.get_hierarchies(agency_id, resource_id, version, item_id, references, detail)
-
             else:
                 result = {
                     "success": False,
                     "error": f"Unknown command: {command}",
                     "available_commands": [
-                        "get_data", "get_effective_exchange_rates", "get_central_bank_policy_rates",
-                        "get_long_term_interest_rates", "get_short_term_interest_rates",
-                        "get_exchange_rates", "get_credit_to_non_financial_sector", "get_house_prices",
-                        "get_available_datasets", "get_data_structures", "search_datasets",
-                        "get_economic_overview", "get_dataset_metadata", "get_available_constraints",
-                        "get_dataflows", "get_categorisations", "get_content_constraints",
-                        "get_actual_constraints", "get_allowed_constraints", "get_structures",
-                        "get_concept_schemes", "get_codelists", "get_category_schemes",
-                        "get_hierarchical_codelists", "get_agency_schemes", "get_concepts",
-                        "get_codes", "get_categories", "get_hierarchies"
+                        "get_data",
+                        "search_datasets",
+                        "get_dataflows",
+                        "get_codelists",
+                        "get_categories"
                     ]
                 }
 

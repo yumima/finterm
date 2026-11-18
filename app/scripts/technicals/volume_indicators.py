@@ -8,7 +8,6 @@ import pandas as pd
 from ._safe import safe_assign
 from ta.volume import (
     AccDistIndexIndicator,
-    OnBalanceVolumeIndicator,
     ChaikinMoneyFlowIndicator,
     ForceIndexIndicator,
     EaseOfMovementIndicator,

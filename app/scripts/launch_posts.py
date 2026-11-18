@@ -164,9 +164,6 @@ Everything runs locally; the optional AI features can use a local model. Much of
     },
 ]
 
-TARGET_IDS = {t["id"] for t in TARGETS}
-
-
 def target(target_id):
     return next((t for t in TARGETS if t["id"] == target_id), None)
 

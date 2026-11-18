@@ -130,16 +130,6 @@ def local_clear(file_path, sheet_name, range_str):
 
 # ── GOOGLE SHEETS ─────────────────────────────────────────────────────────────
 
-def _get_gspread_client(credentials_path):
-    import gspread
-    if credentials_path:
-        return gspread.service_account(filename=credentials_path)
-    else:
-        # Anonymous / public read-only via API key not supported by gspread.
-        # Fall back to requests for public sheets.
-        return None
-
-
 def google_read(spreadsheet_id, sheet_name, range_str, credentials_path):
     import gspread
     if credentials_path:

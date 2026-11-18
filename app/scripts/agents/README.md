@@ -193,16 +193,6 @@ Each agent category has `/configs/` directory with:
 - **Language**: Python 3.11+
 - **Dependencies**: langchain, ollama, sqlite3
 
-## Agent Debate System
-
-Agents can participate in multi-agent debates:
-- Consensus building
-- Contrarian analysis
-- Risk devil's advocate
-- Crowd wisdom aggregation
-
-See `agno_trading/core/debate_orchestrator.py` for debate framework.
-
 ---
 
 **Total Agents**: 30+ agents | **Categories**: 4 (Geopolitics, Hedge Funds, Investors, Economic) | **Framework**: FinAgent Core | **LLM**: Ollama (local) | **Last Updated**: 2026-01-23

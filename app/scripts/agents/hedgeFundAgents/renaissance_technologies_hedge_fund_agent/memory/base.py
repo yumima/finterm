@@ -458,9 +458,3 @@ def get_memory_system() -> RenTechMemory:
     if _memory_system is None:
         _memory_system = RenTechMemory()
     return _memory_system
-
-
-def reset_memory_system():
-    """Reset the memory system (for testing)"""
-    global _memory_system
-    _memory_system = None

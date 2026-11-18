@@ -468,17 +468,6 @@ def handle_action(action, payload):
         # {} means "no XBRL facts for this filer" — a real, cacheable answer.
         # {"error": ...} means the request failed and must be retried.
         return f if f is not None else {"error": "fetch_failed"}
-    if action == "pipeline_with_facts":
-        # Pipeline + financials in one shot, capped to top N filers.
-        cap = payload.get("max_facts", 30)
-        pipeline = fetch_pipeline(
-            days_back=payload.get("days_back", 180),
-            max_hits=payload.get("max_hits", 100),
-        )
-        for entry in pipeline[:cap]:
-            facts = fetch_company_facts(entry["cik"])
-            entry["financials"] = facts or {}
-        return pipeline
     return {"error": f"Unknown action: {action}"}
 
 

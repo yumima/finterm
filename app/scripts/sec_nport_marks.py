@@ -18,8 +18,6 @@ This script:
 
 Actions:
   marks_all        — {marks: {company_name: [{fund, fund_cik, as_of, fair_value, shares, pps}, ...]}}
-  marks_for        — payload: {"name": "Stripe"} → list of marks for a single issuer
-  fund_holdings    — payload: {"fund_cik": "..."} → all restricted holdings for a fund
 
 Free, public, no API key. Polite rate-limited User-Agent.
 """
@@ -332,35 +330,6 @@ def handle_action(action, payload):
         )
         data["cursor"] = {"accessions": cursor, "v": CURSOR_VERSION}
         return data
-    if action == "marks_for":
-        name = (payload.get("name") or "").strip()
-        if not name:
-            return []
-        all_data = collect_all_marks(quarters_back=payload.get("quarters_back", 2))
-        # Direct cid hit first (e.g. payload {"name": "stripe"})
-        if name in all_data["marks"]:
-            return all_data["marks"][name]
-        # Otherwise match against the alias regex set: does any cid have an
-        # alias matching the input?
-        cid, _canonical, _cik = _match_private_id(name)
-        return all_data["marks"].get(cid, []) if cid else []
-    if action == "fund_holdings":
-        cik = payload.get("fund_cik")
-        if not cik:
-            return {"error": "fund_cik required"}
-        # Find the family label, then pull just that fund's marks.
-        label = next((l for l, c in FUND_FAMILIES if c == cik), cik)
-        accessions = list_nport_accessions(cik, limit=payload.get("quarters_back", 2))
-        out = []
-        for a in accessions:
-            for m in fetch_nport_xml(cik, a["adsh"]) or []:
-                out.append({
-                    "fund_name": label,
-                    "fund_cik": cik,
-                    "filed_date": a["filed_date"],
-                    **m,
-                })
-        return out
     return {"error": f"Unknown action: {action}"}
 
 

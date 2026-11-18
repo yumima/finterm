@@ -205,7 +205,7 @@ class DefaultFeaturesPipeline(FeaturesPipeline):
 
     Integrates with:
     - agno_trading/tools/technical_indicators.py
-    - agno_trading/tools/news_sentiment.py
+    - alpha_arena/core/sentiment_agent.py
     """
 
     def __init__(
@@ -371,17 +371,12 @@ class DefaultFeaturesPipeline(FeaturesPipeline):
             features.news_count = result.articles_analyzed
             features.recent_headlines = result.key_headlines[:3]
 
-        except ImportError:
-            # Fallback to basic sentiment tools
-            try:
-                from agno_trading.tools.news_sentiment import get_market_sentiment
-
-                sentiment = get_market_sentiment(symbol)
-                features.overall_sentiment = sentiment.get("overall_sentiment", "neutral")
-                features.sentiment_score = sentiment.get("sentiment_score", 0.0)
-
-            except ImportError:
-                logger.debug("Sentiment tools not available")
+        except ImportError as e:
+            # No fallback: the old one (agno_trading's news_sentiment) was a
+            # placeholder that always answered "neutral, 0.0" — a made-up
+            # reading. Without the agent the features keep their defaults and
+            # news_count stays 0, which is how a reader tells "no sentiment".
+            logger.warning(f"Sentiment unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error computing sentiment: {e}")
 

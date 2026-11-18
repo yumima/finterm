@@ -176,47 +176,6 @@ def get_frontend_db_path() -> Optional[Path]:
     return None
 
 
-def ensure_directory_exists(path: Path) -> bool:
-    """
-    Ensure a directory exists, creating it if necessary.
-
-    Args:
-        path: Directory path to ensure
-
-    Returns:
-        True if directory exists or was created, False on error
-    """
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to create directory {path}: {e}")
-        return False
-
-
-def get_user_specific_path(subdir: str, filename: Optional[str] = None) -> Path:
-    """
-    Get a user-specific path within the RenTech data directory.
-
-    Args:
-        subdir: Subdirectory name (e.g., "models", "exports")
-        filename: Optional filename to append
-
-    Returns:
-        Full path to the requested location
-    """
-    base = get_rentech_data_dir() / subdir
-
-    try:
-        base.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
-        logger.warning(f"Could not create directory {base}: {e}")
-
-    if filename:
-        return base / filename
-    return base
-
-
 # Export convenient path getters
 def get_knowledge_path() -> str:
     """Get knowledge base path as string"""

@@ -7,7 +7,7 @@ import sys
 import json
 import os
 import requests
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 BASE_URL = "https://api.ourworldindata.org/v1"
 GITHUB_RAW = "https://raw.githubusercontent.com/owid/owid-datasets/master/datasets"
@@ -33,15 +33,6 @@ def _make_request(endpoint: str, params: Dict = None) -> Any:
         return {"error": f"Request failed: {str(e)}"}
     except (json.JSONDecodeError, ValueError) as e:
         return {"error": f"JSON decode error: {str(e)}"}
-
-
-def _fetch_owid_csv_api(dataset: str, country: str = None, columns: List[str] = None) -> Any:
-    """Fetch OWID data via the indicators API."""
-    params = {"datasetCode": dataset}
-    if country:
-        params["entityName"] = country
-    data = _make_request("indicators", params=params)
-    return data
 
 
 def get_indicator(indicator_id: int) -> Any:
@@ -149,40 +140,6 @@ def get_health_data(country: str = None) -> Any:
             "child_mortality": "Search 'child mortality' via search command",
             "maternal_mortality": "Search 'maternal mortality rate' via search command",
         }
-    }
-
-
-def get_poverty_data(country: str = None) -> Any:
-    """Get poverty and inequality data via OWID API."""
-    params = {}
-    if country:
-        params["entityName"] = country
-    data = _make_request("indicators/share-of-population-in-extreme-poverty", params=params)
-    if isinstance(data, dict) and "error" not in data:
-        return {"category": "poverty", "country": country, "indicator": "extreme_poverty", "data": data}
-    return {
-        "category": "poverty",
-        "note": "Use search command to find specific poverty indicators",
-        "common_poverty_indicators": {
-            "extreme_poverty": "Search 'extreme poverty' via search command",
-            "gini_coefficient": "Search 'gini coefficient' via search command",
-            "income_share": "Search 'income share' via search command",
-        }
-    }
-
-
-def get_democracy_data(country: str = None) -> Any:
-    """Get democracy and governance indices (V-Dem, Freedom House, Polity)."""
-    params = {}
-    if country:
-        params["entityName"] = country
-    data = _make_request("indicators/electoral-democracy", params=params)
-    if isinstance(data, dict) and "error" not in data:
-        return {"category": "democracy", "country": country, "data": data}
-    return {
-        "category": "democracy",
-        "note": "Use search command to find democracy/governance indicators",
-        "suggested_searches": ["v-dem", "democracy index", "freedom house", "polity"],
     }
 
 
@@ -294,9 +251,6 @@ def main(args=None):
     elif command == "health":
         country = args[1] if len(args) > 1 else None
         result = get_health_data(country)
-    elif command == "democracy":
-        country = args[1] if len(args) > 1 else None
-        result = get_democracy_data(country)
     elif command == "indicator":
         if len(args) < 2:
             result = {"error": "Usage: indicator <indicator_id>"}

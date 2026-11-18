@@ -465,9 +465,3 @@ def get_agent_memory_manager() -> AgentMemoryManager:
     if _agent_memory_manager is None:
         _agent_memory_manager = AgentMemoryManager()
     return _agent_memory_manager
-
-
-def reset_agent_memory_manager():
-    """Reset the agent memory manager (for testing)"""
-    global _agent_memory_manager
-    _agent_memory_manager = None

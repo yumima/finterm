@@ -395,49 +395,6 @@ def get_binance_klines(
     return ft_binance(symbol, start_date, end_date, tld=tld)
 
 
-def get_binance_symbols(tld: str = 'us') -> List[str]:
-    """
-    Get available Binance trading symbols.
-
-    Args:
-        tld: 'us' or 'com'
-
-    Returns:
-        List of symbol strings
-    """
-    from fast_trade.archive.binance_api import get_available_symbols
-    return get_available_symbols(tld=tld)
-
-
-def get_binance_exchange_info(tld: str = 'us') -> Dict[str, Any]:
-    """
-    Get Binance exchange information.
-
-    Args:
-        tld: 'us' or 'com'
-
-    Returns:
-        Exchange info dict
-    """
-    from fast_trade.archive.binance_api import get_exchange_info
-    return get_exchange_info(tld=tld)
-
-
-def get_binance_oldest_date(symbol: str, tld: str = 'us') -> datetime:
-    """
-    Get oldest available date for a Binance symbol.
-
-    Args:
-        symbol: Trading pair
-        tld: 'us' or 'com'
-
-    Returns:
-        Oldest available datetime
-    """
-    from fast_trade.archive.binance_api import get_oldest_date_available
-    return get_oldest_date_available(symbol, tld=tld)
-
-
 # ============================================================================
 # Archive: Coinbase API
 # ============================================================================
@@ -481,62 +438,6 @@ def get_single_candle(
     """
     from fast_trade.archive.coinbase_api import get_single_candle as ft_single
     return ft_single(product_id, params=params or {}, df=df if df is not None else pd.DataFrame())
-
-
-def get_coinbase_candles(
-    product_id: str,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None
-) -> pd.DataFrame:
-    """
-    Fetch candle data from Coinbase.
-
-    Args:
-        product_id: Product ID (e.g. 'BTC-USD')
-        start: Start datetime (optional)
-        end: End datetime (optional)
-
-    Returns:
-        DataFrame with OHLCV data
-    """
-    from fast_trade.archive.coinbase_api import get_product_candles
-    return get_product_candles(product_id, start=start, end=end)
-
-
-def get_coinbase_assets() -> List[str]:
-    """
-    Get available Coinbase asset IDs.
-
-    Returns:
-        List of asset ID strings
-    """
-    from fast_trade.archive.coinbase_api import get_asset_ids
-    return get_asset_ids()
-
-
-def get_coinbase_products() -> List[Dict[str, Any]]:
-    """
-    Get all Coinbase products.
-
-    Returns:
-        List of product dicts
-    """
-    from fast_trade.archive.coinbase_api import get_products
-    return get_products()
-
-
-def get_coinbase_oldest_day(product_id: str) -> datetime:
-    """
-    Get oldest available day for a Coinbase product.
-
-    Args:
-        product_id: Product ID (e.g. 'BTC-USD')
-
-    Returns:
-        Oldest available datetime
-    """
-    from fast_trade.archive.coinbase_api import get_oldest_day
-    return get_oldest_day(product_id)
 
 
 # ============================================================================

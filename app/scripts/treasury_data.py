@@ -79,38 +79,6 @@ def get_exchange_rates(country_currency: str = None, start_date: str = None, end
     return _make_request("v1/accounting/od/rates_of_exchange", params)
 
 
-def get_avg_interest_rates(start_date: str = None, end_date: str = None) -> Any:
-    params = {
-        "fields": "record_date,security_desc,avg_interest_rate_amt",
-        "sort": "-record_date",
-        "page[size]": "500",
-    }
-    filters = []
-    if start_date:
-        filters.append(f"record_date:gte:{start_date}")
-    if end_date:
-        filters.append(f"record_date:lte:{end_date}")
-    if filters:
-        params["filters"] = ",".join(filters)
-    return _make_request("v2/accounting/od/avg_interest_rates", params)
-
-
-def get_record_debt(start_date: str = None, end_date: str = None) -> Any:
-    params = {
-        "fields": "record_date,debt_catg,close_today_bal,close_today_mil_amt",
-        "sort": "-record_date",
-        "page[size]": "500",
-    }
-    filters = []
-    if start_date:
-        filters.append(f"record_date:gte:{start_date}")
-    if end_date:
-        filters.append(f"record_date:lte:{end_date}")
-    if filters:
-        params["filters"] = ",".join(filters)
-    return _make_request("v1/accounting/od/record_setting_auction", params)
-
-
 PAR_CURVE_URL = (
     "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
     "daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve"
@@ -204,16 +172,8 @@ def main(args=None):
         start_date = args[2] if len(args) > 2 else None
         end_date = args[3] if len(args) > 3 else None
         result = get_exchange_rates(country_currency, start_date, end_date)
-    elif command == "avg_rates":
-        start_date = args[1] if len(args) > 1 else None
-        end_date = args[2] if len(args) > 2 else None
-        result = get_avg_interest_rates(start_date, end_date)
     elif command == "par_curve":
         result = get_par_curve()
-    elif command == "record_debt":
-        start_date = args[1] if len(args) > 1 else None
-        end_date = args[2] if len(args) > 2 else None
-        result = get_record_debt(start_date, end_date)
 
     print(json.dumps(result))
 

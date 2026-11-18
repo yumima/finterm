@@ -538,246 +538,93 @@ class StatisticalAnalyzer(EconomicsBase):
         x = np.arange(len(data))
         y = data.values
 
-        # Fit linear regression
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
 
-        # Generate forecasts
-        forecast_x = np.arange(len(data), len(data) + periods)
-        forecast_values = slope * forecast_x + intercept
+        # Calculate trend strength
+        trend_strength = abs(r_value)
 
         return {
-            'method': 'Linear Trend',
-            'forecast_values': [self.to_decimal(x) for x in forecast_values],
-            'slope': self.to_decimal(slope),
-            'intercept': self.to_decimal(intercept),
-            'r_squared': self.to_decimal(r_value ** 2),
-            'description': 'Linear trend extrapolation'
+            'linear_trend': {
+                'slope': self.to_decimal(slope),
+                'intercept': self.to_decimal(intercept),
+                'r_squared': self.to_decimal(r_value ** 2),
+                'p_value': self.to_decimal(p_value),
+                'standard_error': self.to_decimal(std_err)
+            },
+            'trend_direction': 'Increasing' if slope > 0 else 'Decreasing' if slope < 0 else 'Flat',
+            'trend_strength': self.to_decimal(trend_strength),
+            'trend_significance': p_value < 0.05
         }
 
-    def _exponential_smoothing_forecast(self, data: pd.Series, periods: int) -> Dict[str, Any]:
-        """Simple exponential smoothing"""
+    def _analyze_seasonality(self, data: pd.Series) -> Dict[str, Any]:
+        """Analyze seasonality in time series"""
+
+        if len(data) < 24:  # Need at least 2 years of monthly data
+            return {'error': 'Insufficient data for seasonality analysis'}
 
         try:
-            from statsmodels.tsa.holtwinters import ExponentialSmoothing
+            from statsmodels.tsa.seasonal import seasonal_decompose
 
-            # Fit exponential smoothing model
-            model = ExponentialSmoothing(data.values, trend=None, seasonal=None)
-            fitted_model = model.fit()
-
-            # Generate forecasts
-            forecast_values = fitted_model.forecast(periods)
-
-            return {
-                'method': 'Exponential Smoothing',
-                'forecast_values': [self.to_decimal(x) for x in forecast_values],
-                'alpha': self.to_decimal(fitted_model.params['smoothing_level']),
-                'description': 'Simple exponential smoothing'
-            }
-        except Exception as e:
-            # Fallback to manual exponential smoothing
-            alpha = 0.3  # Default smoothing parameter
-
-            # Initialize with first observation
-            smoothed_values = [data.iloc[0]]
-
-            # Calculate smoothed values
-            for i in range(1, len(data)):
-                smoothed_value = alpha * data.iloc[i] + (1 - alpha) * smoothed_values[-1]
-                smoothed_values.append(smoothed_value)
-
-            # Forecast using last smoothed value
-            last_smoothed = smoothed_values[-1]
-            forecast_values = [last_smoothed] * periods
-
-            return {
-                'method': 'Exponential Smoothing (Manual)',
-                'forecast_values': [self.to_decimal(x) for x in forecast_values],
-                'alpha': self.to_decimal(alpha),
-                'description': 'Manual exponential smoothing implementation'
-            }
-
-    def _moving_average_forecast(self, data: pd.Series, periods: int, window: int = None) -> Dict[str, Any]:
-        """Moving average forecast"""
-
-        if window is None:
-            window = min(12, len(data) // 4)  # Default to 1/4 of data length, max 12
-
-        window = max(1, min(window, len(data)))  # Ensure valid window size
-
-        # Calculate moving average
-        ma_values = data.rolling(window=window).mean()
-        last_ma = ma_values.iloc[-1]
-
-        # Forecast using last moving average
-        forecast_values = [last_ma] * periods
-
-        return {
-            'method': f'Moving Average ({window} periods)',
-            'forecast_values': [self.to_decimal(x) for x in forecast_values],
-            'window_size': window,
-            'description': f'{window}-period moving average'
-        }
-
-    def _evaluate_forecasting_methods(self, data: pd.Series, forecast_periods: int,
-                                      methods: List[str]) -> Dict[str, Any]:
-        """Evaluate forecasting methods using holdout sample"""
-
-        # Split data for evaluation
-        train_size = len(data) - forecast_periods
-        train_data = data.iloc[:train_size]
-        test_data = data.iloc[train_size:]
-
-        evaluation_results = {}
-
-        for method in methods:
-            try:
-                # Generate forecast on training data
-                if method == 'naive':
-                    forecast = self._naive_forecast(train_data, forecast_periods)
-                elif method == 'mean':
-                    forecast = self._mean_forecast(train_data, forecast_periods)
-                elif method == 'linear_trend':
-                    forecast = self._linear_trend_forecast(train_data, forecast_periods)
-                elif method == 'exponential_smoothing':
-                    forecast = self._exponential_smoothing_forecast(train_data, forecast_periods)
-                elif method == 'moving_average':
-                    forecast = self._moving_average_forecast(train_data, forecast_periods)
+            # Infer frequency for decomposition
+            freq = pd.infer_freq(data.index)
+            if freq is None:
+                # Try to infer period based on data length
+                if len(data) >= 365:
+                    period = 365  # Daily data, yearly seasonality
+                elif len(data) >= 52:
+                    period = 52  # Weekly data, yearly seasonality
+                elif len(data) >= 12:
+                    period = 12  # Monthly data, yearly seasonality
                 else:
-                    continue
+                    period = 4  # Quarterly data
+            else:
+                period = None
 
-                if 'error' in forecast:
-                    continue
+            decomposition = seasonal_decompose(data, model='additive', period=period)
 
-                # Calculate forecast errors
-                forecast_values = [float(x) for x in forecast['forecast_values']]
-                actual_values = test_data.values
+            # Calculate seasonality strength
+            seasonal_var = np.var(decomposition.seasonal.dropna())
+            residual_var = np.var(decomposition.resid.dropna())
+            seasonality_strength = seasonal_var / (seasonal_var + residual_var)
 
-                # Ensure same length
-                min_length = min(len(forecast_values), len(actual_values))
-                forecast_values = forecast_values[:min_length]
-                actual_values = actual_values[:min_length]
-
-                if min_length == 0:
-                    continue
-
-                # Calculate error metrics
-                mae = np.mean(np.abs(np.array(actual_values) - np.array(forecast_values)))
-                mse = np.mean((np.array(actual_values) - np.array(forecast_values)) ** 2)
-                rmse = np.sqrt(mse)
-
-                # Mean Absolute Percentage Error
-                mape = np.mean(
-                    np.abs((np.array(actual_values) - np.array(forecast_values)) / np.array(actual_values))) * 100
-
-                evaluation_results[method] = {
-                    'mae': self.to_decimal(mae),
-                    'mse': self.to_decimal(mse),
-                    'rmse': self.to_decimal(rmse),
-                    'mape': self.to_decimal(mape)
+            return {
+                'seasonality_detected': seasonality_strength > 0.1,
+                'seasonality_strength': self.to_decimal(seasonality_strength),
+                'seasonal_period': period,
+                'components_variance': {
+                    'trend': self.to_decimal(np.var(decomposition.trend.dropna())),
+                    'seasonal': self.to_decimal(seasonal_var),
+                    'residual': self.to_decimal(residual_var)
                 }
-
-            except Exception as e:
-                logger.error(f"Error evaluating {method}: {e}")
-                evaluation_results[method] = {'error': str(e)}
-
-        # Find best method based on RMSE
-        if evaluation_results:
-            best_method = min(evaluation_results.keys(),
-                              key=lambda k: evaluation_results[k].get('rmse', float('inf'))
-                              if 'error' not in evaluation_results[k] else float('inf'))
-
-            return {
-                'method_performance': evaluation_results,
-                'best_method': best_method,
-                'evaluation_period': forecast_periods
             }
-
-        return {'error': 'Could not evaluate any methods'}
-
-    def arima_forecast(self, data: pd.Series, forecast_periods: int = 12,
-                       order: Tuple[int, int, int] = None,
-                       auto_arima: bool = True) -> Dict[str, Any]:
-        """ARIMA forecasting"""
-
-        if data.empty:
-            raise ValidationError("Empty time series provided")
-
-        clean_data = data.dropna()
-        if len(clean_data) < 20:
-            raise ValidationError("Insufficient data for ARIMA modeling (need at least 20 observations)")
-
-        try:
-            from statsmodels.tsa.arima.model import ARIMA
-
-            if auto_arima and order is None:
-                # Simple auto-ARIMA using AIC
-                best_aic = float('inf')
-                best_order = (1, 1, 1)
-
-                # Try different combinations
-                for p in range(0, 4):
-                    for d in range(0, 2):
-                        for q in range(0, 4):
-                            try:
-                                model = ARIMA(clean_data, order=(p, d, q))
-                                fitted_model = model.fit()
-                                if fitted_model.aic < best_aic:
-                                    best_aic = fitted_model.aic
-                                    best_order = (p, d, q)
-                            except:
-                                continue
-
-                order = best_order
-            elif order is None:
-                order = (1, 1, 1)  # Default ARIMA(1,1,1)
-
-            # Fit ARIMA model
-            model = ARIMA(clean_data, order=order)
-            fitted_model = model.fit()
-
-            # Generate forecasts
-            forecast_result = fitted_model.forecast(steps=forecast_periods)
-            confidence_intervals = fitted_model.get_forecast(steps=forecast_periods).conf_int()
-
-            return {
-                'method': f'ARIMA{order}',
-                'forecast_values': [self.to_decimal(x) for x in forecast_result],
-                'confidence_intervals': {
-                    'lower': [self.to_decimal(x) for x in confidence_intervals.iloc[:, 0]],
-                    'upper': [self.to_decimal(x) for x in confidence_intervals.iloc[:, 1]]
-                },
-                'model_order': order,
-                'aic': self.to_decimal(fitted_model.aic),
-                'bic': self.to_decimal(fitted_model.bic),
-                'log_likelihood': self.to_decimal(fitted_model.llf),
-                'description': f'ARIMA({order[0]},{order[1]},{order[2]}) model'
-            }
-
-        except ImportError:
-            raise DataError("statsmodels package required for ARIMA forecasting")
         except Exception as e:
-            raise CalculationError(f"ARIMA forecasting failed: {e}")
+            logger.warning(f"Could not perform seasonality analysis: {e}")
+            return {'error': 'Could not perform seasonality analysis'}
 
-    def calculate(self, forecast_type: str, **kwargs) -> Dict[str, Any]:
-        """Main forecasting dispatcher"""
+    def calculate(self, analysis_type: str, **kwargs) -> Dict[str, Any]:
+        """Main statistical analysis dispatcher"""
 
-        forecasts = {
-            'simple_methods': lambda: self.simple_forecasting_methods(
-                kwargs['data'], kwargs.get('forecast_periods', 12),
-                kwargs.get('methods')
+        analyses = {
+            'descriptive_statistics': lambda: self.descriptive_statistics(
+                kwargs['data'], kwargs.get('confidence_level', 0.95)
             ),
-            'arima': lambda: self.arima_forecast(
-                kwargs['data'], kwargs.get('forecast_periods', 12),
-                kwargs.get('order'), kwargs.get('auto_arima', True)
-            )
+            'correlation_analysis': lambda: self.correlation_analysis(
+                kwargs['data'], kwargs.get('method', 'pearson')
+            ),
+            'hypothesis_testing': lambda: self.hypothesis_testing(
+                kwargs['data1'], kwargs.get('data2'), kwargs.get('test_type', 'one_sample_t'),
+                kwargs.get('alternative', 'two-sided'), kwargs.get('alpha', 0.05),
+                kwargs.get('null_value', 0)
+            ),
+            'time_series_analysis': lambda: self.time_series_analysis(kwargs['data'])
         }
 
-        if forecast_type not in forecasts:
-            raise ValidationError(f"Unknown forecast type: {forecast_type}")
+        if analysis_type not in analyses:
+            raise ValidationError(f"Unknown analysis type: {analysis_type}")
 
-        result = forecasts[forecast_type]()
+        result = analyses[analysis_type]()
         result['metadata'] = self.get_metadata()
-        result['forecast_type'] = forecast_type
+        result['analysis_type'] = analysis_type
 
         return result
 
@@ -1174,96 +1021,6 @@ class ScenarioAnalyzer(EconomicsBase):
 
         return result
 
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-
-        # Calculate trend strength
-        trend_strength = abs(r_value)
-
-        return {
-            'linear_trend': {
-                'slope': self.to_decimal(slope),
-                'intercept': self.to_decimal(intercept),
-                'r_squared': self.to_decimal(r_value ** 2),
-                'p_value': self.to_decimal(p_value),
-                'standard_error': self.to_decimal(std_err)
-            },
-            'trend_direction': 'Increasing' if slope > 0 else 'Decreasing' if slope < 0 else 'Flat',
-            'trend_strength': self.to_decimal(trend_strength),
-            'trend_significance': p_value < 0.05
-        }
-
-    def _analyze_seasonality(self, data: pd.Series) -> Dict[str, Any]:
-        """Analyze seasonality in time series"""
-
-        if len(data) < 24:  # Need at least 2 years of monthly data
-            return {'error': 'Insufficient data for seasonality analysis'}
-
-        try:
-            from statsmodels.tsa.seasonal import seasonal_decompose
-
-            # Infer frequency for decomposition
-            freq = pd.infer_freq(data.index)
-            if freq is None:
-                # Try to infer period based on data length
-                if len(data) >= 365:
-                    period = 365  # Daily data, yearly seasonality
-                elif len(data) >= 52:
-                    period = 52  # Weekly data, yearly seasonality
-                elif len(data) >= 12:
-                    period = 12  # Monthly data, yearly seasonality
-                else:
-                    period = 4  # Quarterly data
-            else:
-                period = None
-
-            decomposition = seasonal_decompose(data, model='additive', period=period)
-
-            # Calculate seasonality strength
-            seasonal_var = np.var(decomposition.seasonal.dropna())
-            residual_var = np.var(decomposition.resid.dropna())
-            seasonality_strength = seasonal_var / (seasonal_var + residual_var)
-
-            return {
-                'seasonality_detected': seasonality_strength > 0.1,
-                'seasonality_strength': self.to_decimal(seasonality_strength),
-                'seasonal_period': period,
-                'components_variance': {
-                    'trend': self.to_decimal(np.var(decomposition.trend.dropna())),
-                    'seasonal': self.to_decimal(seasonal_var),
-                    'residual': self.to_decimal(residual_var)
-                }
-            }
-        except Exception as e:
-            logger.warning(f"Could not perform seasonality analysis: {e}")
-            return {'error': 'Could not perform seasonality analysis'}
-
-    def calculate(self, analysis_type: str, **kwargs) -> Dict[str, Any]:
-        """Main statistical analysis dispatcher"""
-
-        analyses = {
-            'descriptive_statistics': lambda: self.descriptive_statistics(
-                kwargs['data'], kwargs.get('confidence_level', 0.95)
-            ),
-            'correlation_analysis': lambda: self.correlation_analysis(
-                kwargs['data'], kwargs.get('method', 'pearson')
-            ),
-            'hypothesis_testing': lambda: self.hypothesis_testing(
-                kwargs['data1'], kwargs.get('data2'), kwargs.get('test_type', 'one_sample_t'),
-                kwargs.get('alternative', 'two-sided'), kwargs.get('alpha', 0.05),
-                kwargs.get('null_value', 0)
-            ),
-            'time_series_analysis': lambda: self.time_series_analysis(kwargs['data'])
-        }
-
-        if analysis_type not in analyses:
-            raise ValidationError(f"Unknown analysis type: {analysis_type}")
-
-        result = analyses[analysis_type]()
-        result['metadata'] = self.get_metadata()
-        result['analysis_type'] = analysis_type
-
-        return result
-
 
 class ForecastingEngine(EconomicsBase):
     """Economic forecasting using various methods"""
@@ -1350,3 +1107,246 @@ class ForecastingEngine(EconomicsBase):
 
         x = np.arange(len(data))
         y = data.values
+
+        # Fit linear regression
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+
+        # Generate forecasts
+        forecast_x = np.arange(len(data), len(data) + periods)
+        forecast_values = slope * forecast_x + intercept
+
+        return {
+            'method': 'Linear Trend',
+            'forecast_values': [self.to_decimal(x) for x in forecast_values],
+            'slope': self.to_decimal(slope),
+            'intercept': self.to_decimal(intercept),
+            'r_squared': self.to_decimal(r_value ** 2),
+            'description': 'Linear trend extrapolation'
+        }
+
+    def _exponential_smoothing_forecast(self, data: pd.Series, periods: int) -> Dict[str, Any]:
+        """Simple exponential smoothing"""
+
+        try:
+            from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+            # Fit exponential smoothing model
+            model = ExponentialSmoothing(data.values, trend=None, seasonal=None)
+            fitted_model = model.fit()
+
+            # Generate forecasts
+            forecast_values = fitted_model.forecast(periods)
+
+            return {
+                'method': 'Exponential Smoothing',
+                'forecast_values': [self.to_decimal(x) for x in forecast_values],
+                'alpha': self.to_decimal(fitted_model.params['smoothing_level']),
+                'description': 'Simple exponential smoothing'
+            }
+        except Exception as e:
+            # Fallback to manual exponential smoothing
+            alpha = 0.3  # Default smoothing parameter
+
+            # Initialize with first observation
+            smoothed_values = [data.iloc[0]]
+
+            # Calculate smoothed values
+            for i in range(1, len(data)):
+                smoothed_value = alpha * data.iloc[i] + (1 - alpha) * smoothed_values[-1]
+                smoothed_values.append(smoothed_value)
+
+            # Forecast using last smoothed value
+            last_smoothed = smoothed_values[-1]
+            forecast_values = [last_smoothed] * periods
+
+            return {
+                'method': 'Exponential Smoothing (Manual)',
+                'forecast_values': [self.to_decimal(x) for x in forecast_values],
+                'alpha': self.to_decimal(alpha),
+                'description': 'Manual exponential smoothing implementation'
+            }
+
+    def _moving_average_forecast(self, data: pd.Series, periods: int, window: int = None) -> Dict[str, Any]:
+        """Moving average forecast"""
+
+        if window is None:
+            window = min(12, len(data) // 4)  # Default to 1/4 of data length, max 12
+
+        window = max(1, min(window, len(data)))  # Ensure valid window size
+
+        # Calculate moving average
+        ma_values = data.rolling(window=window).mean()
+        last_ma = ma_values.iloc[-1]
+
+        # Forecast using last moving average
+        forecast_values = [last_ma] * periods
+
+        return {
+            'method': f'Moving Average ({window} periods)',
+            'forecast_values': [self.to_decimal(x) for x in forecast_values],
+            'window_size': window,
+            'description': f'{window}-period moving average'
+        }
+
+    def _evaluate_forecasting_methods(self, data: pd.Series, forecast_periods: int,
+                                      methods: List[str]) -> Dict[str, Any]:
+        """Evaluate forecasting methods using holdout sample"""
+
+        # Split data for evaluation
+        train_size = len(data) - forecast_periods
+        train_data = data.iloc[:train_size]
+        test_data = data.iloc[train_size:]
+
+        evaluation_results = {}
+
+        for method in methods:
+            try:
+                # Generate forecast on training data
+                if method == 'naive':
+                    forecast = self._naive_forecast(train_data, forecast_periods)
+                elif method == 'mean':
+                    forecast = self._mean_forecast(train_data, forecast_periods)
+                elif method == 'linear_trend':
+                    forecast = self._linear_trend_forecast(train_data, forecast_periods)
+                elif method == 'exponential_smoothing':
+                    forecast = self._exponential_smoothing_forecast(train_data, forecast_periods)
+                elif method == 'moving_average':
+                    forecast = self._moving_average_forecast(train_data, forecast_periods)
+                else:
+                    continue
+
+                if 'error' in forecast:
+                    continue
+
+                # Calculate forecast errors
+                forecast_values = [float(x) for x in forecast['forecast_values']]
+                actual_values = test_data.values
+
+                # Ensure same length
+                min_length = min(len(forecast_values), len(actual_values))
+                forecast_values = forecast_values[:min_length]
+                actual_values = actual_values[:min_length]
+
+                if min_length == 0:
+                    continue
+
+                # Calculate error metrics
+                mae = np.mean(np.abs(np.array(actual_values) - np.array(forecast_values)))
+                mse = np.mean((np.array(actual_values) - np.array(forecast_values)) ** 2)
+                rmse = np.sqrt(mse)
+
+                # Mean Absolute Percentage Error
+                mape = np.mean(
+                    np.abs((np.array(actual_values) - np.array(forecast_values)) / np.array(actual_values))) * 100
+
+                evaluation_results[method] = {
+                    'mae': self.to_decimal(mae),
+                    'mse': self.to_decimal(mse),
+                    'rmse': self.to_decimal(rmse),
+                    'mape': self.to_decimal(mape)
+                }
+
+            except Exception as e:
+                logger.error(f"Error evaluating {method}: {e}")
+                evaluation_results[method] = {'error': str(e)}
+
+        # Find best method based on RMSE
+        if evaluation_results:
+            best_method = min(evaluation_results.keys(),
+                              key=lambda k: evaluation_results[k].get('rmse', float('inf'))
+                              if 'error' not in evaluation_results[k] else float('inf'))
+
+            return {
+                'method_performance': evaluation_results,
+                'best_method': best_method,
+                'evaluation_period': forecast_periods
+            }
+
+        return {'error': 'Could not evaluate any methods'}
+
+    def arima_forecast(self, data: pd.Series, forecast_periods: int = 12,
+                       order: Tuple[int, int, int] = None,
+                       auto_arima: bool = True) -> Dict[str, Any]:
+        """ARIMA forecasting"""
+
+        if data.empty:
+            raise ValidationError("Empty time series provided")
+
+        clean_data = data.dropna()
+        if len(clean_data) < 20:
+            raise ValidationError("Insufficient data for ARIMA modeling (need at least 20 observations)")
+
+        try:
+            from statsmodels.tsa.arima.model import ARIMA
+
+            if auto_arima and order is None:
+                # Simple auto-ARIMA using AIC
+                best_aic = float('inf')
+                best_order = (1, 1, 1)
+
+                # Try different combinations
+                for p in range(0, 4):
+                    for d in range(0, 2):
+                        for q in range(0, 4):
+                            try:
+                                model = ARIMA(clean_data, order=(p, d, q))
+                                fitted_model = model.fit()
+                                if fitted_model.aic < best_aic:
+                                    best_aic = fitted_model.aic
+                                    best_order = (p, d, q)
+                            except:
+                                continue
+
+                order = best_order
+            elif order is None:
+                order = (1, 1, 1)  # Default ARIMA(1,1,1)
+
+            # Fit ARIMA model
+            model = ARIMA(clean_data, order=order)
+            fitted_model = model.fit()
+
+            # Generate forecasts
+            forecast_result = fitted_model.forecast(steps=forecast_periods)
+            confidence_intervals = fitted_model.get_forecast(steps=forecast_periods).conf_int()
+
+            return {
+                'method': f'ARIMA{order}',
+                'forecast_values': [self.to_decimal(x) for x in forecast_result],
+                'confidence_intervals': {
+                    'lower': [self.to_decimal(x) for x in confidence_intervals.iloc[:, 0]],
+                    'upper': [self.to_decimal(x) for x in confidence_intervals.iloc[:, 1]]
+                },
+                'model_order': order,
+                'aic': self.to_decimal(fitted_model.aic),
+                'bic': self.to_decimal(fitted_model.bic),
+                'log_likelihood': self.to_decimal(fitted_model.llf),
+                'description': f'ARIMA({order[0]},{order[1]},{order[2]}) model'
+            }
+
+        except ImportError:
+            raise DataError("statsmodels package required for ARIMA forecasting")
+        except Exception as e:
+            raise CalculationError(f"ARIMA forecasting failed: {e}")
+
+    def calculate(self, forecast_type: str, **kwargs) -> Dict[str, Any]:
+        """Main forecasting dispatcher"""
+
+        forecasts = {
+            'simple_methods': lambda: self.simple_forecasting_methods(
+                kwargs['data'], kwargs.get('forecast_periods', 12),
+                kwargs.get('methods')
+            ),
+            'arima': lambda: self.arima_forecast(
+                kwargs['data'], kwargs.get('forecast_periods', 12),
+                kwargs.get('order'), kwargs.get('auto_arima', True)
+            )
+        }
+
+        if forecast_type not in forecasts:
+            raise ValidationError(f"Unknown forecast type: {forecast_type}")
+
+        result = forecasts[forecast_type]()
+        result['metadata'] = self.get_metadata()
+        result['forecast_type'] = forecast_type
+
+        return result

@@ -373,19 +373,6 @@ class PolymarketInfo(BaseModel):
 CompetitionConfig.model_rebuild()
 
 
-class PolymarketPosition(BaseModel):
-    """Position in a Polymarket prediction market."""
-
-    market_id: str = Field(..., description="Market ID")
-    market_question: str = Field(..., description="Market question for display")
-    outcome_index: int = Field(..., description="Outcome index (0=Yes, 1=No, etc.)")
-    outcome_name: str = Field(..., description="Outcome name")
-    shares: float = Field(..., description="Number of shares held")
-    entry_price: float = Field(..., description="Average entry price")
-    current_price: float = Field(0.0, description="Current price")
-    unrealized_pnl: float = Field(0.0, description="Unrealized P&L")
-
-
 class PolymarketDecision(BaseModel):
     """Trading decision for a Polymarket prediction market."""
 

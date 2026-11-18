@@ -380,7 +380,7 @@ def main() -> None:
             result = wrapper.get_overview()
         elif cmd in ("available", "catalogue"):
             result = wrapper.available_series()
-        elif cmd in ("list", "list_all"):
+        elif cmd == "list":
             result = wrapper.list_all_series()
         else:
             result = {"error": f"Unknown command: {cmd}", "commands": COMMANDS}

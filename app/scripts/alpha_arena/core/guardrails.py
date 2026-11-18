@@ -5,7 +5,7 @@ Input/output validation for trading decisions.
 """
 
 import re
-from typing import Dict, List, Optional, Any
+from typing import List, Optional, Any
 from pydantic import BaseModel, Field
 
 from alpha_arena.types.models import ModelDecision, TradeAction
@@ -260,138 +260,6 @@ class TradingGuardrails:
                 passed=False,
                 violations=[f"Invalid JSON: {str(e)}"],
             )
-
-
-class InputGuardrails:
-    """
-    Guardrails for user input validation.
-
-    Validates:
-    - PII detection
-    - Injection prevention
-    - Content moderation
-    """
-
-    PII_PATTERNS = [
-        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email
-        r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Phone
-        r'\b\d{3}[-]?\d{2}[-]?\d{4}\b',  # SSN
-        r'\b(?:\d{4}[-\s]?){3}\d{4}\b',  # Credit card
-    ]
-
-    def __init__(
-        self,
-        check_pii: bool = True,
-        check_injection: bool = True,
-        max_input_length: int = 10000,
-    ):
-        self.check_pii = check_pii
-        self.check_injection = check_injection
-        self.max_input_length = max_input_length
-
-    def check_input(self, text: str, context: Optional[Dict] = None) -> GuardrailResult:
-        """
-        Check user input against guardrails.
-
-        Args:
-            text: Input text to check
-            context: Optional context dictionary
-
-        Returns:
-            GuardrailResult with check status
-        """
-        violations = []
-        warnings = []
-        sanitized = text
-
-        # Length check
-        if len(text) > self.max_input_length:
-            violations.append(f"Input exceeds max length ({self.max_input_length})")
-            sanitized = text[:self.max_input_length]
-
-        # PII check
-        if self.check_pii:
-            for pattern in self.PII_PATTERNS:
-                if re.search(pattern, text, re.IGNORECASE):
-                    warnings.append("Potential PII detected - consider removing")
-                    # Redact PII
-                    sanitized = re.sub(pattern, "[REDACTED]", sanitized, flags=re.IGNORECASE)
-
-        # Injection check
-        if self.check_injection:
-            injection_patterns = [
-                r'<script[^>]*>',
-                r'javascript:',
-                r'on\w+\s*=',
-                r'\{\{.*\}\}',  # Template injection
-                r'\$\{.*\}',    # Variable injection
-            ]
-            for pattern in injection_patterns:
-                if re.search(pattern, text, re.IGNORECASE):
-                    warnings.append("Potential injection pattern detected")
-                    sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
-
-        return GuardrailResult(
-            passed=len(violations) == 0,
-            violations=violations,
-            warnings=warnings,
-            modified_value=sanitized if sanitized != text else None,
-        )
-
-
-class OutputGuardrails:
-    """
-    Guardrails for agent output validation.
-
-    Validates:
-    - Financial advice disclaimers
-    - Confidence calibration
-    - Source attribution
-    """
-
-    def __init__(
-        self,
-        require_disclaimer: bool = True,
-        max_output_length: int = 50000,
-    ):
-        self.require_disclaimer = require_disclaimer
-        self.max_output_length = max_output_length
-
-    def check_output(self, output: Dict[str, Any]) -> GuardrailResult:
-        """
-        Check agent output against guardrails.
-
-        Args:
-            output: Output dictionary to check
-
-        Returns:
-            GuardrailResult with check status
-        """
-        violations = []
-        warnings = []
-
-        # Check for financial advice disclaimer
-        if self.require_disclaimer:
-            reasoning = output.get("reasoning", "")
-            if any(phrase in reasoning.lower() for phrase in [
-                "financial advice",
-                "investment advice",
-                "should buy",
-                "should sell",
-                "guaranteed",
-            ]):
-                warnings.append("Output may contain financial advice - consider adding disclaimer")
-
-        # Check output length
-        output_str = str(output)
-        if len(output_str) > self.max_output_length:
-            violations.append(f"Output exceeds max length ({self.max_output_length})")
-
-        return GuardrailResult(
-            passed=len(violations) == 0,
-            violations=violations,
-            warnings=warnings,
-        )
 
 
 # Factory function for default guardrails

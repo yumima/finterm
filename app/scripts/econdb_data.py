@@ -455,8 +455,6 @@ def main():
                 "indicator <symbol> <country> [start_date] [end_date] [transform]",
                 "profile <country> [latest]",
                 "main <country> [start_date] [end_date] [frequency] [transform]",
-                "list-indicators",
-                "list-countries"
             ]
         }))
         sys.exit(1)
@@ -502,14 +500,6 @@ def main():
             transform = sys.argv[6] if len(sys.argv) > 6 else "toya"
 
             result = asyncio.run(get_main_indicators(country, start_date, end_date, frequency, transform))
-            print(json.dumps(result, indent=2))
-
-        elif command == "list-indicators":
-            result = asyncio.run(list_indicators())
-            print(json.dumps(result, indent=2))
-
-        elif command == "list-countries":
-            result = asyncio.run(list_countries())
             print(json.dumps(result, indent=2))
 
         else:

@@ -1,40 +1,13 @@
 """
-Agno Trading Agent System
-==========================
+Agno trading tools.
 
-A comprehensive AI trading agent framework powered by Agno.
-Supports multiple LLM providers, trading strategies, and market analysis.
+What is left of the upstream "Agno Trading Agent System" is the one part
+anything uses: tools/technical_indicators.py, which Alpha Arena reads for
+its agents' technical features (core/features_pipeline.py) and hands to
+an Agno agent as tools when an agent card enables them (core/base_agent.py).
 
-Architecture:
-- core/: Base classes and agent management
-- agents/: Specialized trading agents (analyst, trader, risk manager, etc.)
-- tools/: Market data, technical analysis, order execution tools
-- knowledge/: Market research, historical data, documentation
-- utils/: Helper functions and utilities
-- config/: Configuration management
-
-Author: finterm
-Version: 1.0.0
+This file imports nothing on purpose. It used to import modules that were
+never committed (core.team_orchestrator, agents.*), so every
+`import agno_trading.<anything>` raised ImportError, and Alpha Arena
+silently ran with empty technical features.
 """
-
-__version__ = "1.0.0"
-
-from .core.agent_manager import AgentManager
-from .core.team_orchestrator import TeamOrchestrator
-from .agents import (
-    MarketAnalystAgent,
-    TradingStrategyAgent,
-    RiskManagerAgent,
-    PortfolioManagerAgent,
-    SentimentAnalystAgent
-)
-
-__all__ = [
-    "AgentManager",
-    "TeamOrchestrator",
-    "MarketAnalystAgent",
-    "TradingStrategyAgent",
-    "RiskManagerAgent",
-    "PortfolioManagerAgent",
-    "SentimentAnalystAgent"
-]

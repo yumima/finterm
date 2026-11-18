@@ -145,88 +145,6 @@ class BEAWrapper:
 
     # ==================== METADATA ENDPOINTS ====================
 
-    def get_dataset_list(self) -> Dict[str, Any]:
-        """Get list of all available datasets"""
-        try:
-            result = self._make_request('GetDatasetList', {})
-
-            if result.get("success"):
-                # Add descriptions for major datasets
-                dataset_descriptions = {
-                    "NIPA": "National Income and Product Accounts",
-                    "NIUnderlyingDetail": "NIPA Underlying Detail",
-                    "FixedAssets": "Fixed Assets",
-                    "MNE": "Multinational Enterprises",
-                    "GDPbyIndustry": "GDP by Industry",
-                    "ITA": "International Transactions",
-                    "IIP": "International Investment Position",
-                    "InputOutput": "Input-Output Accounts",
-                    "UnderlyingGDPbyIndustry": "GDP by Industry - Underlying Detail",
-                    "IntlServTrade": "International Services Trade",
-                    "Regional": "Regional Economic Accounts"
-                }
-
-                # Enhance dataset information
-                for dataset in result.get("data", []):
-                    dataset_name = dataset.get("DatasetName", "")
-                    if dataset_name in dataset_descriptions:
-                        dataset["Description"] = dataset_descriptions[dataset_name]
-
-            return result
-
-        except Exception as e:
-            return BEAError('GetDatasetList', str(e)).to_dict()
-
-    def get_parameter_list(self, dataset_name: str) -> Dict[str, Any]:
-        """Get list of parameters for a specific dataset"""
-        try:
-            if not dataset_name:
-                return BEAError('GetParameterList', 'DatasetName is required').to_dict()
-
-            params = {'DatasetName': dataset_name}
-            result = self._make_request('GetParameterList', params)
-
-            return result
-
-        except Exception as e:
-            return BEAError('GetParameterList', str(e)).to_dict()
-
-    def get_parameter_values(self, dataset_name: str, parameter_name: str) -> Dict[str, Any]:
-        """Get all possible values for a specific parameter"""
-        try:
-            if not dataset_name or not parameter_name:
-                return BEAError('GetParameterValues', 'DatasetName and ParameterName are required').to_dict()
-
-            params = {
-                'DatasetName': dataset_name,
-                'ParameterName': parameter_name
-            }
-            result = self._make_request('GetParameterValues', params)
-
-            return result
-
-        except Exception as e:
-            return BEAError('GetParameterValues', str(e)).to_dict()
-
-    def get_parameter_values_filtered(self, dataset_name: str, parameter_name: str,
-                                    target_parameter: str) -> Dict[str, Any]:
-        """Get filtered parameter values based on another parameter"""
-        try:
-            if not dataset_name or not parameter_name or not target_parameter:
-                return BEAError('GetParameterValuesFiltered', 'DatasetName, ParameterName, and TargetParameter are required').to_dict()
-
-            params = {
-                'DatasetName': dataset_name,
-                'ParameterName': parameter_name,
-                'TargetParameter': target_parameter
-            }
-            result = self._make_request('GetParameterValuesFiltered', params)
-
-            return result
-
-        except Exception as e:
-            return BEAError('GetParameterValuesFiltered', str(e)).to_dict()
-
     # ==================== DATA RETRIEVAL ENDPOINTS ====================
 
     def get_nipa_data(self, table_name: str, frequency: str = 'A', year: str = None,
@@ -255,87 +173,6 @@ class BEAWrapper:
 
         except Exception as e:
             return BEAError('NIPA', str(e)).to_dict()
-
-    def get_ni_underlying_detail(self, table_name: str, frequency: str = 'A',
-                                year: str = None) -> Dict[str, Any]:
-        """Get NIPA Underlying Detail data"""
-        try:
-            if not table_name:
-                return BEAError('NIUnderlyingDetail', 'TableName is required').to_dict()
-
-            params = {
-                'DatasetName': 'NIUnderlyingDetail',
-                'TableName': table_name,
-                'Frequency': frequency
-            }
-
-            if year:
-                params['Year'] = year
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('NIUnderlyingDetail', str(e)).to_dict()
-
-    def get_fixed_assets(self, table_name: str, year: str = None) -> Dict[str, Any]:
-        """Get Fixed Assets data"""
-        try:
-            if not table_name:
-                return BEAError('FixedAssets', 'TableName is required').to_dict()
-
-            params = {'DatasetName': 'FixedAssets', 'TableName': table_name}
-
-            if year:
-                params['Year'] = year
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('FixedAssets', str(e)).to_dict()
-
-    def get_mne_data(self, series_id: str = None, direction: str = 'Outward',
-                    classification: str = 'Country', year: str = None,
-                    country: str = None, industry: str = None,
-                    state: str = None, ownership_level: str = None,
-                    nonbank_affiliates_only: str = None,
-                    get_footnotes: str = 'No') -> Dict[str, Any]:
-        """Get Multinational Enterprises data"""
-        try:
-            params = {'DatasetName': 'MNE'}
-
-            # Required parameters
-            if direction:
-                params['DirectionOfInvestment'] = direction
-            else:
-                return BEAError('MNE', 'DirectionOfInvestment is required').to_dict()
-
-            # Optional parameters
-            if series_id:
-                params['SeriesID'] = series_id
-            if classification:
-                params['Classification'] = classification
-            if year:
-                params['Year'] = year
-            if country:
-                params['Country'] = country
-            if industry:
-                params['Industry'] = industry
-            if state:
-                params['State'] = state
-            if ownership_level:
-                params['OwnershipLevel'] = ownership_level
-            if nonbank_affiliates_only:
-                params['NonBankAffiliatesOnly'] = nonbank_affiliates_only
-            if get_footnotes:
-                params['GetFootnotes'] = get_footnotes
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('MNE', str(e)).to_dict()
 
     def get_gdp_by_industry(self, table_id: str, year: str = None,
                            frequency: str = 'A', industry: str = 'ALL') -> Dict[str, Any]:
@@ -377,92 +214,6 @@ class BEAWrapper:
 
         except Exception as e:
             return BEAError('ITA', str(e)).to_dict()
-
-    def get_international_investment_position(self, type_of_investment: str = None,
-                                            component: str = None, frequency: str = 'A',
-                                            year: str = None) -> Dict[str, Any]:
-        """Get International Investment Position data"""
-        try:
-            params = {
-                'DatasetName': 'IIP',
-                'Frequency': frequency,
-                'Year': year
-            }
-
-            if type_of_investment:
-                params['TypeOfInvestment'] = type_of_investment
-            if component:
-                params['Component'] = component
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('IIP', str(e)).to_dict()
-
-    def get_input_output(self, table_id: str, year: str = None) -> Dict[str, Any]:
-        """Get Input-Output Accounts data"""
-        try:
-            if not table_id:
-                return BEAError('InputOutput', 'TableID is required').to_dict()
-
-            params = {'DatasetName': 'InputOutput', 'TableID': table_id}
-
-            if year:
-                params['Year'] = year
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('InputOutput', str(e)).to_dict()
-
-    def get_underlying_gdp_by_industry(self, table_id: str, year: str = None,
-                                    frequency: str = 'A', industry: str = 'ALL') -> Dict[str, Any]:
-        """Get GDP by Industry - Underlying Detail data"""
-        try:
-            if not table_id:
-                return BEAError('UnderlyingGDPbyIndustry', 'TableID is required').to_dict()
-
-            params = {
-                'DatasetName': 'UnderlyingGDPbyIndustry',
-                'TableID': table_id,
-                'Frequency': frequency,
-                'Year': year,
-                'Industry': industry
-            }
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('UnderlyingGDPbyIndustry', str(e)).to_dict()
-
-    def get_international_services_trade(self, type_of_service: str = None,
-                                       trade_direction: str = None,
-                                       affiliation: str = None,
-                                       area_or_country: str = 'AllCountries',
-                                       year: str = None) -> Dict[str, Any]:
-        """Get International Services Trade data"""
-        try:
-            params = {
-                'DatasetName': 'IntlServTrade',
-                'AreaOrCountry': area_or_country,
-                'Year': year
-            }
-
-            if type_of_service:
-                params['TypeOfService'] = type_of_service
-            if trade_direction:
-                params['TradeDirection'] = trade_direction
-            if affiliation:
-                params['Affiliation'] = affiliation
-
-            result = self._make_request('GetData', params)
-            return result
-
-        except Exception as e:
-            return BEAError('IntlServTrade', str(e)).to_dict()
 
     def get_regional_data(self, table_name: str, line_code: str = 'ALL',
                          geo_fips: str = 'STATE', year: str = None) -> Dict[str, Any]:
@@ -532,50 +283,6 @@ class BEAWrapper:
         result["success"] = overall_success
         return result
 
-    def get_regional_snapshot(self, geo_fips: str = 'USA', year: str = None) -> Dict[str, Any]:
-        """Get comprehensive regional economic snapshot"""
-        result = {
-            "success": True,
-            "snapshot_type": "regional_snapshot",
-            "geo_fips": geo_fips,
-            "year": year or str(datetime.now().year),
-            "timestamp": int(datetime.now().timestamp()),
-            "datasets": {},
-            "failed_datasets": []
-        }
-
-        # Define regional datasets to include
-        regional_datasets = [
-            ('Personal Income', lambda: self.get_regional_data('SAINC1', '1', geo_fips, year)),
-            ('GDP by State', lambda: self.get_regional_data('SAGDP2N', '2', geo_fips, year)),
-            ('Real GDP', lambda: self.get_regional_data('SAGDP9N', '2', geo_fips, year))
-        ]
-
-        overall_success = False
-
-        for dataset_name, dataset_func in regional_datasets:
-            try:
-                dataset_result = dataset_func()
-                result["datasets"][dataset_name] = dataset_result
-
-                if dataset_result.get("success"):
-                    overall_success = True
-                else:
-                    result["failed_datasets"].append({
-                        "dataset": dataset_name,
-                        "error": dataset_result.get("error", "Unknown error")
-                    })
-
-            except Exception as e:
-                result["failed_datasets"].append({
-                    "dataset": dataset_name,
-                    "error": str(e)
-                })
-
-        result["success"] = overall_success
-        return result
-
-
 def main(args=None):
     
     if args is None:
@@ -585,23 +292,8 @@ def main(args=None):
         print(json.dumps({
             "error": "Usage: python bea_data.py <command> <args>",
             "available_commands": [
-                "dataset_list",
-                "parameter_list <dataset_name>",
-                "parameter_values <dataset_name> <parameter_name>",
-                "parameter_values_filtered <dataset_name> <parameter_name> <target_parameter>",
-                "nipa <table_name> [frequency] [year]",
-                "ni_underlying <table_name> [frequency] [year]",
-                "fixed_assets <table_name> [year]",
-                "mne <direction> [classification] [year] [country] [industry] [state] [ownership_level] [nonbank_affiliates_only] [get_footnotes]",
-                "gdp_by_industry <table_id> [year] [frequency] [industry]",
-                "international_transactions [indicator] [area_or_country] [frequency] [year]",
-                "international_investment [type_of_investment] [component] [frequency] [year]",
-                "input_output <table_id> [year]",
-                "underlying_gdp_industry <table_id> [year] [frequency] [industry]",
-                "international_services [type_of_service] [trade_direction] [affiliation] [area_or_country] [year]",
                 "regional <table_name> [line_code] [geo_fips] [year]",
                 "economic_overview [year]",
-                "regional_snapshot [geo_fips] [year]"
             ]
         }))
         sys.exit(1)
@@ -710,148 +402,6 @@ def main(args=None):
             }))
             sys.exit(0)
 
-        elif command == "dataset_list":
-            result = wrapper.get_dataset_list()
-            print(json.dumps(result, indent=2))
-
-        elif command == "parameter_list":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py parameter_list <dataset_name>"}))
-                sys.exit(1)
-
-            dataset_name = args[1]
-            result = wrapper.get_parameter_list(dataset_name)
-            print(json.dumps(result, indent=2))
-
-        elif command == "parameter_values":
-            if len(args) + 1 < 4:
-                print(json.dumps({"error": "Usage: python bea_data.py parameter_values <dataset_name> <parameter_name>"}))
-                sys.exit(1)
-
-            dataset_name = args[1]
-            parameter_name = args[2]
-            result = wrapper.get_parameter_values(dataset_name, parameter_name)
-            print(json.dumps(result, indent=2))
-
-        elif command == "parameter_values_filtered":
-            if len(args) + 1 < 5:
-                print(json.dumps({"error": "Usage: python bea_data.py parameter_values_filtered <dataset_name> <parameter_name> <target_parameter>"}))
-                sys.exit(1)
-
-            dataset_name = args[1]
-            parameter_name = args[2]
-            target_parameter = args[3]
-            result = wrapper.get_parameter_values_filtered(dataset_name, parameter_name, target_parameter)
-            print(json.dumps(result, indent=2))
-
-        elif command == "nipa":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py nipa <table_name> [frequency] [year]"}))
-                sys.exit(1)
-
-            table_name = args[1]
-            frequency = args[2] if len(args) + 1 > 3 else 'A'
-            year = args[3] if len(args) + 1 > 4 else None
-            result = wrapper.get_nipa_data(table_name, frequency, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "ni_underlying":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py ni_underlying <table_name> [frequency] [year]"}))
-                sys.exit(1)
-
-            table_name = args[1]
-            frequency = args[2] if len(args) + 1 > 3 else 'A'
-            year = args[3] if len(args) + 1 > 4 else None
-            result = wrapper.get_ni_underlying_detail(table_name, frequency, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "fixed_assets":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py fixed_assets <table_name> [year]"}))
-                sys.exit(1)
-
-            table_name = args[1]
-            year = args[2] if len(args) + 1 > 3 else None
-            result = wrapper.get_fixed_assets(table_name, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "mne":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py mne <direction> [classification] [year] [country] [industry] [state] [ownership_level] [nonbank_affiliates_only] [get_footnotes]"}))
-                sys.exit(1)
-
-            direction = args[1]
-            classification = args[2] if len(args) + 1 > 3 else 'Country'
-            year = args[3] if len(args) + 1 > 4 else None
-            country = args[4] if len(args) + 1 > 5 else None
-            industry = sys.argv[6] if len(args) + 1 > 6 else None
-            state = sys.argv[7] if len(args) + 1 > 7 else None
-            ownership_level = sys.argv[8] if len(args) + 1 > 8 else None
-            nonbank_affiliates_only = sys.argv[9] if len(args) + 1 > 9 else None
-            get_footnotes = sys.argv[10] if len(args) + 1 > 10 else 'No'
-            result = wrapper.get_mne_data(None, direction, classification, year, country, industry, state, ownership_level, nonbank_affiliates_only, get_footnotes)
-            print(json.dumps(result, indent=2))
-
-        elif command == "gdp_by_industry":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py gdp_by_industry <table_id> [year] [frequency] [industry]"}))
-                sys.exit(1)
-
-            table_id = args[1]
-            year = args[2] if len(args) + 1 > 3 else None
-            frequency = args[3] if len(args) + 1 > 4 else 'A'
-            industry = args[4] if len(args) + 1 > 5 else 'ALL'
-            result = wrapper.get_gdp_by_industry(table_id, year, frequency, industry)
-            print(json.dumps(result, indent=2))
-
-        elif command == "international_transactions":
-            indicator = args[1] if len(args) + 1 > 2 else None
-            area_or_country = args[2] if len(args) + 1 > 3 else 'AllCountries'
-            frequency = args[3] if len(args) + 1 > 4 else 'A'
-            year = args[4] if len(args) + 1 > 5 else None
-            result = wrapper.get_international_transactions(indicator, area_or_country, frequency, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "international_investment":
-            type_of_investment = args[1] if len(args) + 1 > 2 else None
-            component = args[2] if len(args) + 1 > 3 else None
-            frequency = args[3] if len(args) + 1 > 4 else 'A'
-            year = args[4] if len(args) + 1 > 5 else None
-            result = wrapper.get_international_investment_position(type_of_investment, component, frequency, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "input_output":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py input_output <table_id> [year]"}))
-                sys.exit(1)
-
-            table_id = args[1]
-            year = args[2] if len(args) + 1 > 3 else None
-            result = wrapper.get_input_output(table_id, year)
-            print(json.dumps(result, indent=2))
-
-        elif command == "underlying_gdp_industry":
-            if len(args) + 1 < 3:
-                print(json.dumps({"error": "Usage: python bea_data.py underlying_gdp_industry <table_id> [year] [frequency] [industry]"}))
-                sys.exit(1)
-
-            table_id = args[1]
-            year = args[2] if len(args) + 1 > 3 else None
-            frequency = args[3] if len(args) + 1 > 4 else 'A'
-            industry = args[4] if len(args) + 1 > 5 else 'ALL'
-            result = wrapper.get_underlying_gdp_by_industry(table_id, year, frequency, industry)
-            print(json.dumps(result, indent=2))
-
-        elif command == "international_services":
-            type_of_service = args[1] if len(args) + 1 > 2 else None
-            trade_direction = args[2] if len(args) + 1 > 3 else None
-            affiliation = args[3] if len(args) + 1 > 4 else None
-            area_or_country = args[4] if len(args) + 1 > 5 else 'AllCountries'
-            year = sys.argv[6] if len(args) + 1 > 6 else None
-            result = wrapper.get_international_services_trade(type_of_service, trade_direction, affiliation, area_or_country, year)
-            print(json.dumps(result, indent=2))
-
         elif command == "regional":
             if len(args) + 1 < 3:
                 print(json.dumps({"error": "Usage: python bea_data.py regional <table_name> [line_code] [geo_fips] [year]"}))
@@ -869,33 +419,12 @@ def main(args=None):
             result = wrapper.get_economic_overview(year)
             print(json.dumps(result, indent=2))
 
-        elif command == "regional_snapshot":
-            geo_fips = args[1] if len(args) + 1 > 2 else 'USA'
-            year = args[2] if len(args) + 1 > 3 else None
-            result = wrapper.get_regional_snapshot(geo_fips, year)
-            print(json.dumps(result, indent=2))
-
         else:
             print(json.dumps({
                 "error": f"Unknown command: {command}",
                 "available_commands": [
-                    "dataset_list",
-                    "parameter_list <dataset_name>",
-                    "parameter_values <dataset_name> <parameter_name>",
-                    "parameter_values_filtered <dataset_name> <parameter_name> <target_parameter>",
-                    "nipa <table_name> [frequency] [year]",
-                    "ni_underlying <table_name> [frequency] [year]",
-                    "fixed_assets <table_name> [year]",
-                    "mne <direction> [classification] [year] [country] [industry] [state] [ownership_level] [nonbank_affiliates_only] [get_footnotes]",
-                    "gdp_by_industry <table_id> [year] [frequency] [industry]",
-                    "international_transactions [indicator] [area_or_country] [frequency] [year]",
-                    "international_investment [type_of_investment] [component] [frequency] [year]",
-                    "input_output <table_id> [year]",
-                    "underlying_gdp_industry <table_id> [year] [frequency] [industry]",
-                    "international_services [type_of_service] [trade_direction] [affiliation] [area_or_country] [year]",
                     "regional <table_name> [line_code] [geo_fips] [year]",
                     "economic_overview [year]",
-                    "regional_snapshot [geo_fips] [year]"
                 ]
             }))
             sys.exit(1)

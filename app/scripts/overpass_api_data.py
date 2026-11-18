@@ -75,68 +75,6 @@ def get_banks(lat: float, lon: float, radius: int = 1000) -> Any:
             "count": len(features), "banks": features}
 
 
-def get_atms(lat: float, lon: float, radius: int = 500) -> Any:
-    query = _around_query("atm", lat, lon, radius)
-    data = _run_overpass(query)
-    if "error" in data:
-        return data
-    elements = data.get("elements", [])
-    features = []
-    for el in elements:
-        center = el.get("center", {}) or {"lat": el.get("lat"), "lon": el.get("lon")}
-        tags = el.get("tags", {})
-        features.append({"id": el.get("id"), "lat": center.get("lat"), "lon": center.get("lon"),
-                          "operator": tags.get("operator", ""), "brand": tags.get("brand", ""),
-                          "network": tags.get("network", ""), "fee": tags.get("fee", "")})
-    return {"query_center": {"lat": lat, "lon": lon}, "radius_m": radius,
-            "count": len(features), "atms": features}
-
-
-def get_hospitals(lat: float, lon: float, radius: int = 5000) -> Any:
-    query = (
-        f'[out:json][timeout:25];'
-        f'(node["amenity"~"hospital|clinic"](around:{radius},{lat},{lon});'
-        f' way["amenity"~"hospital|clinic"](around:{radius},{lat},{lon}););'
-        f'out center tags;'
-    )
-    data = _run_overpass(query)
-    if "error" in data:
-        return data
-    elements = data.get("elements", [])
-    features = []
-    for el in elements:
-        center = el.get("center", {}) or {"lat": el.get("lat"), "lon": el.get("lon")}
-        tags = el.get("tags", {})
-        features.append({"id": el.get("id"), "lat": center.get("lat"), "lon": center.get("lon"),
-                          "name": tags.get("name", "Unknown"), "amenity": tags.get("amenity"),
-                          "beds": tags.get("beds", ""), "emergency": tags.get("emergency", "")})
-    return {"query_center": {"lat": lat, "lon": lon}, "radius_m": radius,
-            "count": len(features), "hospitals": features}
-
-
-def get_airports(country_code: str = "US") -> Any:
-    query = (
-        f'[out:json][timeout:60];'
-        f'area["ISO3166-1"="{country_code.upper()}"]->.a;'
-        f'(node["aeroway"="aerodrome"](area.a);'
-        f' way["aeroway"="aerodrome"](area.a);'
-        f' relation["aeroway"="aerodrome"](area.a););'
-        f'out center tags;'
-    )
-    data = _run_overpass(query)
-    if "error" in data:
-        return data
-    elements = data.get("elements", [])
-    airports = []
-    for el in elements:
-        center = el.get("center", {}) or {"lat": el.get("lat"), "lon": el.get("lon")}
-        tags = el.get("tags", {})
-        airports.append({"id": el.get("id"), "lat": center.get("lat"), "lon": center.get("lon"),
-                          "name": tags.get("name", "Unknown"), "iata": tags.get("iata", ""),
-                          "icao": tags.get("icao", ""), "type": tags.get("aerodrome:type", "")})
-    return {"country": country_code, "count": len(airports), "airports": airports}
-
-
 def get_ports(lat: float, lon: float, radius: int = 50000) -> Any:
     query = (
         f'[out:json][timeout:30];'
@@ -177,19 +115,6 @@ def main(args=None):
         lon = float(args[2]) if len(args) > 2 else -74.0060
         radius = int(args[3]) if len(args) > 3 else 1000
         result = get_banks(lat, lon, radius)
-    elif command == "atms":
-        lat = float(args[1]) if len(args) > 1 else 40.7128
-        lon = float(args[2]) if len(args) > 2 else -74.0060
-        radius = int(args[3]) if len(args) > 3 else 500
-        result = get_atms(lat, lon, radius)
-    elif command == "hospitals":
-        lat = float(args[1]) if len(args) > 1 else 40.7128
-        lon = float(args[2]) if len(args) > 2 else -74.0060
-        radius = int(args[3]) if len(args) > 3 else 5000
-        result = get_hospitals(lat, lon, radius)
-    elif command == "airports":
-        country_code = args[1] if len(args) > 1 else "US"
-        result = get_airports(country_code)
     elif command == "ports":
         lat = float(args[1]) if len(args) > 1 else 51.5074
         lon = float(args[2]) if len(args) > 2 else 0.1278

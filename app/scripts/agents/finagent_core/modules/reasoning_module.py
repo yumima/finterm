@@ -289,63 +289,6 @@ Start with "Let me break this down..."
         return cls.REASONING_STRATEGIES.copy()
 
 
-class ReasoningTracker:
-    """
-    Tracks and analyzes reasoning across multiple interactions.
-
-    Useful for:
-    - Debugging agent reasoning
-    - Analyzing decision patterns
-    - Improving prompts
-    """
-
-    def __init__(self):
-        self.sessions: Dict[str, List[Dict[str, Any]]] = {}
-
-    def start_session(self, session_id: str) -> None:
-        """Start a new reasoning session"""
-        self.sessions[session_id] = []
-
-    def add_reasoning(
-        self,
-        session_id: str,
-        query: str,
-        reasoning_steps: List[Dict[str, Any]],
-        final_answer: str
-    ) -> None:
-        """Add reasoning to a session"""
-        if session_id not in self.sessions:
-            self.start_session(session_id)
-
-        self.sessions[session_id].append({
-            "query": query,
-            "steps": reasoning_steps,
-            "final_answer": final_answer,
-            "step_count": len(reasoning_steps),
-        })
-
-    def get_session_summary(self, session_id: str) -> Dict[str, Any]:
-        """Get summary of a reasoning session"""
-        if session_id not in self.sessions:
-            return {}
-
-        entries = self.sessions[session_id]
-        total_steps = sum(e["step_count"] for e in entries)
-
-        return {
-            "session_id": session_id,
-            "total_queries": len(entries),
-            "total_reasoning_steps": total_steps,
-            "avg_steps_per_query": total_steps / len(entries) if entries else 0,
-            "entries": entries,
-        }
-
-    def clear_session(self, session_id: str) -> None:
-        """Clear a reasoning session"""
-        if session_id in self.sessions:
-            del self.sessions[session_id]
-
-
 class ReasoningBuilder:
     """
     Fluent builder for creating reasoning modules.

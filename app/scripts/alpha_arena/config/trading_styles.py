@@ -394,30 +394,8 @@ def list_trading_styles() -> List[TradingStyle]:
     return list(TRADING_STYLES.values())
 
 
-def get_styles_by_type(style_type: TradingStyleType) -> List[TradingStyle]:
-    """Get styles by type."""
-    return [s for s in TRADING_STYLES.values() if s.style_type == style_type]
-
-
 def create_styled_agent_name(provider: str, model_id: str, style: TradingStyle) -> str:
     """Create a display name for a styled agent."""
     # Shorten model name for display
     model_short = model_id.split("/")[-1].split("-")[0].title()
     return f"{model_short} ({style.name})"
-
-
-def get_style_system_prompt(style: TradingStyle, base_prompt: str = "") -> str:
-    """Combine style prompt with base prompt."""
-    parts = []
-
-    if style.system_prompt:
-        parts.append(style.system_prompt)
-
-    if base_prompt:
-        parts.append(base_prompt)
-
-    if style.instructions:
-        instructions_text = "\n".join(f"- {i}" for i in style.instructions)
-        parts.append(f"\nKey Instructions:\n{instructions_text}")
-
-    return "\n\n".join(parts)

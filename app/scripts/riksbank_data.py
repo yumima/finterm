@@ -236,13 +236,6 @@ class RiksbankWrapper:
         ids = ["SECBREPOEFF", "SECBDEPOEFF", "SECBLENDEFF"]
         return self._multi(ids, from_date, to_date)
 
-    def get_exchange_rate(self, currency: str = "USD",
-                          from_date: Optional[str] = None,
-                          to_date: Optional[str] = None) -> Dict[str, Any]:
-        """SEK exchange rate for a single currency (e.g. USD, EUR, GBP)."""
-        sid = f"SEK{currency.upper()}PMI"
-        return self._fetch_series(sid, from_date, to_date)
-
     def get_exchange_rates(self, currencies: Optional[List[str]] = None,
                            from_date: Optional[str] = None,
                            to_date: Optional[str] = None) -> Dict[str, Any]:
@@ -349,7 +342,6 @@ COMMANDS = {
     "policy_rate":  "[from_date] [to_date]              — Policy rate (repo rate) history",
     "policy_all":   "[from_date] [to_date]              — Policy/deposit/lending rates",
     "fx":           "[currencies] [from_date] [to_date] — SEK exchange rates (multi)",
-    "fx_single":    "<currency> [from_date] [to_date]   — SEK rate for one currency",
     "tbills":       "[from_date] [to_date]              — T-bill benchmark rates (1M-6M)",
     "mortgage":     "[from_date] [to_date]              — Mortgage bond yields (2Y, 5Y)",
     "bonds":        "[from_date] [to_date]              — Govt bond yields (2Y-10Y)",
@@ -379,20 +371,15 @@ def main() -> None:
     try:
         if cmd == "policy_rate":
             result = wrapper.get_policy_rate(_a(2), _a(3))
-        elif cmd in ("policy_all", "policy_rates"):
+        elif cmd == "policy_all":
             result = wrapper.get_policy_rates_all(_a(2), _a(3))
         elif cmd in ("fx", "exchange_rates"):
             raw  = _a(2, "USD,EUR,GBP,JPY,CHF,NOK,DKK")
             ccys = [c.strip().upper() for c in raw.split(",")]
             result = wrapper.get_exchange_rates(ccys, _a(3), _a(4))
-        elif cmd in ("fx_single", "fx_one"):
-            if len(sys.argv) < 3:
-                result = {"error": "fx_single requires <currency>"}
-            else:
-                result = wrapper.get_exchange_rate(sys.argv[2].upper(), _a(3), _a(4))
         elif cmd in ("tbills", "tbill"):
             result = wrapper.get_tbills(_a(2), _a(3))
-        elif cmd in ("mortgage", "mortgage_bonds"):
+        elif cmd == "mortgage":
             result = wrapper.get_mortgage_bonds(_a(2), _a(3))
         elif cmd in ("bonds", "bond_yields"):
             result = wrapper.get_govt_bond_yields(_a(2), _a(3))

@@ -221,23 +221,6 @@ class DropnaProcessor(DataProcessor):
         return df.dropna(axis=self.axis, thresh=self.thresh)
 
 
-class DropnaLabel(DataProcessor):
-    """
-    Drop rows where label is NaN.
-    """
-
-    def __init__(self):
-        super().__init__(fields_group="label")
-
-    def fit(self, df: pd.DataFrame):
-        """No fitting needed"""
-        pass
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Drop rows with NA labels"""
-        return df.dropna()
-
-
 class Fillna(DataProcessor):
     """
     Fill NaN values with specified method.

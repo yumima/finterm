@@ -362,9 +362,3 @@ def get_tracer() -> Tracer:
     if _tracer is None:
         _tracer = Tracer()
     return _tracer
-
-
-def reset_tracer():
-    """Reset the tracer (for testing)"""
-    global _tracer
-    _tracer = None

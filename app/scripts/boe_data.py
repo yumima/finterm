@@ -26,9 +26,7 @@ Usage:
     python boe_data.py bank_rate [--start 01/Jan/2000] [--end now]
     python boe_data.py sonia [--start 01/Jan/2020] [--end now]
     python boe_data.py exchange_rates [--start 01/Jan/2020] [--end now]
-    python boe_data.py exchange_rate_index [--start 01/Jan/2020] [--end now]
     python boe_data.py quoted_rates [--start 01/Jan/2012] [--end now]
-    python boe_data.py effective_rates [--start 01/Jan/2012] [--end now]
     python boe_data.py monetary_aggregates [--start 01/Jan/2010] [--end now]
     python boe_data.py series --codes IUDBEDR,IUDSOIA [--start 01/Jan/2020] [--end now]
     python boe_data.py overview
@@ -39,7 +37,7 @@ import json
 import io
 import csv
 import requests
-from datetime import datetime, date
+from datetime import date
 from typing import Dict, List, Optional, Any, Union
 
 # ---------------------------------------------------------------------------
@@ -679,11 +677,6 @@ SERIES_GROUPS: Dict[str, List[str]] = {
 # Helper utilities
 # ---------------------------------------------------------------------------
 
-def _today_str() -> str:
-    """Return today's date in BoE format DD/Mon/YYYY."""
-    return datetime.now().strftime("%d/%b/%Y")
-
-
 def _parse_value(raw: str) -> Optional[float]:
     """Convert raw cell string to float; return None for missing ('..' or empty)."""
     if raw is None:
@@ -1070,30 +1063,6 @@ class BankOfEnglandWrapper:
         result["base_currency"] = "GBP"
         return result
 
-    def get_exchange_rate_index(
-        self,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        broad: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Fetch the Sterling Exchange Rate Index (ERI).
-
-        Parameters
-        ----------
-        broad : bool
-            If True, also fetches the broad ERI (XUMABRD) in addition to narrow (XUMAERS).
-        """
-        codes = ["XUMAERS"]
-        if broad:
-            codes.append("XUMABRD")
-        result = self.get_series(codes, start=start, end=end)
-        result["description"] = (
-            "Sterling trade-weighted Exchange Rate Index (ERI). "
-            "Jan 2005 = 100. Annually re-weighted with world trade data."
-        )
-        return result
-
     def get_quoted_rates(
         self,
         include_mortgages: bool = True,
@@ -1125,22 +1094,6 @@ class BankOfEnglandWrapper:
         )
         return result
 
-    def get_effective_rates(
-        self,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Fetch effective interest rates (weighted average rates on outstanding balances
-        and new business for deposits and loans).
-        """
-        result = self.get_series_group("effective_rates", start=start, end=end)
-        result["description"] = (
-            "Effective interest rates: average rates actually paid or received by "
-            "households and companies on outstanding stock and new business."
-        )
-        return result
-
     def get_monetary_aggregates(
         self,
         start: Optional[str] = None,
@@ -1156,55 +1109,6 @@ class BankOfEnglandWrapper:
             "UK monetary aggregates: M4 liabilities, notes and coin in circulation, "
             "consumer credit outstanding, and BoE Banking Department sterling reserves."
         )
-        return result
-
-    def get_yield_curves(
-        self,
-        curve_type: str = "gilt_nominal",
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Fetch yield curve data from the IADB.
-
-        Parameters
-        ----------
-        curve_type : str
-            One of: 'gilt_nominal', 'gilt_inflation', 'ois'.
-            Note: The full term-structure yield curve data (per-maturity) is published
-            as ZIP downloads on the statistics/yield-curves page, not via IADB series
-            codes. The IADB series returned here are key-maturity spot/par yields.
-        """
-        group_map = {
-            "gilt_nominal": "gilt_yields",
-            "gilt_inflation": "gilt_yields",  # IUDSIZC, IUDMIZC
-            "ois": "ois_yields",
-        }
-        if curve_type not in group_map:
-            return {
-                "success": False,
-                "error": f"Unknown curve_type '{curve_type}'. "
-                         f"Choose from: {list(group_map.keys())}",
-            }
-
-        if curve_type == "gilt_inflation":
-            codes = ["IUDSIZC", "IUDMIZC"]
-            result = self.get_series(codes, start=start, end=end)
-        else:
-            result = self.get_series_group(group_map[curve_type], start=start, end=end)
-
-        result["description"] = (
-            f"UK yield curve data – {curve_type}. "
-            "Continuously compounded, quoted on annual basis. "
-            "Full term-structure ZIP downloads available at "
-            "https://www.bankofengland.co.uk/statistics/yield-curves"
-        )
-        result["yield_curve_zip_downloads"] = {
-            "nominal_government": "https://www.bankofengland.co.uk/statistics/yield-curves",
-            "real_government": "https://www.bankofengland.co.uk/statistics/yield-curves",
-            "inflation_government": "https://www.bankofengland.co.uk/statistics/yield-curves",
-            "ois": "https://www.bankofengland.co.uk/statistics/yield-curves",
-        }
         return result
 
     def get_overview(self) -> Dict[str, Any]:
@@ -1350,11 +1254,8 @@ def main(args: Optional[List[str]] = None) -> None:
                 "bank_rate          [--start DD/Mon/YYYY] [--end DD/Mon/YYYY|now]",
                 "sonia              [--start ...] [--end ...] [--compounded Y]",
                 "exchange_rates     [--currencies USD,EUR,JPY,...] [--start ...] [--end ...]",
-                "exchange_rate_index [--broad Y] [--start ...] [--end ...]",
                 "quoted_rates       [--start ...] [--end ...]",
-                "effective_rates    [--start ...] [--end ...]",
                 "monetary_aggregates [--start ...] [--end ...]",
-                "yield_curves       [--type gilt_nominal|gilt_inflation|ois] [--start ...] [--end ...]",
                 "group              --name <group_name> [--start ...] [--end ...]",
                 "series             --codes CODE1,CODE2,... [--start ...] [--end ...]",
             ],
@@ -1394,24 +1295,11 @@ def main(args: Optional[List[str]] = None) -> None:
                 currencies=currencies, start=start, end=end
             )
 
-        elif command == "exchange_rate_index":
-            broad = str(kwargs.get("broad", "N")).upper() == "Y"
-            result = wrapper.get_exchange_rate_index(start=start, end=end, broad=broad)
-
         elif command == "quoted_rates":
             result = wrapper.get_quoted_rates(start=start, end=end)
 
-        elif command == "effective_rates":
-            result = wrapper.get_effective_rates(start=start, end=end)
-
         elif command == "monetary_aggregates":
             result = wrapper.get_monetary_aggregates(start=start, end=end)
-
-        elif command == "yield_curves":
-            curve_type = kwargs.get("type", "gilt_nominal")
-            result = wrapper.get_yield_curves(
-                curve_type=curve_type, start=start, end=end
-            )
 
         elif command == "group":
             name = kwargs.get("name")

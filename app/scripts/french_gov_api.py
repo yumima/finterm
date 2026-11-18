@@ -45,35 +45,6 @@ DEFAULT_HEADERS = {
     'User-Agent': 'finterm-Terminal/1.0'
 }
 
-# French to English translation patterns
-FRENCH_PATTERNS = [
-    r'\b(le|la|les|de|du|des|et|en|pour|dans|une|avec|par|sur|est|sont|ont|été)\b',
-    r'\b(région|régions|département|départements|commune|communes|ville|villes)\b',
-    r'\b(population|surface|superficie|code|nom|adresse|coord|coordonnées)\b',
-    r'\b(statistique|données|information|informations|entreprise|entreprises)\b'
-]
-
-def _detect_french(text: str) -> bool:
-    """
-    Detect if text is in French language
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        True if text appears to be French, False otherwise
-    """
-    if not text or not isinstance(text, str):
-        return False
-
-    text_lower = text.lower()
-
-    # Count French pattern matches
-    french_matches = sum(len(re.findall(pattern, text_lower)) for pattern in FRENCH_PATTERNS)
-
-    # Consider it French if we find enough matches
-    return french_matches >= 2
-
 def _translate_french_to_english(text: str) -> str:
     """
     Simple translation dictionary for common French terms
@@ -395,64 +366,6 @@ def get_municipalities(name: Optional[str] = None, postal_code: Optional[str] = 
             "data": [],
             "metadata": {},
             "error": f"Error fetching municipalities: {str(e)}"
-        }
-
-def get_departments(name: Optional[str] = None, code: Optional[str] = None,
-                   format: str = "json", limit: int = 20) -> Dict[str, Any]:
-    """
-    Get French departments
-
-    Args:
-        name: Search by department name
-        code: Search by department code
-        format: Response format (json or geojson)
-        limit: Maximum number of results
-
-    Returns:
-        JSON response with department data
-    """
-    try:
-        url = f"{GEO_BASE_URL}/departements"
-        params = {"limit": limit}
-
-        if name:
-            params["nom"] = name
-        if code:
-            params["code"] = code
-        if format != "json":
-            params["format"] = format
-
-        result = _make_request(url, timeout=GEO_TIMEOUT, params=params)
-
-        if not result["error"]:
-            # Enhance department data with translation
-            departments = result.get("data", [])
-            if isinstance(departments, list):
-                enhanced_data = []
-                for dept in departments:
-                    original_name = dept.get("nom", "")
-                    translated_name = _translate_french_to_english(original_name)
-
-                    enhanced_dept = {
-                        "code": dept.get("code"),
-                        "name": translated_name,
-                        "original_name": original_name,
-                        "region_code": dept.get("codeRegion"),
-                        "center": dept.get("centre"),
-                        "boundary": dept.get("contour"),
-                        "search_score": dept.get("_score", 0)
-                    }
-                    enhanced_data.append(enhanced_dept)
-                result["data"] = enhanced_data
-                result["metadata"]["count"] = len(enhanced_data)
-
-        return result
-
-    except Exception as e:
-        return {
-            "data": [],
-            "metadata": {},
-            "error": f"Error fetching departments: {str(e)}"
         }
 
 def get_regions(name: Optional[str] = None, code: Optional[str] = None,
@@ -1015,7 +928,6 @@ def main():
             "available_commands": [
                 "# API Géo (Geographic Data)",
                 "municipalities [name|postal_code|lat lon] [limit]",
-                "departments [name|code] [limit]",
                 "regions [name|code] [limit]",
                 "",
                 "# API Catalogue (data.gouv.fr)",
@@ -1071,16 +983,6 @@ def main():
                     result = get_municipalities(name=arg, limit=int(sys.argv[3]) if len(sys.argv) > 3 else 20)
             else:
                 result = get_municipalities(limit=20)
-
-        elif command == "departments":
-            if len(sys.argv) > 2:
-                arg = sys.argv[2]
-                if arg.isdigit():
-                    result = get_departments(code=arg, limit=int(sys.argv[3]) if len(sys.argv) > 3 else 20)
-                else:
-                    result = get_departments(name=arg, limit=int(sys.argv[3]) if len(sys.argv) > 3 else 20)
-            else:
-                result = get_departments(limit=20)
 
         elif command == "regions":
             if len(sys.argv) > 2:
@@ -1144,7 +1046,6 @@ def main():
                 "error": f"Unknown command: {command}",
                 "available_commands": [
                     "municipalities [name|postal_code|lat lon] [limit]",
-                    "departments [name|code] [limit]",
                     "regions [name|code] [limit]",
                     "data-services [query] [page] [page_size]",
                     "datasets [query] [page] [page_size]",

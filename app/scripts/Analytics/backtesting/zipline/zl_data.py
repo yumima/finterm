@@ -10,7 +10,7 @@ import sys
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 
 
 def fetch_yfinance_data(
@@ -75,40 +75,6 @@ def fetch_yfinance_data(
         print(f'[ZL-DATA] {sym}: {len(df)} bars loaded', file=sys.stderr)
 
     return result
-
-
-def prepare_zipline_data(
-    data: Dict[str, pd.DataFrame],
-) -> Tuple[pd.DataFrame, List[str]]:
-    """
-    Merge per-symbol DataFrames into a single panel-like DataFrame for Zipline.
-
-    Returns:
-        (merged_df, symbols) where merged_df has MultiIndex columns (field, symbol)
-    """
-    if len(data) == 1:
-        sym = list(data.keys())[0]
-        df = data[sym].copy()
-        # Create MultiIndex columns: (field, symbol)
-        df.columns = pd.MultiIndex.from_tuples(
-            [(col, sym) for col in df.columns],
-            names=['field', 'symbol']
-        )
-        return df, [sym]
-
-    # Multi-symbol: align on common dates
-    frames = {}
-    for sym, df in data.items():
-        for col in df.columns:
-            frames[(col, sym)] = df[col]
-
-    merged = pd.DataFrame(frames)
-    merged.columns = pd.MultiIndex.from_tuples(
-        merged.columns, names=['field', 'symbol']
-    )
-    merged = merged.dropna()
-    symbols = list(data.keys())
-    return merged, symbols
 
 
 def data_to_records(data: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:

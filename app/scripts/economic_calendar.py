@@ -1,10 +1,3 @@
-import requests
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import json
 from datetime import datetime
 import time
@@ -17,6 +10,14 @@ def scrape_forex_calendar(date_str="oct15.2026"):
     Returns:
         JSON with structured data
     """
+    # Imported here so a missing Selenium reaches the caller as a JSON error
+    # (see __main__), not as an import traceback.
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
     url = f"https://www.forexfactory.com/calendar?day={date_str}"
 
     # Setup headless Chrome
@@ -94,60 +95,24 @@ def scrape_forex_calendar(date_str="oct15.2026"):
         "events": events
     }
 
-# Alternative using requests-html for dynamic content
-def scrape_forex_calendar_alt(date_str="oct15.2026"):
-    """Alternative method using requests-html"""
-    from requests_html import HTMLSession
-
-    url = f"https://www.forexfactory.com/calendar?day={date_str}"
-    session = HTMLSession()
-
-    try:
-        r = session.get(url)
-        r.html.render(timeout=20)
-
-        events = []
-
-        # Parse calendar rows
-        rows = r.html.find('tr.calendar__row')
-
-        for row in rows:
-            event = {}
-
-            event['time'] = row.find('.calendar__time', first=True).text if row.find('.calendar__time') else ""
-            event['currency'] = row.find('.calendar__currency', first=True).text if row.find('.calendar__currency') else ""
-
-            impact = row.find('.calendar__impact', first=True)
-            if impact:
-                event['impact'] = len(impact.find('.icon--ff-impact-red, .icon--ff-impact-ora, .icon--ff-impact-yel'))
-            else:
-                event['impact'] = 0
-
-            event['event'] = row.find('.calendar__event', first=True).text if row.find('.calendar__event') else ""
-            event['actual'] = row.find('.calendar__actual', first=True).text if row.find('.calendar__actual') else ""
-            event['forecast'] = row.find('.calendar__forecast', first=True).text if row.find('.calendar__forecast') else ""
-            event['previous'] = row.find('.calendar__previous', first=True).text if row.find('.calendar__previous') else ""
-
-            if event['event'] and event['event'] not in ['', 'All Day']:
-                events.append(event)
-
-    except Exception as e:
-        print(f"Error: {e}")
-        return {"error": str(e)}
-
-    return {
-        "date": date_str,
-        "url": url,
-        "events_count": len(events),
-        "events": events
-    }
-
 if __name__ == "__main__":
-    # Use Selenium method (more reliable)
-    data = scrape_forex_calendar("oct16.2026")
+    import sys
 
-    # Save to JSON file
-    with open('forex_calendar.json', 'w') as f:
-        json.dump(data, f, indent=2)
+    # The Economics calendar panel passes the day as Forex Factory writes it
+    # ("oct16.2026"); with none, today.
+    if len(sys.argv) > 1:
+        day = sys.argv[1]
+    else:
+        today = datetime.now()
+        day = f"{today.strftime('%b').lower()}{today.day}.{today.year}"
+    try:
+        data = scrape_forex_calendar(day)
+    except Exception as e:
+        # No Selenium / ChromeDriver, a page that never rendered the table
+        # (TimeoutException), a blocked request: the panel shows the reason
+        # instead of a traceback. EconomicsService treats {"error"} as failure.
+        why = (str(e).strip().splitlines() or [""])[0]
+        data = {"error": f"Forex Factory calendar unavailable for {day}: {type(e).__name__}"
+                         + (f": {why}" if why else "")}
 
     print(json.dumps(data, indent=2))

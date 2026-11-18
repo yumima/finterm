@@ -141,9 +141,3 @@ def get_trading_team() -> Team:
     if _trading_team is None:
         _trading_team = create_trading_team()
     return _trading_team
-
-
-def reset_trading_team():
-    """Reset the global Trading Team instance"""
-    global _trading_team
-    _trading_team = None

@@ -95,25 +95,9 @@ def log_debug(message: str, **kwargs):
         logger.debug(message % kwargs if kwargs else message)
 
 
-def log_warning(message: str, **kwargs):
-    """Log warning message."""
-    if LOGURU_AVAILABLE:
-        logger.warning(message, **kwargs)
-    else:
-        logger.warning(message % kwargs if kwargs else message)
-
-
 def log_error(message: str, **kwargs):
     """Log error message."""
     if LOGURU_AVAILABLE:
         logger.error(message, **kwargs)
     else:
         logger.error(message % kwargs if kwargs else message)
-
-
-def log_exception(message: str, **kwargs):
-    """Log exception with traceback."""
-    if LOGURU_AVAILABLE:
-        logger.exception(message, **kwargs)
-    else:
-        logger.exception(message % kwargs if kwargs else message)

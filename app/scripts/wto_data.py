@@ -15,13 +15,11 @@ Data sources:
 - https://api.wto.org/tfad - Trade Facilitation Agreement
 
 Usage:
-    python wto_data.py available_apis
     python wto_data.py qr_members
-    python wto_data.py eping_search --language 1 --domainIds 1
     python wto_data.py timeseries_data --i TP_A_0010 --r US
-    python wto_data.py tfad_data --countries 840,124
 """
 
+import os
 import sys
 import json
 import asyncio
@@ -106,28 +104,6 @@ class WTODataWrapper:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def get_qr_products(self, hs_version: str, code: str = None, description: str = None, page: int = None) -> Dict:
-        """Get QR products list"""
-        params = {'hs_version': hs_version}
-        if code:
-            params['code'] = code
-        if description:
-            params['description'] = description
-        if page:
-            params['page'] = page
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                result = await self.fetch_data(session, f"{self.qr_url}/products", params)
-                return {
-                    "success": True,
-                    "data": result,
-                    "source": "WTO QR API",
-                    "description": f"WTO Quantitative Restrictions products - HS {hs_version}"
-                }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
     async def get_qr_notifications(self, reporter_member_code: str = None, notification_year: int = None, page: int = None) -> Dict:
         """Get QR notifications list"""
         params = {}
@@ -146,20 +122,6 @@ class WTODataWrapper:
                     "data": result,
                     "source": "WTO QR API",
                     "description": "WTO Quantitative Restrictions notifications"
-                }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def get_qr_details(self, qr_id: int) -> Dict:
-        """Get QR details by ID"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                result = await self.fetch_data(session, f"{self.qr_url}/qrs/{qr_id}")
-                return {
-                    "success": True,
-                    "data": result,
-                    "source": "WTO QR API",
-                    "description": f"WTO Quantitative Restrictions details - ID {qr_id}"
                 }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -372,32 +334,6 @@ class WTODataWrapper:
                     "data": result,
                     "source": "WTO Timeseries API",
                     "description": f"WTO Timeseries data count - {indicator}"
-                }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def get_timeseries_reporters(self, name: str = None, individual_group: str = None,
-                                      regions: str = None, groups: str = None, language: int = 1) -> Dict:
-        """Get timeseries reporting economies"""
-        params = {'lang': str(language)}
-
-        if name:
-            params['name'] = name
-        if individual_group:
-            params['ig'] = individual_group
-        if regions:
-            params['reg'] = regions
-        if groups:
-            params['gp'] = groups
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                result = await self.fetch_data(session, f"{self.timeseries_url}/reporters", params)
-                return {
-                    "success": True,
-                    "data": result,
-                    "source": "WTO Timeseries API",
-                    "description": "WTO Timeseries reporting economies"
                 }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -707,6 +643,9 @@ def main():
             api_key = potential_key
             sys.argv = sys.argv[:-1]  # Remove API key from args
 
+    # Otherwise the key the user saved in Settings, which the app injects
+    # (CredentialCatalogue): Trade Statistics needs it, as the WTO panel says.
+    api_key = api_key or os.environ.get("WTO_API_KEY") or None
     wrapper = WTODataWrapper(subscription_key=api_key)
 
     if len(sys.argv) < 2:
@@ -714,13 +653,10 @@ def main():
             "success": False,
             "error": "Usage: python wto_data.py <command> [options]",
             "commands": [
-                "available_apis",
-                "qr_members", "qr_products", "qr_notifications", "qr_details", "qr_list", "qr_hs_versions",
-                "eping_members", "eping_search",
-                "timeseries_topics", "timeseries_indicators", "timeseries_data", "timeseries_reporters",
-                "tfad_data",
-                "overview", "trade_restrictions_analysis", "notifications_analysis",
-                "trade_statistics_analysis", "comprehensive_analysis"
+                "qr_members", "qr_notifications",
+                "timeseries_data",
+                "overview",
+                "comprehensive_analysis"
             ]
         }))
         sys.exit(1)
@@ -743,23 +679,11 @@ def main():
                 args[arg[2:]] = True
 
     try:
-        # REFERENCE COMMANDS
-        if command == "available_apis":
-            result = wrapper.get_available_apis()
-
         # QUANTITATIVE RESTRICTIONS COMMANDS
-        elif command == "qr_members":
+        if command == "qr_members":
             result = asyncio.run(wrapper.get_qr_members(
                 args.get("member_code"),
                 args.get("name"),
-                int(args.get("page")) if args.get("page") else None
-            ))
-
-        elif command == "qr_products":
-            result = asyncio.run(wrapper.get_qr_products(
-                args["hs_version"],
-                args.get("code"),
-                args.get("description"),
                 int(args.get("page")) if args.get("page") else None
             ))
 
@@ -770,62 +694,7 @@ def main():
                 int(args.get("page")) if args.get("page") else None
             ))
 
-        elif command == "qr_details":
-            if "qr_id" not in args:
-                raise ValueError("qr_id parameter is required")
-            result = asyncio.run(wrapper.get_qr_details(int(args["qr_id"])))
-
-        elif command == "qr_list":
-            result = asyncio.run(wrapper.get_qr_list(
-                args.get("reporter_member_code"),
-                args.get("in_force_only") == "true" if args.get("in_force_only") else None,
-                int(args.get("year_of_entry_into_force")) if args.get("year_of_entry_into_force") else None,
-                args.get("product_codes"),
-                args.get("product_ids"),
-                int(args.get("page")) if args.get("page") else None
-            ))
-
-        elif command == "qr_hs_versions":
-            result = asyncio.run(wrapper.get_qr_hs_versions())
-
-        # EPING COMMANDS
-        elif command == "eping_members":
-            result = asyncio.run(wrapper.get_eping_members(
-                int(args.get("language", 1))
-            ))
-
-        elif command == "eping_search":
-            result = asyncio.run(wrapper.search_eping_notifications(
-                int(args.get("language", 1)),
-                int(args.get("domainIds")) if args.get("domainIds") else None,
-                args.get("document_symbol"),
-                args.get("distribution_date_from"),
-                args.get("distribution_date_to"),
-                args.get("country_ids", "").split(",") if args.get("country_ids") else None,
-                args.get("hs_codes"),
-                args.get("ics_codes"),
-                args.get("free_text"),
-                int(args.get("page")) if args.get("page") else None,
-                int(args.get("page_size")) if args.get("page_size") else None
-            ))
-
         # TIMESERIES COMMANDS
-        elif command == "timeseries_topics":
-            result = asyncio.run(wrapper.get_timeseries_topics(
-                int(args.get("language", 1))
-            ))
-
-        elif command == "timeseries_indicators":
-            result = asyncio.run(wrapper.get_timeseries_indicators(
-                args.get("indicator", "all"),
-                args.get("name"),
-                args.get("topics"),
-                args.get("product_classifications"),
-                args.get("trade_partner"),
-                args.get("frequency"),
-                int(args.get("language", 1))
-            ))
-
         elif command == "timeseries_data":
             if "i" not in args:
                 raise ValueError("i (indicator) parameter is required")
@@ -849,44 +718,9 @@ def main():
                 args.get("include_metadata") == "true"
             ))
 
-        elif command == "timeseries_reporters":
-            result = asyncio.run(wrapper.get_timeseries_reporters(
-                args.get("name"),
-                args.get("individual_group"),
-                args.get("regions"),
-                args.get("groups"),
-                int(args.get("language", 1))
-            ))
-
-        # TFAD COMMANDS
-        elif command == "tfad_data":
-            result = asyncio.run(wrapper.get_tfad_data(
-                args.get("countries", "").split(",") if args.get("countries") else None
-            ))
-
         # ANALYSIS COMMANDS
         elif command == "overview":
             result = asyncio.run(wrapper.get_wto_overview())
-
-        elif command == "trade_restrictions_analysis":
-            result = asyncio.run(wrapper.get_trade_restrictions_analysis(
-                args.get("member_code")
-            ))
-
-        elif command == "notifications_analysis":
-            result = asyncio.run(wrapper.get_notifications_analysis(
-                int(args.get("language", 1)),
-                int(args.get("domain_ids")) if args.get("domain_ids") else None,
-                args.get("date_from"),
-                args.get("date_to")
-            ))
-
-        elif command == "trade_statistics_analysis":
-            result = asyncio.run(wrapper.get_trade_statistics_analysis(
-                args.get("indicator", "TP_A_0010"),
-                args.get("reporter", "US"),
-                args.get("years", "2020-2023")
-            ))
 
         elif command == "comprehensive_analysis":
             result = asyncio.run(wrapper.get_comprehensive_wto_analysis(

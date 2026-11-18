@@ -25,7 +25,7 @@ Also handles:
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional, Tuple, Callable, List
+from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass, field
 
 
@@ -748,106 +748,6 @@ def build_portfolio(
     )
 
 
-def build_portfolio_from_orders(
-    vbt,
-    close_series: pd.Series,
-    order_sizes: pd.Series,
-    initial_capital: float = 100000,
-    request: Optional[Dict[str, Any]] = None,
-) -> SimplePortfolio:
-    """Build portfolio from direct order size arrays."""
-    request = request or {}
-    commission = float(request.get('commission', 0.0))
-
-    close_vals = close_series.values.astype(float)
-    sizes = order_sizes.values.astype(float)
-    n = len(close_vals)
-
-    cash = initial_capital
-    position = 0.0
-    equity_vals = np.zeros(n)
-    total_fees = 0.0
-    trades = []
-
-    entry_price = 0.0
-    entry_idx = 0
-
-    for i in range(n):
-        order = sizes[i]
-        if order != 0:
-            cost = abs(order) * close_vals[i]
-            fee = cost * commission
-            total_fees += fee
-
-            if order > 0 and position <= 0:
-                # Opening or flipping long
-                if position < 0:
-                    # Close short
-                    pnl = (entry_price - close_vals[i]) * abs(position) - fee
-                    trades.append(_make_trade_record(
-                        entry_idx, i, entry_price, close_vals[i], abs(position), pnl, fee
-                    ))
-                    cash += pnl
-                entry_price = close_vals[i]
-                entry_idx = i
-                position = order
-                cash -= fee
-            elif order < 0 and position >= 0:
-                # Closing long or opening short
-                if position > 0:
-                    pnl = (close_vals[i] - entry_price) * position - fee
-                    trades.append(_make_trade_record(
-                        entry_idx, i, entry_price, close_vals[i], position, pnl, fee
-                    ))
-                    cash += pnl + entry_price * position
-                entry_price = close_vals[i]
-                entry_idx = i
-                position = order
-                cash -= fee
-
-        equity_vals[i] = cash + position * close_vals[i]
-
-    equity = pd.Series(equity_vals, index=close_series.index, name='Equity')
-    trade_df = pd.DataFrame(trades) if trades else _empty_trade_df()
-
-    return SimplePortfolio(
-        equity_series=equity,
-        close_series=close_series,
-        trade_records=trade_df,
-        init_cash=initial_capital,
-        total_fees_value=total_fees,
-    )
-
-
-def build_holding_portfolio(
-    vbt,
-    close_series: pd.Series,
-    initial_capital: float = 100000,
-) -> SimplePortfolio:
-    """Build a buy-and-hold portfolio for benchmark comparison."""
-    close_vals = close_series.values.astype(float)
-    if close_vals[0] > 0:
-        shares = initial_capital / close_vals[0]
-    else:
-        shares = 0.0
-
-    equity_vals = shares * close_vals
-    equity = pd.Series(equity_vals, index=close_series.index, name='Equity')
-
-    # Single trade record
-    pnl = float(equity_vals[-1] - initial_capital)
-    trade_df = pd.DataFrame([_make_trade_record(
-        0, len(close_vals) - 1, close_vals[0], close_vals[-1], shares, pnl, 0.0
-    )])
-
-    return SimplePortfolio(
-        equity_series=equity,
-        close_series=close_series,
-        trade_records=trade_df,
-        init_cash=initial_capital,
-    )
-
-
 def build_random_portfolio(
     vbt,
     close_series: pd.Series,
@@ -1276,103 +1176,6 @@ def _calculate_position_size(
 # ============================================================================
 # from_order_func Builder (NEW)
 # ============================================================================
-
-def build_portfolio_from_order_func(
-    vbt,
-    close_series: pd.Series,
-    order_func: Callable,
-    initial_capital: float = 100000,
-    commission: float = 0.0,
-    **kwargs,
-) -> SimplePortfolio:
-    """
-    Build portfolio from a custom order function (mimics vbt.Portfolio.from_order_func).
-
-    The order_func is called on each bar with signature:
-        order_func(bar_idx, price, cash, position, **kwargs) -> order_size
-            - positive size = buy that many shares
-            - negative size = sell that many shares
-            - 0 = do nothing
-
-    Args:
-        vbt: vectorbt module (unused, API compat)
-        close_series: Price series
-        order_func: Callable(bar_idx, price, cash, position, **kwargs) -> float
-        initial_capital: Starting capital
-        commission: Commission rate (0.001 = 0.1%)
-
-    Returns:
-        SimplePortfolio instance
-    """
-    close_vals = close_series.values.astype(float)
-    n = len(close_vals)
-
-    cash = initial_capital
-    position = 0.0
-    equity_vals = np.zeros(n)
-    cash_vals = np.zeros(n)
-    asset_vals = np.zeros(n)
-    total_fees = 0.0
-    trades = []
-
-    entry_price = 0.0
-    entry_idx = 0
-
-    for i in range(n):
-        price = close_vals[i]
-
-        # Call user's order function
-        order_size = order_func(i, price, cash, position, **kwargs)
-
-        if order_size != 0:
-            cost = abs(order_size) * price
-            fee = cost * commission
-            total_fees += fee
-
-            if order_size > 0:
-                # Buy
-                total_cost = order_size * price + fee
-                if total_cost <= cash:
-                    if position <= 0 and position != 0:
-                        # Close short first
-                        pnl = (entry_price - price) * abs(position) - fee
-                        trades.append(_make_trade_record(
-                            entry_idx, i, entry_price, price, abs(position), pnl, fee
-                        ))
-                    cash -= total_cost
-                    if position <= 0:
-                        entry_price = price
-                        entry_idx = i
-                    position += order_size
-            elif order_size < 0:
-                # Sell
-                sell_amount = min(abs(order_size), position) if position > 0 else abs(order_size)
-                if position > 0:
-                    pnl = (price - entry_price) * sell_amount - fee
-                    trades.append(_make_trade_record(
-                        entry_idx, i, entry_price, price, sell_amount, pnl, fee
-                    ))
-                    cash += sell_amount * price - fee
-                    position -= sell_amount
-
-        equity_vals[i] = cash + position * price
-        cash_vals[i] = cash
-        asset_vals[i] = position
-
-    idx = close_series.index
-    equity = pd.Series(equity_vals, index=idx, name='Equity')
-    trade_df = pd.DataFrame(trades) if trades else _empty_trade_df()
-
-    return SimplePortfolio(
-        equity_series=equity,
-        close_series=close_series,
-        trade_records=trade_df,
-        init_cash=initial_capital,
-        total_fees_value=total_fees,
-        cash_series=pd.Series(cash_vals, index=idx, name='Cash'),
-        asset_series=pd.Series(asset_vals, index=idx, name='Assets'),
-    )
-
 
 # ============================================================================
 # Position Aggregation Helper (NEW)

@@ -119,36 +119,6 @@ class ResponsePayload(BaseModel):
     content: Optional[str] = Field(None, description="The message content")
 
 
-class DecisionPayload(ResponsePayload):
-    """Payload for trading decision responses."""
-
-    model_name: str = Field(..., description="Model making the decision")
-    action: str = Field(..., description="Trading action")
-    symbol: str = Field(..., description="Trading symbol")
-    quantity: float = Field(0.0, description="Trade quantity")
-    confidence: float = Field(0.5, description="Decision confidence")
-    reasoning: str = Field("", description="Decision reasoning")
-
-
-class TradePayload(ResponsePayload):
-    """Payload for trade execution responses."""
-
-    model_name: str = Field(..., description="Model that traded")
-    action: str = Field(..., description="Trade action")
-    symbol: str = Field(..., description="Trading symbol")
-    quantity: float = Field(..., description="Quantity traded")
-    price: float = Field(..., description="Execution price")
-    pnl: Optional[float] = Field(None, description="Realized P&L")
-    status: str = Field(..., description="Trade status")
-
-
-class LeaderboardPayload(ResponsePayload):
-    """Payload for leaderboard updates."""
-
-    leaderboard: list = Field(..., description="Current leaderboard entries")
-    cycle_number: int = Field(..., description="Current cycle")
-
-
 class UnifiedResponseData(BaseModel):
     """Unified response data structure with optional hierarchy fields."""
 

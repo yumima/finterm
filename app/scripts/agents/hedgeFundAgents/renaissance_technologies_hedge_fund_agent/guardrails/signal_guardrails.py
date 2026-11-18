@@ -9,7 +9,6 @@ Quality guardrails for trading signals:
 """
 
 from typing import Dict, Any, Optional
-from datetime import datetime
 
 from .base import (
     Guardrail,
@@ -311,72 +310,5 @@ class DataQualityGuardrail(Guardrail):
                 "signal_id": signal_id,
                 "ticker": ticker,
                 "quality": "good",
-            },
-        )
-
-
-class SignalStalenessGuardrail(Guardrail):
-    """
-    Checks if signal is still fresh.
-
-    Alpha decays quickly - signals must be acted on promptly.
-    """
-
-    def __init__(self, max_age_minutes: int = 60):
-        super().__init__(
-            name="signal_staleness",
-            description="Ensures signals are acted on before alpha decays",
-            severity=GuardrailSeverity.WARNING,
-        )
-        self.max_age_minutes = max_age_minutes
-
-    def check(self, context: Dict[str, Any]) -> GuardrailResult:
-        """Check signal age"""
-        signal_id = context.get("signal_id", "unknown")
-        signal_time = context.get("signal_timestamp")
-
-        if signal_time is None:
-            return GuardrailResult(
-                guardrail_name=self.name,
-                passed=True,
-                severity=GuardrailSeverity.INFO,
-                action=GuardrailAction.ALLOW,
-                message="Signal timestamp not provided, skipping staleness check",
-            )
-
-        # Calculate age
-        if isinstance(signal_time, str):
-            signal_time = datetime.fromisoformat(signal_time.replace("Z", "+00:00"))
-
-        now = datetime.utcnow()
-        if signal_time.tzinfo:
-            now = now.replace(tzinfo=signal_time.tzinfo)
-
-        age_minutes = (now - signal_time).total_seconds() / 60
-
-        if age_minutes > self.max_age_minutes:
-            return GuardrailResult(
-                guardrail_name=self.name,
-                passed=False,
-                severity=GuardrailSeverity.WARNING,
-                action=GuardrailAction.WARN,
-                message=f"Signal {signal_id} is {age_minutes:.0f} minutes old (max {self.max_age_minutes})",
-                details={
-                    "signal_id": signal_id,
-                    "age_minutes": age_minutes,
-                    "max_age_minutes": self.max_age_minutes,
-                    "alpha_decay_warning": True,
-                },
-            )
-
-        return GuardrailResult(
-            guardrail_name=self.name,
-            passed=True,
-            severity=GuardrailSeverity.INFO,
-            action=GuardrailAction.ALLOW,
-            message=f"Signal {signal_id} is fresh ({age_minutes:.0f} minutes old)",
-            details={
-                "signal_id": signal_id,
-                "age_minutes": age_minutes,
             },
         )
