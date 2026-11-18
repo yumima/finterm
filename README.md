@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`2e20e3788`](https://github.com/yumima/finterm/commit/2e20e3788) workflow nodes: read every dataset through the service that owns it
+- [`9fb509452`](https://github.com/yumima/finterm/commit/9fb509452) data owners: callback reads for FRED, financials, news, Form 4, filings, option chains
 - [`e493f7e22`](https://github.com/yumima/finterm/commit/e493f7e22) storage: one store per dataset; retired storage cleaned by its owner
 - [`d6bb1f3dc`](https://github.com/yumima/finterm/commit/d6bb1f3dc) alerts: ask OwnershipService for clusters, stakes, 13F moves and fund filings instead of running the scripts
 - [`1199ac031`](https://github.com/yumima/finterm/commit/1199ac031) extended hours: the AFT% column and the ER box read one set of session rules

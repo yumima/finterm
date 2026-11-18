@@ -6,6 +6,7 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
+#include "services/news/NewsNlpService.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
@@ -593,21 +594,29 @@ void GeopoliticsService::analyze_barrier_removal(const QJsonObject& params) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void GeopoliticsService::extract_geolocations(const QStringList& headlines) {
-    auto json = QJsonDocument(QJsonArray::fromStringList(headlines)).toJson(QJsonDocument::Compact);
-    run_python("news_geolocation.py", {"extract_and_geocode", json}, "geolocation",
-               [this](bool ok, const QString& out) {
-                   if (!ok) {
-                       emit error_occurred("geolocation", out);
-                       return;
-                   }
-                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
-                   const auto obj = doc.object();
-                   if (!doc.isNull())
-                       disk_cache().save(QStringLiteral("geolocation.json"), doc);
-                   emit geolocation_ready(obj);
-                   if (hub_registered_)
-                       publish_to_hub(QStringLiteral("geopolitics:geolocation"), QVariant(obj));
-               });
+    // NewsNlpService owns news_geolocation.py. Each headline goes in as an
+    // article whose id is its index, so geolocated_articles[].id maps back.
+    QVector<NewsArticle> articles;
+    articles.reserve(headlines.size());
+    for (int i = 0; i < headlines.size(); ++i) {
+        NewsArticle a;
+        a.id = QString::number(i);
+        a.headline = headlines[i];
+        articles.append(a);
+    }
+    QPointer<GeopoliticsService> self = this;
+    NewsNlpService::instance().geolocate_articles(articles, [self](bool ok, GeoResult geo, QString error) {
+        if (!self)
+            return;
+        if (!ok) {
+            emit self->error_occurred("geolocation", error);
+            return;
+        }
+        disk_cache().save(QStringLiteral("geolocation.json"), QJsonDocument(geo.raw));
+        emit self->geolocation_ready(geo.raw);
+        if (self->hub_registered_)
+            publish_to_hub(QStringLiteral("geopolitics:geolocation"), QVariant(geo.raw));
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -669,22 +669,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     ent_layout_outer->addWidget(ent_container);
     layout->addWidget(entities_section_);
 
-    // Infrastructure section
-    infra_section_ = new QWidget(content);
-    infra_section_->hide();
-    auto* infra_layout_outer = new QVBoxLayout(infra_section_);
-    infra_layout_outer->setContentsMargins(0, 4, 0, 4);
-    infra_layout_outer->setSpacing(2);
-    auto* infra_title = new QLabel("NEARBY INFRASTRUCTURE", infra_section_);
-    infra_title->setObjectName("newsDetailSectionTitle");
-    infra_layout_outer->addWidget(infra_title);
-    auto* infra_container = new QWidget(infra_section_);
-    infra_layout_ = new QVBoxLayout(infra_container);
-    infra_layout_->setContentsMargins(0, 0, 0, 0);
-    infra_layout_->setSpacing(2);
-    infra_layout_outer->addWidget(infra_container);
-    layout->addWidget(infra_section_);
-
     layout->addStretch();
     scroll->setWidget(content);
     return scroll;
@@ -706,9 +690,9 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     hide_tldr();
     sync_article_listen();
     // Every per-story section belongs to the story that populated it.
-    // ENTITIES and INFRASTRUCTURE were never reset here, so a late callback
+    // ENTITIES was never reset here, so a late callback
     // for the previous article could leave its findings under this headline.
-    for (QWidget* section : {analysis_section_, related_section_, monitor_section_, entities_section_, infra_section_})
+    for (QWidget* section : {analysis_section_, related_section_, monitor_section_, entities_section_})
         if (section)
             section->hide();
     stack_->setCurrentIndex(1);
@@ -1046,32 +1030,6 @@ void NewsDetailPanel::show_entities(const services::EntityResult& entities) {
         conceal_article_section(entities_section_);
 }
 
-void NewsDetailPanel::show_infrastructure(const QVector<services::InfrastructureItem>& items) {
-    while (infra_layout_->count() > 0) {
-        auto* item = infra_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    if (items.isEmpty()) {
-        conceal_article_section(infra_section_);
-        return;
-    }
-    reveal_article_section(infra_section_);
-
-    for (const auto& inf : items) {
-        QString type_icon = inf.type == "airport"
-                                ? "AIR"
-                                : (inf.type == "military" ? "MIL" : (inf.type == "power_plant" ? "PWR" : "PRT"));
-        auto* lbl =
-            new QLabel(QString("[%1] %2 — %3 km").arg(type_icon, inf.name.left(20)).arg(inf.distance_km, 0, 'f', 1),
-                       infra_section_);
-        lbl->setObjectName("newsDetailKeyPoint");
-        infra_layout_->addWidget(lbl);
-    }
-}
-
 void NewsDetailPanel::clear() {
     has_article_ = false;
     listen_toggle_->stop(); // its button leaves with the article page
@@ -1081,7 +1039,6 @@ void NewsDetailPanel::clear() {
     conceal_article_section(related_section_);
     conceal_article_section(monitor_section_);
     conceal_article_section(entities_section_);
-    conceal_article_section(infra_section_);
     analyze_timeout_->stop();
 }
 
@@ -1209,8 +1166,7 @@ void NewsDetailPanel::set_article_visible(bool visible) {
     if (already_hidden)
         return;
     sections_hidden_by_brief_.clear();
-    for (QWidget* section :
-         {analysis_section_, related_section_, monitor_section_, entities_section_, infra_section_}) {
+    for (QWidget* section : {analysis_section_, related_section_, monitor_section_, entities_section_}) {
         // isHidden(), not isVisible(): the panel may itself be off-screen
         // (another dock tab in front), and that must not be mistaken for a
         // section the story had closed.

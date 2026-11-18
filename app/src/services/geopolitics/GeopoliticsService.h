@@ -53,7 +53,9 @@ class GeopoliticsService : public QObject, public finterm::datahub::Producer {
     /// trade_result_ready("trade_barrier_removal", ...).
     void analyze_barrier_removal(const QJsonObject& params);
 
-    // ── Geolocation (Python) ────────────────────────────────────────────────
+    // ── Geolocation (via NewsNlpService) ────────────────────────────────────
+    /// Emits geolocation_ready(the script's answer; geolocated_articles[].id is
+    /// the headline's index) or error_occurred("geolocation", the script's error).
     void extract_geolocations(const QStringList& headlines);
 
   signals:

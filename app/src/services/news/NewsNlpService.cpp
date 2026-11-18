@@ -112,81 +112,60 @@ void NewsNlpService::cluster_semantic(const QVector<NewsArticle>& articles, Sema
         });
 }
 
+namespace {
+// The failure text of a geolocation run: the script's own {"error"} first
+// (it may exit non-zero with an empty stderr), then stderr, then the exit code.
+QString geo_failure_text(const python::PythonResult& result, const QJsonObject& answer) {
+    QString msg = answer.value("error").toString().trimmed();
+    if (msg.isEmpty() && !result.success)
+        msg = result.error.trimmed();
+    if (msg.isEmpty() && !result.success)
+        msg = QStringLiteral("Script failed (exit code %1)").arg(result.exit_code);
+    if (msg.isEmpty())
+        msg = QStringLiteral("Unreadable geolocation answer");
+    return msg;
+}
+} // namespace
+
 void NewsNlpService::geolocate_articles(const QVector<NewsArticle>& articles, GeoCallback cb) {
     auto json_str = QString::fromUtf8(QJsonDocument(articles_to_json(articles)).toJson(QJsonDocument::Compact));
 
     QPointer<NewsNlpService> self = this;
-    python::PythonRunner::instance().run("news_geolocation.py", {"extract_and_geocode", json_str},
-                                         [self, cb](python::PythonResult result) {
-                                             if (!self)
-                                                 return;
-                                             if (!result.success) {
-                                                 LOG_WARN("NewsNlpService", "Geolocation failed: " + result.error);
-                                                 cb(false, {});
-                                                 return;
-                                             }
+    python::PythonRunner::instance().run(
+        "news_geolocation.py", {"extract_and_geocode", json_str}, [self, cb](python::PythonResult result) {
+            if (!self)
+                return;
+            const auto doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+            const QJsonObject obj = doc.object();
+            if (!result.success || !doc.isObject() || !obj.value("success").toBool()) {
+                const QString err = geo_failure_text(result, obj);
+                LOG_WARN("NewsNlpService", "Geolocation failed: " + err);
+                cb(false, {}, err);
+                return;
+            }
 
-                                             auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-                                             auto obj = doc.object();
-                                             if (!obj["success"].toBool()) {
-                                                 cb(false, {});
-                                                 return;
-                                             }
-
-                                             QVector<ArticleGeo> results;
-                                             for (const auto& v : obj["geolocated_articles"].toArray()) {
-                                                 auto a = v.toObject();
-                                                 ArticleGeo ag;
-                                                 ag.id = a["id"].toString();
-                                                 ag.primary_lat = a["primary_lat"].toDouble();
-                                                 ag.primary_lon = a["primary_lon"].toDouble();
-                                                 for (const auto& lv : a["locations"].toArray()) {
-                                                     auto lo = lv.toObject();
-                                                     GeoLocation gl;
-                                                     gl.name = lo["name"].toString();
-                                                     gl.code = lo["code"].toString();
-                                                     gl.lat = lo["lat"].toDouble();
-                                                     gl.lon = lo["lon"].toDouble();
-                                                     gl.type = lo["type"].toString();
-                                                     ag.locations.append(gl);
-                                                 }
-                                                 results.append(ag);
-                                             }
-
-                                             self->geo_cache_ = results;
-                                             cb(true, results);
-                                         });
-}
-
-void NewsNlpService::nearby_infrastructure(double lat, double lon, int radius_km, InfraCallback cb) {
-    QStringList args = {"nearby_infrastructure", QString::number(lat, 'f', 4), QString::number(lon, 'f', 4),
-                        QString::number(radius_km)};
-
-    python::PythonRunner::instance().run("news_geolocation.py", args, [cb](python::PythonResult result) {
-        if (!result.success) {
-            cb(false, {});
-            return;
-        }
-        auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-        auto obj = doc.object();
-        if (!obj["success"].toBool()) {
-            cb(false, {});
-            return;
-        }
-
-        QVector<InfrastructureItem> items;
-        for (const auto& v : obj["infrastructure"].toArray()) {
-            auto i = v.toObject();
-            InfrastructureItem item;
-            item.name = i["name"].toString();
-            item.type = i["type"].toString();
-            item.lat = i["lat"].toDouble();
-            item.lon = i["lon"].toDouble();
-            item.distance_km = i["distance_km"].toDouble();
-            items.append(item);
-        }
-        cb(true, items);
-    });
+            GeoResult geo;
+            geo.raw = obj;
+            for (const auto& v : obj["geolocated_articles"].toArray()) {
+                const auto a = v.toObject();
+                ArticleGeo ag;
+                ag.id = a["id"].toString();
+                ag.primary_lat = a["primary_lat"].toDouble();
+                ag.primary_lon = a["primary_lon"].toDouble();
+                for (const auto& lv : a["locations"].toArray()) {
+                    const auto lo = lv.toObject();
+                    GeoLocation gl;
+                    gl.name = lo["name"].toString();
+                    gl.code = lo["code"].toString();
+                    gl.lat = lo["lat"].toDouble();
+                    gl.lon = lo["lon"].toDouble();
+                    gl.type = lo["type"].toString();
+                    ag.locations.append(gl);
+                }
+                geo.articles.append(ag);
+            }
+            cb(true, geo, {});
+        });
 }
 
 void NewsNlpService::translate_text(const QString& text, const QString& target_lang, TranslateCallback cb) {

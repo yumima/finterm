@@ -740,20 +740,6 @@ void NewsScreen::on_article_clicked(const services::NewsArticle& article) {
             break;
         }
     }
-
-    // If geolocated, fetch nearby infrastructure
-    auto geo = services::NewsNlpService::instance().cached_geo();
-    for (const auto& g : geo) {
-        if (g.id == article.id && !g.locations.isEmpty()) {
-            QPointer<NewsScreen> geo_self = this;
-            services::NewsNlpService::instance().nearby_infrastructure(
-                g.primary_lat, g.primary_lon, 50, [geo_self](bool ok, QVector<services::InfrastructureItem> items) {
-                    if (geo_self && ok)
-                        geo_self->detail_panel_->show_infrastructure(items);
-                });
-            break;
-        }
-    }
 }
 
 void NewsScreen::on_cluster_clicked(const services::NewsCluster& cluster) {

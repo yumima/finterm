@@ -117,8 +117,8 @@ QString EconomicsService::cache_key(const QString& script, const QString& comman
     return "economics:" + script + ":" + command + ":" + args.join(",");
 }
 
-void EconomicsService::invalidate(const QString& request_id) {
-    finterm::CacheManager::instance().remove(request_id);
+void EconomicsService::invalidate(const QString& script, const QString& command, const QStringList& args) {
+    finterm::CacheManager::instance().remove(cache_key(script, command, args));
 }
 
 // ── Execute ───────────────────────────────────────────────────────────────────
@@ -154,7 +154,14 @@ void EconomicsService::run(const QString& script, const QString& command, const 
 
         EconomicsResult res;
         if (!py.success) {
-            res.error = py.error.isEmpty() ? QString("Script exited with code %1").arg(py.exit_code) : py.error;
+            // A script that prints {"error": ...} and exits non-zero says why
+            // on stdout; prefer that over stderr / the bare exit code.
+            const QJsonObject out = QJsonDocument::fromJson(python::extract_json(py.output).toUtf8()).object();
+            res.error = out.value("error").toString().trimmed();
+            if (res.error.isEmpty())
+                res.error = py.error.trimmed();
+            if (res.error.isEmpty())
+                res.error = QString("Script exited with code %1").arg(py.exit_code);
             LOG_ERROR("EconomicsService", "Script failed: " + res.error);
         } else if (const QString json_str = python::extract_json(py.output); json_str.isEmpty()) {
             res.error = "No JSON output from script";
