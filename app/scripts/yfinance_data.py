@@ -16,7 +16,6 @@ import concurrent.futures
 import yfinance as yf
 import pandas as pd
 from datetime import date, datetime, timedelta
-from finterm_identity import user_agent
 
 # ── yfinance timezone-cache hardening ─────────────────────────────────────────
 # yfinance caches each ticker's exchange timezone in an on-disk SQLite file
@@ -1946,7 +1945,8 @@ def parse_s1_funding(url):
     if not url:
         return {"error": "no url"}
     try:
-        import requests, re
+        import re
+        import sec_http  # the one SEC client: contact identity, shared pacing
         from bs4 import BeautifulSoup
         import warnings
         try:
@@ -1955,12 +1955,12 @@ def parse_s1_funding(url):
         except Exception:
             pass
 
-        # SEC requires the User-Agent header. Same identifier our C++ client
-        # sends so SEC's rate limiter treats both as one client.
-        headers = {"User-Agent": user_agent()}
-        r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code != 200:
-            return {"url": url, "error": f"HTTP {r.status_code}"}
+        # The user's contact goes to SEC only: any other host is not fetched.
+        if not sec_http.is_sec_host(url):
+            return {"url": url, "error": "not an SEC EDGAR document"}
+        r, status = sec_http.get(url, timeout=30)
+        if r is None:
+            return {"url": url, "error": f"HTTP {status}" if status else "SEC did not answer"}
 
         # Strip HTML, normalize whitespace. S-1s use heavy table markup so
         # get_text() leaves a lot of whitespace; collapse runs.

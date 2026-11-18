@@ -16,23 +16,12 @@ Actions:
 import json
 import re
 import sys
-import time
 from datetime import date, timedelta
-from finterm_identity import user_agent
-
-try:
-    import requests
-except ImportError:
-    requests = None
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 EDGAR_SEARCH = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_SUBMISSIONS = "https://data.sec.gov/submissions"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-
-UA = {
-    "User-Agent": user_agent(),
-    "Accept-Encoding": "gzip, deflate",
-}
 
 # Registration-statement form family. /A entries are amendments; DRS / DRS/A are
 # confidential draft submissions filed *before* the public S-1 (the EGC path).
@@ -65,28 +54,6 @@ try:
 except ImportError:
     KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
 
-_LAST_REQ = 0.0
-# 0.4s gap = ≤2.5 req/s per process; with up to 3 SEC scripts concurrent the
-# combined load stays well under the 10 req/s shared cap.
-_MIN_REQ_GAP = 0.4
-
-
-def _get(url, params=None, headers=None, timeout=15):
-    global _LAST_REQ
-    if requests is None:
-        return None
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, params=params, timeout=timeout, headers=headers or UA)
-        _LAST_REQ = time.time()
-        r.raise_for_status()
-        return r
-    except Exception:
-        return None
-
-
 def _cik_padded(cik):
     return str(cik).zfill(10)
 
@@ -103,8 +70,7 @@ def _filings_for_cik(cik, limit=12):
     special-casing downstream. Independent of the date window and hit cap, so a
     name like SpaceX always appears even when the generic sweep misses it."""
     cik_pad = _cik_padded(cik)
-    r = _get(f"{EDGAR_SUBMISSIONS}/CIK{cik_pad}.json",
-             headers={**UA, "Host": "data.sec.gov"})
+    r, _ = sec_http.get(f"{EDGAR_SUBMISSIONS}/CIK{cik_pad}.json", timeout=15)
     if r is None:
         print(f"sec_s1_pipeline: submissions lookup failed for CIK {cik_pad}",
               file=sys.stderr)
@@ -164,7 +130,7 @@ def fetch_pipeline(days_back=180, max_hits=200):
             "enddt": end,
             "from": from_,
         }
-        r = _get(EDGAR_SEARCH, params=params, headers={**UA, "Host": "efts.sec.gov"})
+        r, _ = sec_http.get(EDGAR_SEARCH, timeout=15, params=params)
         if r is None:
             break
         try:
@@ -365,13 +331,13 @@ def fetch_company_facts(cik):
 
     Returns a dict of the concepts found, {} when the filer has no usable XBRL
     facts, or {"error": "fetch_failed"} when the REQUEST failed. That last
-    distinction matters: _get() swallows every exception (timeout, 429, 503,
+    distinction matters: a failed request (timeout, refusal, 503) comes back as None (timeout, 429, 503,
     connection reset) and returns None, so without it a routine SEC rate-limit
     was indistinguishable from "this company files no financials" — and the
     caller cached that permanently.
     """
     cik_pad = _cik_padded(cik)
-    r = _get(FACTS_URL.format(cik=cik_pad), headers={**UA, "Host": "data.sec.gov"})
+    r, _ = sec_http.get(FACTS_URL.format(cik=cik_pad), timeout=15)
     if r is None:
         return {"error": "fetch_failed"}
     try:
@@ -451,7 +417,7 @@ def pipeline_newest(days_back=180):
     the newest date only advances when something genuinely new is filed."""
     start = (date.today() - timedelta(days=days_back)).isoformat()
     end = date.today().isoformat()
-    r = _get(EDGAR_SEARCH,
+    r, _ = sec_http.get(EDGAR_SEARCH, timeout=15,
              # Must match fetch_pipeline's form set exactly, and for the same
              # reason: "/A" entries turn the query into an amendments-only
              # filter. RW is included so a day whose only registration activity
@@ -459,8 +425,7 @@ def pipeline_newest(days_back=180):
              # being pulled would never trigger a re-fetch and the pipeline
              # would keep showing it as live.
              params={"forms": "S-1,F-1,S-11,RW",
-                     "dateRange": "custom", "startdt": start, "enddt": end, "from": 0},
-             headers={**UA, "Host": "efts.sec.gov"})
+                     "dateRange": "custom", "startdt": start, "enddt": end, "from": 0})
     newest = ""
     if r is not None:
         try:

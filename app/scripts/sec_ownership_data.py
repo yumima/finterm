@@ -35,22 +35,12 @@ import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from xml.etree import ElementTree
-from finterm_identity import user_agent
+import sec_http  # the one SEC client: contact identity, shared pacing, 404 vs refusal
 
 try:
     import requests
 except ImportError:
     requests = None
-
-UA = {
-    "User-Agent": user_agent(),
-    "Accept-Encoding": "gzip, deflate",
-}
-
-# Same 0.4s floor the other SEC scripts use: <=10 req/s is shared across the
-# User-Agent, and several SEC scripts can be in flight at once.
-_LAST_REQ = 0.0
-_MIN_REQ_GAP = 0.4
 
 # Form 4 transaction codes. Only P and S are open-market decisions; the rest are
 # compensation mechanics or administrative. Splitting them is the whole point —
@@ -73,45 +63,6 @@ ROUTINE_MIN_YEARS = 3
 # A cluster is >=2 distinct insiders buying on the open market inside this window.
 CLUSTER_WINDOW_DAYS = 30
 CLUSTER_MIN_INSIDERS = 2
-
-
-def _get_status(url, headers=None, timeout=20):
-    """Throttled GET that says why it failed: (response, status).
-
-    (resp, 200) on success; (None, 404) etc. for an HTTP error; (None, None)
-    when nothing came back at all — network failure, or `requests` missing.
-    Callers that must tell "the file does not exist" from "we could not read
-    it" use this; _get folds both into None.
-    """
-    global _LAST_REQ
-    if requests is None:
-        return None, None
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, timeout=timeout, headers=headers or UA)
-    except Exception:
-        _LAST_REQ = time.time()
-        return None, None
-    _LAST_REQ = time.time()
-    if r.status_code == 403 and missing_archive_object(r.text):
-        return None, 404  # EDGAR's archive answers a file that does not exist this way
-    return (r, r.status_code) if r.ok else (None, r.status_code)
-
-
-def missing_archive_object(body):
-    """EDGAR's archive is served from object storage, and a file that does not
-    exist — the daily index of a day SEC was closed (Labor Day 2026) — comes
-    back 403 with an S3 AccessDenied document, not 404. A refusal for going too
-    fast is an HTML page instead, and must stay a refusal."""
-    b = body or ""
-    return "<Code>AccessDenied</Code>" in b and "<Error>" in b
-
-
-def _get(url, headers=None, timeout=20):
-    """Throttled GET. Returns the response or None — never raises."""
-    return _get_status(url, headers, timeout)[0]
 
 
 def _pad_cik(cik):
@@ -162,7 +113,7 @@ def _company_name_or_blank(symbol):
 
 
 def _submissions(cik):
-    r = _get(f"https://data.sec.gov/submissions/CIK{_pad_cik(cik)}.json")
+    r, _ = sec_http.get(f"https://data.sec.gov/submissions/CIK{_pad_cik(cik)}.json")
     if r is None:
         return None
     try:
@@ -216,7 +167,7 @@ def recent_filings(cik, forms, since_date):
         name = extra.get("name")
         if not name:
             continue
-        r = _get(f"https://data.sec.gov/submissions/{name}")
+        r, _ = sec_http.get(f"https://data.sec.gov/submissions/{name}")
         if r is None:
             continue
         try:
@@ -537,7 +488,7 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
         if not url:
             unparsed += 1
             continue
-        r = _get(url, headers=UA)
+        r, _ = sec_http.get(url)
         if r is None:
             unparsed += 1
             continue
@@ -634,17 +585,16 @@ def _filing_parties(cik, accession):
         int(cik), accession.replace("-", ""), accession)
     # No Accept-Encoding: a ranged GET of a gzip stream comes back as a
     # truncated member, and decoding it raises out of r.text — which is lazy,
-    # so _get()'s "never raises" does not cover it. Identity encoding on 6 KB
+    # so sec_http.get's "never raises" does not cover it. Identity encoding on 6 KB
     # costs nothing and cannot half-decode.
-    headers = dict(UA, Range="bytes=0-6000")
-    headers["Accept-Encoding"] = "identity"
-    r = _get(url, headers=headers)
+    headers = {"Range": "bytes=0-6000", "Accept-Encoding": "identity"}
+    r, _ = sec_http.get(url, headers=headers)
     if r is None:
         # One retry. These run on top of the Form 4 fetches against the same
         # 10 req/s budget, so a transient 403 is expected — and treating it as
         # an answer would drop a real 13D from the list.
-        time.sleep(_MIN_REQ_GAP)
-        r = _get(url, headers=headers)
+        time.sleep(sec_http.MIN_GAP_S)
+        r, _ = sec_http.get(url, headers=headers)
     if r is None:
         return None
     try:

@@ -37,18 +37,11 @@ if fi.user_agent() != "finterm (https://github.com/yumima/finterm)":
 # scripts for user_agent() outside these files is a leak of the address.
 import re
 SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts")
-DECLARED = {  # host each file talks to
-    "sec_form_d_data.py", "sec_data.py", "sec_s1_pipeline.py", "sec_form4_bulk.py", "sec_13f_bulk.py",
-    "sec_xbrl_data.py", "sec_nport_marks.py", "sec_ownership_data.py",
-    "ipo_calendar.py",                                           # EDGAR submissions only (Nasdaq gets no contact)
+DECLARED = {  # host each file talks to; every other SEC caller goes through sec_http
+    "sec_http.py",                                               # the one SEC client: refuses any non-*.sec.gov host, redirects included
     "finra_short_volume.py", "finra_short_interest.py",          # FINRA
     "nominatim_data.py", "overpass_api_data.py",                 # OpenStreetMap
-    "yfinance_data.py",                                          # its EDGAR document fetch
-    "sec_http.py",                                               # the one SEC client: refuses any non-*.sec.gov host, redirects included
-    "brief_drafts.py",                                           # EDGAR only: company_tickers.json + submissions (_sec_get)
-    "earnings_links.py",                                         # EDGAR only: _get gives the contact to *.sec.gov hosts alone
-    os.path.join("mcp", "edgar", "base.py"),                     # EDGAR
-    os.path.join("Analytics", "corporateFinance", "deal_database", "deal_scanner.py"),  # EDGAR
+    os.path.join("mcp", "edgar", "base.py"),                     # EDGAR, through edgartools' own client (set_identity)
 }
 for root, _, files in os.walk(SCRIPTS):
     for fn in files:
@@ -81,6 +74,65 @@ try:
     fails.append("sec_http.get sent a request to a non-SEC host")
 except ValueError:
     pass
+
+# …and what it sends and how it reads the answer, against a scripted network.
+import requests  # noqa: E402
+
+
+class _R:
+    def __init__(self, url, status, location=None, text=""):
+        self.url, self.status_code, self.text = url, status, text
+        self.headers = {"Location": location} if location else {}
+        self.is_redirect = location is not None
+        self.ok = status < 400
+
+
+_calls = []
+
+
+def _script(answers):
+    def fake_get(url, params=None, timeout=None, headers=None, allow_redirects=True):
+        _calls.append((url, dict(headers or {})))
+        return answers[url]
+    return fake_get
+
+
+os.environ["FINTERM_CONTACT_EMAIL"] = "me@example.com"
+_real_get = requests.get
+try:
+    S3 = "<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"
+    requests.get = _script({"https://www.sec.gov/a": _R("https://www.sec.gov/a", 302, "https://evil.example.com/a"),
+                            "https://www.sec.gov/b": _R("https://www.sec.gov/b", 301, "https://data.sec.gov/b"),
+                            "https://data.sec.gov/b": _R("https://data.sec.gov/b", 200),
+                            "https://www.sec.gov/gone": _R("https://www.sec.gov/gone", 403, text=S3),
+                            "https://www.sec.gov/slow": _R("https://www.sec.gov/slow", 403, text="<html>Rate</html>")})
+    if sec_http.get("https://www.sec.gov/a") != (None, 302) or any("evil" in u for u, _ in _calls):
+        fails.append("sec_http followed a redirect off sec.gov")
+    r, st = sec_http.get("https://www.sec.gov/b", headers={"User-Agent": "spoof", "Range": "bytes=0-1"})
+    if st != 200 or _calls[-1][0] != "https://data.sec.gov/b":
+        fails.append("sec_http did not follow a redirect within sec.gov")
+    if any(h.get("User-Agent") != "finterm (me@example.com)" for _, h in _calls[1:]):
+        fails.append("an extra header replaced the contact")
+    if _calls[-1][1].get("Range") != "bytes=0-1":
+        fails.append("extra headers are not carried over a redirect")
+    if sec_http.get("https://www.sec.gov/gone") != (None, 404):
+        fails.append("EDGAR's S3 AccessDenied must read as 404 (no such file)")
+    if sec_http.get("https://www.sec.gov/slow") != (None, 403):
+        fails.append("a rate-limit 403 must stay a refusal")
+    # one gate for every caller: request STARTS spaced by `gap`, threads included
+    import threading  # noqa: E402
+    import time  # noqa: E402
+    starts = []
+    requests.get = lambda url, **k: (starts.append(time.time()), _R(url, 200))[1]
+    ts = [threading.Thread(target=sec_http.get, args=("https://www.sec.gov/x",), kwargs={"gap": 0.1})
+          for _ in range(4)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    starts.sort()
+    if min(b - a for a, b in zip(starts, starts[1:])) < 0.095:
+        fails.append(f"sec_http let concurrent requests start closer than the gap: {starts}")
+finally:
+    requests.get = _real_get
 
 for f in fails:
     print("FAIL:", f)

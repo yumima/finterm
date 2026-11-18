@@ -226,35 +226,38 @@ def main():
 
     # ── whose identity each request carries ──────────────────────────────────
     # The user's contact is declared to SEC alone — decided by the host, so an
-    # exhibit link in a filing that points off sec.gov never carries it.
+    # exhibit link in a filing that points off sec.gov never carries it. SEC
+    # URLs go through sec_http (which follows redirects by hand and keeps the
+    # contact on *.sec.gov — test_identity); everything else is the project.
     sent = []
 
     def fake_urlopen(req, timeout=None):
         sent.append(req.get_header("User-agent"))
         raise OSError("offline")
 
-    real_open, real_env = el._OPENER.open, os.environ.get("FINTERM_CONTACT_EMAIL")
-    el._OPENER.open, os.environ["FINTERM_CONTACT_EMAIL"] = fake_urlopen, "me@example.com"
+    def fake_sec_get(url, timeout=20, headers=None, **_):
+        sent.append(el.sec_http._headers(headers)["User-Agent"])
+        return None, 403
+
+    real = (el.urllib.request.urlopen, el.sec_http.get, os.environ.get("FINTERM_CONTACT_EMAIL"))
+    el.urllib.request.urlopen, el.sec_http.get = fake_urlopen, fake_sec_get
+    os.environ["FINTERM_CONTACT_EMAIL"] = "me@example.com"
+    refusal = ""
     try:
         for url in ("https://www.sec.gov/Archives/x.htm", "https://evil.example.com/sec.gov/x.htm",
                     "https://sec.gov.example.com/x.htm"):
             try:
                 el._get(url, as_json=False)
-            except el._FetchFailed:
-                pass
-        # …and a sec.gov URL that redirects off SEC does not take it along
-        hop = el._ContactStaysOnSec()
-        req = el.urllib.request.Request("https://www.sec.gov/x", headers={"User-Agent": el.user_agent()})
-        off = hop.redirect_request(req, None, 302, "Found", {}, "https://evil.example.com/x")
-        on = hop.redirect_request(req, None, 301, "Moved", {}, "https://data.sec.gov/x")
-        sent += [off.get_header("User-agent"), on.get_header("User-agent")]
+            except el._FetchFailed as e:
+                refusal = refusal or str(e)
     finally:
-        el._OPENER.open = real_open
-        if real_env is None:
+        el.urllib.request.urlopen, el.sec_http.get = real[0], real[1]
+        if real[2] is None:
             os.environ.pop("FINTERM_CONTACT_EMAIL", None)
         else:
-            os.environ["FINTERM_CONTACT_EMAIL"] = real_env
-    check("contact only to sec.gov", ["me@example.com" in (ua or "") for ua in sent], [True, False, False, False, True])
+            os.environ["FINTERM_CONTACT_EMAIL"] = real[2]
+    check("contact only to sec.gov", ["me@example.com" in (ua or "") for ua in sent], [True, False, False])
+    check("an SEC refusal is a failure, not an empty page", refusal, "HTTP 403 on x.htm")
 
     print(f"{len(CASES) + extra - failed}/{len(CASES) + extra} passed")
     return 1 if failed else 0

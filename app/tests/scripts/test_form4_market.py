@@ -148,8 +148,8 @@ def main():
                               {f"{dd}-read": f"a/{dd}-read.txt", f"{dd}-new": f"a/{dd}-new.txt"})
     class Ok:
         ok, text = True, "no ownership xml here"
-    m._get_status = lambda url: (fetched.append(url) or (Ok(), 200))
-    m.REQ_PAUSE = 0
+    real_sec_get = m.sec_http.get  # the one SEC client, scripted for the scan
+    m.sec_http.get = lambda url, **_: (fetched.append(url) or (Ok(), 200))
     res = m.scan(days=8)
     check("scan: the interrupted day is walked again", partial in walked, str(walked))
     check("scan: a completed day is not", complete not in walked, str(walked))
@@ -173,7 +173,7 @@ def main():
                               {f"{dd}-ok": f"a/{dd}-ok.txt", f"{dd}-404": f"a/{dd}-404.txt"}
                               if dd.isoformat() == gone_day else
                               None if dd.isoformat() == refused else {})
-    m._get_status = lambda url: ((None, 503) if url.endswith("-bad.txt") else
+    m.sec_http.get = lambda url, **_: ((None, 503) if url.endswith("-bad.txt") else
                                  (None, 404) if url.endswith("-404.txt") else (Ok(), 200))
     res = m.scan(days=12)
     con = m.connect()
@@ -196,12 +196,13 @@ def main():
 
     # day_index itself: 404 = no filings that day; anything else = unknown.
     real = __import__("importlib").reload(m)
-    real._get_status = lambda url: (None, 404)
+    real.sec_http.get = lambda url, **_: (None, 404)
     check("day_index: 404 is an empty day", real.day_index(today) == {})
-    real._get_status = lambda url: (None, 403)
+    real.sec_http.get = lambda url, **_: (None, 403)
     check("day_index: a refusal is None, not empty", real.day_index(today) is None)
-    real._get_status = lambda url: (None, None)
+    real.sec_http.get = lambda url, **_: (None, None)
     check("day_index: no answer is None, not empty", real.day_index(today) is None)
+    m.sec_http.get = real_sec_get
 
     print()
     if FAILURES:

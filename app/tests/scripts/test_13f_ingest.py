@@ -113,12 +113,12 @@ class FakeResponse:
 
 def run_ingest(bulk, payload):
     """Run the shipped ingest against a synthetic data set."""
-    real_get = bulk._get
-    bulk._get = lambda url, timeout=300: FakeResponse(payload)
+    real_get = bulk.sec_http.get
+    bulk.sec_http.get = lambda url, timeout=20, **_: (FakeResponse(payload), 200)
     try:
-        return bulk.ingest("http://example.invalid/set.zip")
+        return bulk.ingest("https://www.sec.gov/set.zip")
     finally:
-        bulk._get = real_get
+        bulk.sec_http.get = real_get
 
 
 def main():

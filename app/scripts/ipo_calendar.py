@@ -61,7 +61,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from finterm_identity import user_agent  # noqa: E402  (SEC only — see finterm_identity)
+import sec_http  # noqa: E402  (the one SEC client: contact identity, shared pacing)
 from finterm_paths import market_data_path  # noqa: E402
 
 try:
@@ -211,31 +211,31 @@ class Cache:
         self.con.commit()
 
 
-_last = {"nasdaq": 0.0, "sec": 0.0}
-# Request STARTS are spaced; the requests themselves run concurrently (Nasdaq
-# answers in ~2.5 s, so one-at-a-time made a cold enrich take >10 minutes).
-# SEC: ≤2.5 starts/s, the same budget as the other SEC scripts — up to three
-# of them run at once (PreIpoService's S-1/Form D/N-PORT fetches start when
-# IPO Watch opens) under SEC's shared 10/s cap.
-_GAP = {"nasdaq": 0.12, "sec": 0.4}
+_last = 0.0
+# Nasdaq request STARTS are spaced; the requests themselves run concurrently
+# (Nasdaq answers in ~2.5 s, so one-at-a-time made a cold enrich take >10
+# minutes). SEC requests go through sec_http, which paces them the same way.
+_GAP = 0.12
 _gate = threading.Lock()
 WORKERS = 8
 
 
-def _http_json(kind, url, headers):
+def _http_json(url, headers):
+    """Nasdaq JSON, or None (a failed request is not an answer — caller keeps stale)."""
+    global _last
     if requests is None:
         return None
     with _gate:
-        wait = _GAP[kind] - (time.time() - _last[kind])
+        wait = _GAP - (time.time() - _last)
         if wait > 0:
             time.sleep(wait)
-        _last[kind] = time.time()
+        _last = time.time()
     try:
         r = requests.get(url, headers=headers, timeout=20)
         r.raise_for_status()
         return r.json()
-    except Exception as e:  # a failed request is not an answer — caller keeps stale
-        print(f"ipo_calendar: {kind} fetch failed: {url.split('?')[0]} ({type(e).__name__})",
+    except Exception as e:
+        print(f"ipo_calendar: nasdaq fetch failed: {url.split('?')[0]} ({type(e).__name__})",
               file=sys.stderr)
         return None
 
@@ -261,7 +261,7 @@ def _month_ttl(yyyymm, today, written_at=None):
 
 
 def _fetch_month_net(yyyymm):
-    doc = _http_json("nasdaq", NASDAQ_CAL.format(yyyymm), NASDAQ_HEADERS)
+    doc = _http_json(NASDAQ_CAL.format(yyyymm), NASDAQ_HEADERS)
     data = (doc or {}).get("data") if isinstance(doc, dict) else None
     if not isinstance(data, dict):
         return None
@@ -584,7 +584,7 @@ def _ov_ttl(final):
 
 
 def _fetch_overview_net(deal_id):
-    doc = _http_json("nasdaq", NASDAQ_DEAL.format(deal_id), NASDAQ_HEADERS)
+    doc = _http_json(NASDAQ_DEAL.format(deal_id), NASDAQ_HEADERS)
     po = (((doc or {}).get("data") or {}).get("poOverview")) if isinstance(doc, dict) else None
     return parse_overview(po) if isinstance(po, dict) else None
 
@@ -646,9 +646,15 @@ def _sub_ttl(hot):
 
 
 def _fetch_submissions_net(cik):
-    doc = _http_json("sec", SEC_SUBMISSIONS.format(str(cik).zfill(10)),
-                     {"User-Agent": user_agent(), "Accept-Encoding": "gzip, deflate"})
+    url = SEC_SUBMISSIONS.format(str(cik).zfill(10))
+    r, status = sec_http.get(url, timeout=20)
+    try:
+        doc = r.json() if r is not None else None
+    except ValueError:
+        doc = None
     if not isinstance(doc, dict):
+        # a failed request is not an answer — caller keeps stale
+        print(f"ipo_calendar: sec fetch failed: {url} (HTTP {status})", file=sys.stderr)
         return None
     # keep only what the ladder needs — submissions JSON can be megabytes
     rec = (doc.get("filings") or {}).get("recent") or {}

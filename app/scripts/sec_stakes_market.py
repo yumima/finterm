@@ -32,15 +32,14 @@ import os
 import re
 import sqlite3
 import sys
-import time
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sec_ownership_data import _get_status, _pad_cik  # noqa: E402
+import sec_http  # noqa: E402  (the one SEC client)
+from sec_ownership_data import _pad_cik  # noqa: E402
 from finterm_paths import market_data_path  # noqa: E402
 
 BASE = "https://www.sec.gov/Archives"
-REQ_PAUSE = 0.13  # well under SEC's 10 requests a second, shared with other scans
 
 STAKE_FORMS = ("SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A",
                "SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A")
@@ -170,7 +169,7 @@ def business_days(n):
 
 def day_index(d):
     q = (d.month - 1) // 3 + 1
-    r, status = _get_status(f"{BASE}/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx")
+    r, status = sec_http.get(f"{BASE}/edgar/daily-index/{d.year}/QTR{q}/form.{d.strftime('%Y%m%d')}.idx")
     if r is None:
         return {} if status == 404 else None
     return parse_index(r.text)
@@ -222,8 +221,7 @@ def scan(days=30, max_new_days=None):
                                  1 if activist else 0, 1 if amendment else 0, 0, url))
                     listed += 1
                     continue
-                r, status = _get_status(f"{BASE}/{path}")
-                time.sleep(REQ_PAUSE)
+                r, status = sec_http.get(f"{BASE}/{path}")
                 read += 1
                 if r is None and status == 404:
                     con.execute("INSERT OR REPLACE INTO stakes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

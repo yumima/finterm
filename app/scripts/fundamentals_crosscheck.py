@@ -32,7 +32,6 @@ import json
 import math
 import os
 import sys
-import time
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -270,8 +269,8 @@ def main(argv: List[str]) -> int:
         return 2
     # SEC refuses a client that declares no contact. The app passes the user's
     # configured one in the environment; run by hand, read it from the keyring
-    # as the weekly brief does. It goes to SEC only, and must be set BEFORE
-    # sec_xbrl_data is imported (its session reads it at import).
+    # as the weekly brief does. It goes to SEC only (sec_http reads it on
+    # every request, and paces them).
     if not os.environ.get("FINTERM_CONTACT_EMAIL"):
         try:
             from weekly_brief_core import CONTACT_KEY, contact_from_keyring
@@ -296,7 +295,6 @@ def main(argv: List[str]) -> int:
         results.append(check(s))
         if (i + 1) % 25 == 0:
             print(f"… {i + 1}/{len(syms)}", file=sys.stderr, flush=True)
-        time.sleep(0.15)  # SEC asks for at most 10 requests a second
     print(json.dumps(summarize(results), indent=1))
     return 0
 

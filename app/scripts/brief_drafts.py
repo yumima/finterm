@@ -471,14 +471,6 @@ def parse_tickers(text):
     return out[:25]
 
 
-def _sec_get(url):
-    from finterm_identity import user_agent
-
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent(), "Accept-Encoding": "identity"})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.loads(r.read().decode("utf-8"))
-
-
 FILING_FORMS = ("8-K", "10-K", "10-Q", "S-1", "S-1/A", "DEF 14A", "6-K", "20-F", "424B4", "SC 13D", "SC 13G")
 
 
@@ -496,6 +488,7 @@ def theme_facts(tickers, days=30, today=None):
     today = today or date.today()
     cutoff = today - timedelta(days=days)
     import sec_directory  # the app's one copy of SEC's ticker directory
+    import sec_http  # the one SEC client: contact identity, shared pacing
     try:
         sec_directory.rows()
     except Exception as e:  # noqa: BLE001
@@ -510,7 +503,12 @@ def theme_facts(tickers, days=30, today=None):
         cik = row["cik"]
         c = {"ticker": t, "cik": cik, "name": row["title"], "sic": "", "filings": []}
         try:
-            sub = _sec_get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
+            r, status = sec_http.get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json", timeout=20)
+            if r is None:  # refused or offline: the filings are said to be missing, not empty
+                c["filings_error"] = f"HTTP {status}" if status else "no answer"
+                companies.append(c)
+                continue
+            sub = r.json()
             c["name"] = sub.get("name") or c["name"]
             c["sic"] = sub.get("sicDescription") or ""
             rec = (sub.get("filings") or {}).get("recent") or {}
@@ -523,7 +521,6 @@ def theme_facts(tickers, days=30, today=None):
         except Exception as e:  # noqa: BLE001 — the company stays; its filings are said to be missing
             c["filings_error"] = type(e).__name__
         companies.append(c)
-        time.sleep(0.15)  # SEC: well under 10 requests a second
     insiders, insider_note = [], ""
     try:
         import sec_form4_market as f4

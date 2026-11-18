@@ -34,6 +34,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
 
+import sec_http  # noqa: E402
 import sec_ownership_data as so  # noqa: E402
 
 FAILURES = []
@@ -115,10 +116,10 @@ def test_a_missing_edgar_file_is_not_a_refusal():
     # AccessDenied document. Read as a refusal, the scan stopped there for good.
     s3 = ('<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>AccessDenied</Code>'
           '<Message>Access Denied</Message></Error>')
-    check("S3 AccessDenied = no such file", so.missing_archive_object(s3))
+    check("S3 AccessDenied = no such file", sec_http.missing_archive_object(s3))
     check("SEC's rate-limit page stays a refusal",
-          not so.missing_archive_object("<html><h1>Request Rate Threshold Exceeded</h1></html>"))
-    check("empty body stays a refusal", not so.missing_archive_object(""))
+          not sec_http.missing_archive_object("<html><h1>Request Rate Threshold Exceeded</h1></html>"))
+    check("empty body stays a refusal", not sec_http.missing_archive_object(""))
 
 
 def test_parse_reads_the_filed_values():

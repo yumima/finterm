@@ -28,15 +28,9 @@ All endpoints are public, no API key. EDGAR requires a descriptive User-Agent.
 import json
 import re
 import sys
-import time
 from datetime import date, datetime, timedelta, timezone
 from xml.etree import ElementTree as ET
-from finterm_identity import user_agent
-
-try:
-    import requests
-except ImportError:
-    requests = None
+import sec_http  # the one SEC client: contact identity, shared pacing
 
 EDGAR_SEARCH = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_SUBMISSIONS = "https://data.sec.gov/submissions"
@@ -52,38 +46,6 @@ try:
 except ImportError:
     # Standalone fallback if the sibling module isn't importable.
     KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
-
-UA = {
-    "User-Agent": user_agent(),
-    "Accept-Encoding": "gzip, deflate",
-    "Host": "efts.sec.gov",
-}
-UA_ARCHIVE = dict(UA)
-UA_ARCHIVE["Host"] = "www.sec.gov"
-
-# SEC asks for ≤10 req/s shared across User-Agent. PreIpoService runs up to 3
-# SEC scripts concurrently, so per-process gap must be ≥0.34s to stay under
-# the shared ceiling. Use 0.4s for safety margin.
-_LAST_REQ = 0.0
-_MIN_REQ_GAP = 0.4
-
-
-def _get(url, params=None, headers=None, timeout=15):
-    global _LAST_REQ
-    if requests is None:
-        return None
-    elapsed = time.time() - _LAST_REQ
-    if elapsed < _MIN_REQ_GAP:
-        time.sleep(_MIN_REQ_GAP - elapsed)
-    try:
-        r = requests.get(url, params=params, timeout=timeout,
-                         headers=headers or UA)
-        _LAST_REQ = time.time()
-        r.raise_for_status()
-        return r
-    except Exception:
-        return None
-
 
 def _cik_padded(cik):
     return str(cik).zfill(10)
@@ -309,7 +271,7 @@ def search_filings(forms, days_back, max_hits=200, q=None, entity_name=None):
             params["q"] = q
         if entity_name:
             params["entityName"] = entity_name
-        r = _get(EDGAR_SEARCH, params=params)
+        r, _ = sec_http.get(EDGAR_SEARCH, timeout=15, params=params)
         if r is None:
             # Nothing back at all is a failure; a later page failing is a
             # partial answer. Both are distinct from "EDGAR has nothing".
@@ -435,7 +397,7 @@ def fetch_form_d_xml(cik, adsh):
     cik_u = _cik_unpadded(cik)
     adsh_clean = adsh.replace("-", "")
     url = f"{EDGAR_ARCHIVE}/{cik_u}/{adsh_clean}/primary_doc.xml"
-    r = _get(url, headers=UA_ARCHIVE)
+    r, _ = sec_http.get(url, timeout=15)
     if r is None:
         return None
     try:
@@ -624,10 +586,10 @@ def _filings_for_cik(cik, forms=("D", "D/A"), limit=10):
     _LAST_SUBMISSIONS_TRUNCATED = False
     cik_pad = _cik_padded(cik)
     url = f"{EDGAR_SUBMISSIONS}/CIK{cik_pad}.json"
-    r = _get(url, headers={**UA_ARCHIVE, "Host": "data.sec.gov"})
+    r, _ = sec_http.get(url, timeout=15)
     if r is None:
         _LAST_SUBMISSIONS_FAILED = True
-        # _get already swallowed the exception, but for known-CIK lookups
+        # sec_http answered None (refused, missing or offline); for known-CIK lookups
         # surface it on stderr so the operator notices a stale curated entry.
         print(f"sec_form_d_data: submissions lookup failed for CIK {cik_pad}",
               file=sys.stderr)
@@ -856,7 +818,7 @@ def spv_query_counts():
         if not t or t.lower() in counts:
             continue
         q = ('"%s"' % t) if " " in t else t
-        r = _get(EDGAR_SEARCH, params={"forms": "D,D/A", "q": q, "from": 0})
+        r, _ = sec_http.get(EDGAR_SEARCH, timeout=15, params={"forms": "D,D/A", "q": q, "from": 0})
         total = 0
         if r is not None:
             try:
