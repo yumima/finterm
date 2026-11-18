@@ -1,9 +1,11 @@
+#include "services/markets/MarketDataService.h"
 #include "services/workflow/nodes/MarketDataNodes.h"
 
 #include "python/PythonRunner.h"
 #include "screens/economics/panels/EconomicsPresets.h"
 #include "services/workflow/NodeRegistry.h"
 
+#include <memory>
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -44,11 +46,6 @@ std::optional<QString> script_error_message(const QJsonObject& obj) {
         return msg;
     }
     return QString("Python script reported an error");
-}
-
-// JSON number when > 0, else null — a 0 bid/ask/price means "not reported".
-QJsonValue positive_or_null(const QJsonValue& v) {
-    return (v.isDouble() && v.toDouble() > 0.0) ? v : QJsonValue(QJsonValue::Null);
 }
 
 // Helper: run a Python script and parse the JSON result, calling cb with the outcome.
@@ -95,7 +92,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .description = "Fetch real-time market quote for a symbol",
         .icon_text = "$",
         .accent_color = "#2563eb",
-        .version = 1,
+        .version = 2, // v2: one quote shape with MCP (MarketDataService::quote_json)
         .inputs = {{"input_0", "Data In", PortDirection::Input, ConnectionType::Main}},
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::MarketData}},
         .parameters =
@@ -106,8 +103,18 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>&,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                QString symbol = params.value("symbol").toString("AAPL");
-                run_python_json("yfinance_data.py", {"quote", symbol}, cb);
+                const QString symbol = params.value("symbol").toString("AAPL");
+                // The app's one market quote (same source as every screen).
+                services::MarketDataService::instance().fetch_quotes(
+                    {symbol},
+                    [cb, symbol](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
+                        if (!ok || quotes.isEmpty()) {
+                            cb(false, {}, err.isEmpty() ? QStringLiteral("no quote for %1").arg(symbol) : err);
+                            return;
+                        }
+                        cb(true, services::MarketDataService::quote_json(quotes.first()), {});
+                    },
+                    /*stale_on_failure=*/false);
             },
     });
 
@@ -130,10 +137,17 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>&,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                QString symbol = params.value("symbol").toString("AAPL");
-                QString period = params.value("period").toString("1y");
-                QString interval = params.value("interval").toString("1d");
-                run_python_json("yfinance_data.py", {"historical_period", symbol, period, interval}, cb);
+                const QString symbol = params.value("symbol").toString("AAPL");
+                const QString period = params.value("period").toString("1y");
+                const QString interval = params.value("interval").toString("1d");
+                // The app's one price-history read (priced rows only).
+                services::MarketDataService::instance().fetch_bars(
+                    symbol, period, interval, [cb](const services::MarketDataService::BarsReply& r) {
+                        if (!r.ok)
+                            cb(false, {}, r.error);
+                        else
+                            cb(true, r.rows, {});
+                    });
             },
     });
 
@@ -157,24 +171,52 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 QString symbol = params.value("symbol").toString("AAPL");
                 // yfinance has no L2 book — report the real top-of-book only.
                 // A missing bid/ask is null, never substituted with last price.
-                run_python_json("yfinance_data.py", {"quote", symbol},
-                                [cb, symbol](bool ok, QJsonValue val, QString err) {
-                                    if (!ok) {
-                                        cb(false, {}, err);
-                                        return;
-                                    }
-                                    QJsonObject quote = val.toObject();
-                                    QJsonObject out;
-                                    out["symbol"] = symbol;
-                                    out["level"] = "top_of_book";
-                                    out["bid"] = positive_or_null(quote.value("bid"));
-                                    out["ask"] = positive_or_null(quote.value("ask"));
-                                    out["bid_size"] = positive_or_null(quote.value("bid_size"));
-                                    out["ask_size"] = positive_or_null(quote.value("ask_size"));
-                                    out["last"] = positive_or_null(quote.value("price"));
-                                    out["source"] = "yfinance";
-                                    cb(true, out, {});
-                                });
+                // Both reads in parallel; the node answers when both have.
+                // No book (refused, or none outside hours) is null bid/ask,
+                // not a failure, as long as there is a last price.
+                struct Depth {
+                    int pending = 2;
+                    services::MarketDataService::OrderbookData book;
+                    bool book_ok = false;
+                    QVector<services::QuoteData> quotes;
+                    QString error;
+                };
+                auto st = std::make_shared<Depth>();
+                auto finish = [cb, symbol, st] {
+                    if (--st->pending > 0)
+                        return;
+                    auto pos = [](double v) { return v > 0 ? QJsonValue(v) : QJsonValue(); };
+                    const QJsonValue last = st->quotes.isEmpty() ? QJsonValue() : pos(st->quotes.first().price);
+                    if (!st->book_ok && last.isNull()) {
+                        cb(false, {}, st->error.isEmpty() ? QStringLiteral("no market data for %1").arg(symbol)
+                                                          : st->error);
+                        return;
+                    }
+                    QJsonObject out;
+                    out["symbol"] = symbol;
+                    out["level"] = "top_of_book";
+                    out["bid"] = st->book_ok ? pos(st->book.bid) : QJsonValue();
+                    out["ask"] = st->book_ok ? pos(st->book.ask) : QJsonValue();
+                    out["bid_size"] = st->book_ok ? pos(st->book.bid_size) : QJsonValue();
+                    out["ask_size"] = st->book_ok ? pos(st->book.ask_size) : QJsonValue();
+                    out["last"] = last;
+                    out["source"] = "yfinance";
+                    cb(true, out, {});
+                };
+                auto& mds = services::MarketDataService::instance();
+                mds.fetch_orderbook(symbol, [st, finish](bool ok, services::MarketDataService::OrderbookData ob) {
+                    st->book_ok = ok;
+                    st->book = ob;
+                    finish();
+                });
+                mds.fetch_quotes(
+                    {symbol},
+                    [st, finish](bool, QVector<services::QuoteData> quotes, const QString& err) {
+                        st->quotes = quotes;
+                        st->error = err;
+                        finish();
+                    },
+                    /*stale_on_failure=*/false);
             },
     });
 
@@ -478,7 +520,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .description = "Foreign exchange rates",
         .icon_text = "$",
         .accent_color = "#2563eb",
-        .version = 1,
+        .version = 2, // v2: one quote shape with MCP (MarketDataService::quote_json)
         .inputs = {{"input_0", "Data In", PortDirection::Input, ConnectionType::Main}},
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::PriceData}},
         .parameters =
@@ -493,18 +535,20 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 QString quote = params.value("quote").toString("EUR");
                 // yfinance supports forex via "USDEUR=X" format
                 QString symbol = base + quote + "=X";
-                run_python_json("yfinance_data.py", {"quote", symbol},
-                                [cb, base, quote](bool ok, QJsonValue val, QString err) {
-                                    if (!ok) {
-                                        cb(false, {}, err);
-                                        return;
-                                    }
-                                    QJsonObject out = val.toObject();
-                                    out["base"] = base;
-                                    out["quote"] = quote;
-                                    out["rate"] = out.value("price");
-                                    cb(true, out, {});
-                                });
+                services::MarketDataService::instance().fetch_quotes(
+                    {symbol},
+                    [cb, base, quote, symbol](bool ok, QVector<services::QuoteData> quotes, const QString& err) {
+                        if (!ok || quotes.isEmpty()) {
+                            cb(false, {}, err.isEmpty() ? QStringLiteral("no rate for %1").arg(symbol) : err);
+                            return;
+                        }
+                        QJsonObject out = services::MarketDataService::quote_json(quotes.first());
+                        out["base"] = base;
+                        out["quote"] = quote;
+                        out["rate"] = out.value("price");
+                        cb(true, out, {});
+                    },
+                    /*stale_on_failure=*/false);
             },
     });
 

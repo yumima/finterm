@@ -1,8 +1,11 @@
 #pragma once
 #include "core/result/Result.h"
 #include "core/util/BarTime.h"
+#include "services/markets/Bars.h"
 #include "datahub/Producer.h"
 
+#include <QDateTime>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -111,31 +114,6 @@ struct InfoData {
     QVector<OfficerInfo> officers;
 };
 
-struct HistoryPoint {
-    /// Midnight in the EXCHANGE's own zone — a session, not an instant. Same
-    /// convention as Candle::timestamp, from the same daemon. Decode it with
-    /// date(); see core/util/BarTime.h for what a bare fromSecsSinceEpoch()
-    /// costs (a day, in the wrong direction, per exchange or per viewer).
-    qint64 timestamp = 0; // seconds since epoch, exchange midnight
-    double open = 0;
-    double high = 0;
-    double low = 0;
-    double close = 0;
-    qint64 volume = 0;
-
-    /// The session this bar covers, on the exchange's calendar. Valid for the
-    /// 1d / 1wk / 1mo intervals fetch_history() serves; a weekly or monthly
-    /// bar is stamped at the start of its period.
-    ///
-    /// UNENFORCED PRECONDITION: fetch_history() takes `interval` as a free-form
-    /// QString, so nothing stops an intraday one. All current callers pass
-    /// "1d"; an intraday bar is a real instant, and bar_date()'s +14h would
-    /// silently roll a 15:30 ET bar into the next day with no diagnostic. If an
-    /// intraday path is ever added, it must not call this — decode those in a
-    /// real timezone instead.
-    QDate date() const { return core::bartime::bar_date(timestamp); }
-};
-
 struct TickerDef {
     QString symbol;
     QString name;
@@ -202,6 +180,9 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     /// kept off QuoteData so an unchanged tick stays byte-identical for the
     /// hub's no-change check. Invalid when no quote is held.
     QDateTime quote_as_of(const QString& symbol) const;
+    /// A quote as JSON for tools and workflows — one shape everywhere; an
+    /// unknown figure is null, never 0.
+    static QJsonObject quote_json(const QuoteData& q);
 
     /// Real day's top gainers + losers via yfinance's predefined screeners.
     /// Returns both sides in one daemon round-trip. Used by TopMoversWidget;
@@ -377,12 +358,27 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     using S1FundingCallback = std::function<void(bool, S1Funding)>;
     void fetch_s1_funding(const QString& s1_url, S1FundingCallback cb);
 
-    /// Fetch historical OHLCV data. period: "1mo","3mo","6mo","1y","2y","5y"
-    /// interval: "1d","1wk","1mo"
-    /// Phase 3+: prefer `DataHub::subscribe(this, "market:history:<sym>:<period>:<interval>", ...)`
-    /// for streaming chart widgets. Callback API remains for one-shot reads.
-    using HistoryCallback = std::function<void(bool, QVector<HistoryPoint>)>;
-    void fetch_history(const QString& symbol, const QString& period, const QString& interval, HistoryCallback cb);
+    /// One price series, as every reader in the app gets it.
+    struct BarsReply {
+        bool ok = false;            ///< an answer (bars may be empty: "no history"); false = failed
+        QVector<HistoryPoint> bars; ///< priced bars only (bars::parse)
+        QJsonArray rows;            ///< the same bars as the daemon's rows (technicals / TALipp read these)
+        QDateTime as_of;            ///< when fetched (a cache hit keeps its original time)
+        QString error;              ///< the vendor's own reason when !ok
+    };
+    using BarsCallback = std::function<void(const BarsReply&)>;
+    /// The ONE price-history read: `historical_period` through one parser
+    /// (bars::parse), one cache entry per (symbol, period, interval, adjusted)
+    /// and concurrent asks for the same series coalesced onto one request.
+    /// A failed or empty reply is never cached. period: "1d" … "max" or
+    /// "range:YYYY-MM-DD:YYYY-MM-DD"; interval: "1m" … "1mo".
+    /// Streaming chart widgets subscribe to market:history:<sym>:<period>:<interval>
+    /// instead — the same parser and cache.
+    /// Split/dividend-adjusted prices, or the prints that actually traded.
+    /// A strong enum, not a bool: a stray integer argument must not compile.
+    enum class Adjust { Adjusted, Raw };
+    void fetch_bars(const QString& symbol, const QString& period, const QString& interval, BarsCallback cb,
+                    Adjust adjust = Adjust::Adjusted);
 
     /// Fetch 5-day hourly sparkline data for multiple symbols in one Python call.
     /// Callback: map of symbol -> list of close prices (chronological).
@@ -418,6 +414,7 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     void stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
 
   private:
+    QHash<QString, QVector<BarsCallback>> bars_waiters_; // series key → callers waiting on its request
     /// The one movers fetch (kMoversMax per side): cached kMoversTtlSec,
     /// concurrent callers coalesced onto the request already out.
     void fetch_movers_all(std::function<void(bool, const TopMovers&, const QString&)> cb, bool fresh = false);
@@ -490,7 +487,8 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
         QString symbol;
         QString period;
         QString interval;
-        QVector<HistoryPoint> points;
+        QJsonArray rows;              // priced rows (bars::priced_rows) — what the shared cache holds
+        QVector<HistoryPoint> points; // bars::parse(rows)
     };
     QVector<QuoteData> refresh_pending_quotes_;
     // symbol -> absolute position in refresh_pending_quotes_ (minus _base_ =

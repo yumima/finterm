@@ -39,7 +39,9 @@ Two things are guarded here, because fixing instances is what failed before:
 
   2. STRUCTURE — every loop in the daemon that builds an OHLC row out of a
      DataFrame must consult _has_prices, and the C++ boundary that turns
-     JSON into Candles must consult row_has_prices. A new unguarded builder
+     JSON into bars (services/markets/Bars.h, read by every history path
+     through MarketDataService::fetch_bars and the market:history topic)
+     must consult row_has_prices. A new unguarded builder
      fails here rather than shipping a chart that silently reads zero.
 
 The structural half is a pure text scan: no build, no network, no pandas.
@@ -53,7 +55,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(HERE, "..", "..", "scripts")
 SRC = os.path.join(HERE, "..", "..", "src")
 DAEMON = os.path.join(SCRIPTS, "yfinance_data.py")
-SERVICE = os.path.join(SRC, "services", "equity", "EquityResearchService.cpp")
+BARS = os.path.join(SRC, "services", "markets", "Bars.h")
+MDS = os.path.join(SRC, "services", "markets", "MarketDataService.cpp")
 
 failures = []
 
@@ -108,37 +111,38 @@ def check_daemon_builders():
 # array back to Python. Each entry point needs the filter.
 
 def check_cpp_boundary():
-    src = open(SERVICE, encoding="utf-8").read()
+    bars = open(BARS, encoding="utf-8").read()
+    mds = open(MDS, encoding="utf-8").read()
 
-    check("bool row_has_prices(" in src,
-          "row_has_prices exists in EquityResearchService.cpp",
+    check("inline bool row_has_prices(" in bars,
+          "row_has_prices exists in Bars.h",
           "the C++ boundary guard is gone; cached null-bearing payloads will "
-          "be read as zero-priced candles again")
+          "be read as zero-priced bars again")
 
-    m = re.search(r"QVector<Candle>\s+EquityResearchService::parse_candles"
-                  r"\s*\([^)]*\)\s*const\s*\{(.*?)\n\}", src, re.DOTALL)
-    check(m is not None, "found parse_candles",
-          "the scan lost parse_candles; fix the pattern rather than deleting "
-          "the test")
+    m = re.search(r"inline QVector<HistoryPoint> parse\(.*?\n\}", bars, re.DOTALL)
+    check(m is not None, "found bars::parse",
+          "the scan lost bars::parse; fix the pattern rather than deleting the test")
     if m:
-        check("row_has_prices(" in m.group(1),
-              "parse_candles filters price-less rows",
+        check("row_has_prices(" in m.group(0),
+              "bars::parse filters price-less rows",
               "a null OHLC field will become a 0.0 price on every chart")
 
-    # The two paths that hand the raw array straight to Python.
-    for fn in ("run_compute", "run_talipp"):
-        m = re.search(rf"auto {fn} = \[.*?\]\((.*?)\)\s*\{{(.*?)\n    \}};",
-                      src, re.DOTALL)
-        check(m is not None, f"found {fn}",
-              "the scan lost this lambda; fix the pattern, do not delete it")
-        if m:
-            check("priced_rows(" in m.group(2),
-                  f"{fn} filters price-less rows before handing them to Python",
-                  "pandas reads a null close as NaN and every rolling window "
-                  "covering that bar comes back blank")
+    # Every history reply is filtered BEFORE it is cached or handed out — the
+    # rows reach the technicals / TALIpp compute in Python as-is.
+    m = re.search(r"void MarketDataService::fetch_bars\(.*?\n\}", mds, re.DOTALL)
+    check(m is not None, "found fetch_bars",
+          "the scan lost fetch_bars; fix the pattern, do not delete it")
+    if m:
+        check("bars::priced_rows(" in m.group(0),
+              "fetch_bars keeps priced rows only (cache and the rows handed to Python)",
+              "pandas reads a null close as NaN and every rolling window "
+              "covering that bar comes back blank")
+    check("ph.rows = bars::priced_rows(" in mds,
+          "the market:history topic keeps priced rows only",
+          "the hub's history path would publish (and cache) null bars")
 
     # The rule that must NOT come back: a positivity test deletes real bars.
-    m = re.search(r"bool row_has_prices\(.*?\n\}", src, re.DOTALL)
+    m = re.search(r"inline bool row_has_prices\(.*?\n\}", bars, re.DOTALL)
     if m:
         check("<= 0" not in m.group(0) and "> 0.0" not in m.group(0),
               "row_has_prices is a finiteness test, not a positivity test",

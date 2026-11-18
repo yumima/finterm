@@ -466,12 +466,7 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
 void MarketChartDialog::load() {
     const auto& def = period_def(prefs().period);
     canvas_->set_intraday(def.intraday);
-    const QString key = symbol_ + QLatin1Char('|') + QLatin1String(def.label);
     const int seq = ++request_seq_;
-    if (cache_.contains(key)) {
-        apply(cache_.value(key));
-        return;
-    }
     canvas_->clear();
     overlay_->show_loading(QStringLiteral("LOADING %1…").arg(symbol_));
     last_->clear();
@@ -480,33 +475,20 @@ void MarketChartDialog::load() {
     QPointer<MarketChartDialog> self = this;
     const QString sym = symbol_;
     services::MarketDataService::instance()
-        .fetch_history( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
+        .fetch_bars( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
             sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
-            [self, seq, key](bool ok, QVector<services::HistoryPoint> pts) {
+            [self, seq](const services::MarketDataService::BarsReply& r) {
                 // A later click (another period or symbol) supersedes this one.
+                // (A cached series answers at once, inside this call.)
                 if (!self || seq != self->request_seq_)
                     return;
                 self->overlay_->hide_loading();
-                if (!ok) {
+                if (!r.ok) {
                     self->canvas_->clear();
                     self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
                     return;
                 }
-                QVector<services::equity::Candle> candles;
-                candles.reserve(pts.size());
-                for (const auto& p : pts) {
-                    services::equity::Candle c;
-                    c.timestamp = p.timestamp;
-                    c.open = p.open;
-                    c.high = p.high;
-                    c.low = p.low;
-                    c.close = p.close;
-                    c.volume = p.volume;
-                    candles.append(c);
-                }
-                if (!candles.isEmpty())
-                    self->cache_.insert(key, candles);
-                self->apply(candles);
+                self->apply(r.bars);
             });
 }
 

@@ -47,10 +47,12 @@ HistoryChartPanel::HistoryChartPanel(const QString& ticker, const QString& perio
 
 void HistoryChartPanel::load() {
     QPointer<HistoryChartPanel> guard(this);
-    services::MarketDataService::instance().fetch_history( // D4-exempt: one-shot panel load, needs ok flag
-        ticker_, period_, "1d", [guard](bool ok, QVector<services::HistoryPoint> pts) {
+    services::MarketDataService::instance().fetch_bars( // D4-exempt: one-shot panel load, needs ok flag
+        ticker_, period_, "1d", [guard](const services::MarketDataService::BarsReply& r) {
             if (!guard)
                 return;
+            const bool ok = r.ok;
+            const auto& pts = r.bars;
             if (!ok || pts.isEmpty()) {
                 guard->status_->setText(QString("No history data for %1.").arg(guard->ticker_));
                 return;

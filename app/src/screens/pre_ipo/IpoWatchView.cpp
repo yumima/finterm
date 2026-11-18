@@ -1631,10 +1631,12 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
     // Pick a window long enough to span most IPOs we care about. yfinance's
     // 6mo window covers the typical research horizon for a recently priced
     // deal; for older priced rows the curve will just clip to listing date.
-    services::MarketDataService::instance().fetch_history( // D4-exempt: one-shot detail curve, caches per ticker
-        sym, "6mo", "1d", [self, sym](bool ok, QVector<services::HistoryPoint> points) {
+    services::MarketDataService::instance().fetch_bars( // D4-exempt: one-shot detail curve, caches per ticker
+        sym, "6mo", "1d", [self, sym](const services::MarketDataService::BarsReply& r) {
             if (!self)
                 return;
+            const bool ok = r.ok;
+            const auto& points = r.bars;
             QVector<double> closes;
             if (ok) {
                 closes.reserve(points.size());
@@ -1643,11 +1645,14 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
             }
             self->history_inflight_.remove(sym);
             self->history_cache_.insert(sym, closes);
-            // Only re-render if this ticker is still on screen.
-            if (self->detail_symbol_ == sym) {
-                self->rerender_detail();
-                return;
-            }
+            // Only re-render if this ticker is still on screen — on the next
+            // turn: a cached series answers inside this call, which runs from
+            // render_detail itself.
+            if (self->detail_symbol_ == sym)
+                QTimer::singleShot(0, self.data(), [self, sym] {
+                    if (self && self->detail_symbol_ == sym)
+                        self->rerender_detail();
+                });
         });
 }
 

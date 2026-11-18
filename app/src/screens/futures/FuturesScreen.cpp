@@ -1428,11 +1428,13 @@ void FuturesScreen::load_chart(bool retry) {
     chart_overlay_->show_loading(QStringLiteral("LOADING %1…").arg(sym));
     QPointer<FuturesScreen> self = this;
     services::MarketDataService::instance()
-        .fetch_history( // D4-exempt: one-shot chart read; needs the ok flag and chart_seq_ supersession
+        .fetch_bars( // D4-exempt: one-shot chart read; needs the ok flag and chart_seq_ supersession
             sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
-            [self, seq](bool ok, QVector<services::HistoryPoint> pts) {
+            [self, seq](const services::MarketDataService::BarsReply& r) {
                 if (!self || seq != self->chart_seq_)
                     return;
+                const bool ok = r.ok;
+                const auto& pts = r.bars;
                 self->chart_overlay_->hide_loading();
                 if (!ok || pts.isEmpty()) {
                     self->canvas_->clear();
@@ -1449,19 +1451,7 @@ void FuturesScreen::load_chart(bool retry) {
                     return;
                 }
                 self->chart_retry_.reset();
-                QVector<services::equity::Candle> candles;
-                candles.reserve(pts.size());
-                for (const auto& p : pts) {
-                    services::equity::Candle c;
-                    c.timestamp = p.timestamp;
-                    c.open = p.open;
-                    c.high = p.high;
-                    c.low = p.low;
-                    c.close = p.close;
-                    c.volume = p.volume;
-                    candles.append(c);
-                }
-                self->canvas_->set_candles(candles, QString());
+                self->canvas_->set_candles(pts, QString()); // Candle is the app's one bar type
             });
 }
 

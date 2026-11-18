@@ -71,9 +71,9 @@ class MarketChartDialog : public QDialog {
 
     QString symbol_;
     QString label_;
-    // Bars per symbol+period for this window's life: flipping between periods
-    // is the main thing anyone does here, and refetching each time is slow.
-    QHash<QString, QVector<services::equity::Candle>> cache_;
+    // Bumped per load: a later click (another period or symbol) supersedes an
+    // answer still out. Bars come from MarketDataService::fetch_bars, whose
+    // shared cache answers a repeat of a fresh series at once.
     int request_seq_ = 0;
 
     ResearchCandleCanvas* canvas_ = nullptr;

@@ -16,28 +16,8 @@ namespace finterm::mcp::tools {
 
 namespace {
 
-// NaN / non-finite = the vendor supplied nothing → JSON null, never 0.
-QJsonValue markets_num_or_null(double v) {
-    return std::isfinite(v) ? QJsonValue(v) : QJsonValue();
-}
-
 QString markets_now_utc_iso() {
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-}
-
-QJsonObject markets_quote_json(const services::QuoteData& q) {
-    QJsonObject o{
-        {"symbol", q.symbol},
-        {"price", q.price > 0 ? QJsonValue(q.price) : QJsonValue()},
-        {"change", markets_num_or_null(q.change)},
-        {"change_pct", markets_num_or_null(q.change_pct)},
-        {"day_high", q.high > 0 ? QJsonValue(q.high) : QJsonValue()},
-        {"day_low", q.low > 0 ? QJsonValue(q.low) : QJsonValue()},
-        {"volume", markets_num_or_null(q.volume)},
-    };
-    if (!q.name.isEmpty())
-        o["name"] = q.name;
-    return o;
 }
 
 } // namespace
@@ -90,7 +70,7 @@ std::vector<ToolDef> get_markets_tools() {
                     for (const auto& q : qs) {
                         if (q.symbol.isEmpty() || !(q.price > 0))
                             continue; // price 0 = vendor returned nothing usable
-                        QJsonObject o = markets_quote_json(q);
+                        QJsonObject o = services::MarketDataService::quote_json(q);
                         o["fetched_at"] = fetched_at;
                         quotes.append(o);
                         found.append(q.symbol.toUpper());
@@ -147,7 +127,7 @@ std::vector<ToolDef> get_markets_tools() {
                     auto side = [](const QVector<services::QuoteData>& v) {
                         QJsonArray arr;
                         for (const auto& q : v)
-                            arr.append(markets_quote_json(q));
+                            arr.append(services::MarketDataService::quote_json(q));
                         return arr;
                     };
                     resolve(ToolResult::ok_data(QJsonObject{

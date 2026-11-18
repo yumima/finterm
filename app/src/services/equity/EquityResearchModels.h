@@ -1,5 +1,6 @@
 // src/services/equity/EquityResearchModels.h
 #pragma once
+#include "services/markets/Bars.h"
 #include "core/util/BarTime.h"
 
 #include <QDate>
@@ -131,20 +132,9 @@ struct StockInfo {
 };
 
 // ── Historical OHLCV candle ───────────────────────────────────────────────────
-struct Candle {
-    /// Midnight in the EXCHANGE's own zone — a session, not an instant. Decode
-    /// it with date() below, never with a bare fromSecsSinceEpoch(): see
-    /// core/util/BarTime.h for why that has been wrong five times.
-    qint64 timestamp = 0;
-    double open = 0.0;
-    double high = 0.0;
-    double low = 0.0;
-    double close = 0.0;
-    qint64 volume = 0;
-
-    /// The session this bar covers, on the exchange's calendar.
-    QDate date() const { return core::bartime::bar_date(timestamp); }
-};
+// The app's one bar type (services/markets/Bars.h): a chart here and a
+// portfolio return elsewhere read the same series the same way.
+using Candle = finterm::services::HistoryPoint;
 
 // ── Financial statements ──────────────────────────────────────────────────────
 // period → line_item → value; stored as raw JSON since yfinance returns
@@ -500,7 +490,6 @@ struct EarningsLinks {
 #include <QMetaType>
 Q_DECLARE_METATYPE(finterm::services::equity::QuoteData)
 Q_DECLARE_METATYPE(finterm::services::equity::StockInfo)
-Q_DECLARE_METATYPE(QVector<finterm::services::equity::Candle>)
 Q_DECLARE_METATYPE(finterm::services::equity::TechnicalsData)
 Q_DECLARE_METATYPE(finterm::services::equity::FinancialsData)
 Q_DECLARE_METATYPE(QVector<finterm::services::equity::NewsArticle>)

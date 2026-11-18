@@ -111,6 +111,15 @@ QuoteData quote_from_cache(const QJsonObject& o, const QString& fallback_symbol 
     qd.ask_size = o.value("ask_size").toDouble();
     return qd;
 }
+/// The one cache key for a series. v1: the bars:: rules (priced rows only).
+QString bars_key(const QString& symbol, const QString& period, const QString& interval, bool adjusted) {
+    return QStringLiteral("bars:v1:%1:%2:%3:%4").arg(symbol, period, interval, adjusted ? "adj" : "raw");
+}
+/// Intraday series move by the minute; daily ones are stable within the
+/// session's quarter-hour.
+int bars_ttl_sec(const QString& interval) {
+    return bars::is_intraday(interval) ? 60 : 600;
+}
 } // namespace
 
 // ── DataHub Producer integration ────────────────────────────────────────────
@@ -336,19 +345,9 @@ void MarketDataService::refresh(const QStringList& topics) {
                 ph.symbol = h.value("symbol").toString();
                 ph.period = h.value("period").toString();
                 ph.interval = h.value("interval").toString();
-                const QJsonArray pts = h.value("points").toArray();
-                ph.points.reserve(pts.size());
-                for (const auto& pv : pts) {
-                    const QJsonObject p = pv.toObject();
-                    HistoryPoint pt;
-                    pt.timestamp = static_cast<qint64>(p["timestamp"].toDouble());
-                    pt.open = p["open"].toDouble();
-                    pt.high = p["high"].toDouble();
-                    pt.low = p["low"].toDouble();
-                    pt.close = p["close"].toDouble();
-                    pt.volume = static_cast<qint64>(p["volume"].toDouble());
-                    ph.points.append(pt);
-                }
+                // Same rules as fetch_bars: priced rows only, one parser.
+                ph.rows = bars::priced_rows(h.value("points").toArray());
+                ph.points = bars::parse(ph.rows);
                 bool replaced = false;
                 for (auto& pending : self->refresh_pending_hists_)
                     if (pending.symbol == ph.symbol && pending.period == ph.period && pending.interval == ph.interval) {
@@ -422,6 +421,12 @@ void MarketDataService::drain_refresh_chunk() {
     // Histories — publish only.
     while (budget > 0 && !refresh_pending_hists_.isEmpty()) {
         const PendingHistory ph = refresh_pending_hists_.takeFirst();
+        // The series fetch_bars reads: one cache entry whichever path fetched it.
+        if (!ph.rows.isEmpty())
+            finterm::CacheManager::instance().put(
+                bars_key(ph.symbol, ph.period, ph.interval, /*adjusted=*/true),
+                QString::fromUtf8(QJsonDocument(ph.rows).toJson(QJsonDocument::Compact)), bars_ttl_sec(ph.interval),
+                "market_data");
         publish_history_to_hub(ph.symbol, ph.period, ph.interval, ph.points);
         --budget;
     }
@@ -913,6 +918,25 @@ void MarketDataService::invalidate_quotes(const QStringList& symbols) {
 
 // ── Batched + Cached fetch_quotes ───────────────────────────────────────────
 
+QJsonObject MarketDataService::quote_json(const QuoteData& q) {
+    auto num = [](double v) { return std::isfinite(v) ? QJsonValue(v) : QJsonValue(); };
+    auto price = [](double v) { return std::isfinite(v) && v > 0 ? QJsonValue(v) : QJsonValue(); };
+    QJsonObject o{
+        {"symbol", q.symbol},
+        {"price", price(q.price)},
+        {"change", num(q.change)},
+        {"change_pct", num(q.change_pct)},
+        {"open", price(q.open)},
+        {"prev_close", price(q.prev_close)},
+        {"day_high", price(q.high)},
+        {"day_low", price(q.low)},
+        {"volume", num(q.volume)},
+    };
+    if (!q.name.isEmpty())
+        o["name"] = q.name;
+    return o;
+}
+
 QDateTime MarketDataService::quote_as_of(const QString& symbol) const {
     const auto aged = finterm::CacheManager::instance().try_get_aged(QStringLiteral("market:") + symbol);
     return aged ? aged->written_at : QDateTime();
@@ -1254,41 +1278,64 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
 
 // ── History fetch (OHLCV) ────────────────────────────────────────────────────
 
-void MarketDataService::fetch_history(const QString& symbol, const QString& period, const QString& interval,
-                                      HistoryCallback cb) {
+
+void MarketDataService::fetch_bars(const QString& symbol, const QString& period, const QString& interval,
+                                   BarsCallback cb, Adjust adjust) {
+    const bool adjusted = adjust == Adjust::Adjusted;
+    const QString key = bars_key(symbol, period, interval, adjusted);
+    if (const auto hit = finterm::CacheManager::instance().try_get_aged(key)) {
+        BarsReply r;
+        r.rows = QJsonDocument::fromJson(hit->value.toUtf8()).array();
+        r.bars = bars::parse(r.rows);
+        r.ok = true;
+        r.as_of = hit->written_at;
+        cb(r);
+        return;
+    }
+    auto& waiting = bars_waiters_[key];
+    waiting.append(std::move(cb));
+    if (waiting.size() > 1)
+        return; // the request already out answers this caller too
+
     QJsonObject payload;
     payload["symbol"] = symbol;
     payload["period"] = period;
     payload["interval"] = interval;
-
+    if (!adjusted)
+        payload["auto_adjust"] = false;
+    QPointer<MarketDataService> self = this;
     python::PythonWorker::instance().submit(
         "historical_period", payload,
-        [cb, symbol](bool ok, QJsonObject result, QString err) {
-            if (!ok) {
-                LOG_WARN("MarketData", "History fetch failed for " + symbol + ": " + err);
-                cb(false, {});
+        [self, key, symbol, interval](bool ok, QJsonObject result, QString err) {
+            if (!self)
                 return;
+            BarsReply r;
+            if (!ok || result.contains("error")) {
+                r.error = result.value("error").toString(err.isEmpty() ? QStringLiteral("history fetch failed") : err);
+            } else {
+                // An answer — possibly "no history" (no bars). Only a series
+                // with priced bars is cached: an empty one is asked again.
+                r.ok = true;
+                const QJsonArray raw = result.value("_value").toArray();
+                r.rows = bars::priced_rows(raw);
+                if (r.rows.size() < raw.size())
+                    LOG_WARN("MarketData", QString("history %1: dropped %2 price-less bar(s) of %3 — vendor sent "
+                                                   "null/NaN OHLC")
+                                               .arg(key)
+                                               .arg(raw.size() - r.rows.size())
+                                               .arg(raw.size()));
+                r.bars = bars::parse(r.rows);
+                r.as_of = QDateTime::currentDateTime();
+                if (!r.rows.isEmpty())
+                    finterm::CacheManager::instance().put(
+                        key, QString::fromUtf8(QJsonDocument(r.rows).toJson(QJsonDocument::Compact)),
+                        bars_ttl_sec(interval), "market_data");
             }
-            // Daemon returns a flat list; wrapped under _value. A failed fetch
-            // (a Yahoo 429 included) arrives as ok:false — the daemon raises for
-            // historical_period — so an empty list here is a real "no bars".
-            const QJsonArray points = result.value("_value").toArray();
-
-            QVector<HistoryPoint> history;
-            for (const auto& v : points) {
-                QJsonObject o = v.toObject();
-                HistoryPoint pt;
-                pt.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
-                pt.open = o["open"].toDouble();
-                pt.high = o["high"].toDouble();
-                pt.low = o["low"].toDouble();
-                pt.close = o["close"].toDouble();
-                pt.volume = static_cast<qint64>(o["volume"].toDouble());
-                history.append(pt);
-            }
-
-            LOG_INFO("MarketData", QString("Fetched %1 history points for %2").arg(history.size()).arg(symbol));
-            cb(true, history);
+            if (!r.ok)
+                LOG_WARN("MarketData", QString("history %1 (%2): %3").arg(symbol, key, r.error.left(160)));
+            const auto waiters = self->bars_waiters_.take(key);
+            for (const auto& w : waiters)
+                w(r);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }

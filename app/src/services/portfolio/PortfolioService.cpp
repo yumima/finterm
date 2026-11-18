@@ -1534,47 +1534,33 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
     // Allow callers to omit the symbol → defaults to SPY (legacy behaviour).
     const QString sym = symbol.isEmpty() ? QStringLiteral("SPY") : symbol;
 
-    // Use the persistent yfinance daemon (historical_period action) instead of
-    // spawning a fresh Python process via PythonRunner::run_code(). The daemon
-    // already has yfinance/pandas imported, reducing latency from ~2-4s to
-    // ~200-500ms (or near-instant on a cache hit from EquityResearchService).
-    QJsonObject payload;
-    payload["symbol"] = sym;
-    payload["period"] = period;
-    payload["interval"] = QStringLiteral("1d");
-
+    // The app's one price-history read (MarketDataService::fetch_bars): the
+    // same series, parser and cache as the charts and Equity Research.
     QPointer<PortfolioService> self = this;
-    python::PythonWorker::instance().submit(
-        "historical_period", payload,
-        [self, sym, period](bool ok, QJsonObject result, QString err) {
+    MarketDataService::instance().fetch_bars(
+        sym, period, QStringLiteral("1d"),
+        [self, sym, period](const MarketDataService::BarsReply& r) {
             if (!self)
                 return;
 
             QStringList dates;
             QVector<double> closes;
 
-            if (ok) {
-                // Daemon wraps a flat array under "_value".
-                const QJsonArray arr =
-                    result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
-
-                dates.reserve(arr.size());
-                closes.reserve(arr.size());
-                for (const auto& v : arr) {
-                    const auto o = v.toObject();
-                    const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
-                    // Daily BAR stamps (interval "1d"), so exchange-midnight —
-                    // and the benchmark is often not a US index:
-                    // default_benchmark_for_currency() maps JPY to ^N225, HKD to
-                    // ^HSI. ^N225's midnight JST is 15:00 UTC the
-                    // PREVIOUS day, so a UTC decode shifted the whole benchmark
-                    // series one session against the NAV it is plotted with.
-                    const QDate d = finterm::core::bartime::bar_date(ts);
-                    dates.append(d.toString(Qt::ISODate));
-                    closes.append(o["close"].toDouble());
+            if (r.ok) {
+                dates.reserve(r.bars.size());
+                closes.reserve(r.bars.size());
+                for (const auto& b : r.bars) {
+                    // Daily BAR stamps, so exchange-midnight — and the
+                    // benchmark is often not a US index:
+                    // default_benchmark_for_currency() maps JPY to ^N225, HKD
+                    // to ^HSI. ^N225's midnight JST is 15:00 UTC the PREVIOUS
+                    // day, so a UTC decode shifted the whole benchmark series
+                    // one session against the NAV it is plotted with.
+                    dates.append(b.date().toString(Qt::ISODate));
+                    closes.append(b.close);
                 }
             } else {
-                LOG_WARN("PortfolioSvc", QString("Benchmark %1 fetch failed: %2").arg(sym, err.left(200)));
+                LOG_WARN("PortfolioSvc", QString("Benchmark %1 fetch failed: %2").arg(sym, r.error.left(200)));
             }
 
             // No bars (unknown symbol, failed fetch) → an EMPTY series, which
@@ -1603,8 +1589,7 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                 emit self->spy_history_loaded(dates, closes);
             }
             emit self->benchmark_history_loaded(sym, dates, closes);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+        });
 }
 
 // ── 1D intraday ──────────────────────────────────────────────────────────────
@@ -1624,16 +1609,10 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol, const QStrin
         emit symbol_intraday_loaded(sym, {}, {});
         return;
     }
-    QJsonObject payload;
-    payload["symbol"] = sym;
-    payload["period"] = period;
-    payload["interval"] = interval;
-
     const qint64 epoch = ++symbol_intraday_epoch_;
     QPointer<PortfolioService> self = this;
-    python::PythonWorker::instance().submit(
-        "historical_period", payload,
-        [self, sym, epoch](bool ok, QJsonObject result, QString err) {
+    MarketDataService::instance().fetch_bars(
+        sym, period, interval, [self, sym, epoch](const MarketDataService::BarsReply& r) {
             if (!self)
                 return;
             if (self->symbol_intraday_epoch_ != epoch) {
@@ -1643,28 +1622,23 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol, const QStrin
             }
             QVector<qint64> ts_ms;
             QVector<double> closes;
-            if (ok) {
-                const QJsonArray arr =
-                    result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
-                ts_ms.reserve(arr.size());
-                closes.reserve(arr.size());
-                for (const auto& v : arr) {
-                    const auto o = v.toObject();
-                    const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
-                    if (sec <= 0)
+            if (r.ok) {
+                ts_ms.reserve(r.bars.size());
+                closes.reserve(r.bars.size());
+                for (const auto& b : r.bars) {
+                    if (b.timestamp <= 0)
                         continue;
-                    ts_ms.append(sec * 1000);
-                    closes.append(o["close"].toDouble());
+                    ts_ms.append(b.timestamp * 1000);
+                    closes.append(b.close);
                 }
             } else {
-                LOG_WARN("PortfolioSvc", QString("Intraday %1 fetch failed: %2").arg(sym, err.left(200)));
+                LOG_WARN("PortfolioSvc", QString("Intraday %1 fetch failed: %2").arg(sym, r.error.left(200)));
             }
 
             // No bars → empty; the chart says "unavailable". (A flat $1.00
             // 2-point series used to be synthesised here on any failure.)
             emit self->symbol_intraday_loaded(sym, ts_ms, closes);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+        });
 }
 
 void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
@@ -1740,29 +1714,18 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
 
     QPointer<PortfolioService> self = this;
     for (const QString& sym : unique_symbols) {
-        QJsonObject payload;
-        payload["symbol"] = sym;
-        payload["period"] = QStringLiteral("1d");
-        payload["interval"] = QStringLiteral("1m");
-        python::PythonWorker::instance().submit(
-            "historical_period", payload,
-            [self, portfolio_id, sym, state, qty_by_symbol, fx_by_symbol](bool ok, QJsonObject result, QString err) {
+        MarketDataService::instance().fetch_bars(
+            sym, QStringLiteral("1d"), QStringLiteral("1m"),
+            [self, portfolio_id, sym, state, qty_by_symbol, fx_by_symbol](const MarketDataService::BarsReply& r) {
                 if (!self)
                     return;
                 QHash<qint64, double>& bars = state->by_symbol[sym];
-                if (ok) {
-                    const QJsonArray arr =
-                        result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
-                    for (const auto& v : arr) {
-                        const auto o = v.toObject();
-                        const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
-                        const double close = o["close"].toDouble();
-                        if (sec <= 0 || !(close > 0))
-                            continue;
-                        bars.insert(sec * 1000, close);
-                    }
+                if (r.ok) {
+                    for (const auto& b : r.bars)
+                        if (b.timestamp > 0 && b.close > 0)
+                            bars.insert(b.timestamp * 1000, b.close);
                 } else {
-                    LOG_WARN("PortfolioSvc", QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
+                    LOG_WARN("PortfolioSvc", QString("Aggregate intraday %1 failed: %2").arg(sym, r.error.left(200)));
                 }
 
                 if (--state->pending > 0)
@@ -1852,8 +1815,7 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                                              .arg(ts_ms.size())
                                              .arg(sorted_bars.size()));
                 emit self->portfolio_intraday_loaded(portfolio_id, ts_ms, navs, QString());
-            },
-            python::PythonWorker::kNetworkActionTimeoutMs);
+            });
     }
 }
 
@@ -3136,39 +3098,29 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
 
     QPointer<PortfolioService> self = this;
     for (const auto& req : pending) {
-        QJsonObject payload;
-        payload["symbol"] = req.symbol;
         // Unparseable entry date → bounded 1y window rather than "max": an
         // unbounded peak from a decade ago would render an L% that has nothing
         // to do with the user's position.
-        payload["period"] =
+        const QString period =
             req.entry.isEmpty() ? QStringLiteral("1y") : QStringLiteral("range:") + req.entry + QLatin1Char(':') + end;
-        payload["interval"] = QStringLiteral("1d");
-        // RAW prices: the peak is compared against a raw live price to give a
-        // trailing-stop distance. Adjusted highs are pushed DOWN by every
-        // dividend since, which understated the drawdown — increasingly so
-        // the longer the position was held and the higher its yield.
-        payload["auto_adjust"] = false;
-
-        python::PythonWorker::instance().submit(
-            "historical_period", payload,
-            [self, portfolio_id, req, state](bool ok, QJsonObject result, QString err) {
+        // RAW prices (adjusted = false): the peak is compared against a raw
+        // live price to give a trailing-stop distance. Adjusted highs are
+        // pushed DOWN by every dividend since, which understated the drawdown
+        // — increasingly so the longer the position was held and the higher
+        // its yield.
+        MarketDataService::instance().fetch_bars(
+            req.symbol, period, QStringLiteral("1d"),
+            [self, portfolio_id, req, state](const MarketDataService::BarsReply& r) {
                 if (!self)
                     return;
 
                 double peak = 0;
-                if (ok) {
-                    // The daemon wraps a flat array under "_value".
-                    const QJsonArray arr =
-                        result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
-                    for (const auto& v : arr) {
-                        const double high = v.toObject()["high"].toDouble();
-                        if (high > peak)
-                            peak = high;
-                    }
+                if (r.ok) {
+                    for (const auto& b : r.bars)
+                        peak = std::max(peak, b.high);
                 } else {
                     LOG_WARN("PortfolioSvc",
-                             QString("Peak-high fetch failed for %1: %2").arg(req.symbol, err.left(200)));
+                             QString("Peak-high fetch failed for %1: %2").arg(req.symbol, r.error.left(200)));
                 }
 
                 {
@@ -3209,7 +3161,7 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
 
                 emit self->position_peaks_loaded(portfolio_id, state->peaks);
             },
-            python::PythonWorker::kNetworkActionTimeoutMs);
+            MarketDataService::Adjust::Raw);
     }
 }
 

@@ -228,7 +228,6 @@ class EquityResearchService : public QObject {
 
     // ── Parsers ───────────────────────────────────────────────────────────────
     StockInfo parse_info(const QJsonObject& obj) const;
-    QVector<Candle> parse_candles(const QJsonArray& arr) const;
     FinancialsData parse_financials(const QJsonObject& obj) const;
     /// Builds the display rows and delegates the verdict to TechnicalRating.
     TechnicalsData parse_technicals(const QString& symbol, const QString& period, const QString& interval,

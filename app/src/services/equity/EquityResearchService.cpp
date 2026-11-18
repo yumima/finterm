@@ -31,34 +31,6 @@ namespace finterm::services::equity {
 
 namespace {
 
-/// True only if all four OHLC fields are present and finite.
-///
-/// Deliberately NOT a positivity test. Zero and negative prints are real
-/// market data — ^IRX closed at 0.000 through much of 2020-2021 and CL=F
-/// settled at -37.63 on 2020-04-20, both on this app's watchlists — so a
-/// `> 0` rule would delete history rather than repair it.
-///
-/// What this rejects is the all-NaN row yfinance emits for a session it has
-/// no prices for yet, typically today's bar. The daemon drops those at the
-/// source (_has_prices in yfinance_data.py); this is the C++ boundary that
-/// keeps payloads cached before that fix — and anything else that ever sends
-/// a null — out of the app.
-///
-/// Why a null is dangerous rather than merely absent: the daemon's
-/// _sanitize_for_json must turn NaN into JSON null, because bare NaN is not
-/// valid JSON and QJsonDocument::fromJson rejects the whole document. But
-/// QJsonValue::toDouble() then reads that null back as 0.0 without
-/// complaint, so "no price" becomes "priced at zero" silently.
-bool row_has_prices(const QJsonObject& o) {
-    static const char* kFields[] = {"open", "high", "low", "close"};
-    for (const char* f : kFields) {
-        const double v = o.value(QLatin1String(f)).toDouble(std::numeric_limits<double>::quiet_NaN());
-        if (!std::isfinite(v))
-            return false;
-    }
-    return true;
-}
-
 /// A string field, with the daemon's "N/A" filler treated as absent.
 ///
 /// get_info defaults longName / sector / industry / country / exchange /
@@ -91,43 +63,7 @@ double num(const QJsonObject& o, const char* key) {
     return o.value(QLatin1String(key)).toDouble(std::numeric_limits<double>::quiet_NaN());
 }
 
-QJsonArray priced_rows(const QJsonArray& arr, const QString& what) {
-    const bool all_priced =
-        std::all_of(arr.begin(), arr.end(), [](const QJsonValue& v) { return row_has_prices(v.toObject()); });
-    if (all_priced)
-        return arr;
-    QJsonArray out;
-    for (const auto& v : arr) {
-        if (row_has_prices(v.toObject()))
-            out.append(v);
-    }
-    LOG_WARN("EquityResearch", QString("%1: dropped %2 price-less bar(s) of %3 — vendor sent null/NaN OHLC")
-                                   .arg(what)
-                                   .arg(arr.size() - out.size())
-                                   .arg(arr.size()));
-    return out;
-}
 
-// A daemon reply carrying an error — or no rows at all — is not data.
-//
-// The daemon deliberately refuses to cache those (see _is_cacheable_result
-// there); caching them on this side undoes that decision, and the companion
-// disk write makes one transient failure outlive a restart. The observed
-// result was an empty chart pinned for the full TTL and rehydrated on the
-// next launch, from a single rate-limit blip.
-//
-// ok == true is not sufficient on its own: get_historical_period returns []
-// for an empty history and {"error": ...} for an exception, and BOTH arrive
-// with ok == true.
-bool series_is_cacheable(const QJsonObject& result, const QJsonArray& rows) {
-    return !result.contains("error") && !rows.isEmpty();
-}
-
-/// The user-facing message for a history fetch that came back empty/failed.
-QString history_error_text(const QJsonObject& result) {
-    return QString("Historical fetch returned no data: %1")
-        .arg(result.value("error").toString(QStringLiteral("empty history")));
-}
 
 // Persistent on-disk cache so the equity research panels can paint the
 // most-recently-viewed symbol immediately on next launch. One file per
@@ -208,34 +144,6 @@ void update_symbol_cache(const QString& symbol, const QString& key, const QJsonV
         root.insert("_at", at);
     }
     disk_cache().save(fname, QJsonDocument(root));
-}
-
-// The ONE implementation of "cache a fetched candle series": guard, memory
-// put, per-symbol disk write and the warn-log together. Returns whether the
-// series was cacheable — callers that must fan an error out on empty/failed
-// history check it; callers that continue with the (possibly empty) parse
-// ignore it. This used to be five hand copies that had already diverged in
-// logging and disk sub-key, and the sixth history path would have started
-// unguarded.
-bool cache_history_series(const QJsonObject& result, const QJsonArray& arr, const QString& symbol,
-                          const QString& candles_key, const QString& disk_sub, int ttl_sec) {
-    if (!series_is_cacheable(result, arr)) {
-        LOG_WARN("EquityResearch", QString("Not caching empty/failed history for %1 (%2) — a transient "
-                                           "failure must not outlive the request")
-                                       .arg(symbol, disk_sub));
-        return false;
-    }
-    finterm::CacheManager::instance().put(
-        candles_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), ttl_sec, "equity");
-    const QString fname = symbol_filename(symbol);
-    QJsonObject root = disk_cache().load(fname).object();
-    root.insert("symbol", symbol);
-    QJsonObject by_period = root.value("candles").toObject();
-    by_period.insert(disk_sub, arr);
-    root.insert("candles", by_period);
-    stamp_section(root, QStringLiteral("candles/") + disk_sub);
-    disk_cache().save(fname, QJsonDocument(root));
-    return true;
 }
 
 } // namespace
@@ -333,7 +241,6 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                                                       "equity", age_sec);
             }
         };
-        repopulate_periodic("candles", "equity:candles:", kHistoricalTtlSec);
         repopulate_periodic("technicals", "equity:technicals:" + QString(kTechnicalsSchemaTag) + ":",
                             kTechnicalsTtlSec);
     }
@@ -520,38 +427,25 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
         return;
     const QString key = "equity:candles:" + symbol + ":" + period;
     auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
-        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
-        if (!hcv.isNull()) {
-            QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
-            emit historical_loaded(symbol, period, parsed);
-            // Resolve with the cache entry\'s WRITE time: a hit answers
-            // instantly, and stamping "now" would present a value hydrated
-            // from disk at startup as brand new.
-            resolve(QVariant::fromValue(parsed), hcv_aged->written_at);
-            return;
-        }
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        payload["period"] = period;
-        payload["interval"] = "1d";
-        run_daemon("historical_period", payload,
-                   [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
-                       if (!ok) {
-                           const QString msg = "Failed to fetch historical for " + symbol + ": " + err;
-                           emit error_occurred(symbol, "Historical", msg);
-                           emit historical_loaded(symbol, period, {});
-                           reject(msg);
-                           return;
-                       }
-                       const auto arr = result.contains("_value") ? result.value("_value").toArray()
-                                                                  : result.value("history").toArray();
-                       cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
-                       QVector<Candle> parsed = parse_candles(arr);
-                       emit historical_loaded(symbol, period, parsed);
-                       resolve(QVariant::fromValue(parsed));
-                   });
+        // The app's one price-history read (same parser and cache as every
+        // other chart and the portfolio returns).
+        QPointer<EquityResearchService> self = this;
+        services::MarketDataService::instance().fetch_bars(
+            symbol, period, QStringLiteral("1d"),
+            [self, symbol, period, resolve, reject](const services::MarketDataService::BarsReply& r) {
+                if (!self)
+                    return;
+                if (!r.ok) {
+                    const QString msg = "Failed to fetch historical for " + symbol + ": " + r.error;
+                    emit self->error_occurred(symbol, "Historical", msg);
+                    emit self->historical_loaded(symbol, period, {});
+                    reject(msg);
+                    return;
+                }
+                emit self->historical_loaded(symbol, period, r.bars);
+                // The series' own fetch time: a cache hit is not "now".
+                resolve(QVariant::fromValue(r.bars), r.as_of);
+            });
     };
     // Daily candles barely change intraday — generous SWR window so period
     // switches feel instant for the rest of the session. Beyond 24h the
@@ -832,33 +726,16 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
     if (symbol.isEmpty() || period.isEmpty())
         return;
     const QString key = "equity:candles:" + symbol + ":" + period;
-    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
-        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
-        if (!hcv.isNull()) {
-            QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
-            // No legacy broadcast emission on prefetch — nobody is waiting,
-            // and broadcasting would mislead any subscribed tab into
-            // thinking the user actively switched to this period.
-            resolve(QVariant::fromValue(parsed));
-            return;
-        }
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        payload["period"] = period;
-        payload["interval"] = "1d";
-        run_daemon("historical_period", payload,
-                   [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
-                       if (!ok) {
-                           reject(err);
-                           return;
-                       }
-                       const auto arr = result.contains("_value") ? result.value("_value").toArray()
-                                                                  : result.value("history").toArray();
-                       cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
-                       resolve(QVariant::fromValue(parse_candles(arr)));
-                   });
+    auto fetcher = [symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
+        // No legacy broadcast on a prefetch — nobody is waiting, and it would
+        // tell a subscribed tab the user switched to this period.
+        services::MarketDataService::instance().fetch_bars(
+            symbol, period, QStringLiteral("1d"), [resolve, reject](const services::MarketDataService::BarsReply& r) {
+                if (!r.ok)
+                    reject(r.error);
+                else
+                    resolve(QVariant::fromValue(r.bars), r.as_of);
+            });
     };
     query::QueryStore::instance().prefetch(key, kHistoricalTtlSec, std::move(fetcher));
 }
@@ -989,41 +866,22 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     }
 
     // ── Historical ───────────────────────────────────────────────────────────
-    // Cache key MUST include period — without it, switching the period
-    // button (1M/3M/6M/1Y/5Y) hits the cached entry from the previous
-    // period and emits stale data, leaving the chart visually unchanged.
+    // The app's one price-history read: keyed by period (a period switch is
+    // a different series), concurrent asks coalesced there.
     {
-        const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
-        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
-        if (!hcv.isNull()) {
-            emit historical_loaded(symbol, period,
-                                   parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
-        } else {
-            const QString inflight_key = "historical:" + symbol + ":" + period;
-            if (acquire_inflight(inflight_key)) {
-                QJsonObject payload;
-                payload["symbol"] = symbol;
-                payload["period"] = period;
-                payload["interval"] = "1d";
-                run_daemon("historical_period", payload,
-                           [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
-                               release_inflight(inflight_key);
-                               if (!ok) {
-                                   emit error_occurred(symbol, "Historical",
-                                                       "Failed to fetch historical for " + symbol + ": " + err);
-                                   // Empty candles signals failure; overlay gate still closes via on_historical_loaded.
-                                   emit historical_loaded(symbol, period, {});
-                                   return;
-                               }
-                               // Daemon returns a flat list; PythonWorker wraps under "_value".
-                               const auto arr = result.contains("_value") ? result.value("_value").toArray()
-                                                                          : result.value("history").toArray();
-                               cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
-                               emit historical_loaded(symbol, period, parse_candles(arr));
-                           });
-            }
-        }
+        QPointer<EquityResearchService> self = this;
+        services::MarketDataService::instance().fetch_bars(
+            symbol, period, QStringLiteral("1d"),
+            [self, symbol, period](const services::MarketDataService::BarsReply& r) {
+                if (!self)
+                    return;
+                if (!r.ok)
+                    emit self->error_occurred(symbol, "Historical",
+                                              "Failed to fetch historical for " + symbol + ": " + r.error);
+                // Empty candles signal failure; the overlay gate still closes
+                // via on_historical_loaded.
+                emit self->historical_loaded(symbol, period, r.ok ? r.bars : QVector<Candle>{});
+            });
     }
 }
 
@@ -1108,15 +966,10 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         if (!self) {
             return;
         } // (key remains held — process is exiting anyway)
-        // This path never builds Candles, so parse_candles' guard does not
-        // apply: the array goes straight back to Python. Note what does and
-        // does not already protect it there — compute_technicals_from_candles
-        // coerces all four OHLC columns and then drops on CLOSE only, so a
-        // row with a good close but a null high/low survives into every
-        // rolling window that reads them (ATR, Bollinger, Stochastic, Aroon)
-        // as NaN. This filter is what covers those columns, and it covers
-        // both callers below, including the disk-cache hit.
-        const QJsonArray candles = priced_rows(raw, "technicals " + symbol);
+        // Priced rows only (fetch_bars hands over bars::priced_rows): the
+        // compute drops on CLOSE alone, so a null high/low would otherwise
+        // reach ATR, Bollinger, Stochastic and Aroon as NaN.
+        const QJsonArray& candles = raw;
         QJsonObject payload;
         payload["candles"] = candles;
         python::PythonWorker::instance().submit(
@@ -1159,67 +1012,24 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
             python::PythonWorker::kComputeActionTimeoutMs);
     };
 
-    // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
-    // Daily candles keep the legacy key so the chart, prefetch and talipp
-    // paths (all daily-only) share one entry with the technicals compute —
-    // splitting them meant the same 5y daily series was fetched twice and the
-    // "<100ms re-open" path went cold. Only non-daily intervals get their own
-    // segment.
-    const QString candles_key = interval == QLatin1String("1d")
-                                    ? "equity:candles:" + symbol + ":" + period
-                                    : "equity:candles:" + symbol + ":" + interval + ":" + period;
-    const QString candles_disk_sub = interval == QLatin1String("1d") ? period : interval + ":" + period;
-    QJsonArray candles_from_cache;
-    {
-        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
-        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
-        if (!hcv.isNull()) {
-            const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
-            if (doc.isArray())
-                candles_from_cache = doc.array();
-        }
-    }
-    if (!candles_from_cache.isEmpty()) {
-        run_compute(candles_from_cache);
-        return;
-    }
-
-    QJsonObject hist_payload;
-    hist_payload["symbol"] = symbol;
-    hist_payload["period"] = period;
-    hist_payload["interval"] = interval;
-    python::PythonWorker::instance().submit(
-        "historical_period", hist_payload,
-        [self, symbol, candles_key, candles_disk_sub, run_compute, inflight_key](bool ok, QJsonObject result,
-                                                                                 QString err) {
+    // ── Stage 1: the series, through the app's one price-history read ────────
+    // One cache entry per (symbol, period, interval): the chart, the prefetch,
+    // TALIpp and this compute all read the same daily series.
+    services::MarketDataService::instance().fetch_bars(
+        symbol, period, interval,
+        [self, symbol, run_compute, inflight_key](const services::MarketDataService::BarsReply& r) {
             if (!self)
                 return;
-            if (!ok) {
-                // Stage 1 failed — release the dedup key here since stage 2
-                // will never run to release it for us.
+            if (!r.ok || r.rows.isEmpty()) {
+                // Stage 2 will never run to release the dedup key.
                 self->release_inflight(inflight_key);
                 emit self->error_occurred(symbol, "Technicals",
-                                          err.isEmpty() ? QStringLiteral("Failed historical fetch")
-                                                        : QStringLiteral("Failed historical fetch: ") + err);
+                                          QStringLiteral("Historical fetch returned no data: %1")
+                                              .arg(r.ok ? QStringLiteral("empty history") : r.error));
                 return;
             }
-            // Daemon returns a flat array; PythonWorker wraps under _value.
-            const QJsonArray candles =
-                result.contains("_value") ? result.value("_value").toArray() : result.value("history").toArray();
-            // Same guard as every other history path: an {"error":…} result
-            // or empty series arrives with ok == true, and putting it under
-            // the SHARED daily candles key pinned a blank chart, technicals
-            // and TALIpp for the full TTL from one rate-limit blip. (The
-            // disk sub-key is interval-qualified for weekly so 10y of weekly
-            // bars does not land on top of 10y of daily bars.)
-            if (!cache_history_series(result, candles, symbol, candles_key, candles_disk_sub, kHistoricalTtlSec)) {
-                self->release_inflight(inflight_key);
-                emit self->error_occurred(symbol, "Technicals", history_error_text(result));
-                return;
-            }
-            run_compute(candles);
-        },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+            run_compute(r.rows);
+        });
 }
 
 // ── Peers ─────────────────────────────────────────────────────────────────────
@@ -1324,7 +1134,8 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     // zero price would corrupt every downstream value — so the rows must be
     // filtered to fully-priced bars BEFORE they reach it.
     auto run_talipp = [this, symbol, indicator, params](const QJsonArray& raw) {
-        const QByteArray hist_json = QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact);
+        // Priced rows only (fetch_bars): equity_talipp.py refuses a null price.
+        const QByteArray hist_json = QJsonDocument(raw).toJson(QJsonDocument::Compact);
         QJsonObject p_obj;
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             p_obj[it.key()] = QJsonValue::fromVariant(it.value());
@@ -1363,52 +1174,23 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                    });
     };
 
-    // Use cached historical if available, else fetch. Cache key includes
-    // period so different period selections don't reuse each other's data.
-    const QString candles_key = "equity:candles:" + symbol + ":" + period;
-    const auto cached_candles_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
-    const QVariant cached_candles = cached_candles_aged ? QVariant(cached_candles_aged->value) : QVariant();
-    const auto cached_doc =
-        cached_candles.isNull() ? QJsonDocument() : QJsonDocument::fromJson(cached_candles.toString().toUtf8());
-    // A cached blob that no longer parses as an array is not a cache hit.
-    // .array() would hand back an empty array, which equity_talipp.py does
-    // reject ("OHLCV data must be a non-empty JSON array") — so the user saw
-    // an error rather than a blank overlay, but an error for a recoverable
-    // condition. Falling through to the fetch is the better answer. Same
-    // test fetch_technicals already uses on its own cache read.
-    if (cached_doc.isArray()) {
-        run_talipp(cached_doc.array());
-    } else {
-        // Dedup: with errors (correctly) never cached, every parameter tweak
-        // during an outage would otherwise fire its own full RPC for the
-        // same candles. The first request's outcome reaches the tab via the
-        // talipp_result / error_occurred broadcasts either way.
-        const QString inflight_key = "talipp-hist:" + symbol + ":" + period;
-        if (!acquire_inflight(inflight_key))
-            return;
-        QJsonObject payload;
-        payload["symbol"] = symbol;
-        payload["period"] = period;
-        payload["interval"] = "1d";
-        run_daemon(
-            "historical_period", payload,
-            [this, symbol, period, candles_key, run_talipp, inflight_key](bool ok, QJsonObject result, QString err) {
-                release_inflight(inflight_key);
-                if (!ok) {
-                    emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
-                    return;
-                }
-                const auto arr =
-                    result.contains("_value") ? result.value("_value").toArray() : result.value("history").toArray();
-                // Same shared-key poisoning guard as fetch_technicals
-                // stage 1 — an error/empty series must not be pinned.
-                if (!cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec)) {
-                    emit error_occurred(symbol, "TALIpp", history_error_text(result));
-                    return;
-                }
-                run_talipp(arr);
-            });
-    }
+    // The series through the app's one price-history read (cached per
+    // period, concurrent asks coalesced — parameter tweaks during an outage
+    // ride the one request out).
+    QPointer<EquityResearchService> self = this;
+    services::MarketDataService::instance().fetch_bars(
+        symbol, period, QStringLiteral("1d"),
+        [self, symbol, run_talipp](const services::MarketDataService::BarsReply& r) {
+            if (!self)
+                return;
+            if (!r.ok || r.rows.isEmpty()) {
+                emit self->error_occurred(symbol, "TALIpp",
+                                          r.ok ? QStringLiteral("Historical fetch returned no data")
+                                               : "Historical fetch failed: " + r.error);
+                return;
+            }
+            run_talipp(r.rows);
+        });
 }
 
 // ── Parsers ───────────────────────────────────────────────────────────────────
@@ -1492,29 +1274,6 @@ StockInfo EquityResearchService::parse_info(const QJsonObject& o) const {
     s.recommendation_key = str(o, "recommendation_key");
     s.analyst_count = o["number_of_analyst_opinions"].toInt();
     return s;
-}
-
-QVector<Candle> EquityResearchService::parse_candles(const QJsonArray& arr) const {
-    QVector<Candle> candles;
-    candles.reserve(arr.size());
-    for (const auto& v : arr) {
-        auto o = v.toObject();
-        // A price-less row must never become a zero-priced Candle: one such
-        // bar drags a chart's y-range low to 0, and on the log axis that
-        // spans 1e-9…hi and flattens every real candle into the top 1% of
-        // the plot. See row_has_prices.
-        if (!row_has_prices(o))
-            continue;
-        Candle c;
-        c.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
-        c.open = o["open"].toDouble();
-        c.high = o["high"].toDouble();
-        c.low = o["low"].toDouble();
-        c.close = o["close"].toDouble();
-        c.volume = static_cast<qint64>(o["volume"].toDouble());
-        candles.append(c);
-    }
-    return candles;
 }
 
 FinancialsData EquityResearchService::parse_financials(const QJsonObject& obj) const {

@@ -987,6 +987,13 @@ set_target_properties(test_last_known_quote PROPERTIES UNITY_BUILD OFF AUTOMOC O
 add_test(NAME last_known_quote COMMAND test_last_known_quote)
 set_tests_properties(last_known_quote PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── OHLCV rules shared by every price-history read (services/markets/Bars.h) ─
+add_executable(test_bars services/test_bars.cpp)
+target_include_directories(test_bars PRIVATE ../src)
+target_link_libraries(test_bars PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_bars PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME bars COMMAND test_bars)
+
 # ── SEC contact identity (C++ half; the Python half is contact_identity) ─────
 add_executable(test_sec_identity
     services/test_sec_identity.cpp
