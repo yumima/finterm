@@ -158,6 +158,29 @@ int main(int argc, char* argv[]) {
     // (Qt Charts, QOpenGLWidget) — prevents black rendering in floating windows.
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
+    // Composite QtWebEngine pages in software (the earnings-call player, the
+    // dashboard's web video). Qt 6.10 hands Chromium's GPU-composited frames
+    // to Qt via GBM; where GBM isn't usable ("GBM is not supported with the
+    // current configuration. Fallback to Vulkan rendering in Chromium" — this
+    // Intel Arc + RTX 5070 Ti hybrid on Wayland, and Xvfb) the view shows
+    // nothing usable: measured 2026-11-17, a page's text and layers never
+    // painted (blank, or only the background colour) while the page ran fine
+    // underneath. With GPU compositing off the same Q4 webcast page renders
+    // completely; rasterisation and video decode still use the GPU, only the
+    // final layer composite is done on the CPU — cheap for a call page.
+    // Appended to any flags the user set, never replacing them.
+    {
+        // Whole flags, not substrings: --disable-gpu-sandbox (common on
+        // Wayland/containers) must not suppress this.
+        const QByteArray flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+        const QList<QByteArray> given = flags.split(' ');
+        const bool decided = given.contains("--disable-gpu") || given.contains("--disable-gpu-compositing") ||
+                             given.contains("--enable-gpu-compositing");
+        if (!decided)
+            qputenv("QTWEBENGINE_CHROMIUM_FLAGS", (flags.isEmpty() ? QByteArray() : flags + ' ') +
+                                                       QByteArrayLiteral("--disable-gpu-compositing"));
+    }
+
     // Pin Qt Multimedia's audio-device backend to PulseAudio. Qt 6.10 defaults
     // to a native PipeWire device backend whose SPA-Pod format parser chokes on
     // PipeWire 1.6.2 — it logs "spaVisitChoice: parse error" while parsing a

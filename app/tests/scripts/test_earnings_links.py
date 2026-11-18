@@ -149,6 +149,53 @@ def main():
     check("page not a call", el.call_near_date("November 17, 2026 https://identity.q4inc.com/oauth/auth "
                                                "https://www.youtube.com/Salesforce", date(2026, 11, 17)), None)
 
+    # ── a call link outlives the host's "upcoming events" feed ───────────────
+    # get_earnings_links end to end, with EDGAR and the IR site faked; the
+    # store in a temp dir, and every patched name restored afterwards.
+    import shutil
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    patched = {n: getattr(el, n) for n in ("_calls_path", "_cik_for", "_earnings_8ks", "_filing",
+                                           "_addresses_in", "_find_call", "_today_et")}
+    try:
+        el._calls_path = lambda: os.path.join(tmp, "calls.json")
+        el._cik_for = lambda sym: 1045810
+        el._earnings_8ks = lambda cik: ({"filingDate": ["2026-11-17"]}, [0])
+        el._filing = lambda cik, rec, i: ("https://sec/q3fy27pr.htm", ["https://sec/q3fy27pr.htm"], "2026-11-17")
+        el._addresses_in = lambda docs: ("https://investor.nvidia.com", "https://investor.nvidia.com")
+        el._today_et = lambda: date(2026, 11, 17)
+        feed = {"url": "https://events.q4inc.com/attendee/902213296", "page": "https://ir/nvda-q3",
+                "media": "https://cdn/replay.mp3", "ir_url": "https://investor.nvidia.com/home/default.aspx"}
+        el._find_call = lambda site, d, deadline: dict(feed)
+        r = el.get_earnings_links("NVDA", "2026-11-17")
+        check("found call", (r["call"]["url"], (r["audio"] or {}).get("kind")),
+              ("https://events.q4inc.com/attendee/902213296", "media"))
+        # After the call the feed has moved on: no call, no media.
+        el._find_call = lambda site, d, deadline: {"ir_url": feed["ir_url"]}
+        r = el.get_earnings_links("NVDA", "2026-11-17")
+        check("remembered call", (r["call"]["url"], r["call"]["source"], (r["audio"] or {}).get("url"), r["note"]),
+              ("https://events.q4inc.com/attendee/902213296", "remembered", "https://cdn/replay.mp3", ""))
+        # Seen again WITHOUT the media: the media found earlier is not forgotten.
+        el._find_call = lambda site, d, deadline: {"ir_url": feed["ir_url"], "url": feed["url"], "page": None}
+        el.get_earnings_links("NVDA", "2026-11-17")
+        check("media kept", el.remembered_call("NVDA", date(2026, 11, 17))["media"], "https://cdn/replay.mp3")
+        # A malformed store is ignored, never raised.
+        with open(os.path.join(tmp, "calls.json"), "w") as f:
+            f.write('{"NVDA|2026-11-17": "https://x"}')
+        check("malformed store", el.remembered_call("NVDA", date(2026, 11, 17)), None)
+        # Old prints are pruned on the next write.
+        el.remember_call("NVDA", date(2026, 11, 17), {"url": "u"}, today=date(2026, 11, 17))
+        el.remember_call("COST", date(2028, 1, 10), {"url": "v"}, today=date(2028, 1, 10))
+        check("old pruned", el.remembered_call("NVDA", date(2026, 11, 17)), None)
+        # An unwritable store never breaks the answer.
+        el._calls_path = lambda: "/proc/no/such/dir/calls.json"
+        el.remember_call("NVDA", date(2026, 11, 17), {"url": "u"})
+        check("unwritable store", True, True)
+    finally:
+        for n, f in patched.items():
+            setattr(el, n, f)
+        shutil.rmtree(tmp, ignore_errors=True)
+
     # ── which 8-K is the print's release ─────────────────────────────────────
     rec = {"filingDate": ["2026-11-23", "2026-11-19", "2026-11-16"]}
     # Fri 20 Nov after-close print, filed after 17:30 → dated Mon 23 Nov.

@@ -30,7 +30,9 @@ worked around), and IR pages built entirely in the browser with no feed.
 
 import html
 import json
+import os
 import re
+import threading
 import time
 import urllib.request
 from datetime import date, datetime, timedelta
@@ -397,6 +399,68 @@ def playable_audio(call_url, media_url, site_url, d, today):
     return None
 
 
+# ── calls, remembered ────────────────────────────────────────────────────────
+# Q4's events feed lists UPCOMING events only: the moment a call has taken
+# place it drops off, and with it the link to its page and replay (NVDA,
+# 17 Nov 2026 — the link was there before the call and gone an hour after).
+# So a call link, once found, is kept for its print — the ONE place this is
+# remembered (the app does not keep a second copy). Public URLs only, kept
+# under market_data/ (locally built public data), not cache/: it can't be
+# regenerated once the host's feed has moved on.
+_CALLS_KEEP_DAYS = 400
+_calls_lock = threading.Lock()
+
+
+def _calls_path():
+    import finterm_paths
+
+    return finterm_paths.market_data_path("earnings_calls.json")
+
+
+def _calls_load():
+    """{key: {url, page, media}}; anything malformed is dropped, never raised."""
+    try:
+        with open(_calls_path(), encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:  # noqa: BLE001 — missing, unreadable, unparsable, no paths module
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)}
+
+
+def remembered_call(symbol, d):
+    with _calls_lock:
+        return _calls_load().get(f"{symbol.upper()}|{d.isoformat()}")
+
+
+def remember_call(symbol, d, call, today=None):
+    """Keep `call` ({url, page, media}) for the print on d — merged with what
+    is already kept (a media file found once is not forgotten by a later
+    fetch that missed it), written only when something changed, and best
+    effort: a store that can't be written never breaks the links answer."""
+    today = today or date.today()
+    key = f"{symbol.upper()}|{d.isoformat()}"
+    try:
+        with _calls_lock:
+            data = _calls_load()
+            old = data.get(key) or {}
+            merged = {f: call.get(f) or old.get(f) for f in ("url", "page", "media")}
+            cutoff = (today - timedelta(days=_CALLS_KEEP_DAYS)).isoformat()
+            pruned = {k: v for k, v in data.items() if k.split("|", 1)[-1] >= cutoff}
+            if merged == old and len(pruned) == len(data):
+                return
+            pruned[key] = merged
+            path = _calls_path()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(pruned, f)
+            os.replace(tmp, path)
+    except Exception:  # noqa: BLE001 — best effort
+        pass
+
+
 def _today_et():
     try:
         from zoneinfo import ZoneInfo
@@ -522,6 +586,15 @@ def get_earnings_links(symbol, report_date=None):
     elif site:
         out["ir_url"] = site
     if d:
+        call = out["call"] or {}
+        if call.get("url") or call.get("page"):
+            # Found now: keep it, so the call's page (its replay, afterwards)
+            # stays reachable once the host's feed has moved on.
+            remember_call(symbol, d, {"url": call.get("url"), "page": call.get("page"), "media": media}, today)
+        kept = remembered_call(symbol, d) or {}
+        if not (call.get("url") or call.get("page")) and (kept.get("url") or kept.get("page")):
+            out["call"] = {"url": kept.get("url"), "page": kept.get("page"), "source": "remembered"}
+        media = media or kept.get("media")
         out["audio"] = playable_audio((out["call"] or {}).get("url"), media, out["ir_url"], d, today)
     if not out["call"]:
         out["note"] = ("The company hasn't posted this call's webcast on its IR site yet."
