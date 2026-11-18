@@ -1,6 +1,7 @@
 #include "services/workflow/nodes/AnalyticsNodes.h"
 
-#include "python/PythonRunner.h"
+#include "services/equity/EquityResearchService.h"
+#include "services/portfolio/PortfolioAnalyticsService.h"
 #include "services/workflow/NodeRegistry.h"
 
 #include <QJsonArray>
@@ -12,53 +13,11 @@
 
 namespace finterm::workflow {
 
-using finterm::python::extract_json;
-using finterm::python::PythonResult;
-using finterm::python::PythonRunner;
-
 namespace {
 
-// Helper: run a Python script and parse the JSON result.
-void analytics_run_python_json(const QString& script, const QStringList& args,
-                               std::function<void(bool, QJsonValue, QString)> cb) {
-    PythonRunner::instance().run(script, args, [cb](const PythonResult& res) {
-        if (!res.success) {
-            cb(false, {}, res.error);
-            return;
-        }
-        QString json_str = extract_json(res.output).trimmed();
-        auto doc = QJsonDocument::fromJson(json_str.toUtf8());
-        if (doc.isNull()) {
-            cb(false, {}, "Invalid JSON: " + res.output.left(200));
-            return;
-        }
-        // Check for Python-level error: {"success": false, ...} or a bare
-        // {"error": ...} (string, object, or true + "message"). Either is a failure.
-        if (doc.isObject()) {
-            auto obj = doc.object();
-            const QJsonValue e = obj.value("error");
-            const bool has_error = !(e.isUndefined() || e.isNull() || (e.isBool() && !e.toBool()) ||
-                                     (e.isString() && e.toString().isEmpty()));
-            const bool explicit_fail = obj.contains("success") && !obj.value("success").toBool(true);
-            if (explicit_fail || (has_error && !obj.value("success").toBool(false))) {
-                QString msg;
-                if (e.isString())
-                    msg = e.toString();
-                else if (e.isObject())
-                    msg = e.toObject().value("error").toString(e.toObject().value("message").toString());
-                if (msg.isEmpty())
-                    msg = obj.value("message").toString();
-                cb(false, {}, msg.isEmpty() ? QString("Python script returned failure") : msg);
-                return;
-            }
-        }
-        cb(true, doc.isObject() ? QJsonValue(doc.object()) : QJsonValue(doc.array()), {});
-    });
-}
-
-// Nodes whose analysis has no backing implementation. compute_technicals.py
-// ignores --indicator and always returns the standard technicals set, so
-// routing these through it produced output unrelated to the node's label.
+// Nodes whose analysis has no backing implementation. The technicals compute
+// always returns the standard indicator set, so routing these through it
+// produced output unrelated to the node's label.
 void analysis_not_supported(const QString& what, const std::function<void(bool, QJsonValue, QString)>& cb) {
     cb(false, {}, QString("%1 is not supported yet — no backing implementation is wired").arg(what));
 }
@@ -101,47 +60,33 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .type_id = "analytics.technical_indicators",
         .display_name = "Technical Indicators",
         .category = "Analytics",
-        .description = "Calculate SMA, RSI, MACD, Bollinger Bands, etc.",
+        .description = "The Technicals tab's indicator set (SMA/EMA, RSI, MACD, Bollinger, ATR, ADX, OBV, …) "
+                       "computed over the input price rows",
         .icon_text = "A",
         .accent_color = "#7c3aed",
-        .version = 1,
+        // v2: computed by the Technicals tab's compute; the output is the
+        // input rows with every indicator column added (was {success, data}).
+        // The indicator / period / symbol parameters are gone — no compute
+        // ever read them; every run returns the whole set.
+        .version = 2,
         .inputs = {{"input_0", "Price Data", PortDirection::Input, ConnectionType::PriceData}},
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::TechnicalData}},
-        .parameters =
-            {
-                {"indicator",
-                 "Indicator",
-                 "select",
-                 "SMA",
-                 {"SMA", "EMA", "RSI", "MACD", "BBANDS", "ATR", "STOCH", "ADX", "CCI", "WILLR", "OBV", "VWAP"},
-                 "",
-                 true},
-                {"period", "Period", "number", 14, {}, "Lookback period"},
-                {"symbol", "Symbol", "string", "", {}, "Ticker symbol"},
-            },
+        .parameters = {},
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
+            [](const QJsonObject&, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                // Serialise input price data to pass as a JSON string arg.
-                QJsonValue input_val = inputs.isEmpty() ? QJsonValue{} : inputs[0];
-                QJsonDocument input_doc;
-                if (input_val.isArray())
-                    input_doc = QJsonDocument(input_val.toArray());
-                else if (input_val.isObject())
-                    input_doc = QJsonDocument(input_val.toObject());
-
-                QString json_data =
-                    input_doc.isNull() ? "{}" : QString::fromUtf8(input_doc.toJson(QJsonDocument::Compact));
-
-                QString indicator = params.value("indicator").toString("SMA");
-                QString period = QString::number(static_cast<int>(params.value("period").toDouble(14)));
-                QString symbol = params.value("symbol").toString();
-
-                QStringList args = {"--data", json_data, "--indicator", indicator, "--period", period};
-                if (!symbol.isEmpty())
-                    args << "--symbol" << symbol;
-
-                analytics_run_python_json("compute_technicals.py", args, cb);
+                if (inputs.isEmpty() || !inputs[0].isArray() || inputs[0].toArray().isEmpty()) {
+                    cb(false, {},
+                       "Technical Indicators: needs price rows with open/high/low/close (connect Historical Data)");
+                    return;
+                }
+                services::equity::EquityResearchService::instance().compute_technicals_rows(
+                    inputs[0].toArray(), [cb](bool ok, const QJsonArray& rows, const QString& err) {
+                        if (ok)
+                            cb(true, rows, {});
+                        else
+                            cb(false, {}, err);
+                    });
             },
     });
 
@@ -172,10 +117,14 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .type_id = "analytics.portfolio_optimization",
         .display_name = "Portfolio Optimization",
         .category = "Analytics",
-        .description = "Optimize portfolio allocation (mean-variance, Black-Litterman)",
+        .description = "Optimal weights for the input holdings — the Portfolio Optimization screen's optimizer "
+                       "(one year of daily returns)",
         .icon_text = "A",
         .accent_color = "#7c3aed",
-        .version = 1,
+        // v2: the screen's optimizer and methods (mean_variance / min_variance
+        // never existed in it and fell through to equal weight); the
+        // risk-free rate parameter is gone — the optimizer uses its own 4%.
+        .version = 2,
         .inputs = {{"input_0", "Holdings", PortDirection::Input, ConnectionType::PortfolioData}},
         .outputs = {{"output_main", "Optimized", PortDirection::Output, ConnectionType::PortfolioData}},
         .parameters =
@@ -183,24 +132,45 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"method",
                  "Method",
                  "select",
-                 "mean_variance",
-                 {"mean_variance", "black_litterman", "risk_parity", "min_variance", "max_sharpe"},
+                 "max_sharpe",
+                 {"max_sharpe", "min_volatility", "risk_parity", "max_return", "equal_weight", "hrp",
+                  "black_litterman"},
                  ""},
-                {"risk_free_rate", "Risk-Free Rate", "number", 0.05, {}, ""},
             },
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                // Build a JSON args object containing the input data and params.
-                QJsonObject args_obj;
-                args_obj["method"] = params.value("method").toString("mean_variance");
-                args_obj["risk_free_rate"] = params.value("risk_free_rate").toDouble(0.05);
-                if (!inputs.isEmpty())
-                    args_obj["holdings"] = inputs[0];
-
-                QString json_args = QString::fromUtf8(QJsonDocument(args_obj).toJson(QJsonDocument::Compact));
-
-                analytics_run_python_json("optimize_portfolio_weights.py", {"--args", json_args}, cb);
+                // Holdings: Get Positions' {positions: [...]}, or an array of
+                // {symbol, ...} rows or of bare symbols.
+                QJsonArray rows;
+                if (!inputs.isEmpty()) {
+                    if (inputs[0].isArray())
+                        rows = inputs[0].toArray();
+                    else if (inputs[0].isObject())
+                        rows = inputs[0].toObject().value("positions").toArray();
+                }
+                QStringList symbols;
+                for (const auto& v : rows) {
+                    const QString sym =
+                        (v.isString() ? v.toString() : v.toObject().value("symbol").toString()).trimmed().toUpper();
+                    if (!sym.isEmpty() && !symbols.contains(sym))
+                        symbols.append(sym);
+                }
+                if (symbols.size() < 2) {
+                    cb(false, {}, "Portfolio Optimization: needs at least two holdings with a symbol");
+                    return;
+                }
+                QJsonObject args;
+                args["symbols"] = QJsonArray::fromStringList(symbols);
+                args["method"] = params.value("method").toString("max_sharpe");
+                services::PortfolioAnalyticsService::instance().optimize_weights(
+                    QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
+                    [cb](const services::AnalyticsResult& r) {
+                        if (r.success)
+                            cb(true, r.data, {});
+                        else
+                            cb(false, {}, r.error);
+                    });
             },
     });
 

@@ -5678,9 +5678,9 @@ def _load_technicals_modules():
 
 def compute_technicals_from_candles(candles):
     """
-    Compute the full indicator suite from a candle list. Mirrors what
-    compute_technicals.py does standalone, but reuses the daemon's already-
-    imported pandas + cached `ta` modules.
+    Compute the full indicator suite from a candle list — the app's one
+    technicals compute (the Technicals tab, MCP and the workflow node all
+    read it), on the daemon's already-imported pandas + cached `ta` modules.
 
     candles: list of {timestamp/date, open, high, low, close, volume?}.
     Returns: {success, data: <merged indicator dict>, error?}
@@ -5709,8 +5709,8 @@ def compute_technicals_from_candles(candles):
         df = df.dropna(subset=["close"]).reset_index(drop=True)
 
         # Each calculator returns the df with new indicator columns appended.
-        # Order mirrors compute_technicals.py: trend, momentum, volatility,
-        # volume (only if available), others.
+        # Order: trend, momentum, volatility, volume (only if available),
+        # others.
         result = df.copy()
         for stage in ("trend", "momentum", "volatility", "volume", "others"):
             if stage == "volume" and "volume" not in result.columns:

@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`9fb509452`](https://github.com/yumima/finterm/commit/9fb509452) data owners: callback reads for FRED, financials, news, Form 4, filings, option chains
 - [`c5055aea8`](https://github.com/yumima/finterm/commit/c5055aea8) info: one company-info read; shared reads always answer later
 - [`eba46712d`](https://github.com/yumima/finterm/commit/eba46712d) history: one price-history read for the whole app
 - [`80b23b584`](https://github.com/yumima/finterm/commit/80b23b584) quote: Equity Research reads the app's one market quote

@@ -15,8 +15,8 @@
 # IMPORTANT — do NOT mix `GLOB_RECURSE` with `LIST_DIRECTORIES true`. CMake's
 # globbing then returns every intermediate directory on the search path, not
 # just the pattern matches. (Diagnosed when `technicals/` and 11 other
-# legitimate subdirectories were being wiped on every build, breaking
-# `compute_technicals.py` because its `from technicals.X import Y` failed.)
+# legitimate subdirectories were being wiped on every build, breaking the
+# technicals compute because its `from technicals.X import Y` failed.)
 
 if(NOT DEFINED SCRIPTS_DIR)
     message(FATAL_ERROR "prune_scripts_junk.cmake: SCRIPTS_DIR must be set")
