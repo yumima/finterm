@@ -122,7 +122,9 @@ def _us_market_holidays(year: int) -> FrozenSet[date]:
     try:
         from pandas.tseries.holiday import (
             GoodFriday,
+            Holiday,
             USFederalHolidayCalendar,
+            sunday_to_monday,
         )
 
         class _USMarketCal(USFederalHolidayCalendar):
@@ -131,8 +133,11 @@ def _us_market_holidays(year: int) -> FrozenSet[date]:
             # It also includes Columbus Day and Veterans Day, which are bank
             # holidays only: NYSE and CME trade normally on both, so walking
             # back past them priced a day change against the session before.
+            # And it moves a Saturday New Year's Day to the Friday before
+            # (31 Dec 2021, 2027); NYSE does not, it trades that Friday.
             rules = [r for r in USFederalHolidayCalendar.rules
-                     if r.name not in ("Columbus Day", "Veterans Day")] + [GoodFriday]
+                     if r.name not in ("Columbus Day", "Veterans Day", "New Year's Day")] + [
+                Holiday("New Year's Day", month=1, day=1, observance=sunday_to_monday), GoodFriday]
 
         hols = _USMarketCal().holidays(
             start=f"{year}-01-01", end=f"{year}-12-31"
@@ -146,6 +151,11 @@ def _us_market_holidays(year: int) -> FrozenSet[date]:
         result = frozenset()
     _HOLIDAYS_CACHE[year] = result
     return result
+
+
+def is_us_market_holiday(day: date) -> bool:
+    """A weekday the US equity markets are closed (see _us_market_holidays)."""
+    return day in _us_market_holidays(day.year)
 
 
 def previous_session_end_utc(symbol: str,

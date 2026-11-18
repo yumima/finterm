@@ -129,7 +129,11 @@ def _et(hour, minute=0, day_offset=0):
 # ── frame builders ───────────────────────────────────────────────────────────
 
 def _minute_frame(bars):
-    """bars: [(datetime in ET, close)] → a frame shaped like yfinance's."""
+    """bars: [(datetime in ET, close)] → a frame shaped like yfinance's.
+
+    As in Yahoo's own series, a day's regular minutes end at 15:59: the bar
+    stamped 16:00 is the first after-hours minute (extended_rules), so a
+    fixture's "close" without a daily frame is a 15:59 bar."""
     idx = pd.DatetimeIndex([pd.Timestamp(t).tz_convert("UTC") for t, _ in bars])
     return pd.DataFrame({"Close": [c for _, c in bars]}, index=idx)
 
@@ -414,7 +418,7 @@ def test_official_close_is_the_denominator():
 def test_stale_reference_yields_no_move():
     """No regular-hours trade today ⇒ no after-hours move, not a multi-day one."""
     minute = _multi({"FNILX": _minute_frame([
-        (_et(16, 0, day_offset=-6), 30.0),   # last trade: nearly a week ago
+        (_et(15, 59, day_offset=-6), 30.0),   # last trade: nearly a week ago
         (_et(18, 0), 27.9),                  # a fresh extended print
     ])})
     row = _quote(["FNILX"], minute)[0]
@@ -445,7 +449,7 @@ def test_refusal_is_unavailable_not_declined():
     deliberate refusal — tiles blank for good, live prints shut out, while the
     dashboard (which re-polls) showed them all a minute later.
     """
-    minute = _multi({"MSFT": _minute_frame([(_et(16, 0), 500.0), (_et(19, 0), 505.0)])})
+    minute = _multi({"MSFT": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
     rows = {r["symbol"]: r for r in _quote(["MSFT", "AMZN"], minute, retry_error=_RateLimited("429"))}
     check("a symbol the source refused is unavailable", rows["AMZN"].get("unavailable") is True,
           f"got {rows['AMZN']}")
@@ -457,7 +461,7 @@ def test_refusal_is_unavailable_not_declined():
 
 def test_no_bars_is_an_answer():
     """A fund with no intraday bars (empty frame, no exception) is answered."""
-    minute = _multi({"MSFT": _minute_frame([(_et(16, 0), 500.0), (_et(19, 0), 505.0)])})
+    minute = _multi({"MSFT": _minute_frame([(_et(15, 59), 500.0), (_et(19, 0), 505.0)])})
     rows = {r["symbol"]: r for r in _quote(["MSFT", "VMRXX"], minute)}
     check("no price data is not 'unavailable'", not rows["VMRXX"].get("unavailable"),
           f"got {rows['VMRXX']}")
@@ -473,7 +477,7 @@ def test_empty_download_is_unavailable():
 def test_post_market_move_is_reported():
     """The guards must not suppress the number the column exists for."""
     minute = _multi({"MSFT": _minute_frame([
-        (_et(16, 0), 500.0),
+        (_et(15, 59), 500.0),   # last regular minute: the close (no daily frame)
         (_et(19, 0), 465.0),    # -7% after hours
     ])})
     row = _quote(["MSFT"], minute)[0]
@@ -489,7 +493,7 @@ def test_pre_market_is_not_paired_with_todays_close():
     """After the bell, no post-market print means no number — never pre."""
     minute = _multi({"MSFT": _minute_frame([
         (_et(8, 0), 460.0),     # this morning's pre-market, vs YESTERDAY's close
-        (_et(16, 0), 500.0),    # today's close
+        (_et(15, 59), 500.0),   # today's close (last regular minute)
     ])})
     row = _quote(["MSFT"], minute, hour=18)[0]
     check("pre-market is not measured against today's close",
@@ -502,7 +506,7 @@ def test_pre_market_is_not_paired_with_todays_close():
 def test_regular_session_shows_this_mornings_pre_market():
     """Mid-session the last extended move is today's pre-market, not yesterday's post."""
     minute = _multi({"MSFT": _minute_frame([
-        (_et(16, 0, day_offset=-1), 500.0),   # yesterday's close  = the reference
+        (_et(15, 59, day_offset=-1), 500.0),   # yesterday's close  = the reference
         (_et(18, 0, day_offset=-1), 490.0),   # yesterday's post-market
         (_et(8, 0), 505.0),                   # today's pre-market
     ])})
@@ -519,7 +523,7 @@ def test_regular_session_shows_this_mornings_pre_market():
 def test_pre_session_falls_back_to_the_prior_post_market():
     """Before the open both prints reference the same close, so the fallback is sound."""
     minute = _multi({"MSFT": _minute_frame([
-        (_et(16, 0, day_offset=-1), 500.0),   # yesterday's close
+        (_et(15, 59, day_offset=-1), 500.0),   # yesterday's close
         (_et(18, 0, day_offset=-1), 490.0),   # yesterday's post-market
     ])})
     row = _quote(["MSFT"], minute, hour=8)[0]

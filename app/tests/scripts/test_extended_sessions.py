@@ -7,7 +7,9 @@ What each case guards:
     day's, pre-market against the day before. Nasdaq's feed measures an
     after-hours print against the previous day's close — "-8%" all evening
     beside a stock that has moved +0.4% since the bell.
-  - No matching close means no percentage, never another day's close.
+  - The close is the official one; without it, the last regular-session
+    minute of the SAME day (the AFT% column's rule — extended_rules). Neither
+    means no percentage, never another day's close.
   - Daily bar labels are dates and are read as written, whatever zone they
     are stamped in.
   - A stray print (a late-reported trade at another moment's price) is not
@@ -106,22 +108,32 @@ check("after-hours live at 17:00 on its own day", a2 and a2["live"] and not p2["
 a3, p3 = es.summarise(BARS, DAILY, datetime(2026, 11, 17, 5, 0, tzinfo=ET))
 check("yesterday's sessions are not live the next morning", a3 and not a3["live"] and not p3["live"])
 
-# ── no matching close → no percentage ────────────────────────────────────────
+# ── no official close → that day's last regular minute, else no percentage ───
+# BARS' Monday regular session is 09:30-09:59, last minute 27.80 - 0.04*29.
+MON_LAST_MINUTE = 27.80 - 0.04 * 29
 lagging = daily_bars(EARLIER + [(FRI, 28.88, 2_000_000.0)])   # Monday's daily bar not there yet
 a4, p4 = es.summarise(BARS, lagging, now)
-check("after-hours with no close for its own day carries no percentage",
-      a4 and a4["pct"] is None and a4["ref_close"] is None and a4["last"] is not None)
-check("pre-market is unaffected by that", p4 and p4["pct"] is not None)
+check("after-hours with no official close for its day: that day's last regular minute",
+      a4 and a4["ref_date"] == MON.isoformat() and abs(a4["ref_close"] - MON_LAST_MINUTE) < 1e-9
+      and a4["pct"] is not None, str(a4 and (a4["ref_date"], a4["ref_close"])))
+check("pre-market is unaffected by that", p4 and p4["pct"] is not None and p4["ref_close"] == 28.88)
 a5, p5 = es.summarise(BARS, None, now)
-check("no daily frame: prices stand, percentages do not",
-      a5 and p5 and a5["pct"] is None and p5["pct"] is None and a5["avg_volume"] is None)
+check("no daily frame: after-hours against Monday's last regular minute",
+      a5 and abs(a5["ref_close"] - MON_LAST_MINUTE) < 1e-9 and a5["avg_volume"] is None)
+check("no daily frame, no regular minute on Friday: the pre-market has no percentage",
+      p5 and p5["pct"] is None and p5["ref_close"] is None and p5["last"] is not None)
+no_regular = BARS[[t.date() != MON or not (9 <= t.hour < 16) for t in BARS.index.tz_convert(ET)]]
+a5b, _ = es.summarise(no_regular, lagging, now)
+check("no official close and no regular minute that day: no percentage, never Friday's",
+      a5b and a5b["pct"] is None and a5b["ref_close"] is None, str(a5b and a5b["ref_date"]))
 
 # Tuesday pre-market while the daily frame still ends on Friday: Friday's
-# close is not "the previous close", and the percentage would carry Monday.
+# close is not "the previous close" — Monday's is, from its minutes.
 tue = minute_bars([(MON, "09:30", 30, 27.80, -0.04), (MON, "16:00", 30, 26.45, 0.0), (TUE, "04:00", 20, 26.30, 0.0)])
 _, p9 = es.summarise(tue, lagging, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
-check("pre-market with a daily frame a day behind carries no percentage",
-      p9 and p9["date"] == TUE.isoformat() and p9["pct"] is None, str(p9 and (p9["ref_date"], p9["pct"])))
+check("pre-market with a daily frame a day behind: Monday's last regular minute, not Friday",
+      p9 and p9["date"] == TUE.isoformat() and p9["ref_date"] == MON.isoformat()
+      and abs(p9["ref_close"] - MON_LAST_MINUTE) < 1e-9, str(p9 and (p9["ref_date"], p9["pct"])))
 _, p10 = es.summarise(tue, DAILY, datetime(2026, 11, 17, 4, 30, tzinfo=ET))
 check("pre-market against Monday's close once the daily frame has it",
       p10 and p10["ref_date"] == MON.isoformat() and p10["live"], str(p10 and p10["ref_date"]))

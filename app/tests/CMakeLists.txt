@@ -654,6 +654,15 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_extended_sessions.py
     )
     set_tests_properties(extended_sessions PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # The two views above read the same rules (scripts/extended_rules.py): the
+    # same frames through both entry points must give the same after-hours and
+    # pre-market prices against the same closes, at a POST and a PRE clock, on
+    # an early close and after a holiday.
+    add_test(
+        NAME extended_consistency
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_extended_consistency.py
+    )
+    set_tests_properties(extended_consistency PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
 # ── An earnings reaction must come from a session that has closed ────────────

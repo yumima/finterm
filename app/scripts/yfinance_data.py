@@ -5756,6 +5756,7 @@ def get_extended_hours_quotes(symbols):
         import pandas as _pd
         from datetime import datetime
         from zoneinfo import ZoneInfo
+        import extended_rules as _xr
     except Exception:
         return []
 
@@ -5852,40 +5853,34 @@ def get_extended_hours_quotes(symbols):
                 # take the whole column down.
                 daily = None
 
+    _officials_memo = {}
+
+    def _officials(sym):
+        """{date: official close} for that symbol — extended_rules reads the
+        labels as the calendar dates they are (converting a midnight-UTC stamp
+        to ET would hand back yesterday's close as today's)."""
+        if sym in _officials_memo:
+            return _officials_memo[sym]
+        out = {}
+        if daily is not None and not getattr(daily, "empty", True):
+            try:
+                dhist = None
+                if isinstance(daily.columns, _pd.MultiIndex):
+                    if sym in daily.columns.get_level_values(0):
+                        dhist = daily[sym]
+                    elif sym in daily.columns.get_level_values(1):
+                        dhist = daily.xs(sym, axis=1, level=1)
+                elif len(symbols) == 1:
+                    dhist = daily
+                out = _xr.official_closes(dhist)
+            except Exception:
+                out = {}
+        _officials_memo[sym] = out
+        return out
+
     def _official_close(sym, want_date):
         """That symbol's official close on `want_date` (ET), or None."""
-        if daily is None or getattr(daily, "empty", True):
-            return None
-        try:
-            if isinstance(daily.columns, _pd.MultiIndex):
-                lvl0 = daily.columns.get_level_values(0)
-                if sym in lvl0:
-                    dhist = daily[sym]
-                elif sym in daily.columns.get_level_values(1):
-                    dhist = daily.xs(sym, axis=1, level=1)
-                else:
-                    return None
-            elif len(symbols) == 1:
-                dhist = daily
-            else:
-                return None
-            if "Close" not in dhist.columns:
-                return None
-            # A daily bar's label is a calendar date, not an instant. yfinance
-            # currently returns it naive; if it ever stamps midnight UTC
-            # instead, converting to ET would land on the PREVIOUS day and
-            # quietly hand back yesterday's close as today's denominator.
-            # Dropping the zone reads the date as written either way.
-            didx = dhist.index
-            if didx.tz is not None:
-                didx = didx.tz_localize(None)
-            match = (didx.date == want_date)
-            if not match.any():
-                return None
-            v = dhist["Close"][match].iloc[-1]
-            return None if _pd.isna(v) else float(v)
-        except Exception:
-            return None
+        return _officials(sym).get(want_date)
 
     def _slice(sym):
         """The bulk frame's columns for one symbol, or None when it isn't there."""
@@ -5915,95 +5910,125 @@ def get_extended_hours_quotes(symbols):
         except Exception:
             return None
 
+    def _us_prints(sym, hist):
+        """A plain US ticker: its sessions, pairing and close are
+        extended_rules' — the same ones the ER Extended Hours box reads, so
+        the two never disagree about the same session.
+
+        `regular` is the close of the last COMPLETED session (ref_day): today's
+        once its bell has rung (13:00 on an early close), else the trading day
+        before. Its post-market is ref_day's after-hours window; the pre-market
+        is today's. A symbol without a close on ref_day (no regular-hours
+        trade: money-market and mutual funds, thin ETFs) reports the latest
+        earlier one, which the caller flags as stale."""
+        m = _xr.minute_frame(hist)
+        officials = _officials(sym)
+        ref_day = _xr.last_closed_day(now_et)
+        regular = regular_ts = None
+        got = _xr.latest_close(m, officials, ref_day)
+        if got is not None:
+            regular, regular_ts = got[1]
+        post, post_ts = _xr.last_print(_xr.window_bars(m, ref_day, _xr.post_window(ref_day))) or (None, None)
+        pre, pre_ts = _xr.last_print(_xr.window_bars(m, today, _xr.pre_window(today))) or (None, None)
+        return regular, regular_ts, ref_day, pre, pre_ts, post, post_ts
+
+    def _generic_prints(sym, hist):
+        """Futures, FX, crypto and non-US listings: the settle-based reference."""
+        idx = hist.index
+        if idx.tz is None:
+            idx = idx.tz_localize("UTC")
+
+        # "regular_end" = the most recent COMPLETED regular session-end
+        # for this symbol. Past 20:00 ET or before 04:00 ET we'd
+        # otherwise be tempted to use "today's 16:00 ET" — but if
+        # today's hasn't happened yet that reference is in the future
+        # and any "before today's 16:00 ET" filter would pick up the
+        # previous day's post-market bars, badly distorting `regular`.
+        if _prev_end is not None:
+            regular_end_utc = _pd.Timestamp(_prev_end(sym))
+        else:
+            # Fallback: equity convention (16:00 ET) on the most
+            # recent weekday <= now.
+            t = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+            if t > now_et:
+                from datetime import timedelta as _td
+                t -= _td(days=1)
+            while t.weekday() >= 5:
+                from datetime import timedelta as _td
+                t -= _td(days=1)
+            regular_end_utc = _pd.Timestamp(t).tz_convert("UTC")
+
+        # regular = last bar at or before regular_end. For a query at
+        # 00:10 ET Thursday this lands on Wed 16:00 ET (yesterday's
+        # close) — which is exactly the right denominator for
+        # Wednesday's post-market or Thursday's pre-market.
+        # Bar timestamps travel with the prices. A consumer cannot tell a
+        # sound pairing from a stale one by looking at the numbers — the
+        # dashboard tried comparing `regular` against its own quote feed
+        # and ended up hiding every symbol with a big after-hours move,
+        # because that feed rolls over to extended-hours prices and the
+        # "mismatch" it measured WAS the move. Times are checkable; prices
+        # are not.
+        regular = None
+        regular_ts = None
+        mask_reg = idx <= regular_end_utc
+        if bool(mask_reg.any()):
+            v = hist["Close"][mask_reg].iloc[-1]
+            if not _pd.isna(v):
+                regular = float(v)
+                regular_ts = int(idx[mask_reg][-1].timestamp())
+
+        regular_end_et = regular_end_utc.tz_convert(et)
+        # Prefer the official close over the last 1m bar — but only for
+        # instruments whose session ends at the equity bell. A futures or
+        # crypto "daily close" is struck at a different moment than the
+        # settle that regular_end refers to, so for those the intraday bar
+        # at the settle time really is the right reference.
+        if (regular_end_et.hour, regular_end_et.minute) == (16, 0):
+            official = _official_close(sym, regular_end_et.date())
+            if official:
+                regular = official
+                regular_ts = int(regular_end_utc.timestamp())
+
+        # post-market: bars strictly after regular_end whose ET date
+        # equals regular_end's ET date (i.e. the same trading day —
+        # we don't want tomorrow's pre-market to bleed in as "post").
+        post = None
+        post_ts = None
+        mask_post = idx > regular_end_utc
+        if bool(mask_post.any()):
+            idx_et = idx[mask_post].tz_convert(et)
+            same_day = (idx_et.date == regular_end_utc.tz_convert(et).date())
+            if same_day.any():
+                close_series = hist["Close"][mask_post]
+                v = close_series[same_day].iloc[-1]
+                if not _pd.isna(v):
+                    post = float(v)
+                    post_ts = int(idx[mask_post][same_day][-1].timestamp())
+
+        # pre-market: bars in TODAY's [04:00, 09:30) ET window.
+        # Only populated when we're currently past 04:00 ET today.
+        pre = None
+        pre_ts = None
+        mask_pre = (idx >= pre_open_utc) & (idx < open_utc)
+        if bool(mask_pre.any()):
+            idx_et = idx[mask_pre].tz_convert(et)
+            same_day = (idx_et.date == today)
+            if same_day.any():
+                close_series = hist["Close"][mask_pre]
+                v = close_series[same_day].iloc[-1]
+                if not _pd.isna(v):
+                    pre = float(v)
+                    pre_ts = int(idx[mask_pre][same_day][-1].timestamp())
+        return regular, regular_ts, regular_end_et.date(), pre, pre_ts, post, post_ts
+
     def _row(sym, hist):
         """One symbol's extended-hours row from its 1-minute frame, or None."""
         try:
-            idx = hist.index
-            if idx.tz is None:
-                idx = idx.tz_localize("UTC")
-
-            # "regular_end" = the most recent COMPLETED regular session-end
-            # for this symbol. Past 20:00 ET or before 04:00 ET we'd
-            # otherwise be tempted to use "today's 16:00 ET" — but if
-            # today's hasn't happened yet that reference is in the future
-            # and any "before today's 16:00 ET" filter would pick up the
-            # previous day's post-market bars, badly distorting `regular`.
-            if _prev_end is not None:
-                regular_end_utc = _pd.Timestamp(_prev_end(sym))
+            if _xr.has_us_extended_session(sym):
+                regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _us_prints(sym, hist)
             else:
-                # Fallback: equity convention (16:00 ET) on the most
-                # recent weekday <= now.
-                t = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
-                if t > now_et:
-                    from datetime import timedelta as _td
-                    t -= _td(days=1)
-                while t.weekday() >= 5:
-                    from datetime import timedelta as _td
-                    t -= _td(days=1)
-                regular_end_utc = _pd.Timestamp(t).tz_convert("UTC")
-
-            # regular = last bar at or before regular_end. For a query at
-            # 00:10 ET Thursday this lands on Wed 16:00 ET (yesterday's
-            # close) — which is exactly the right denominator for
-            # Wednesday's post-market or Thursday's pre-market.
-            # Bar timestamps travel with the prices. A consumer cannot tell a
-            # sound pairing from a stale one by looking at the numbers — the
-            # dashboard tried comparing `regular` against its own quote feed
-            # and ended up hiding every symbol with a big after-hours move,
-            # because that feed rolls over to extended-hours prices and the
-            # "mismatch" it measured WAS the move. Times are checkable; prices
-            # are not.
-            regular = None
-            regular_ts = None
-            mask_reg = idx <= regular_end_utc
-            if bool(mask_reg.any()):
-                v = hist["Close"][mask_reg].iloc[-1]
-                if not _pd.isna(v):
-                    regular = float(v)
-                    regular_ts = int(idx[mask_reg][-1].timestamp())
-
-            regular_end_et = regular_end_utc.tz_convert(et)
-            # Prefer the official close over the last 1m bar — but only for
-            # instruments whose session ends at the equity bell. A futures or
-            # crypto "daily close" is struck at a different moment than the
-            # settle that regular_end refers to, so for those the intraday bar
-            # at the settle time really is the right reference.
-            if (regular_end_et.hour, regular_end_et.minute) == (16, 0):
-                official = _official_close(sym, regular_end_et.date())
-                if official:
-                    regular = official
-                    regular_ts = int(regular_end_utc.timestamp())
-
-            # post-market: bars strictly after regular_end whose ET date
-            # equals regular_end's ET date (i.e. the same trading day —
-            # we don't want tomorrow's pre-market to bleed in as "post").
-            post = None
-            post_ts = None
-            mask_post = idx > regular_end_utc
-            if bool(mask_post.any()):
-                idx_et = idx[mask_post].tz_convert(et)
-                same_day = (idx_et.date == regular_end_utc.tz_convert(et).date())
-                if same_day.any():
-                    close_series = hist["Close"][mask_post]
-                    v = close_series[same_day].iloc[-1]
-                    if not _pd.isna(v):
-                        post = float(v)
-                        post_ts = int(idx[mask_post][same_day][-1].timestamp())
-
-            # pre-market: bars in TODAY's [04:00, 09:30) ET window.
-            # Only populated when we're currently past 04:00 ET today.
-            pre = None
-            pre_ts = None
-            mask_pre = (idx >= pre_open_utc) & (idx < open_utc)
-            if bool(mask_pre.any()):
-                idx_et = idx[mask_pre].tz_convert(et)
-                same_day = (idx_et.date == today)
-                if same_day.any():
-                    close_series = hist["Close"][mask_pre]
-                    v = close_series[same_day].iloc[-1]
-                    if not _pd.isna(v):
-                        pre = float(v)
-                        pre_ts = int(idx[mask_pre][same_day][-1].timestamp())
+                regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _generic_prints(sym, hist)
 
             # Which extended print may be paired with `regular` depends on the
             # session, and getting it wrong yields the OPPOSITE number rather
@@ -6032,8 +6057,8 @@ def get_extended_hours_quotes(symbols):
             # — money-market and mutual funds, thin ETFs — leaves `regular`
             # sitting on a bar from an earlier day, and pairing a fresh
             # extended print against it reports a multi-day return as an
-            # after-hours move. Both windows above are already pinned to
-            # regular_end's date, so requiring the same of the denominator
+            # after-hours move. The post-market window is already pinned to
+            # ref_day, so requiring ref_day of the denominator
             # closes the loop; the C++ side's timestamp check is a backstop,
             # not the rule.
             # The prints go too, not just `ext`. quote_from_row on the C++ side
@@ -6045,7 +6070,7 @@ def get_extended_hours_quotes(symbols):
             # reference is well inside its five-day tolerance. `regular` stays:
             # it is a real close and the futures table prints it.
             reg_stale = (regular_ts is not None and
-                         datetime.fromtimestamp(regular_ts, et).date() != regular_end_et.date())
+                         datetime.fromtimestamp(regular_ts, et).date() != ref_day)
             if reg_stale:
                 ext, ext_ts = None, None
                 pre, pre_ts = None, None
@@ -6469,22 +6494,14 @@ def _empty_ext_row(sym, session, unavailable=False):
 
 
 def _ext_session_label(now_et):
-    """Derive a session label (PRE/REGULAR/POST/CLOSED) from the current ET
-    clock. Saturday/Sunday and overnight gaps map to CLOSED. Half-day or
-    holiday closes still report by clock alone — that's acceptable here
-    since the session label is purely cosmetic in the consumer view."""
-    if now_et.weekday() >= 5:
-        return "CLOSED"
-    h, m = now_et.hour, now_et.minute
-    if h < 4:
-        return "CLOSED"
-    if (h, m) < (9, 30):
-        return "PRE"
-    if h < 16:
-        return "REGULAR"
-    if h < 20:
-        return "POST"
-    return "CLOSED"
+    """The session label (PRE/REGULAR/POST/CLOSED) at `now_et`.
+
+    Not cosmetic: quote_from_row pairs today's pre-market with `regular` only
+    under PRE/REGULAR, so the label must flip exactly when the reference does —
+    at the real bell (13:00 on an early close), and never on a holiday or a
+    weekend. extended_rules owns both."""
+    import extended_rules
+    return extended_rules.session_label(now_et)
 
 
 _STREAM_URL = "wss://streamer.finance.yahoo.com/?version=2"
