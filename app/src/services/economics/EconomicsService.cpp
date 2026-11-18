@@ -54,6 +54,36 @@ QString file_for_dispatch(const QString& source_id, const QString& script, const
     return clean_stem + QStringLiteral("_") + QString::fromLatin1(digest.left(16)) + QStringLiteral(".json");
 }
 
+// Why an answer without a top-level error still holds nothing usable, or
+// empty. fred_economic_data.py's composite commands (the yield curve: one
+// FRED series per tenor) report each series' failure inside it; when every
+// one failed the answer is the refusal, not a curve.
+QString unusable_reason(const QString& command, const QJsonObject& data) {
+    if (command != QLatin1String("yield_curve"))
+        return {};
+    QString first_error;
+    for (const char* block : {"yield_curve", "spreads"}) {
+        const QJsonObject series = data.value(QLatin1String(block)).toObject();
+        for (auto it = series.constBegin(); it != series.constEnd(); ++it) {
+            const QJsonObject s = it.value().toObject();
+            const QString e = s.value("error").toString();
+            if (!e.isEmpty()) {
+                if (first_error.isEmpty())
+                    first_error = e;
+                continue;
+            }
+            for (const auto& o : s.value("observations").toArray()) {
+                bool num = false;
+                o.toObject().value("value").toString().toDouble(&num); // FRED's "." = no value
+                if (num)
+                    return {};
+            }
+        }
+    }
+    return first_error.isEmpty() ? QStringLiteral("FRED returned no yield on any tenor")
+                                 : QStringLiteral("FRED returned no yield on any tenor: ") + first_error;
+}
+
 } // namespace
 
 EconomicsService& EconomicsService::instance() {
@@ -97,13 +127,19 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
             const QString topic = hub_topic(rec.source_id, rec.request_id);
             dispatch_records_.insert(topic, rec);
 
-            // Repopulate CacheManager so a subsequent execute() emits cached
-            // immediately. Use full TTL since freshness is gated by execute()'s
-            // own age check on next invocation.
+            // Repopulate CacheManager only while the record is inside its TTL,
+            // with its real age, so a hit answers with the time FRED was asked
+            // and an old series is fetched again instead of served as fresh.
+            // A record without a fetch time (written by an older build) has no
+            // age to trust: it only keeps its dispatch for hub replay.
+            const qint64 fetched_at = static_cast<qint64>(root.value("fetched_at").toDouble(0));
+            const qint64 age = QDateTime::currentSecsSinceEpoch() - fetched_at;
+            if (fetched_at <= 0 || age < 0 || age >= kCacheTtlSec)
+                continue;
             finterm::CacheManager::instance().put(
                 cache_key(rec.script, rec.command, rec.args),
                 QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
-                "economics");
+                "economics", static_cast<int>(age));
             ++hydrated;
         }
         if (hydrated > 0)
@@ -126,12 +162,12 @@ void EconomicsService::invalidate(const QString& script, const QString& command,
 void EconomicsService::run(const QString& script, const QString& command, const QStringList& args, RunDone done) {
     const QString key = cache_key(script, command, args);
     {
-        const QVariant cached = finterm::CacheManager::instance().get(key);
-        if (!cached.isNull()) {
+        if (const auto cached = finterm::CacheManager::instance().try_get_aged(key)) {
             LOG_DEBUG("EconomicsService", "Cache hit: " + key);
             EconomicsResult res;
             res.success = true;
-            res.data = QJsonDocument::fromJson(cached.toString().toUtf8()).object();
+            res.data = QJsonDocument::fromJson(cached->value.toUtf8()).object();
+            res.as_of = cached->written_at;
             done(res, false);
             return;
         }
@@ -148,7 +184,7 @@ void EconomicsService::run(const QString& script, const QString& command, const 
     LOG_INFO("EconomicsService", QString("Run %1 %2 [%3]").arg(script, command, args.join(", ")));
 
     QPointer<EconomicsService> self = this;
-    python::PythonRunner::instance().run(script, full_args, [self, key](python::PythonResult py) {
+    python::PythonRunner::instance().run(script, full_args, [self, key, script, command](python::PythonResult py) {
         if (!self)
             return;
 
@@ -184,8 +220,14 @@ void EconomicsService::run(const QString& script, const QString& command, const 
                     res.error = error_code.isEmpty()
                                     ? message
                                     : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
+                } else if (const QString why = unusable_reason(command, res.data); !why.isEmpty()) {
+                    // Answered, but with nothing in it: every series inside
+                    // carried FRED's error. A failure, never cached.
+                    res.error = why;
+                    LOG_WARN("EconomicsService", script + " " + command + ": " + why);
                 } else {
                     res.success = true;
+                    res.as_of = QDateTime::currentDateTimeUtc();
                     finterm::CacheManager::instance().put(
                         key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
                         kCacheTtlSec, "economics");
@@ -232,6 +274,7 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
                     args_arr.append(a);
                 root.insert("args", args_arr);
                 root.insert("request_id", rec.request_id);
+                root.insert("fetched_at", static_cast<double>(res.as_of.toSecsSinceEpoch()));
                 root.insert("data", res.data);
                 disk_cache().save(file_for_dispatch(rec.source_id, rec.script, rec.command, rec.args, rec.request_id),
                                   QJsonDocument(root));

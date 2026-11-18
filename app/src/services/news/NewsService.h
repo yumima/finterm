@@ -257,6 +257,15 @@ class NewsService : public QObject, public finterm::datahub::Producer {
     // long enough to absorb a double-click.
     static constexpr int kPartialBriefCacheTtlSec = 60;
     int feed_count_ = 0;
+
+    /// The one RSS fan-out behind fetch_all_news / fetch_all_news_progressive:
+    /// a cache hit answers on the next turn; otherwise callers wait on the
+    /// fan-out already out, or start one. ok = false when no feed returned an
+    /// article (nothing is cached then).
+    void request_feed(bool force, bool progressive, ArticlesCallback cb);
+    QVector<ArticlesCallback> fanout_waiters_;
+    bool fanout_in_flight_ = false;
+    bool fanout_progressive_ = false; ///< a waiter wants articles_partial per feed
     QStringList active_sources_;
 
     // WebSocket live feed

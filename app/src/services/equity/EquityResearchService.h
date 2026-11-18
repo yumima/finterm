@@ -174,12 +174,15 @@ class EquityResearchService : public QObject {
     // the caller gets exactly what the tab shows. A failure carries the
     // vendor's reason; it is never an empty success.
 
-    using FinancialsCallback = std::function<void(bool ok, const FinancialsData& data, const QString& error)>;
+    /// `as_of`: when the statements were fetched (a cache hit keeps its write time).
+    using FinancialsCallback =
+        std::function<void(bool ok, const FinancialsData& data, const QString& error, const QDateTime& as_of)>;
     void read_financials(const QString& symbol, FinancialsCallback cb);
 
     /// `count` is a request size, as for fetch_news: a cached list for the
     /// symbol is served whatever its length (one entry per symbol, as the tab).
-    using NewsCallback = std::function<void(bool ok, const QVector<NewsArticle>& articles, const QString& error)>;
+    using NewsCallback = std::function<void(bool ok, const QVector<NewsArticle>& articles, const QString& error,
+                                            const QDateTime& as_of)>;
     void read_news(const QString& symbol, int count, NewsCallback cb);
 
     /// The Technicals tab's indicator compute (the daemon's
@@ -187,6 +190,10 @@ class EquityResearchService : public QObject {
     /// rating is read from. Not cached: the candles are the caller's own.
     using RowsCallback = std::function<void(bool ok, const QJsonArray& rows, const QString& error)>;
     void compute_technicals_rows(const QJsonArray& candles, RowsCallback cb);
+
+    /// The indicator stages the compute lost on `row` (the daemon leaves a
+    /// `_<stage>_error` column instead of aborting): (stage, error), by stage.
+    static QVector<QPair<QString, QString>> technicals_stage_errors(const QJsonObject& row);
 
     /// One statement as [{period, items}], most recent first — the JSON shape
     /// of FinancialsData every non-UI reader (MCP, workflows) hands out.
@@ -243,6 +250,32 @@ class EquityResearchService : public QObject {
     /// its result via the matching `*_loaded` signal so all subscribers
     /// (including this caller's tab) still get the data.
     bool acquire_inflight(const QString& key);
+
+    /// The one bridge from a broadcast fetch_* to a single answer: the first
+    /// `loaded` emission `matches` accepts goes to `on_loaded`, the first
+    /// error_occurred for (`symbol`, `context`) to `on_error` — whichever comes
+    /// first, once; the other is disconnected with it. Symbols compare
+    /// case-insensitively on both paths. Attach before calling fetch_*.
+    template <typename... Args, typename Match, typename OnLoaded>
+    void bridge_once(void (EquityResearchService::*loaded)(Args...), const QString& symbol, const QString& context,
+                     Match matches, OnLoaded on_loaded, std::function<void(const QString&)> on_error) {
+        auto* watcher = new QObject(this);
+        connect(this, loaded, watcher, [watcher, matches, on_loaded](Args... args) {
+            if (!matches(args...))
+                return;
+            const auto done = on_loaded; // deleting the watcher destroys this lambda
+            delete watcher;
+            done(args...);
+        });
+        connect(this, &EquityResearchService::error_occurred, watcher,
+                [watcher, symbol, context, on_error](const QString& s, const QString& ctx, const QString& msg) {
+                    if (ctx != context || s.compare(symbol, Qt::CaseInsensitive) != 0)
+                        return;
+                    const auto done = on_error;
+                    delete watcher;
+                    done(msg);
+                });
+    }
     void release_inflight(const QString& key);
 
     /// The company info for `symbol` (the app's one info read), emitted as

@@ -27,9 +27,11 @@
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
 #include <QThreadPool>
+#include <QTimer>
 #include <QUuid>
 #include <QXmlStreamReader>
 #include <QtConcurrent>
@@ -158,41 +160,67 @@ static NewsArticle article_from_json(const QJsonObject& o) {
 }
 
 // ── Fetch all RSS feeds in parallel ─────────────────────────────────────────
+//
+// One fan-out at a time. fetch_all_news and fetch_all_news_progressive are two
+// ways of asking for the same merged feed: a caller arriving while a fan-out is
+// out waits on it (a workflow during the screen's refresh used to launch a
+// second full fan-out). A progressive caller joining a plain fan-out turns its
+// partial emissions on. Every caller is answered after the call returns, cache
+// hit included.
 
 void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
-    if (!force) {
+    request_feed(force, false, std::move(cb));
+}
+
+// First few fast feeds (Reuters, BBC) typically arrive in <300ms giving the
+// screen something to render immediately while slower feeds trickle in.
+void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_cb) {
+    request_feed(force, true, std::move(final_cb));
+}
+
+void NewsService::request_feed(bool force, bool progressive, ArticlesCallback cb) {
+    if (!force && !fanout_in_flight_) {
         const QVariant cached = finterm::CacheManager::instance().get(kArticlesCacheKey);
         if (!cached.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
             QVector<NewsArticle> articles;
             articles.reserve(arr.size());
-            for (const auto& v : arr) {
+            for (const auto& v : arr)
                 articles.append(article_from_json(v.toObject()));
-            }
-            cb(true, articles);
-            publish_articles_to_hub(articles);
+            QPointer<NewsService> self = this;
+            QTimer::singleShot(0, this, [self, progressive, cb = std::move(cb), articles]() {
+                if (!self)
+                    return;
+                cb(true, articles);
+                if (progressive)
+                    emit self->articles_partial(articles, self->feed_count_, self->feed_count_);
+                self->publish_articles_to_hub(articles);
+            });
             return;
         }
     }
 
-    auto feeds = default_feeds();
-    feed_count_ = feeds.size();
+    fanout_waiters_.append(std::move(cb));
+    if (progressive)
+        fanout_progressive_ = true;
+    if (fanout_in_flight_)
+        return; // the fan-out already out answers this caller too
+    fanout_in_flight_ = true;
 
-    // Shared state for collecting results from parallel requests
+    const auto feeds = default_feeds();
+    feed_count_ = feeds.size();
+    const int total = feeds.size();
+
     struct FetchState {
-        QMutex mutex;
         QVector<NewsArticle> all_articles;
         finterm::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
-        QAtomicInt remaining{0};
-        ArticlesCallback callback;
-        NewsService* service = nullptr;
+        int remaining = 0;
+        int done = 0;
     };
-
     auto state = std::make_shared<FetchState>();
-    state->remaining.storeRelaxed(feeds.size());
-    state->callback = std::move(cb);
-    state->service = this;
+    state->remaining = total;
 
+    QPointer<NewsService> self = this;
     for (const auto& feed : feeds) {
         QNetworkRequest req(QUrl(feed.url));
         req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
@@ -201,10 +229,13 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
         req.setTransferTimeout(kFeedTransferTimeoutMs);
 
         auto* reply = nam_->get(req);
-        connect(reply, &QNetworkReply::finished, this, [reply, feed, state]() {
+        // Replies finish on this (the GUI) thread, one at a time.
+        connect(reply, &QNetworkReply::finished, this, [reply, feed, state, total, self]() {
             reply->deleteLater();
+            if (!self)
+                return;
 
-            QVector<NewsArticle> articles;
+            QVector<NewsArticle> batch;
             const int http_code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             if (reply->error() == QNetworkReply::NoError) {
                 QByteArray data = reply->readAll();
@@ -213,122 +244,6 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
                 // <feed. HTML error pages (Akamai access-denied, Cloudflare
                 // captcha) start with <html / <!doctype and would pass through
                 // the parser silently producing 0 articles — flag them clearly.
-                const bool looks_like_html = trimmed.left(20).toLower().contains("<html") ||
-                                             trimmed.left(20).toLower().contains("<!doctype html");
-                if (looks_like_html) {
-                    LOG_WARN("NewsService", QString("Feed %1 (%2) returned HTML (likely access-denied), %3 bytes")
-                                                .arg(feed.id, feed.source)
-                                                .arg(data.size()));
-                } else if (trimmed.startsWith('<')) {
-                    articles = parse_rss_xml(data, feed);
-                }
-                if (articles.isEmpty() && !looks_like_html) {
-                    LOG_WARN("NewsService", QString("Feed %1 (%2) returned %3 bytes but no parsed articles")
-                                                .arg(feed.id, feed.source)
-                                                .arg(data.size()));
-                }
-            } else {
-                LOG_WARN("NewsService", QString("Feed %1 (%2) failed: HTTP %3, err=%4")
-                                            .arg(feed.id, feed.source)
-                                            .arg(http_code)
-                                            .arg(reply->errorString()));
-            }
-
-            {
-                QMutexLocker lock(&state->mutex);
-                finterm::news::merge_feed_batch(state->all_articles, state->merge_index, articles);
-            }
-
-            if (state->remaining.fetchAndSubRelaxed(1) == 1) {
-                // Last feed done — sort by time descending
-                auto& all = state->all_articles;
-                std::sort(all.begin(), all.end(),
-                          [](const NewsArticle& a, const NewsArticle& b) { return a.sort_ts > b.sort_ts; });
-
-                QSet<QString> sources;
-                for (const auto& a : all) {
-                    sources.insert(a.source);
-                    for (const auto& o : a.also_sources) // outlets folded into this row
-                        sources.insert(o);
-                }
-                state->service->active_sources_ = sources.values();
-
-                // Serialize to CacheManager
-                QJsonArray arr;
-                for (const auto& a : all) {
-                    arr.append(article_to_json(a));
-                }
-                finterm::CacheManager::instance().put(
-                    kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                    kArticleCacheTtlSec, "news");
-
-                LOG_INFO("NewsService",
-                         QString("Fetched %1 articles from %2 sources").arg(all.size()).arg(sources.size()));
-
-                state->callback(true, all);
-                emit state->service->articles_updated(all);
-                state->service->publish_articles_to_hub(all);
-            }
-        });
-    }
-}
-
-// ── Progressive fetch — emits partial batches as each feed arrives ───────────
-// First few fast feeds (Reuters, BBC) typically arrive in <300ms giving the
-// screen something to render immediately while slower feeds trickle in.
-
-void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_cb) {
-    if (!force) {
-        const QVariant cached = finterm::CacheManager::instance().get(kArticlesCacheKey);
-        if (!cached.isNull()) {
-            const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
-            QVector<NewsArticle> articles;
-            articles.reserve(arr.size());
-            for (const auto& v : arr) {
-                articles.append(article_from_json(v.toObject()));
-            }
-            final_cb(true, articles);
-            emit articles_partial(articles, feed_count_, feed_count_);
-            publish_articles_to_hub(articles);
-            return;
-        }
-    }
-
-    auto feeds = default_feeds();
-    feed_count_ = feeds.size();
-    const int total = feeds.size();
-
-    struct FetchState {
-        QMutex mutex;
-        QVector<NewsArticle> all_articles;
-        finterm::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
-        QAtomicInt remaining{0};
-        QAtomicInt done{0};
-        ArticlesCallback callback;
-        NewsService* service = nullptr;
-    };
-
-    auto state = std::make_shared<FetchState>();
-    state->remaining.storeRelaxed(total);
-    state->callback = std::move(final_cb);
-    state->service = this;
-
-    for (const auto& feed : feeds) {
-        QNetworkRequest req(QUrl(feed.url));
-        req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
-        req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-        req.setTransferTimeout(kFeedTransferTimeoutMs);
-
-        auto* reply = nam_->get(req);
-        connect(reply, &QNetworkReply::finished, this, [reply, feed, state, total, this]() {
-            reply->deleteLater();
-
-            QVector<NewsArticle> batch;
-            const int http_code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (reply->error() == QNetworkReply::NoError) {
-                QByteArray data = reply->readAll();
-                const QByteArray trimmed = data.trimmed();
                 const bool looks_like_html = trimmed.left(20).toLower().contains("<html") ||
                                              trimmed.left(20).toLower().contains("<!doctype html");
                 if (looks_like_html) {
@@ -350,53 +265,73 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
                                             .arg(reply->errorString()));
             }
 
-            QVector<NewsArticle> snapshot;
-            int feeds_done = 0;
-            {
-                QMutexLocker lock(&state->mutex);
-                finterm::news::merge_feed_batch(state->all_articles, state->merge_index, batch);
-                feeds_done = state->done.fetchAndAddRelaxed(1) + 1;
-                // Partial snapshot sorted by time for progressive display
-                snapshot = state->all_articles;
-            }
-            std::sort(snapshot.begin(), snapshot.end(),
-                      [](const NewsArticle& a, const NewsArticle& b) { return a.sort_ts > b.sort_ts; });
-            emit articles_partial(snapshot, feeds_done, total);
-            // Progressive publish — each chunk fans out the accumulated
-            // list. Hub's per-topic coalescing (news:general at 250ms)
-            // throttles the UI repaint storm on cold-cache fills.
-            publish_articles_to_hub(snapshot);
-
-            if (state->remaining.fetchAndSubRelaxed(1) == 1) {
-                // All feeds done — finalize cache
-                auto& all = state->all_articles;
-                std::sort(all.begin(), all.end(),
+            finterm::news::merge_feed_batch(state->all_articles, state->merge_index, batch);
+            ++state->done;
+            if (self->fanout_progressive_) {
+                QVector<NewsArticle> snapshot = state->all_articles;
+                std::sort(snapshot.begin(), snapshot.end(),
                           [](const NewsArticle& a, const NewsArticle& b) { return a.sort_ts > b.sort_ts; });
+                emit self->articles_partial(snapshot, state->done, total);
+                // Progressive publish — each chunk fans out the accumulated
+                // list. Hub's per-topic coalescing (news:general at 250ms)
+                // throttles the UI repaint storm on cold-cache fills.
+                self->publish_articles_to_hub(snapshot);
+            }
 
+            if (--state->remaining > 0)
+                return;
+            // Last feed done — sort by time descending
+            auto& all = state->all_articles;
+            std::sort(all.begin(), all.end(),
+                      [](const NewsArticle& a, const NewsArticle& b) { return a.sort_ts > b.sort_ts; });
+
+            // Every feed failing or refusing is not a quiet news day: answer
+            // a failure and cache nothing, so the next ask tries again.
+            const bool ok = !all.isEmpty();
+            if (ok) {
                 QSet<QString> sources;
                 for (const auto& a : all) {
                     sources.insert(a.source);
                     for (const auto& o : a.also_sources) // outlets folded into this row
                         sources.insert(o);
                 }
-                state->service->active_sources_ = sources.values();
+                self->active_sources_ = sources.values();
 
-                QJsonArray parr;
-                for (const auto& a : all) {
-                    parr.append(article_to_json(a));
-                }
+                QJsonArray arr;
+                for (const auto& a : all)
+                    arr.append(article_to_json(a));
                 finterm::CacheManager::instance().put(
-                    kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(parr).toJson(QJsonDocument::Compact))),
+                    kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                     kArticleCacheTtlSec, "news");
-
-                LOG_INFO(
-                    "NewsService",
-                    QString("Progressive fetch complete: %1 articles, %2 sources").arg(all.size()).arg(sources.size()));
-
-                state->callback(true, all);
-                emit state->service->articles_updated(all);
-                state->service->publish_articles_to_hub(all);
+                LOG_INFO("NewsService",
+                         QString("Fetched %1 articles from %2 sources").arg(all.size()).arg(sources.size()));
+            } else {
+                LOG_WARN("NewsService", QString("No feed of %1 returned an article").arg(total));
             }
+
+            const auto waiters = std::move(self->fanout_waiters_);
+            self->fanout_waiters_.clear();
+            self->fanout_in_flight_ = false;
+            self->fanout_progressive_ = false;
+            for (const auto& w : waiters)
+                w(ok, all);
+            if (ok) {
+                emit self->articles_updated(all);
+                self->publish_articles_to_hub(all);
+            }
+        });
+    }
+    if (total == 0) {
+        // No feeds configured: answer, don't strand the waiters.
+        QTimer::singleShot(0, this, [self]() {
+            if (!self)
+                return;
+            const auto waiters = std::move(self->fanout_waiters_);
+            self->fanout_waiters_.clear();
+            self->fanout_in_flight_ = false;
+            self->fanout_progressive_ = false;
+            for (const auto& w : waiters)
+                w(false, {});
         });
     }
 }

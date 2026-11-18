@@ -481,33 +481,18 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
             }
         }
 
-        // Cache miss → use the existing fetch_technicals two-stage chain.
-        // We hook one-shot listeners on technicals_loaded / error_occurred
-        // to bridge the broadcast back into the QueryStore promise pair.
-        // A `watcher` QObject owns both connections; deleting it on first
-        // matching event auto-disconnects both (no leak if we exit via
-        // either path).
-        auto* watcher = new QObject(this);
-        QPointer<QObject> watcher_guard(watcher);
-        connect(this, &EquityResearchService::technicals_loaded, watcher,
-                [symbol, period, interval, resolve, watcher_guard](TechnicalsData d) {
-                    // Interval is part of the identity: daily and weekly requests
-                    // share the same floored period ("10y") and would otherwise
-                    // resolve each other and poison the QueryStore entry.
-                    if (d.symbol != symbol || d.period != period || d.interval != interval)
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    resolve(QVariant::fromValue(d));
-                });
-        connect(this, &EquityResearchService::error_occurred, watcher,
-                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                    if (sym != symbol || ctx != "Technicals")
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    reject(msg);
-                });
+        // Cache miss → the fetch_technicals two-stage chain, bridged back.
+        // Interval is part of the identity: daily and weekly requests share
+        // the same floored period ("10y") and would otherwise resolve each
+        // other and poison the QueryStore entry.
+        bridge_once(
+            &EquityResearchService::technicals_loaded, symbol, QStringLiteral("Technicals"),
+            [symbol, period, interval](const TechnicalsData& d) {
+                return d.symbol.compare(symbol, Qt::CaseInsensitive) == 0 && d.period == period &&
+                       d.interval == interval;
+            },
+            [resolve](const TechnicalsData& d) { resolve(QVariant::fromValue(d)); },
+            [reject](const QString& msg) { reject(msg); });
         fetch_technicals(symbol, period, interval);
     };
     // SWR window — technicals are derived from daily candles and barely
@@ -517,11 +502,9 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
                                             std::move(fetcher));
 }
 
-// All three of these (financials, news, peers) bridge to existing broadcast
-// emitters via a one-shot watcher rather than re-implementing the cache /
-// fetch chain. Same template as subscribe_technicals: cache check first,
-// then attach watcher, then call legacy fetch_* which emits the broadcast.
-// The watcher's QObject scope auto-disconnects on first matching event.
+// Financials and news resolve through the callback reads (cache first, with
+// the entry's write time; else the fetch_* broadcast, bridged once). Peers
+// bridge directly: fetch_peers keys its own cache on the basket.
 
 void EquityResearchService::subscribe_financials(QObject* owner, const QString& symbol,
                                                  query::QueryStore::Callback cb) {
@@ -529,39 +512,13 @@ void EquityResearchService::subscribe_financials(QObject* owner, const QString& 
         return;
     const QString key = "equity:financials:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto fcv_aged = finterm::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
-        const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
-        if (!fcv.isNull()) {
-            const auto doc = QJsonDocument::fromJson(fcv.toString().toUtf8());
-            if (doc.isObject()) {
-                FinancialsData parsed = parse_financials(doc.object());
-                emit financials_loaded(parsed);
-                // Resolve with the cache entry\'s WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                resolve(QVariant::fromValue(parsed), fcv_aged->written_at);
-                return;
-            }
-        }
-        auto* watcher = new QObject(this);
-        QPointer<QObject> watcher_guard(watcher);
-        connect(this, &EquityResearchService::financials_loaded, watcher,
-                [symbol, resolve, watcher_guard](FinancialsData d) {
-                    if (d.symbol != symbol)
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    resolve(QVariant::fromValue(d));
-                });
-        connect(this, &EquityResearchService::error_occurred, watcher,
-                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                    if (sym != symbol || ctx != "Financials")
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    reject(msg);
-                });
-        fetch_financials(symbol);
+        read_financials(symbol, [resolve, reject](bool ok, const FinancialsData& d, const QString& err,
+                                                  const QDateTime& as_of) {
+            if (ok)
+                resolve(QVariant::fromValue(d), as_of);
+            else
+                reject(err);
+        });
     };
     query::QueryStore::instance().subscribe(owner, key, kFinancialsTtlSec, kFinancialsTtlSec * 4, std::move(cb),
                                             std::move(fetcher));
@@ -572,39 +529,13 @@ void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol
         return;
     const QString key = "equity:news:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto ncv_aged = finterm::CacheManager::instance().try_get_aged("equity:news:" + symbol);
-        const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
-        if (!ncv.isNull()) {
-            const auto doc = QJsonDocument::fromJson(ncv.toString().toUtf8());
-            if (doc.isArray()) {
-                QVector<NewsArticle> parsed = parse_news(doc.array());
-                emit news_loaded(symbol, parsed);
-                // Resolve with the cache entry\'s WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                resolve(QVariant::fromValue(parsed), ncv_aged->written_at);
-                return;
-            }
-        }
-        auto* watcher = new QObject(this);
-        QPointer<QObject> watcher_guard(watcher);
-        connect(this, &EquityResearchService::news_loaded, watcher,
-                [symbol, resolve, watcher_guard](QString sym, QVector<NewsArticle> articles) {
-                    if (sym != symbol)
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    resolve(QVariant::fromValue(articles));
-                });
-        connect(this, &EquityResearchService::error_occurred, watcher,
-                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                    if (sym != symbol || ctx != "News")
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    reject(msg);
-                });
-        fetch_news(symbol);
+        read_news(symbol, 20, [resolve, reject](bool ok, const QVector<NewsArticle>& articles, const QString& err,
+                                                const QDateTime& as_of) {
+            if (ok)
+                resolve(QVariant::fromValue(articles), as_of);
+            else
+                reject(err);
+        });
     };
     query::QueryStore::instance().subscribe(owner, key, kNewsTtlSec, kNewsTtlSec * 5, std::move(cb),
                                             std::move(fetcher));
@@ -625,24 +556,13 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
         // No cache short-circuit at this layer — fetch_peers's own cache
         // path keys on the same basket and emits peers_loaded synchronously
         // on hit. We just attach the bridge and call.
-        auto* watcher = new QObject(this);
-        QPointer<QObject> watcher_guard(watcher);
-        connect(this, &EquityResearchService::peers_loaded, watcher,
-                [symbol, resolve, watcher_guard](QString sym, QVector<PeerData> peers) {
-                    if (sym != symbol)
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    resolve(QVariant::fromValue(peers));
-                });
-        connect(this, &EquityResearchService::error_occurred, watcher,
-                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                    if (sym != symbol || ctx != "Peers")
-                        return;
-                    if (watcher_guard)
-                        watcher_guard->deleteLater();
-                    reject(msg);
-                });
+        bridge_once(
+            &EquityResearchService::peers_loaded, symbol, QStringLiteral("Peers"),
+            [symbol](const QString& s, const QVector<PeerData>&) {
+                return s.compare(symbol, Qt::CaseInsensitive) == 0;
+            },
+            [resolve](const QString&, const QVector<PeerData>& peers) { resolve(QVariant::fromValue(peers)); },
+            [reject](const QString& msg) { reject(msg); });
         fetch_peers(symbol, peer_symbols);
     };
     query::QueryStore::instance().subscribe(owner, key, kPeersTtlSec, kPeersTtlSec * 2, std::move(cb),
@@ -1060,10 +980,10 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
 
 // ── Callback reads ────────────────────────────────────────────────────────────
 //
-// Each one bridges to the broadcast fetch_* path with a one-shot watcher (the
-// subscribe_* template), so the cache, the in-flight dedupe and the disk copy
-// stay fetch_*'s alone. The fetch starts on the next event-loop turn: a cache
-// hit inside fetch_* emits synchronously, and these answer after the call.
+// Cache first (answered with the entry's write time), else the broadcast
+// fetch_* path bridged once — so the in-flight dedupe and the disk copy stay
+// fetch_*'s alone. Both start on the next event-loop turn: these answer after
+// the call returns, cache hit included.
 
 void EquityResearchService::read_financials(const QString& symbol, FinancialsCallback cb) {
     const QString sym = symbol.trimmed().toUpper();
@@ -1072,27 +992,23 @@ void EquityResearchService::read_financials(const QString& symbol, FinancialsCal
         if (!self)
             return;
         if (sym.isEmpty()) {
-            cb(false, {}, QStringLiteral("Financials: no symbol"));
+            cb(false, {}, QStringLiteral("Financials: no symbol"), {});
             return;
         }
-        // Deleting the watcher disconnects both lambdas, so the caller is
-        // answered once even when both signals fire.
-        auto* watcher = new QObject(self);
-        connect(self, &EquityResearchService::financials_loaded, watcher, [sym, cb, watcher](FinancialsData d) {
-            if (d.symbol.compare(sym, Qt::CaseInsensitive) != 0)
+        if (const auto aged = finterm::CacheManager::instance().try_get_aged("equity:financials:" + sym)) {
+            const auto doc = QJsonDocument::fromJson(aged->value.toUtf8());
+            if (doc.isObject()) {
+                const FinancialsData parsed = self->parse_financials(doc.object());
+                emit self->financials_loaded(parsed);
+                cb(true, parsed, {}, aged->written_at);
                 return;
-            const auto done = cb; // deleting the watcher destroys this lambda
-            delete watcher;
-            done(true, d, {});
-        });
-        connect(self, &EquityResearchService::error_occurred, watcher,
-                [sym, cb, watcher](const QString& s, const QString& ctx, const QString& msg) {
-                    if (s != sym || ctx != QLatin1String("Financials"))
-                        return;
-                    const auto done = cb; // deleting the watcher destroys this lambda
-                    delete watcher;
-                    done(false, {}, msg);
-                });
+            }
+        }
+        self->bridge_once(
+            &EquityResearchService::financials_loaded, sym, QStringLiteral("Financials"),
+            [sym](const FinancialsData& d) { return d.symbol.compare(sym, Qt::CaseInsensitive) == 0; },
+            [cb](const FinancialsData& d) { cb(true, d, {}, QDateTime::currentDateTime()); },
+            [cb](const QString& msg) { cb(false, {}, msg, {}); });
         self->fetch_financials(sym);
     });
 }
@@ -1104,26 +1020,25 @@ void EquityResearchService::read_news(const QString& symbol, int count, NewsCall
         if (!self)
             return;
         if (sym.isEmpty()) {
-            cb(false, {}, QStringLiteral("News: no symbol"));
+            cb(false, {}, QStringLiteral("News: no symbol"), {});
             return;
         }
-        auto* watcher = new QObject(self);
-        connect(self, &EquityResearchService::news_loaded, watcher,
-                [sym, cb, watcher](const QString& s, const QVector<NewsArticle>& articles) {
-                    if (s != sym)
-                        return;
-                    const auto done = cb; // deleting the watcher destroys this lambda
-                    delete watcher;
-                    done(true, articles, {});
-                });
-        connect(self, &EquityResearchService::error_occurred, watcher,
-                [sym, cb, watcher](const QString& s, const QString& ctx, const QString& msg) {
-                    if (s != sym || ctx != QLatin1String("News"))
-                        return;
-                    const auto done = cb; // deleting the watcher destroys this lambda
-                    delete watcher;
-                    done(false, {}, msg);
-                });
+        if (const auto aged = finterm::CacheManager::instance().try_get_aged("equity:news:" + sym)) {
+            const auto doc = QJsonDocument::fromJson(aged->value.toUtf8());
+            if (doc.isArray()) {
+                const QVector<NewsArticle> parsed = self->parse_news(doc.array());
+                emit self->news_loaded(sym, parsed);
+                cb(true, parsed, {}, aged->written_at);
+                return;
+            }
+        }
+        self->bridge_once(
+            &EquityResearchService::news_loaded, sym, QStringLiteral("News"),
+            [sym](const QString& s, const QVector<NewsArticle>&) { return s.compare(sym, Qt::CaseInsensitive) == 0; },
+            [cb](const QString&, const QVector<NewsArticle>& articles) {
+                cb(true, articles, {}, QDateTime::currentDateTime());
+            },
+            [cb](const QString& msg) { cb(false, {}, msg, {}); });
         self->fetch_news(sym, count);
     });
 }
@@ -1157,6 +1072,17 @@ void EquityResearchService::compute_technicals_rows(const QJsonArray& candles, R
             cb(true, data, {});
         },
         python::PythonWorker::kComputeActionTimeoutMs);
+}
+
+QVector<QPair<QString, QString>> EquityResearchService::technicals_stage_errors(const QJsonObject& row) {
+    QVector<QPair<QString, QString>> lost;
+    for (auto it = row.constBegin(); it != row.constEnd(); ++it) {
+        const QString& key = it.key();
+        if (key.startsWith(QLatin1Char('_')) && key.endsWith(QLatin1String("_error")) && key.size() > 7)
+            lost.append({key.mid(1, key.size() - 7), it.value().toString()});
+    }
+    std::sort(lost.begin(), lost.end());
+    return lost;
 }
 
 QJsonArray EquityResearchService::statement_json(const QVector<QPair<QString, QJsonObject>>& statement) {
@@ -1404,13 +1330,9 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     // it: without this the panel merely looks thinner than usual while the
     // rating is quietly derived from whatever survived.
     QStringList lost;
-    for (auto it = last.constBegin(); it != last.constEnd(); ++it) {
-        const QString& key = it.key();
-        if (key.startsWith(QLatin1Char('_')) && key.endsWith(QLatin1String("_error")))
-            lost << key.mid(1, key.size() - 7);
-    }
+    for (const auto& [stage, why] : technicals_stage_errors(last))
+        lost << stage;
     if (!lost.isEmpty()) {
-        lost.sort();
         td.data_warning = QStringLiteral("Could not compute: %1").arg(lost.join(QStringLiteral(", ")));
     }
 

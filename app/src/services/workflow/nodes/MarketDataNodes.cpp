@@ -25,10 +25,13 @@ namespace {
 
 // An EconomicsService answer as a node result.
 void emit_economics(const services::EconomicsResult& r, const std::function<void(bool, QJsonValue, QString)>& cb) {
-    if (r.success)
-        cb(true, r.data, {});
-    else
+    if (r.success) {
+        QJsonObject out = r.data;
+        out.insert("as_of", r.as_of.toUTC().toString(Qt::ISODate)); // when FRED was asked
+        cb(true, out, {});
+    } else {
         cb(false, {}, r.error);
+    }
 }
 
 // A JSON number for a value that was filed, null for one that was not.
@@ -267,7 +270,8 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 }
                 // The Financials tab's read: same cache, same in-flight request.
                 services::equity::EquityResearchService::instance().read_financials(
-                    symbol, [cb, type, symbol](bool ok, const services::equity::FinancialsData& d, const QString& err) {
+                    symbol, [cb, type, symbol](bool ok, const services::equity::FinancialsData& d, const QString& err,
+                                               const QDateTime& as_of) {
                         if (!ok) {
                             cb(false, {}, err);
                             return;
@@ -283,6 +287,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
                            QJsonObject{{"symbol", d.symbol},
                                        {"basis", "annual"},
                                        {"statement", type},
+                                       {"as_of", as_of.toUTC().toString(Qt::ISODate)},
                                        {"periods", services::equity::EquityResearchService::statement_json(stmt)}},
                            {});
                     });
@@ -412,7 +417,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
                     services::equity::EquityResearchService::instance().read_news(
                         symbol, std::max(limit, 20),
                         [cb, symbol, limit](bool ok, const QVector<services::equity::NewsArticle>& all,
-                                            const QString& err) {
+                                            const QString& err, const QDateTime& as_of) {
                             if (!ok) {
                                 cb(false, {}, err);
                                 return;
@@ -422,6 +427,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
                             cb(true,
                                QJsonObject{{"symbol", symbol},
                                            {"source", "yahoo"},
+                                           {"as_of", as_of.toUTC().toString(Qt::ISODate)},
                                            {"count", articles.size()},
                                            {"articles", articles}},
                                {});

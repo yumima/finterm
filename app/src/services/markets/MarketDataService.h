@@ -660,12 +660,18 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     bool sec_cik_loading_ = false;
     /// Answered with whether the map loaded and, when not, why.
     QVector<std::function<void(bool, const QString&)>> sec_cik_waiters_;
-    /// Every recent filing for an upper-case ticker (no cap), from the one
+    /// Recent filings for an upper-case ticker, from the one
     /// submissions cache entry; concurrent asks share one request.
     /// `mapped` = false when EDGAR's ticker map has no CIK for it.
+    /// Only the newest `limit` filings of `form` ("" = any) are built.
     using SecSubmissionsDone = std::function<void(const SecFilingsReply&, bool mapped)>;
-    void read_sec_submissions(const QString& tkr, SecSubmissionsDone done);
-    QHash<QString, QVector<SecSubmissionsDone>> sec_submissions_waiters_; // ticker → callers
+    void read_sec_submissions(const QString& tkr, const QString& form, int limit, SecSubmissionsDone done);
+    struct SecSubmissionsWaiter {
+        QString form;
+        int limit = 0;
+        SecSubmissionsDone done;
+    };
+    QHash<QString, QVector<SecSubmissionsWaiter>> sec_submissions_waiters_; // ticker → callers
     QHash<QString, QVector<OptionsChainCallback>> options_chain_waiters_; // symbol → callers
 };
 

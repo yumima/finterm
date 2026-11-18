@@ -638,39 +638,30 @@ std::vector<ToolDef> get_equity_research_tools() {
             const QString sym = args["symbol"].toString().toUpper();
             auto* svc = &services::equity::EquityResearchService::instance();
             AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym](auto resolve) {
-                auto* holder = new QObject(svc);
-                QObject::connect(svc, &services::equity::EquityResearchService::financials_loaded, holder,
-                                 [sym, resolve, holder](services::equity::FinancialsData f) {
-                                     if (f.symbol.toUpper() != sym)
-                                         return;
-                                     resolve(ToolResult::ok_data(QJsonObject{
-                                         {"symbol", f.symbol},
-                                         // Name the basis in the payload, not just the
-                                         // description: an agent reading these columns
-                                         // has no other way to tell years from quarters.
-                                         {"basis", "annual"},
-                                         {"income_statement", services::equity::EquityResearchService::statement_json(f.income_statement)},
-                                         {"balance_sheet", services::equity::EquityResearchService::statement_json(f.balance_sheet)},
-                                         {"cash_flow", services::equity::EquityResearchService::statement_json(f.cash_flow)},
-                                         {"ttm_revenue", f.ttm_revenue},
-                                         {"ttm_net_income", f.ttm_net_income},
-                                         {"ttm_operating_income", f.ttm_operating_income},
-                                         {"ttm_ebitda", f.ttm_ebitda},
-                                         {"ttm_period", f.ttm_period},
-                                     }));
-                                     holder->deleteLater();
-                                 });
-                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                 [sym, resolve, holder](QString s, QString, QString msg) {
-                                     // finterm's signal: (symbol, context, message). The service
-                                     // is shared, so an error for ANOTHER symbol (the user's own
-                                     // tab, a concurrent tool call) must not fail this call.
-                                     if (!s.isEmpty() && s.toUpper() != sym)
-                                         return;
-                                     resolve(ToolResult::fail(msg));
-                                     holder->deleteLater();
-                                 });
-                svc->fetch_financials(sym);
+                // The Financials tab's read: one answer for THIS symbol.
+                svc->read_financials(sym, [resolve](bool ok, const services::equity::FinancialsData& f,
+                                                    const QString& err, const QDateTime&) {
+                    if (!ok) {
+                        resolve(ToolResult::fail(err));
+                        return;
+                    }
+                    using ER = services::equity::EquityResearchService;
+                    resolve(ToolResult::ok_data(QJsonObject{
+                        {"symbol", f.symbol},
+                        // Name the basis in the payload, not just the
+                        // description: an agent reading these columns
+                        // has no other way to tell years from quarters.
+                        {"basis", "annual"},
+                        {"income_statement", ER::statement_json(f.income_statement)},
+                        {"balance_sheet", ER::statement_json(f.balance_sheet)},
+                        {"cash_flow", ER::statement_json(f.cash_flow)},
+                        {"ttm_revenue", f.ttm_revenue},
+                        {"ttm_net_income", f.ttm_net_income},
+                        {"ttm_operating_income", f.ttm_operating_income},
+                        {"ttm_ebitda", f.ttm_ebitda},
+                        {"ttm_period", f.ttm_period},
+                    }));
+                });
             });
         };
         tools.push_back(std::move(t));
@@ -804,29 +795,21 @@ std::vector<ToolDef> get_equity_research_tools() {
             const int count = args["count"].toInt(20);
             auto* svc = &services::equity::EquityResearchService::instance();
             AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, count](auto resolve) {
-                auto* holder = new QObject(svc);
-                QObject::connect(svc, &services::equity::EquityResearchService::news_loaded, holder,
-                                 [sym, resolve, holder](QString s, QVector<services::equity::NewsArticle> as) {
-                                     if (s.toUpper() != sym)
-                                         return;
-                                     resolve(ToolResult::ok_data(QJsonObject{
-                                         {"symbol", s},
-                                         {"articles", services::equity::EquityResearchService::news_json(as)},
-                                         {"count", static_cast<int>(as.size())},
-                                     }));
-                                     holder->deleteLater();
-                                 });
-                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                 [sym, resolve, holder](QString s, QString, QString msg) {
-                                     // finterm's signal: (symbol, context, message). The service
-                                     // is shared, so an error for ANOTHER symbol (the user's own
-                                     // tab, a concurrent tool call) must not fail this call.
-                                     if (!s.isEmpty() && s.toUpper() != sym)
-                                         return;
-                                     resolve(ToolResult::fail(msg));
-                                     holder->deleteLater();
-                                 });
-                svc->fetch_news(sym, count);
+                // The News tab's read: one answer for THIS symbol.
+                svc->read_news(sym, count,
+                               [resolve, sym, count](bool ok, const QVector<services::equity::NewsArticle>& all,
+                                                     const QString& err, const QDateTime&) {
+                                   if (!ok) {
+                                       resolve(ToolResult::fail(err));
+                                       return;
+                                   }
+                                   const auto as = all.mid(0, count);
+                                   resolve(ToolResult::ok_data(QJsonObject{
+                                       {"symbol", sym},
+                                       {"articles", services::equity::EquityResearchService::news_json(as)},
+                                       {"count", static_cast<int>(as.size())},
+                                   }));
+                               });
             });
         };
         tools.push_back(std::move(t));

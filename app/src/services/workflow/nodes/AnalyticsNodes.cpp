@@ -5,6 +5,7 @@
 #include "services/workflow/NodeRegistry.h"
 
 #include <QJsonArray>
+#include <QHash>
 #include <QJsonDocument>
 #include <QRandomGenerator>
 
@@ -82,10 +83,23 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 }
                 services::equity::EquityResearchService::instance().compute_technicals_rows(
                     inputs[0].toArray(), [cb](bool ok, const QJsonArray& rows, const QString& err) {
-                        if (ok)
-                            cb(true, rows, {});
-                        else
+                        if (!ok) {
                             cb(false, {}, err);
+                            return;
+                        }
+                        // A stage the compute lost leaves a `_<stage>_error`
+                        // column; a partial indicator set is not the set.
+                        const auto lost =
+                            services::equity::EquityResearchService::technicals_stage_errors(rows.last().toObject());
+                        if (!lost.isEmpty()) {
+                            QStringList parts;
+                            for (const auto& [stage, why] : lost)
+                                parts << QString("%1 (%2)").arg(stage, why);
+                            cb(false, {},
+                               "Technical Indicators: could not compute " + parts.join(QStringLiteral(", ")));
+                            return;
+                        }
+                        cb(true, rows, {});
                     });
             },
     });
@@ -121,9 +135,10 @@ void register_analytics_nodes(NodeRegistry& registry) {
                        "(one year of daily returns)",
         .icon_text = "A",
         .accent_color = "#7c3aed",
-        // v2: the screen's optimizer and methods (mean_variance / min_variance
-        // never existed in it and fell through to equal weight); the
-        // risk-free rate parameter is gone — the optimizer uses its own 4%.
+        // v2: the screen's optimizer and methods (a v1 mean_variance /
+        // min_variance runs as max_sharpe / min_volatility, said in the
+        // output); the risk-free rate parameter is gone — the optimizer uses
+        // its own 4%. Long-only: shorts are excluded and listed.
         .version = 2,
         .inputs = {{"input_0", "Holdings", PortDirection::Input, ConnectionType::PortfolioData}},
         .outputs = {{"output_main", "Optimized", PortDirection::Output, ConnectionType::PortfolioData}},
@@ -141,7 +156,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
             [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
                 // Holdings: Get Positions' {positions: [...]}, or an array of
-                // {symbol, ...} rows or of bare symbols.
+                // {symbol, side?, quantity?, current_price?} rows or of bare symbols.
                 QJsonArray rows;
                 if (!inputs.isEmpty()) {
                     if (inputs[0].isArray())
@@ -149,27 +164,75 @@ void register_analytics_nodes(NodeRegistry& registry) {
                     else if (inputs[0].isObject())
                         rows = inputs[0].toObject().value("positions").toArray();
                 }
+                // The optimizer is long-only: a short is not a long asset with
+                // a sign dropped, so it is left out and named in the output.
                 QStringList symbols;
+                QJsonArray excluded_short;
+                QHash<QString, double> value_by_symbol; // long market value, when priced
+                bool all_valued = true;
                 for (const auto& v : rows) {
-                    const QString sym =
-                        (v.isString() ? v.toString() : v.toObject().value("symbol").toString()).trimmed().toUpper();
-                    if (!sym.isEmpty() && !symbols.contains(sym))
+                    const QJsonObject o = v.toObject();
+                    const QString sym = (v.isString() ? v.toString() : o.value("symbol").toString()).trimmed().toUpper();
+                    if (sym.isEmpty())
+                        continue;
+                    if (o.value("side").toString().compare("short", Qt::CaseInsensitive) == 0) {
+                        excluded_short.append(sym);
+                        continue;
+                    }
+                    if (!symbols.contains(sym))
                         symbols.append(sym);
+                    const QJsonValue q = o.value("quantity"), px = o.value("current_price");
+                    if (q.isDouble() && px.isDouble() && q.toDouble() > 0 && px.toDouble() > 0)
+                        value_by_symbol[sym] += q.toDouble() * px.toDouble();
+                    else
+                        all_valued = false;
                 }
                 if (symbols.size() < 2) {
-                    cb(false, {}, "Portfolio Optimization: needs at least two holdings with a symbol");
+                    cb(false, {},
+                       QString("Portfolio Optimization: needs at least two long holdings with a symbol%1")
+                           .arg(excluded_short.isEmpty() ? QString()
+                                                         : QString(" (%1 short excluded)").arg(excluded_short.size())));
                     return;
                 }
+                // Current weights from quantity x price — only when every long
+                // is priced; a partial set would misstate every weight.
+                QJsonValue current_weights;
+                if (all_valued) {
+                    double total = 0;
+                    for (const auto& sym : symbols)
+                        total += value_by_symbol.value(sym);
+                    QJsonObject w;
+                    for (const auto& sym : symbols)
+                        w[sym] = value_by_symbol.value(sym) / total;
+                    current_weights = w;
+                }
+
+                // v1 methods the optimizer never had: mean_variance is the
+                // tangency (max-Sharpe) portfolio, min_variance its minimum-
+                // volatility one. Saved v1 workflows keep running.
+                QString method = params.value("method").toString("max_sharpe");
+                QString migrated_from;
+                if (method == "mean_variance" || method == "min_variance") {
+                    migrated_from = method;
+                    method = method == "mean_variance" ? QStringLiteral("max_sharpe") : QStringLiteral("min_volatility");
+                }
+
                 QJsonObject args;
                 args["symbols"] = QJsonArray::fromStringList(symbols);
-                args["method"] = params.value("method").toString("max_sharpe");
+                args["method"] = method;
                 services::PortfolioAnalyticsService::instance().optimize_weights(
                     QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
-                    [cb](const services::AnalyticsResult& r) {
-                        if (r.success)
-                            cb(true, r.data, {});
-                        else
+                    [cb, excluded_short, current_weights, migrated_from](const services::AnalyticsResult& r) {
+                        if (!r.success) {
                             cb(false, {}, r.error);
+                            return;
+                        }
+                        QJsonObject out = r.data;
+                        out["current_weights"] = current_weights; // null when any long is unpriced
+                        out["excluded_short"] = excluded_short;
+                        if (!migrated_from.isEmpty())
+                            out["method_migrated_from"] = migrated_from;
+                        cb(true, out, {});
                     });
             },
     });

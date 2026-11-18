@@ -1836,7 +1836,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         cb(false, {});
         return;
     }
-    read_sec_submissions(ticker.toUpper(), [cb](const SecFilingsReply& r, bool mapped) {
+    read_sec_submissions(ticker.toUpper(), QString(), 25, [cb](const SecFilingsReply& r, bool mapped) {
         if (!mapped) {
             cb(true, {}); // no CIK yet (a fresh IPO): nothing filed under this ticker
             return;
@@ -1845,7 +1845,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
             cb(false, {});
             return;
         }
-        cb(true, r.filings.mid(0, 25));
+        cb(true, r.filings);
     });
 }
 
@@ -1857,32 +1857,22 @@ void MarketDataService::fetch_sec_filings_of_form(const QString& ticker, const Q
         return;
     }
     QPointer<MarketDataService> self = this;
-    read_sec_submissions(tkr, [self, cb, tkr, form, limit](const SecFilingsReply& r, bool mapped) {
+    read_sec_submissions(tkr, form, limit, [self, cb, tkr](const SecFilingsReply& r, bool mapped) {
         if (!self)
             return;
-        SecFilingsReply out;
-        if (!mapped) {
-            out.error = QStringLiteral("EDGAR's ticker map has no CIK for %1").arg(tkr);
-        } else if (!r.ok) {
-            out.error = r.error;
-        } else {
-            out.ok = true;
-            for (const auto& f : r.filings) {
-                if (out.filings.size() >= limit)
-                    break;
-                if (form.isEmpty() || f.form == form)
-                    out.filings.append(f);
-            }
-        }
+        SecFilingsReply out = r;
+        if (!mapped)
+            out = {false, {}, QStringLiteral("EDGAR's ticker map has no CIK for %1").arg(tkr)};
         // read_sec_submissions can answer inside the call (cache hit).
         self->later([cb, out]() { cb(out); });
     });
 }
 
-void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsDone done) {
+void MarketDataService::read_sec_submissions(const QString& tkr, const QString& form, int limit,
+                                             SecSubmissionsDone done) {
     // Inner closure runs once the CIK map is loaded — looks up the ticker,
     // builds the submissions URL, returns the list of recent filings.
-    auto with_cik_map = [this, tkr, done]() {
+    auto with_cik_map = [this, tkr, form, limit, done]() {
         auto it = sec_cik_map_.constFind(tkr);
         if (it == sec_cik_map_.constEnd()) {
             LOG_INFO("MarketData", "SEC: no CIK for ticker " + tkr);
@@ -1892,7 +1882,10 @@ void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsD
         const int cik = it.value();
         const QString cik_padded = QString("%1").arg(cik, 10, 10, QChar('0'));
         const QString cache_key = "sec_filings:" + tkr;
-        auto parse = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
+        // Only the rows asked for are built: the recent block runs to a
+        // thousand filings, and this runs on the GUI thread on every hit.
+        auto parse = [cik_padded](const QJsonObject& root, const QString& want_form,
+                                  int want_limit) -> QVector<SecFiling> {
             QVector<SecFiling> out;
             const auto recent = root["filings"].toObject()["recent"].toObject();
             const auto forms = recent["form"].toArray();
@@ -1900,8 +1893,9 @@ void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsD
             const auto accessions = recent["accessionNumber"].toArray();
             const auto primary = recent["primaryDocument"].toArray();
             const int n = std::min({forms.size(), dates.size(), accessions.size(), primary.size()});
-            out.reserve(n);
-            for (int i = 0; i < n; ++i) {
+            for (int i = 0; i < n && out.size() < want_limit; ++i) {
+                if (!want_form.isEmpty() && forms.at(i).toString() != want_form)
+                    continue;
                 SecFiling f;
                 f.form = forms.at(i).toString();
                 f.filing_date = dates.at(i).toString();
@@ -1919,12 +1913,12 @@ void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsD
         };
         if (auto cached = finterm::CacheManager::instance().try_get(cache_key); cached.has_value()) {
             const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
-            done({true, parse(obj), {}}, true);
+            done({true, parse(obj, form, limit), {}}, true);
             return;
         }
 
         auto& waiters = sec_submissions_waiters_[tkr];
-        waiters.append(done);
+        waiters.append({form, limit, done});
         if (waiters.size() > 1)
             return; // the request already out answers this caller too
 
@@ -1937,23 +1931,27 @@ void MarketDataService::read_sec_submissions(const QString& tkr, SecSubmissionsD
             url, headers, [parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
                 if (!self_ptr)
                     return;
-                SecFilingsReply reply;
+                QString error;
+                QJsonObject obj;
                 if (!res.is_ok() || !res.value().isObject()) {
                     const QString err =
                         res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
                     sec_refused(contact, err);
                     const QString why = sec_failure(contact, err);
                     LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr + why);
-                    reply.error = QStringLiteral("SEC submissions fetch failed for %1%2").arg(tkr, why);
+                    error = QStringLiteral("SEC submissions fetch failed for %1%2").arg(tkr, why);
                 } else {
-                    const auto obj = res.value().object();
+                    obj = res.value().object();
                     const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
                     finterm::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
-                    reply = {true, parse(obj), {}};
                 }
                 const auto waiters = self_ptr->sec_submissions_waiters_.take(tkr);
-                for (const auto& w : waiters)
-                    w(reply, true);
+                for (const auto& w : waiters) {
+                    if (error.isEmpty())
+                        w.done({true, parse(obj, w.form, w.limit), {}}, true);
+                    else
+                        w.done({false, {}, error}, true);
+                }
             });
     };
 
