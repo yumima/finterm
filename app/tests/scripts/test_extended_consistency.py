@@ -205,7 +205,19 @@ for official in (True, False):
     aft, er = run_both(BARS, closes, datetime(2026, 8, 13, 18, 0, tzinfo=ET))
     check(f"POST/{tag}: AFT row is in POST", aft["session"] == "POST", aft["session"])
     agree_after_hours(f"POST/{tag}", aft, er)
-    agree_pre_market(f"POST/{tag}", aft, er, paired=False)
+    # The ER box shows this morning's pre-market against Wednesday's close;
+    # the AFT row, whose `regular` is now Thursday's, must not carry it at all.
+    check(f"POST/{tag}: the AFT row withholds this morning's pre-market",
+          aft["pre_market"] is None and aft["pre_market_ts"] is None, str(aft["pre_market"]))
+    check(f"POST/{tag}: the ER box shows it, against Wednesday's close",
+          (er.get("pre_market") or {}).get("ref_date") == WED.isoformat())
+    # The bell-minute bar is after-hours AND strictly after the close's stamp —
+    # ExtendedHoursMath.h's pairing_is_sound rejects ext_ts <= regular_ts.
+    first = run_both(BARS, closes, datetime(2026, 8, 13, 16, 0, 30, tzinfo=ET))[0]
+    check(f"POST/{tag}: a print in the bell minute pairs, strictly after the close",
+          first["post_market"] is not None and first["post_market_ts"] > first["regular_ts"]
+          and first["ext_change_pct"] is not None,
+          f"post={first['post_market']} ts={first['post_market_ts']} reg_ts={first['regular_ts']}")
     a = er.get("after_hours") or {}
     check(f"POST/{tag}: same after-hours percentage", same(aft["ext_change_pct"], a.get("pct")),
           f"aft={aft['ext_change_pct']} er={a.get('pct')}")
@@ -250,22 +262,51 @@ check("after Labor Day: the pre-market's close is Friday's",
       (er.get("pre_market") or {}).get("ref_date") == FRI2.isoformat() and same(aft["regular"], 50.05),
       f"{aft['regular']} {(er.get('pre_market') or {}).get('ref_date')}")
 
+# ── an unscheduled closure: Thursday 9 January 2025 (national day of mourning) ─
+# The holiday calendar calls it a trading day. The data does not: no print at
+# all that day. It must be neither the AFT row's reference day (its missing
+# close would decline every row) nor the pre-market's "session before".
+
+WED3, THU3, FRI3 = date(2025, 1, 8), date(2025, 1, 9), date(2025, 1, 10)
+MOURN_BARS = (minutes(WED3, "15:50", 10, 200.0, 0.01) + minutes(WED3, "16:00", 30, 201.0, 0.01)
+              + minutes(FRI3, "07:00", 30, 203.0, 0.01))
+check("the calendar alone calls 9 Jan 2025 a trading day", xr.is_trading_day(THU3))
+aft, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 9, 18, 0, tzinfo=ET))
+check("closure evening: CLOSED, not POST", aft["session"] == "CLOSED", aft["session"])
+check("closure evening: not declined, measured against Wednesday's close",
+      aft["declined"] is False and same(aft["regular"], 200.05) and ts_date(aft["regular_ts"]) == WED3.isoformat(),
+      f"declined={aft['declined']} regular={aft['regular']}")
+agree_after_hours("closure evening", aft, er)
+aft, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 10, 8, 0, tzinfo=ET))
+agree_pre_market("morning after the closure", aft, er, paired=True)
+check("morning after the closure: the pre-market's close is Wednesday's",
+      (er.get("pre_market") or {}).get("ref_date") == WED3.isoformat(), str(er.get("pre_market")))
+
+# ── the label is per row: the equity calendar is not a future's ──────────────
+
+MLK = datetime(2026, 1, 19, 10, 0, tzinfo=ET)          # NYSE shut, CME open
+check("MLK Day 10:00: a US stock's row is CLOSED", yd._ext_session_label(MLK, "MSFT") == "CLOSED")
+check("MLK Day 10:00: ES=F keeps the clock rule", yd._ext_session_label(MLK, "ES=F") == "REGULAR")
+BF14 = datetime(2026, 11, 27, 14, 0, tzinfo=ET)
+check("Black Friday 14:00: a US stock is POST", yd._ext_session_label(BF14, "MSFT") == "POST")
+check("Black Friday 14:00: ES=F is not", yd._ext_session_label(BF14, "ES=F") == "REGULAR")
+
 # ── the shared calendar itself ───────────────────────────────────────────────
 
 check("Labor Day is not a trading day", not xr.is_trading_day(date(2026, 9, 7)))
 check("a Saturday New Year's Day closes nothing: NYSE trades Friday 31 Dec 2027",
-      xr.is_trading_day(date(2027, 12, 31)) and xr.previous_trading_day(date(2028, 1, 3)) == date(2027, 12, 31))
+      xr.is_trading_day(date(2027, 12, 31)) and xr.previous_session(date(2028, 1, 3)) == date(2027, 12, 31))
 check("a Sunday New Year's Day is observed on the Monday",
       not xr.is_trading_day(date(2023, 1, 2)))
-check("the day before Tuesday 8 Sept is Friday 4 Sept", xr.previous_trading_day(TUE2) == FRI2)
-check("Thanksgiving skipped", xr.previous_trading_day(BF) == WED2)
+check("the day before Tuesday 8 Sept is Friday 4 Sept", xr.previous_session(TUE2) == FRI2)
+check("Thanksgiving skipped", xr.previous_session(BF) == WED2)
 check("a holiday is CLOSED, whatever the clock",
       xr.session_label(datetime(2026, 9, 7, 8, 0, tzinfo=ET)) == "CLOSED")
 check("last closed day at 02:00 Tuesday after a holiday Monday is Friday",
       xr.last_closed_day(datetime(2026, 9, 8, 2, 0, tzinfo=ET)) == FRI2)
-check("DST: the bell instant follows the zone (EDT 20:00Z, EST 21:00Z)",
-      xr.bell_instant(THU).astimezone(ZoneInfo("UTC")).hour == 20
-      and xr.bell_instant(date(2026, 11, 16)).astimezone(ZoneInfo("UTC")).hour == 21)
+check("DST: the close stamp follows the zone (EDT 19:59:59Z, EST 20:59:59Z)",
+      xr.close_instant(THU).astimezone(ZoneInfo("UTC")).strftime("%H:%M:%S") == "19:59:59"
+      and xr.close_instant(date(2026, 11, 16)).astimezone(ZoneInfo("UTC")).strftime("%H:%M:%S") == "20:59:59")
 
 print()
 if FAILURES:

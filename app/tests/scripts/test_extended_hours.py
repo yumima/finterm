@@ -389,6 +389,24 @@ def test_download_failure_raises():
         unfreeze()
 
 
+def test_missing_rules_module_raises():
+    """A broken install (the shared rules unloadable) is not an empty answer."""
+    saved = sys.modules.get("extended_rules")
+    sys.modules["extended_rules"] = None   # makes `import extended_rules` raise
+    try:
+        raised = None
+        try:
+            yd.get_extended_hours_quotes(["MSFT"])
+        except ImportError as exc:
+            raised = exc
+        check("an unloadable extended_rules raises, never returns []", raised is not None)
+    finally:
+        if saved is None:
+            sys.modules.pop("extended_rules", None)
+        else:
+            sys.modules["extended_rules"] = saved
+
+
 def test_flat_frame_is_not_shared_across_symbols():
     """One ticker's frame must never answer for a whole book."""
     flat = _minute_frame([(_et(15, 59), 100.0), (_et(18, 0), 93.0)])  # -7%
@@ -499,8 +517,11 @@ def test_pre_market_is_not_paired_with_todays_close():
     check("pre-market is not measured against today's close",
           row["ext_change_pct"] is None and row["ext_price"] is None,
           f"got pct={row['ext_change_pct']} ext={row['ext_price']}")
-    check("the pre-market print is still reported as such",
-          row["pre_market"] == 460.0, f"got {row['pre_market']}")
+    # Not even as a raw print: the payload's `regular` is today's close now,
+    # and any consumer pairing the two would invert the day's move.
+    check("this morning's pre-market print is not in the payload after the bell",
+          row["pre_market"] is None and row["pre_market_ts"] is None,
+          f"got {row['pre_market']}")
 
 
 def test_regular_session_shows_this_mornings_pre_market():

@@ -5749,6 +5749,9 @@ _EXT_RETRY_MAX = 15
 def get_extended_hours_quotes(symbols):
     if not symbols:
         return []
+    # Outside the try below: a module that fails to load is a broken install,
+    # and [] would read as "nothing to report" — raise, the daemon answers ok:false.
+    import extended_rules as _xr
     try:
         import io
         import contextlib
@@ -5756,7 +5759,6 @@ def get_extended_hours_quotes(symbols):
         import pandas as _pd
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        import extended_rules as _xr
     except Exception:
         return []
 
@@ -5792,10 +5794,14 @@ def get_extended_hours_quotes(symbols):
     if data is None or getattr(data, "empty", True):
         # Nothing came back at all — a rate-limited burst (429) looks exactly
         # like this. That says nothing about any symbol's prints.
-        return [_empty_ext_row(s, _ext_session_label(now_et), unavailable=True) for s in symbols]
+        return [_empty_ext_row(s, _ext_session_label(now_et, s), unavailable=True) for s in symbols]
 
-    session = _ext_session_label(now_et)
     today = now_et.date()
+    # The days the market printed at all, across the whole book: the evidence
+    # that overrules the holiday calendar on an unscheduled closure (see
+    # extended_rules.is_session). Market-wide, so one thin name's quiet day is
+    # not mistaken for one.
+    seen = _xr.et_days(data.dropna(how="all").index)
 
     # Today's pre-market / open boundaries in UTC (only meaningful for
     # equities; futures/crypto ignore these).
@@ -5826,7 +5832,7 @@ def get_extended_hours_quotes(symbols):
     #
     # Only equities have a closing auction to miss. A futures or crypto "daily
     # close" is struck at a different moment than the settle `regular_end`
-    # refers to, so _official_close is consulted for 16:00-ET instruments only —
+    # refers to, so the official close is consulted for 16:00-ET instruments only —
     # and an all-futures book must not pay for a second full download, which now
     # also holds the process-wide gate for its duration.
     def _ends_at_the_bell(sym):
@@ -5856,7 +5862,7 @@ def get_extended_hours_quotes(symbols):
     _officials_memo = {}
 
     def _officials(sym):
-        """{date: official close} for that symbol — extended_rules reads the
+        """{date: (official close, volume)} for that symbol — extended_rules reads the
         labels as the calendar dates they are (converting a midnight-UTC stamp
         to ET would hand back yesterday's close as today's)."""
         if sym in _officials_memo:
@@ -5877,10 +5883,6 @@ def get_extended_hours_quotes(symbols):
                 out = {}
         _officials_memo[sym] = out
         return out
-
-    def _official_close(sym, want_date):
-        """That symbol's official close on `want_date` (ET), or None."""
-        return _officials(sym).get(want_date)
 
     def _slice(sym):
         """The bulk frame's columns for one symbol, or None when it isn't there."""
@@ -5916,20 +5918,28 @@ def get_extended_hours_quotes(symbols):
         the two never disagree about the same session.
 
         `regular` is the close of the last COMPLETED session (ref_day): today's
-        once its bell has rung (13:00 on an early close), else the trading day
-        before. Its post-market is ref_day's after-hours window; the pre-market
-        is today's. A symbol without a close on ref_day (no regular-hours
-        trade: money-market and mutual funds, thin ETFs) reports the latest
-        earlier one, which the caller flags as stale."""
-        m = _xr.minute_frame(hist)
+        once its bell has rung (13:00 on an early close), else the session
+        before. Its post-market is ref_day's after-hours window. A symbol
+        without a close on ref_day (no regular-hours trade: money-market and
+        mutual funds, thin ETFs) reports the latest earlier one, which the
+        caller flags as stale.
+
+        Today's pre-market is carried only while ref_day is the session before
+        it (PRE / REGULAR). After the bell `regular` is today's close and that
+        print belongs to the previous one: a consumer pairing the two would
+        report the day's move backwards, so it is not in the payload at all."""
+        m = _xr.Minutes.of(hist)
         officials = _officials(sym)
-        ref_day = _xr.last_closed_day(now_et)
+        ref_day = _xr.last_closed_day(now_et, seen)
         regular = regular_ts = None
         got = _xr.latest_close(m, officials, ref_day)
         if got is not None:
             regular, regular_ts = got[1]
-        post, post_ts = _xr.last_print(_xr.window_bars(m, ref_day, _xr.post_window(ref_day))) or (None, None)
-        pre, pre_ts = _xr.last_print(_xr.window_bars(m, today, _xr.pre_window(today))) or (None, None)
+        post = post_ts = pre = pre_ts = None
+        if m is not None:
+            post, post_ts = _xr.last_print(m.window(ref_day, _xr.post_window(ref_day))) or (None, None)
+            if ref_day < today:
+                pre, pre_ts = _xr.last_print(m.window(today, _xr.PRE_WINDOW)) or (None, None)
         return regular, regular_ts, ref_day, pre, pre_ts, post, post_ts
 
     def _generic_prints(sym, hist):
@@ -5985,9 +5995,9 @@ def get_extended_hours_quotes(symbols):
         # settle that regular_end refers to, so for those the intraday bar
         # at the settle time really is the right reference.
         if (regular_end_et.hour, regular_end_et.minute) == (16, 0):
-            official = _official_close(sym, regular_end_et.date())
+            official = _officials(sym).get(regular_end_et.date())
             if official:
-                regular = official
+                regular = official[0]
                 regular_ts = int(regular_end_utc.timestamp())
 
         # post-market: bars strictly after regular_end whose ET date
@@ -6025,6 +6035,11 @@ def get_extended_hours_quotes(symbols):
     def _row(sym, hist):
         """One symbol's extended-hours row from its 1-minute frame, or None."""
         try:
+            # The label drives the pairing below (and quote_from_row's on the
+            # C++ side), so each row carries its own: a US stock's from the
+            # equity calendar, anything else's from the plain clock rule — CME
+            # trades on MLK Day and runs a full day after Thanksgiving.
+            session = _ext_session_label(now_et, sym, seen)
             if _xr.has_us_extended_session(sym):
                 regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _us_prints(sym, hist)
             else:
@@ -6117,7 +6132,7 @@ def get_extended_hours_quotes(symbols):
         row = _row(sym, hist) if hist is not None else None
         if row is None:
             missing.append(sym)
-            row = _empty_ext_row(sym, session)
+            row = _empty_ext_row(sym, _ext_session_label(now_et, sym, seen))
         rows.append(row)
 
     # A multi-symbol 1-minute download drops tickers intermittently — the same
@@ -6493,15 +6508,32 @@ def _empty_ext_row(sym, session, unavailable=False):
     }
 
 
-def _ext_session_label(now_et):
-    """The session label (PRE/REGULAR/POST/CLOSED) at `now_et`.
+def _ext_session_label(now_et, symbol=None, seen=None):
+    """The session label (PRE/REGULAR/POST/CLOSED) of `symbol`'s row at `now_et`.
 
     Not cosmetic: quote_from_row pairs today's pre-market with `regular` only
-    under PRE/REGULAR, so the label must flip exactly when the reference does —
-    at the real bell (13:00 on an early close), and never on a holiday or a
-    weekend. extended_rules owns both."""
+    under PRE/REGULAR, so the label must flip exactly when the reference does.
+    For a plain US stock that is extended_rules' — the real bell (13:00 on an
+    early close), CLOSED on a holiday or an unscheduled closure (`seen`: the ET
+    dates the market printed). Futures, FX and other listings keep the clock
+    rule their settle-based reference was written against: the US equity
+    calendar is not theirs (CME trades MLK Day and a full day after
+    Thanksgiving)."""
     import extended_rules
-    return extended_rules.session_label(now_et)
+    if symbol is not None and extended_rules.has_us_extended_session(symbol):
+        return extended_rules.session_label(now_et, seen)
+    if now_et.weekday() >= 5:
+        return "CLOSED"
+    h, m = now_et.hour, now_et.minute
+    if h < 4:
+        return "CLOSED"
+    if (h, m) < (9, 30):
+        return "PRE"
+    if h < 16:
+        return "REGULAR"
+    if h < 20:
+        return "POST"
+    return "CLOSED"
 
 
 _STREAM_URL = "wss://streamer.finance.yahoo.com/?version=2"

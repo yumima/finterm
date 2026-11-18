@@ -16,8 +16,10 @@ take them from here:
     runs 13:00-17:00). Half-open: the bar stamped 16:00 is after-hours — Yahoo's
     regular minutes end at 15:59, and the 16:00 bar's close is an extended print
     (it carries the closing auction's VOLUME, not its price);
+  * which days were sessions: the holiday calendar, overruled by the data when
+    the market closed unscheduled (9 Jan 2025) — see is_session;
   * the close an extended print belongs to: after-hours of day D -> D's close;
-    pre-market of D -> the close of the trading day before D;
+    pre-market of D -> the close of the session before D;
   * the close itself: the official daily close (the 1-minute series never
     contains the closing auction), else the last regular-session minute of that
     same day — never another day's;
@@ -32,6 +34,10 @@ import re
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+# Loudly: without the holiday calendar every holiday would read as a session
+# and its missing close would decline every row.
+from exchange_sessions import is_us_market_holiday
+
 ET = ZoneInfo("America/New_York")
 
 PRE_OPEN = time(4, 0)
@@ -41,6 +47,11 @@ POST_CLOSE = time(20, 0)
 
 EARLY_CLOSE = time(13, 0)
 EARLY_POST_CLOSE = time(17, 0)
+
+PRE_WINDOW = (PRE_OPEN, REG_OPEN)
+
+# A day with no print at all this long after the open was not a session.
+_NO_SESSION_AFTER = timedelta(minutes=30)
 
 
 # ── the calendar ─────────────────────────────────────────────────────────────
@@ -65,20 +76,35 @@ def is_early_close(day):
 
 
 def is_trading_day(day):
-    if day.weekday() >= 5:
+    """A scheduled session: a weekday that is not a market holiday."""
+    return day.weekday() < 5 and not is_us_market_holiday(day)
+
+
+def is_session(day, seen=None, now_et=None):
+    """Whether `day` was (or is) a session.
+
+    The holiday calendar knows only scheduled closures. `seen` — the ET dates
+    on which the minute data has any print — overrules it for the rest: a
+    trading day with no print at all, inside the span the data covers, was
+    closed (9 Jan 2025, a national day of mourning); so was today, once it is
+    half an hour past the open without one. Before the data's first day, or
+    without `seen`, the calendar stands."""
+    if not is_trading_day(day):
         return False
-    try:
-        from exchange_sessions import is_us_market_holiday
-    except Exception:
+    if not seen or day in seen:
         return True
-    return not is_us_market_holiday(day)
+    if min(seen) < day < max(seen):
+        return False
+    if now_et is not None and day == now_et.date() and day > max(seen):
+        return now_et < datetime.combine(day, REG_OPEN, tzinfo=ET) + _NO_SESSION_AFTER
+    return True
 
 
-def previous_trading_day(day):
-    """The trading day before `day` (which need not be one itself)."""
+def previous_session(day, seen=None):
+    """The session before `day` (which need not be one itself)."""
     d = day - timedelta(days=1)
     for _ in range(14):
-        if is_trading_day(d):
+        if is_session(d, seen):
             return d
         d -= timedelta(days=1)
     return d
@@ -86,10 +112,6 @@ def previous_trading_day(day):
 
 def bell(day):
     return EARLY_CLOSE if is_early_close(day) else REG_CLOSE
-
-
-def pre_window(day):
-    return (PRE_OPEN, REG_OPEN)
 
 
 def regular_window(day):
@@ -100,25 +122,32 @@ def post_window(day):
     return (EARLY_CLOSE, EARLY_POST_CLOSE) if is_early_close(day) else (REG_CLOSE, POST_CLOSE)
 
 
-def bell_instant(day):
-    return datetime.combine(day, bell(day), tzinfo=ET)
+def close_instant(day):
+    """When `day`'s official close is stamped: one second before the bell.
+
+    The close is struck AT the bell, and the bar Yahoo stamps with the bell
+    minute holds prints made after it. Stamping both with the same second would
+    break the strict order every consumer checks (ExtendedHoursMath.h's
+    pairing_is_sound rejects ext_ts <= regular_ts) and drop a move printed in
+    that first minute."""
+    return datetime.combine(day, bell(day), tzinfo=ET) - timedelta(seconds=1)
 
 
-def last_closed_day(now_et):
-    """The trading day whose close is the most recent one at `now_et`: today
-    once its bell has rung, else the trading day before."""
+def last_closed_day(now_et, seen=None):
+    """The session whose close is the most recent one at `now_et`: today once
+    its bell has rung, else the session before."""
     today = now_et.date()
-    if is_trading_day(today) and now_et.time() >= bell(today):
+    if now_et.time() >= bell(today) and is_session(today, seen, now_et):
         return today
-    return previous_trading_day(today)
+    return previous_session(today, seen)
 
 
-def session_label(now_et):
+def session_label(now_et, seen=None):
     """PRE / REGULAR / POST / CLOSED at `now_et`. PRE and REGULAR are exactly
     the stretch in which last_closed_day() is an EARLIER day — the consumers
     pair today's pre-market with the reference only then."""
     today = now_et.date()
-    if not is_trading_day(today):
+    if not is_session(today, seen, now_et):
         return "CLOSED"
     t = now_et.time()
     if t < PRE_OPEN:
@@ -157,43 +186,63 @@ def price(v):
     return f if math.isfinite(f) and f > 0 else None
 
 
-def minute_frame(bars):
-    """The priced rows of a 1-minute frame, index in UTC, with their ET date
-    (`_d`) and time (`_t`) alongside. None when there is nothing priced."""
-    if bars is None or getattr(bars, "empty", True) or "Close" not in bars.columns:
-        return None
-    idx = bars.index
-    if getattr(idx, "tz", None) is None:
-        idx = idx.tz_localize("UTC")
-    import pandas as pd
-    m = bars.copy()
-    m.index = idx
-    c = pd.to_numeric(m["Close"], errors="coerce")
-    m = m[c.notna() & (c > 0) & (c < float("inf"))]
-    if m.empty:
-        return None
-    et_idx = m.index.tz_convert(ET)
-    m["_d"] = et_idx.date
-    m["_t"] = et_idx.time
-    return m
+def et_days(index):
+    """The ET dates of a minute index (naive = UTC), as a set."""
+    if index is None or len(index) == 0:
+        return set()
+    if getattr(index, "tz", None) is None:
+        index = index.tz_localize("UTC")
+    return set(index.tz_convert(ET).normalize().unique().date)
 
 
-def window_bars(m, day, window):
-    """`day`'s rows inside `window` = (start, end), half-open."""
+class Minutes:
+    """A 1-minute frame, read by window. Each window is a slice found by
+    binary search on the time index — the frame is neither copied nor given
+    per-row columns, since this runs per symbol on every AFT poll."""
+
+    def __init__(self, bars):
+        idx = bars.index
+        if getattr(idx, "tz", None) is None:
+            bars = bars.set_axis(idx.tz_localize("UTC"))
+        if not bars.index.is_monotonic_increasing:
+            bars = bars.sort_index()
+        self.bars = bars
+        self._days = None
+
+    @classmethod
+    def of(cls, bars):
+        """None when there is no frame or no Close column to read."""
+        if bars is None or getattr(bars, "empty", True) or "Close" not in bars.columns:
+            return None
+        return cls(bars)
+
+    def days(self):
+        """ET dates with a row of any kind."""
+        if self._days is None:
+            self._days = et_days(self.bars.index)
+        return self._days
+
+    def window(self, day, window):
+        """`day`'s priced rows inside `window` = (start, end), half-open, or None."""
+        import pandas as pd
+        lo = pd.Timestamp(datetime.combine(day, window[0], tzinfo=ET))
+        hi = pd.Timestamp(datetime.combine(day, window[1], tzinfo=ET))
+        idx = self.bars.index
+        part = self.bars.iloc[idx.searchsorted(lo, "left"):idx.searchsorted(hi, "left")]
+        if part.empty:
+            return None
+        c = pd.to_numeric(part["Close"], errors="coerce")
+        part = part[c.notna() & (c > 0) & (c < float("inf"))]
+        return None if part.empty else part
+
+
+def latest_window(m, window):
+    """(day, rows) for the most recent ET date with priced rows inside its
+    window — `window` is (start, end) or a function of the day — or None."""
     if m is None:
         return None
-    lo, hi = window
-    part = m[(m["_d"] == day) & (m["_t"] >= lo) & (m["_t"] < hi)]
-    return None if part.empty else part
-
-
-def latest_window(m, window_fn):
-    """(day, rows) for the most recent ET date with rows inside its own
-    `window_fn(day)`, or None."""
-    if m is None:
-        return None
-    for day in sorted(set(m["_d"]), reverse=True):
-        part = window_bars(m, day, window_fn(day))
+    for day in sorted(m.days(), reverse=True):
+        part = m.window(day, window(day) if callable(window) else window)
         if part is not None:
             return day, part
     return None
@@ -209,51 +258,53 @@ def last_print(part):
 # ── the close a print is measured against ────────────────────────────────────
 
 def official_closes(daily):
-    """{date: official close} from a daily frame, labels read as written."""
+    """{date: (official close, volume or None)} from a daily frame, labels
+    read as the calendar dates they are."""
     if daily is None or getattr(daily, "empty", True) or "Close" not in daily.columns:
         return {}
     idx = daily.index
     if getattr(idx, "tz", None) is not None:
         idx = idx.tz_localize(None)
+    vols = daily["Volume"] if "Volume" in daily.columns else [None] * len(idx)
     out = {}
-    for d, c in zip(idx.date, daily["Close"]):
+    for d, c, v in zip(idx.date, daily["Close"], vols):
         c = price(c)
         if c is not None:
-            out[d] = c
+            v = price(v)
+            out[d] = (c, v)
     return out
 
 
 def reference_close(m, day, officials):
-    """(close, epoch seconds) of `day`'s regular session, or None.
+    """(close, epoch seconds) of `day`'s regular session, or None. This is
+    also the close day `day`'s after-hours is measured against.
 
-    The official close when the daily frame has that day (stamped at the
-    bell); else the last regular-session minute of that same day, which misses
-    only the closing auction. A day without either has no close: never
-    substitute another day's."""
-    c = (officials or {}).get(day)
-    if c is not None:
-        return c, int(bell_instant(day).timestamp())
-    return last_print(window_bars(m, day, regular_window(day)))
-
-
-def close_for_post(m, day, officials):
-    """The close day `day`'s after-hours is measured against: its own."""
-    return reference_close(m, day, officials)
+    The official close when the daily frame has that day (see close_instant);
+    else the last regular-session minute of that same day, which misses only
+    the closing auction. A day without either has no close: never substitute
+    another day's."""
+    got = (officials or {}).get(day)
+    if got is not None:
+        return got[0], int(close_instant(day).timestamp())
+    return last_print(m.window(day, regular_window(day))) if m is not None else None
 
 
-def close_for_pre(m, day, officials):
-    """(ref_day, (close, ts)) day `day`'s pre-market is measured against: the
-    trading day before's. ref_day is returned even when there is no close."""
-    prev = previous_trading_day(day)
+def close_for_pre(m, day, officials, seen=None):
+    """(ref_day, (close, ts) or None): the close day `day`'s pre-market is
+    measured against — the session before's."""
+    prev = previous_session(day, seen)
     return prev, reference_close(m, prev, officials)
 
 
 def latest_close(m, officials, upto_day):
     """(day, (close, ts)) for the most recent day <= upto_day with a close, or
     None. Used only to report a reference that is NOT the one wanted."""
+    ref = reference_close(m, upto_day, officials)
+    if ref is not None:
+        return upto_day, ref   # the usual case: no need to list the frame's days
     days = set(officials or {})
     if m is not None:
-        days |= set(m["_d"])
+        days |= m.days()
     for d in sorted((d for d in days if d <= upto_day), reverse=True):
         ref = reference_close(m, d, officials)
         if ref is not None:

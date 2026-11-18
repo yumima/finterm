@@ -39,7 +39,7 @@ import re
 from datetime import datetime
 
 from extended_rules import (  # noqa: F401  (re-exported: tests and callers read them here)
-    ET, has_us_extended_session, is_early_close, post_window, pre_window,
+    ET, REG_OPEN, has_us_extended_session, is_early_close, post_window,
 )
 import extended_rules as xr
 
@@ -67,23 +67,6 @@ def _num(v):
     except (TypeError, ValueError):
         return None
     return f if f == f and f not in (float("inf"), float("-inf")) else None
-
-
-def _daily_rows(daily):
-    """[(date, close, volume)] oldest first, from a daily frame, dates as written."""
-    if daily is None or getattr(daily, "empty", True) or "Close" not in daily.columns:
-        return []
-    idx = daily.index
-    if getattr(idx, "tz", None) is not None:
-        idx = idx.tz_localize(None)
-    out = []
-    has_vol = "Volume" in daily.columns
-    for d, c, v in zip(idx.date, daily["Close"], daily["Volume"] if has_vol else [None] * len(idx)):
-        c = _num(c)
-        if c is not None and c > 0:
-            out.append((d, c, _num(v)))
-    out.sort(key=lambda r: r[0])
-    return out
 
 
 def _without_stray_prints(part):
@@ -120,7 +103,7 @@ def _without_stray_prints(part):
     return part[keep] if keep.any() else part
 
 
-def _summary(day, part, ref_date, ref, daily_rows, live):
+def _summary(day, part, ref_date, ref, officials, live):
     """One session's summary. `ref` is (close, ts) for `ref_date`, or None."""
     part = _without_stray_prints(part)
     # The newest minute is never dropped as stray, so this is the same last
@@ -150,7 +133,7 @@ def _summary(day, part, ref_date, ref, daily_rows, live):
         out["pct"] = (last - ref_close) / ref_close * 100.0
     # Full-day volume of the sessions BEFORE this one: the yardstick is fixed
     # for the session rather than growing with today's own running total.
-    vols = [v for d, _, v in daily_rows if d < day and v is not None and v > 0][-AVG_VOLUME_DAYS:]
+    vols = [v for d, (_, v) in sorted(officials.items()) if d < day and v is not None][-AVG_VOLUME_DAYS:]
     if len(vols) >= 5:
         out["avg_volume"] = sum(vols) / len(vols)
     return out
@@ -163,11 +146,10 @@ def summarise(bars, daily, now_et):
     one with prints, measured against the close extended_rules pairs it with —
     a day without that close gives prices and no percentage, never another
     day's close."""
-    m = xr.minute_frame(bars)
+    m = xr.Minutes.of(bars)
     if m is None:
         return None, None
     officials = xr.official_closes(daily)
-    rows = _daily_rows(daily)
     today = now_et.date()
     now_t = now_et.time()
 
@@ -176,16 +158,19 @@ def summarise(bars, daily, now_et):
     if got:
         day, part = got
         lo, hi = post_window(day)
-        after = _summary(day, part, day, xr.close_for_post(m, day, officials), rows,
+        after = _summary(day, part, day, xr.reference_close(m, day, officials), officials,
                          day == today and lo <= now_t < hi)
 
     pre = None
-    got = xr.latest_window(m, pre_window)
+    got = xr.latest_window(m, xr.PRE_WINDOW)
     if got:
         day, part = got
-        lo, hi = pre_window(day)
-        ref_day, ref = xr.close_for_pre(m, day, officials)
-        pre = _summary(day, part, ref_day, ref, rows, day == today and lo <= now_t < hi)
+        lo, hi = xr.PRE_WINDOW
+        # The session before is the calendar's, unless the minute data shows
+        # it closed. Not the daily frame's rows: that frame can lag a day, and
+        # a missing row there is not a closure.
+        ref_day, ref = xr.close_for_pre(m, day, officials, m.days())
+        pre = _summary(day, part, ref_day, ref, officials, day == today and lo <= now_t < hi)
     return after, pre
 
 
@@ -430,7 +415,7 @@ def fetch(symbol):
     # takes a while to become official: a copy is good for two minutes in the
     # first hour, a quarter of an hour after that.
     import time as _clock
-    close_at = xr.bell_instant(now_et.date())
+    close_at = datetime.combine(now_et.date(), post_window(now_et.date())[0], tzinfo=ET)
     since_close = (now_et - close_at).total_seconds()
     max_age = None if since_close < 0 else (120 if since_close < 3600 else 900)
     dkey = (symbol, now_et.date(), since_close >= 0)
@@ -464,7 +449,7 @@ def fetch(symbol):
     for session, market in ((after, "post"), (pre, "pre")):
         if session:
             day = datetime.strptime(session["date"], "%Y-%m-%d").date()
-            end = (post_window if market == "post" else pre_window)(day)[1]
+            end = post_window(day)[1] if market == "post" else REG_OPEN
             ended = datetime.combine(day, end, tzinfo=ET)
             add_volume(symbol, market, session,
                        ask=lambda s_, m_: _nasdaq(s_, m_, deadline),
