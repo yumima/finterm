@@ -43,6 +43,11 @@ def test_earnings_day_parsed():
     assert rows[2]["eps_forecast"] == -0.12, rows[2]
     assert rows[0]["eps_actual"] is None  # not reported yet: absent, not 0
     assert rows[0]["date"] == "2026-11-18"
+    # The dashboard tile's year-ago comparison reads these (one parser for
+    # both surfaces); absent stays None/"" — never 0.
+    assert rows[0]["eps_last_year"] == 0.53 and rows[0]["last_year_report"] == "11/19/2025", rows[0]
+    assert rows[1]["eps_last_year"] is None and rows[1]["last_year_report"] == "", rows[1]
+    assert w.EARN_KIND != "earn"  # rows gained fields: old cached days must not be served
 
 
 def test_absent_is_none_not_zero():

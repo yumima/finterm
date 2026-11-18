@@ -99,7 +99,6 @@ class EarningsCalendarWidget : public BaseWidget {
 
     // ── This week (Nasdaq calendar) ──────────────────────────────────────────
     void load_week();
-    void fetch_day(const QDate& date, qint64 epoch);
     void week_fetches_done();
 
     // ── Holdings (both views) ────────────────────────────────────────────────
@@ -141,9 +140,9 @@ class EarningsCalendarWidget : public BaseWidget {
     // Fetch epoch: bumped on every (re)load so a fan-out still in flight when
     // the user flips views or portfolios can't paint over the newer request.
     qint64 epoch_ = 0;
-    int pending_days_ = 0;
     int pending_symbols_ = 0;
     int ok_days_ = 0;
+    int failed_days_ = 0; // days Nasdaq did not answer (named in the note)
     int ok_symbols_ = 0;
     QStringList refused_symbols_; // refused / unanswered (not "no earnings")
     QString refused_note_;        // names them under the list; replaced per fetch

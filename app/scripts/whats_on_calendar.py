@@ -50,6 +50,10 @@ EARN_URL = "https://api.nasdaq.com/api/calendar/earnings?date={}"
 DIV_URL = "https://api.nasdaq.com/api/calendar/dividends?date={}"
 
 _SESSION = {"time-pre-market": "BMO", "time-after-hours": "AMC"}
+# Cache key prefix for parsed earnings days. Bump when parse_earnings_day's
+# row shape changes, or cached days come back without the new fields.
+EARN_KIND = "earn2"  # earn2: eps_last_year + last_year_report
+EARN_KIND_PREV = "earn"
 
 
 # ── pure parsers (tests/scripts/test_whats_on_calendar.py) ───────────────────
@@ -115,6 +119,8 @@ def parse_earnings_day(doc, day):
             "surprise_pct": money(r.get("surprise")),
             "fiscal_quarter": (r.get("fiscalQuarterEnding") or "").strip(),
             "estimates": money(r.get("noOfEsts")),
+            "eps_last_year": money(r.get("lastYearEPS")),
+            "last_year_report": (r.get("lastYearRptDt") or "").strip(),
         })
     return out
 
@@ -212,6 +218,10 @@ def _fetch_days(cache, kind, url, parse, days, today):
             key = f"{kind}:{d.isoformat()}"
             if rows is None:
                 stale = cache.stale(key)
+                if stale is None and kind == EARN_KIND:
+                    # The last copy under the previous row shape: missing the
+                    # newer fields (read as unknown), still the day's reports.
+                    stale = cache.stale(f"{EARN_KIND_PREV}:{d.isoformat()}")
                 if stale is not None:
                     got[d] = stale
                 else:
@@ -250,10 +260,10 @@ def events(start, end, symbols):
     mine = {norm_symbol(s) for s in symbols if norm_symbol(s)}
     days = weekdays(start, end)
     cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
-    earn, failed = _fetch_days(cache, "earn", EARN_URL, parse_earnings_day, days, today)
-    earnings = []
-    for d in sorted(earn):
-        earnings += keep_earnings(earn[d], mine)
+    # The same fetch the dashboard tile reads (earnings_days), then the cut.
+    every = earnings_days(start, end)
+    failed = every["days_failed"]
+    earnings = keep_earnings(every["earnings"], mine)
     dividends, div_failed = [], []
     if mine:
         div, div_failed = _fetch_days(cache, "div", DIV_URL, parse_dividends_day, days, today)
@@ -267,6 +277,22 @@ def events(start, end, symbols):
         "days_total": len(days), "days_failed": failed, "div_days_failed": div_failed,
         "prefilter_cap": PREFILTER_CAP,
     }
+
+
+def earnings_days(start, end):
+    """Every company reporting on each weekday in [start, end] — no size
+    filter (the dashboard tile ranks them itself). Same parser, refusal rule
+    and per-day cache as `events`, so the two surfaces cannot disagree."""
+    import ipo_calendar as ic
+    today = date.today()
+    days = weekdays(start, end)
+    cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
+    earn, failed = _fetch_days(cache, EARN_KIND, EARN_URL, parse_earnings_day, days, today)
+    rows = []
+    for d in sorted(earn):
+        rows += earn[d]
+    return {"start": start.isoformat(), "end": end.isoformat(), "earnings": rows,
+            "days_total": len(days), "days_failed": failed}
 
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
@@ -321,8 +347,8 @@ def main(argv):
         ids = [s.strip().upper() for s in argv[1].split(",") if s.strip()]
         print(json.dumps(fred(ids, start)))
         return 0
-    if len(argv) < 3 or argv[0] != "events":
-        print(json.dumps({"error": "usage: whats_on_calendar.py events START END [SYM,...]"}))
+    if len(argv) < 3 or argv[0] not in ("events", "earnings"):
+        print(json.dumps({"error": "usage: whats_on_calendar.py events|earnings START END [SYM,...]"}))
         return 2
     try:
         start = date.fromisoformat(argv[1])
@@ -330,6 +356,12 @@ def main(argv):
     except ValueError:
         print(json.dumps({"error": "bad date"}))
         return 2
+    if argv[0] == "earnings":
+        out = earnings_days(start, end)
+        if out["days_total"] and len(out["days_failed"]) == out["days_total"]:
+            out["error"] = "Nasdaq earnings calendar did not answer"
+        print(json.dumps(out))
+        return 0
     syms = [s for s in (argv[3].split(",") if len(argv) > 3 else []) if s.strip()]
     out = events(start, end, syms)
     if out["days_total"] and len(out["days_failed"]) == out["days_total"]:
