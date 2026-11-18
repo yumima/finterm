@@ -22,6 +22,7 @@ Usage:
     python wto_data.py tfad_data --countries 840,124
 """
 
+import os
 import sys
 import json
 import asyncio
@@ -707,6 +708,9 @@ def main():
             api_key = potential_key
             sys.argv = sys.argv[:-1]  # Remove API key from args
 
+    # Otherwise the key the user saved in Settings, which the app injects
+    # (CredentialCatalogue): Trade Statistics needs it, as the WTO panel says.
+    api_key = api_key or os.environ.get("WTO_API_KEY") or None
     wrapper = WTODataWrapper(subscription_key=api_key)
 
     if len(sys.argv) < 2:

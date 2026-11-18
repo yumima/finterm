@@ -1,6 +1,7 @@
 # EIA (U.S. Energy Information Administration) Data Wrapper
 # Provides access to Weekly Petroleum Status Report and Short Term Energy Outlook data
 
+import os
 import sys
 import json
 import asyncio
@@ -410,7 +411,9 @@ def main(args=None):
         sys.exit(1)
 
     command = args[0]
-    api_key = None  # In production, this should come from environment variables or config
+    # The app injects the key the user saved in Settings (CredentialCatalogue);
+    # only STEO needs it, as the Economics EIA panel says.
+    api_key = os.environ.get("EIA_API_KEY") or None
 
     try:
         fetcher = EIADataFetcher(api_key=api_key)

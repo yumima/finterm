@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`0e9c9b871`](https://github.com/yumima/finterm/commit/0e9c9b871) economic calendar: a failed scrape answers as JSON; a late reply is dropped
 - [`44d50943e`](https://github.com/yumima/finterm/commit/44d50943e) economics: restore the analytics engine's methods to their own classes
 - [`3fc9e5fe9`](https://github.com/yumima/finterm/commit/3fc9e5fe9) economics: delete the unreachable trend block after analytics_engine's return
 - [`8a7cff138`](https://github.com/yumima/finterm/commit/8a7cff138) scripts: delete script actions and CLI commands no caller sends
