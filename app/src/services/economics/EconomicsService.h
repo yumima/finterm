@@ -5,6 +5,7 @@
 
 #include "datahub/Producer.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -21,6 +22,7 @@ struct EconomicsResult {
     QJsonObject data;
     QString error;
     QString source_id; // which provider produced this
+    QDateTime as_of;   // when the script produced `data` (a cache hit keeps its original time)
 };
 
 /// Phase 6 — DataHub producer for `econ:<source>:<request_id>` topics.

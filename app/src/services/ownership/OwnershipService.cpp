@@ -485,6 +485,18 @@ void OwnershipService::load(const QString& symbol) {
         return;
     const qint64 age = QDateTime::currentMSecsSinceEpoch() - fetched_at_.value(sym, 0);
     if (cache_.contains(sym) && age < kCacheTtlMs) {
+        if (!cache_.value(sym).edgar_ok) {
+            // EDGAR refused (or failed) while the other sources answered: the
+            // snapshot is fresh, its EDGAR half is not an answer. Ask EDGAR
+            // again and keep the rest; note_source_done finishes the load.
+            auto snap = cache_.value(sym);
+            snap.edgar_error.clear();
+            cache_.insert(sym, snap);
+            pending_[sym].insert(kSrcEdgar);
+            fetch_edgar(sym);
+            emit snapshot_updated(sym);
+            return;
+        }
         emit snapshot_updated(sym);
         emit load_finished(sym);
         ensure_holders(sym);

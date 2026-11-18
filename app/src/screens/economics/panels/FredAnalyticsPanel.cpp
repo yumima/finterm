@@ -24,6 +24,11 @@ namespace {
 
 static constexpr const char* kFredAnalyticsScript = "fred_economic_data.py";
 static constexpr const char* kFredAnalyticsSourceId = "fred_analytics";
+// Request-id prefix, versioned: "fredan_" records were dispatched with the
+// command passed twice (the script read it as the start date). Their disk
+// records still load under the old topics; a new prefix means none of them
+// can ever answer, or be replayed for, this panel.
+static constexpr const char* kFredAnalyticsRequestPrefix = "fredan_v2_";
 static constexpr const char* kFredAnalyticsColor = "#F97316"; // orange (distinct from FredPanel red)
 } // namespace
 
@@ -82,7 +87,7 @@ void FredAnalyticsPanel::on_fetch() {
 
     const QString arg_suffix = dataset.args.isEmpty() ? "" : "_" + dataset.args.join("_");
     services::EconomicsService::instance().execute(kFredAnalyticsSourceId, kFredAnalyticsScript, dataset.command, args,
-                                                   "fredan_" + dataset.command + arg_suffix);
+                                                   kFredAnalyticsRequestPrefix + dataset.command + arg_suffix);
 }
 
 // Extract rows from various FRED Analytics response shapes.
@@ -105,7 +110,7 @@ static QJsonArray extract_fred_analytics_rows(const QJsonObject& data) {
 void FredAnalyticsPanel::on_result(const QString& request_id, const services::EconomicsResult& result) {
     if (result.source_id != kFredAnalyticsSourceId)
         return;
-    if (!request_id.startsWith("fredan_"))
+    if (!request_id.startsWith(QLatin1String(kFredAnalyticsRequestPrefix)))
         return;
 
     if (!result.success) {
