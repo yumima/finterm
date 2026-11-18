@@ -235,6 +235,7 @@ class EquityOverviewTab : public QWidget {
 
   protected:
     void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
   private:
     QWidget* build_valuation_panel();
@@ -277,26 +278,31 @@ class EquityOverviewTab : public QWidget {
     QLabel* prev_close_val_ = nullptr;
     QLabel* vol_val_ = nullptr;
 
-    // Extended hours panel — the latest after-hours and pre-market session,
-    // the more recent one on top. Fetched on its own (not part of the quote).
+    // Extended hours panel — the latest pre-market, after-hours and overnight
+    // session, most recent on top. Price and move come from
+    // services::ExtendedHoursService (the portfolio's EXT% source); range and
+    // volume from the `extended_sessions` bars.
     struct ExtBlock {
         QFrame* box = nullptr;
         QLabel* title = nullptr;
-        QLabel* when = nullptr;
+        QLabel* window = nullptr;
         QLabel* price = nullptr;
+        QLabel* last = nullptr;
         QLabel* range = nullptr;
-        QLabel* volume = nullptr;
-        QLabel* volume_share = nullptr;
+        QLabel* volume = nullptr;    ///< "3.47M (7.2%)": the session's volume and its share of an average day
+        QWidget* bar_rows[2] = {}; ///< range / volume rows: hidden when the bars have none
     };
-    ExtBlock ext_blocks_[2];
+    ExtBlock ext_blocks_[3];
     QLabel* ext_note_ = nullptr; ///< shown instead of the blocks when there is no session to show
     services::equity::ExtSessions ext_sessions_;
     bool ext_answered_ = false; ///< the current symbol's sessions have arrived
     ui::LoadingOverlay* ext_loading_ = nullptr; ///< the same waving bars as the other panels
     QTimer* ext_timer_ = nullptr;
     void fetch_extended_sessions();
+    void watch_extended_hours();
     void render_extended_sessions();
-    void render_ext_block(ExtBlock& b, const services::equity::ExtSession& s, bool pre);
+    void render_ext_block(ExtBlock& b, const services::equity::ExtSession& s,
+                          screens::widgets::exthours::ExtSide side, bool latest);
 
     // Valuation panel
     QLabel* mktcap_val_ = nullptr;

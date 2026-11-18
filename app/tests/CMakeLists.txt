@@ -161,11 +161,12 @@ set_target_properties(test_earnings_math PROPERTIES
 
 add_test(NAME earnings_math COMMAND test_earnings_math)
 
-# ── Extended-hours (AFT%) maths tests ────────────────────────────────────────
-# quote_from_row() decides the sign and the base of the dashboard's AFT%
-# column. It shipped inverted once — AAPL down 6.5% displayed as up 6.3% — so
-# the fixtures are real daemon payloads rather than invented numbers. Pure
-# JSON-in/struct-out, no widget and no daemon.
+# ── Extended-hours (EXT%) maths tests ────────────────────────────────────────
+# ExtendedHoursMath.h keeps one reading per session (pre-market, after-hours,
+# overnight) and picks the one every EXT surface shows; ExtendedSessions.h puts
+# the same readings in the ER panel. Sign inversions, a pre-market paired with
+# the wrong close and two unnamed sessions have each been on screen — the
+# fixtures are real prices. Pure JSON-in/struct-out, no widget and no daemon.
 
 add_executable(test_extended_hours_math
     screens/test_extended_hours_math.cpp
@@ -634,12 +635,13 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
-# ── Extended hours (AFT%) ────────────────────────────────────────────────────
+# ── Extended hours (EXT%) ────────────────────────────────────────────────────
 # yfinance.download() keeps its results in module globals, so two overlapping
 # downloads in the daemon returned mislabelled frames — one stock's bars under
 # another stock's ticker, which put a foreign after-hours move on the MSFT row.
-# Also pins the denominator (official close, not the 15:59 bar) and the refusal
-# to price an extended print against a reference bar from an earlier day.
+# Also pins the batch-quote pairing for US stocks (each print against its own
+# close, PRE/REGULAR/POST/PREPRE/CLOSED, early close, absent fields absent) and
+# the refusal to price an extended print against a close from an earlier day.
 
 if(Python3_Interpreter_FOUND)
     add_test(

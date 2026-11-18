@@ -70,7 +70,7 @@ inline const QVector<Section>& world_sections() {
          },
          true, true,
          QStringLiteral("FUT% is each index's future (pinned contract vs its own previous close), shown while "
-                        "the cash market is not in its regular session — a cash index has no after-hours "
+                        "the cash market is not in its regular session — a cash index has no extended-hours "
                         "prints.")},
         {QStringLiteral("EUROPE"),
          {

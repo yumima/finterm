@@ -28,11 +28,14 @@ Two sources, because neither has the whole picture:
     reads "-8%" for a stock that has moved +0.4% since the bell.
 
 Each session carries its own reference close, so nothing here depends on what
-time it is now — the pairing rules that invert in yfinance_data's
-get_extended_hours_quotes (one row, one `regular`) do not arise. Which close
-that is, the session windows, which close is official and what counts as a
-print are extended_rules' — shared with that function, so the two never
-disagree about the same session.
+time it is now. Which close that is, the session windows, which close is
+official and what counts as a print are extended_rules' — shared with
+yfinance_data.get_extended_hours_quotes (the EXT% source, from Yahoo's batch
+quote), so the two never disagree about the same session. On screen the box's
+headline price for a session is the EXT% source's own reading
+(ExtendedSessions.h, with_live_readings); what this adds is the range, the
+active minutes and the volume. The overnight session (20:00-04:00 ET) has no
+bars here — it comes from the push stream alone.
 """
 
 import re
@@ -106,8 +109,7 @@ def _without_stray_prints(part):
 def _summary(day, part, ref_date, ref, officials, live):
     """One session's summary. `ref` is (close, ts) for `ref_date`, or None."""
     part = _without_stray_prints(part)
-    # The newest minute is never dropped as stray, so this is the same last
-    # print get_extended_hours_quotes reports for the session.
+    # The newest minute is never dropped as stray: the last print of the tape.
     last, last_ts = xr.last_print(part)
     # A bar's own high/low can be a stray print inside an otherwise sound
     # minute, so each is held to the same distance from that minute's close.

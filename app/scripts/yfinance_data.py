@@ -5730,111 +5730,140 @@ def compute_technicals_from_candles(candles):
         return {"success": False, "error": str(e), "data": []}
 
 
-# Extended-hours helper — returns regular / pre / post for each symbol so the
-# Portfolio Futures view (and Portfolio Heatmap AFT mode) shows after-hours
-# moves for every holding. The previous implementation looped one
-# `Ticker(sym).info` call per symbol — a heavy Yahoo quote-page scrape
-# (~1-3 s/symbol, throttled, preMarketPrice/postMarketPrice often missing).
-# For a 20-row portfolio it routinely returned empty rows or timed out.
+# Extended-hours (EXT%) rows — one per symbol, each extended session's latest
+# print with the close it is measured against:
 #
-# This implementation does ONE batched intraday download
-# (period=5d, interval=1m, prepost=True) and derives the regular /
-# pre-market / post-market fields directly from the bar timeline. Same
-# JSON shape for the C++ side; faster, more reliable, no info-scrape.
-# Cap on the per-symbol re-ask below, so a wholly failed bulk download
-# can't turn into one request per holding.
+#   {symbol, session, regular, regular_ts, declined, [unavailable],
+#    pre: {price, ts, day, ref, ref_ts, ref_date} | None,
+#    post: {...} | None, currency, name}
+#
+# `regular` / `regular_ts` is the most recent completed close. The C++ side
+# (ExtendedHoursMath.h) keeps each session separately, adds the overnight
+# session from the push stream, and shows the latest print since that close.
+#
+# Plain US stocks read Yahoo's batch quote (extended_rules.quote_sessions): one
+# ~0.1 s request for the whole book that never waits behind the process-wide
+# download lock. It used to be a 5-day 1-minute download plus a daily one —
+# ~1.2 s on its own, and seconds more queued behind the start-up sparkline and
+# quote downloads, so the column always filled last. Futures, FX, crypto and
+# non-US listings have no such quote fields and keep the bar/settle path.
+#
+# Contract: `declined` ONLY for a stale reference close (no number, and a live
+# print must not build one); `unavailable` = refused or dropped (ask again); a
+# row with neither and no sessions has simply not printed.
 _EXT_RETRY_MAX = 15
 
 
 def get_extended_hours_quotes(symbols):
     if not symbols:
         return []
-    # Outside the try below: a module that fails to load is a broken install,
-    # and [] would read as "nothing to report" — raise, the daemon answers ok:false.
+    # Outside any try: a module that fails to load is a broken install, and []
+    # would read as "nothing to report" — raise, the daemon answers ok:false.
     import extended_rules as _xr
+    # Imported here, not at module level, so a test can freeze the clock.
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+
+    us = [s for s in symbols if _xr.has_us_extended_session(s)]
+    other = [s for s in symbols if not _xr.has_us_extended_session(s)]
+    rows = {}
+    if us:
+        rows.update(_us_extended_rows(us, now_et, _xr))
+    if other:
+        rows.update(_bar_extended_rows(other, now_et, _xr))
+    return [rows[s] for s in symbols]
+
+
+def _us_extended_rows(symbols, now_et, _xr):
+    """Plain US stocks, from one batch-quote snapshot."""
+    # BRK.B is BRK-B on Yahoo.
+    asked = {s: re.sub(r"\.([ABC])$", r"-\1", s.upper()) for s in symbols}
     try:
-        import io
-        import contextlib
-        import yfinance as _yf
-        import pandas as _pd
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-    except Exception:
-        return []
+        quotes = {q.get("symbol"): q for q in _v7_quotes(sorted(set(asked.values())), _xr.QUOTE_FIELDS)}
+    except Exception as e:
+        # A refusal (429, crumb, timeout) says nothing about the prints: ask again.
+        print(f"[extended_hours] batch quote refused: {str(e)[:160]}", file=sys.stderr, flush=True)
+        label = _xr.session_label(now_et)
+        return {s: _empty_ext_row(s, label, unavailable=True) for s in symbols}
+    # The newest regular-session day across the book: evidence that overrules
+    # the holiday calendar on an unscheduled closure (extended_rules.is_session).
+    # Only the newest — one halted name's older day must not mark the days
+    # between as closures. Before today's open, a book whose every name last
+    # traded on that day says the sessions since were closed (the morning
+    # after 9 Jan 2025): today goes in too, which marks the days between.
+    # Never from a single name, whose quote alone may simply be stale: the
+    # calendar decides then.
+    days = [d for d in (_xr.quote_day(q) for q in quotes.values()) if d is not None]
+    seen = None
+    if len(days) >= 2:
+        seen = {max(days)}
+        if now_et.time() < _xr.REG_OPEN and _xr.is_trading_day(now_et.date()):
+            seen.add(now_et.date())
+    label = _xr.session_label(now_et, seen)
+    out = {}
+    for s in symbols:
+        q = quotes.get(asked[s])
+        if q is None:
+            # Left out of the answer: a dropped row or an unknown ticker — the
+            # batch cannot say which. Asked again (the service backs off), as
+            # the bar path re-asks a symbol its bulk frame dropped.
+            out[s] = _empty_ext_row(s, label, unavailable=True)
+            continue
+        out[s] = dict(_xr.quote_sessions(q, now_et, seen), symbol=s, session=label,
+                      currency=q.get("currency") or "", name=s, unavailable=False)
+    return out
+
+
+def _bar_extended_rows(symbols, now_et, _xr):
+    """Futures, FX, crypto and non-US listings: one batched 1-minute download
+    (period=5d, prepost) and the settle-based reference."""
+    import io
+    import contextlib
+    import yfinance as _yf
+    import pandas as _pd
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
     _buf = io.StringIO()
     with contextlib.redirect_stdout(_buf):
         try:
-            # auto_adjust=False deliberately. These prices are compared against
-            # each other over a five-day window and are meant to be the prints
-            # that actually happened; back-adjusting the regular bars for a
-            # dividend that goes ex inside the window — while the post-market
-            # price is whatever Yahoo last quoted — manufactures a move that
-            # never traded.
+            # auto_adjust=False: these are the prints that happened, compared
+            # with each other over five days — back-adjusting the regular bars
+            # for a dividend inside the window manufactures a move.
             data = _yf.download(
                 symbols, period="5d", interval="1m",
                 prepost=True, group_by="ticker", progress=False,
                 threads=True, auto_adjust=False,
             )
         except Exception as e:
-            # Raise, don't return []. An empty list is indistinguishable from
-            # "market is quiet, nothing to report", so consumers took it as a
-            # successful answer: the heatmap wiped its tiles and the dashboard
-            # column silently kept whatever it had from the last good fetch,
-            # with the header still reading Idle. The daemon turns an exception
-            # into ok=false, which is what the retry/"unavailable" paths on the
-            # C++ side are already written for.
+            # Raise, don't return []: an empty list reads as "market is quiet".
+            # The daemon turns an exception into ok=false, which the C++ retry
+            # paths are written for.
             raise RuntimeError(f"extended-hours download failed: {e}") from e
 
-    # Defer session label so we can short-circuit on empty data without
-    # tripping the et zoneinfo lookup.
     et = ZoneInfo("America/New_York")
-    now_et = datetime.now(et)
-
     if data is None or getattr(data, "empty", True):
-        # Nothing came back at all — a rate-limited burst (429) looks exactly
-        # like this. That says nothing about any symbol's prints.
-        return [_empty_ext_row(s, _ext_session_label(now_et, s), unavailable=True) for s in symbols]
+        # Nothing came back at all — a rate-limited burst looks exactly like
+        # this. That says nothing about any symbol's prints.
+        return {s: _empty_ext_row(s, _ext_session_label(now_et), unavailable=True) for s in symbols}
 
     today = now_et.date()
-    # The days the market printed at all, across the whole book: the evidence
-    # that overrules the holiday calendar on an unscheduled closure (see
-    # extended_rules.is_session). Market-wide, so one thin name's quiet day is
-    # not mistaken for one.
-    seen = _xr.et_days(data.dropna(how="all").index)
+    pre_open_utc = _pd.Timestamp(now_et.replace(hour=4, minute=0, second=0, microsecond=0)).tz_convert("UTC")
+    open_utc = _pd.Timestamp(now_et.replace(hour=9, minute=30, second=0, microsecond=0)).tz_convert("UTC")
 
-    # Today's pre-market / open boundaries in UTC (only meaningful for
-    # equities; futures/crypto ignore these).
-    pre_open_utc = _pd.Timestamp(now_et.replace(hour=4,  minute=0,  second=0, microsecond=0)).tz_convert("UTC")
-    open_utc     = _pd.Timestamp(now_et.replace(hour=9,  minute=30, second=0, microsecond=0)).tz_convert("UTC")
-
-    # Per-symbol "most recent completed session-end" comes from the
-    # exchange_sessions registry — equities: 16:00 ET, futures: each
-    # exchange's settle time, crypto: 00:00 UTC, FX: 17:00 ET.
+    # Per-symbol "most recent completed session-end" from the exchange_sessions
+    # registry — futures: each exchange's settle time, crypto: 00:00 UTC, FX:
+    # 17:00 ET, a 16:00-ET listing: the bell.
     try:
         from exchange_sessions import previous_session_end_utc as _prev_end
     except Exception:
         _prev_end = None
 
-    # Official daily closes, for the denominator.
-    #
-    # The last 1-minute regular bar is NOT the closing price: Yahoo's intraday
-    # series stops at 15:59 and never contains the closing auction print, which
-    # is where a large share of the day's volume trades. MSFT on 2026-08-07
-    # closed at 499.99 while its last 1m bar read 499.58 — 0.08%, against
-    # after-hours moves that are routinely 0.2%. Every AFT number carried that
-    # error. The daily bar is the official close, so use it whenever it lines
-    # up with the session we are measuring against, and keep the 1m bar as the
-    # fallback for symbols the daily frame doesn't cover.
-    #
-    # auto_adjust=False for the same reason as the intraday call: we want the
-    # price that printed, not one back-adjusted for a later dividend.
-    #
-    # Only equities have a closing auction to miss. A futures or crypto "daily
-    # close" is struck at a different moment than the settle `regular_end`
-    # refers to, so the official close is consulted for 16:00-ET instruments only —
-    # and an all-futures book must not pay for a second full download, which now
-    # also holds the process-wide gate for its duration.
+    # Official daily closes, for instruments whose session ends at the 16:00
+    # ET bell (a Toronto listing): Yahoo's 1-minute series stops at 15:59 and
+    # never contains the closing auction. A futures or crypto "daily close" is
+    # struck at a different moment than the settle, so those keep the bar.
     def _ends_at_the_bell(sym):
         if _prev_end is None:
             return True
@@ -5854,17 +5883,12 @@ def get_extended_hours_quotes(symbols):
                     threads=True, auto_adjust=False,
                 )
             except Exception:
-                # Non-fatal: the intraday frame alone still yields a usable (if
-                # very slightly off) reference, and one flaky call should not
-                # take the whole column down.
-                daily = None
+                daily = None   # the 1-minute frame alone still yields a reference
 
     _officials_memo = {}
 
     def _officials(sym):
-        """{date: (official close, volume)} for that symbol — extended_rules reads the
-        labels as the calendar dates they are (converting a midnight-UTC stamp
-        to ET would hand back yesterday's close as today's)."""
+        """{date: (official close, volume)} for that symbol (labels read as dates)."""
         if sym in _officials_memo:
             return _officials_memo[sym]
         out = {}
@@ -5899,11 +5923,10 @@ def get_extended_hours_quotes(symbols):
             elif len(symbols) == 1:
                 hist = data
             else:
-                # Flat columns with several symbols requested means the frame
-                # carries ONE ticker and there is no way to tell which. Handing
-                # it to every symbol is how a single stock's after-hours move
-                # ends up printed against the whole book; the per-symbol retry
-                # below fetches the real thing instead.
+                # Flat columns with several symbols requested: the frame
+                # carries ONE ticker and there is no telling which. Handing it
+                # to every symbol prints one instrument's move on the whole
+                # book; the per-symbol retry below fetches the real thing.
                 return None
             hist = hist.dropna(how="all")
             if hist.empty or "Close" not in hist.columns:
@@ -5912,278 +5935,129 @@ def get_extended_hours_quotes(symbols):
         except Exception:
             return None
 
-    def _us_prints(sym, hist):
-        """A plain US ticker: its sessions, pairing and close are
-        extended_rules' — the same ones the ER Extended Hours box reads, so
-        the two never disagree about the same session.
-
-        `regular` is the close of the last COMPLETED session (ref_day): today's
-        once its bell has rung (13:00 on an early close), else the session
-        before. Its post-market is ref_day's after-hours window. A symbol
-        without a close on ref_day (no regular-hours trade: money-market and
-        mutual funds, thin ETFs) reports the latest earlier one, which the
-        caller flags as stale.
-
-        Today's pre-market is carried only while ref_day is the session before
-        it (PRE / REGULAR). After the bell `regular` is today's close and that
-        print belongs to the previous one: a consumer pairing the two would
-        report the day's move backwards, so it is not in the payload at all."""
-        m = _xr.Minutes.of(hist)
-        officials = _officials(sym)
-        ref_day = _xr.last_closed_day(now_et, seen)
-        regular = regular_ts = None
-        got = _xr.latest_close(m, officials, ref_day)
-        if got is not None:
-            regular, regular_ts = got[1]
-        post = post_ts = pre = pre_ts = None
-        if m is not None:
-            post, post_ts = _xr.last_print(m.window(ref_day, _xr.post_window(ref_day))) or (None, None)
-            if ref_day < today:
-                pre, pre_ts = _xr.last_print(m.window(today, _xr.PRE_WINDOW)) or (None, None)
-        return regular, regular_ts, ref_day, pre, pre_ts, post, post_ts
-
-    def _generic_prints(sym, hist):
-        """Futures, FX, crypto and non-US listings: the settle-based reference."""
+    def _prints(sym, hist):
         idx = hist.index
         if idx.tz is None:
             idx = idx.tz_localize("UTC")
-
-        # "regular_end" = the most recent COMPLETED regular session-end
-        # for this symbol. Past 20:00 ET or before 04:00 ET we'd
-        # otherwise be tempted to use "today's 16:00 ET" — but if
-        # today's hasn't happened yet that reference is in the future
-        # and any "before today's 16:00 ET" filter would pick up the
-        # previous day's post-market bars, badly distorting `regular`.
+        # The most recent COMPLETED session end. Past 20:00 or before 04:00 ET
+        # "today's" end would be in the future, and a "before it" filter would
+        # pick up the previous day's after-hours bars as the close.
         if _prev_end is not None:
             regular_end_utc = _pd.Timestamp(_prev_end(sym))
         else:
-            # Fallback: equity convention (16:00 ET) on the most
-            # recent weekday <= now.
+            from datetime import timedelta as _td
             t = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
             if t > now_et:
-                from datetime import timedelta as _td
                 t -= _td(days=1)
             while t.weekday() >= 5:
-                from datetime import timedelta as _td
                 t -= _td(days=1)
             regular_end_utc = _pd.Timestamp(t).tz_convert("UTC")
 
-        # regular = last bar at or before regular_end. For a query at
-        # 00:10 ET Thursday this lands on Wed 16:00 ET (yesterday's
-        # close) — which is exactly the right denominator for
-        # Wednesday's post-market or Thursday's pre-market.
-        # Bar timestamps travel with the prices. A consumer cannot tell a
-        # sound pairing from a stale one by looking at the numbers — the
-        # dashboard tried comparing `regular` against its own quote feed
-        # and ended up hiding every symbol with a big after-hours move,
-        # because that feed rolls over to extended-hours prices and the
-        # "mismatch" it measured WAS the move. Times are checkable; prices
-        # are not.
-        regular = None
-        regular_ts = None
+        # Bar times travel with the prices: a consumer can check a pairing's
+        # times, never its prices.
+        regular = regular_ts = None
         mask_reg = idx <= regular_end_utc
         if bool(mask_reg.any()):
             v = hist["Close"][mask_reg].iloc[-1]
             if not _pd.isna(v):
                 regular = float(v)
                 regular_ts = int(idx[mask_reg][-1].timestamp())
-
         regular_end_et = regular_end_utc.tz_convert(et)
-        # Prefer the official close over the last 1m bar — but only for
-        # instruments whose session ends at the equity bell. A futures or
-        # crypto "daily close" is struck at a different moment than the
-        # settle that regular_end refers to, so for those the intraday bar
-        # at the settle time really is the right reference.
         if (regular_end_et.hour, regular_end_et.minute) == (16, 0):
             official = _officials(sym).get(regular_end_et.date())
             if official:
                 regular = official[0]
                 regular_ts = int(regular_end_utc.timestamp())
 
-        # post-market: bars strictly after regular_end whose ET date
-        # equals regular_end's ET date (i.e. the same trading day —
-        # we don't want tomorrow's pre-market to bleed in as "post").
-        post = None
-        post_ts = None
+        # After the session end, same ET day only (tomorrow's early bars are
+        # not this session's after-hours).
+        post = post_ts = None
         mask_post = idx > regular_end_utc
         if bool(mask_post.any()):
             idx_et = idx[mask_post].tz_convert(et)
-            same_day = (idx_et.date == regular_end_utc.tz_convert(et).date())
+            same_day = (idx_et.date == regular_end_et.date())
             if same_day.any():
-                close_series = hist["Close"][mask_post]
-                v = close_series[same_day].iloc[-1]
+                v = hist["Close"][mask_post][same_day].iloc[-1]
                 if not _pd.isna(v):
                     post = float(v)
                     post_ts = int(idx[mask_post][same_day][-1].timestamp())
 
-        # pre-market: bars in TODAY's [04:00, 09:30) ET window.
-        # Only populated when we're currently past 04:00 ET today.
-        pre = None
-        pre_ts = None
+        # Today's [04:00, 09:30) ET window.
+        pre = pre_ts = None
         mask_pre = (idx >= pre_open_utc) & (idx < open_utc)
         if bool(mask_pre.any()):
             idx_et = idx[mask_pre].tz_convert(et)
             same_day = (idx_et.date == today)
             if same_day.any():
-                close_series = hist["Close"][mask_pre]
-                v = close_series[same_day].iloc[-1]
+                v = hist["Close"][mask_pre][same_day].iloc[-1]
                 if not _pd.isna(v):
                     pre = float(v)
                     pre_ts = int(idx[mask_pre][same_day][-1].timestamp())
         return regular, regular_ts, regular_end_et.date(), pre, pre_ts, post, post_ts
 
     def _row(sym, hist):
-        """One symbol's extended-hours row from its 1-minute frame, or None."""
+        """One symbol's row from its 1-minute frame, or None."""
         try:
-            # The label drives the pairing below (and quote_from_row's on the
-            # C++ side), so each row carries its own: a US stock's from the
-            # equity calendar, anything else's from the plain clock rule — CME
-            # trades on MLK Day and runs a full day after Thanksgiving.
-            session = _ext_session_label(now_et, sym, seen)
-            if _xr.has_us_extended_session(sym):
-                regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _us_prints(sym, hist)
-            else:
-                regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _generic_prints(sym, hist)
+            session = _ext_session_label(now_et)
+            regular, regular_ts, ref_day, pre, pre_ts, post, post_ts = _prints(sym, hist)
+            # A reference from an earlier day (no trade in the last session)
+            # turns any print into a multi-day return: no sessions at all.
+            declined = (regular_ts is not None and datetime.fromtimestamp(regular_ts, et).date() != ref_day)
 
-            # Which extended print may be paired with `regular` depends on the
-            # session, and getting it wrong yields the OPPOSITE number rather
-            # than a stale one.
-            #
-            # `regular` is the last COMPLETED close. Before today's bell — PRE
-            # and REGULAR — that is yesterday's close, so today's pre-market
-            # print is measured against exactly the right reference, and it is
-            # also the most recent extended move there is. Once the bell has
-            # rung — POST, and the CLOSED stretch after 20:00 ET — `regular` is
-            # TODAY's close, and today's pre-market print belongs to the
-            # previous one; pairing them computes the day's move backwards. The
-            # old fallback did precisely that whenever the post-market window
-            # had opened but nothing had printed yet, which is how -7.82%
-            # appeared beside AMZN on a day it closed up 3.9%. So there is no
-            # fallback to `pre` after the close: no post-market print means no
-            # number. Same rule as ExtendedHoursMath.h's quote_from_row, which
-            # the dashboard column runs on the same payload.
-            if session in ("PRE", "REGULAR"):
-                ext, ext_ts = (pre, pre_ts) if pre is not None else (post, post_ts)
-            else:
-                ext, ext_ts = (post, post_ts) if post is not None else (None, None)
-
-            # The reference has to be the close of the session the extended
-            # print belongs to. A symbol that didn't trade during regular hours
-            # — money-market and mutual funds, thin ETFs — leaves `regular`
-            # sitting on a bar from an earlier day, and pairing a fresh
-            # extended print against it reports a multi-day return as an
-            # after-hours move. The post-market window is already pinned to
-            # ref_day, so requiring ref_day of the denominator
-            # closes the loop; the C++ side's timestamp check is a backstop,
-            # not the rule.
-            # The prints go too, not just `ext`. quote_from_row on the C++ side
-            # re-derives the percentage from `post_market`/`pre_market` against
-            # `regular` and never looks at `ext_price`, so nulling `ext` alone
-            # left both the dashboard column and the heatmap free to compute
-            # the very number this guard exists to suppress — and
-            # pairing_is_sound wouldn't catch it either, since a two-day-old
-            # reference is well inside its five-day tolerance. `regular` stays:
-            # it is a real close and the futures table prints it.
-            reg_stale = (regular_ts is not None and
-                         datetime.fromtimestamp(regular_ts, et).date() != ref_day)
-            if reg_stale:
-                ext, ext_ts = None, None
-                pre, pre_ts = None, None
-                post, post_ts = None, None
-
-            ext_chg = None
-            ext_pct = None
-            if ext is not None and regular:
-                ext_chg = ext - regular
-                ext_pct = (ext_chg / regular) * 100.0
+            def reading(p, t):
+                if declined or p is None or t is None or not regular or (regular_ts and t <= regular_ts):
+                    return None
+                return {"price": p, "ts": t, "day": datetime.fromtimestamp(t, et).date().isoformat(),
+                        "ref": regular, "ref_ts": regular_ts,
+                        "ref_date": ref_day.isoformat()}
 
             return {
-                "symbol": sym,
-                "regular": regular,
-                "pre_market": pre,
-                "post_market": post,
-                "ext_price": ext,
-                "ext_change": ext_chg,
-                "ext_change_pct": ext_pct,
-                "regular_ts": regular_ts,
-                "pre_market_ts": pre_ts,
-                "post_market_ts": post_ts,
-                "ext_ts": ext_ts,
-                "session": session,
-                # The ONE case the consumers must not rebuild from a live
-                # print: the reference close is from an earlier day. Said
-                # explicitly — a null ext_price also means "no print yet",
-                # and reading that as a refusal blanked tiles for good.
-                "declined": bool(reg_stale),
-                # name/currency are no longer fetched — they required
-                # the per-symbol Ticker.info call we just removed. The
-                # consumer (PortfolioFuturesView, PortfolioHeatmap) gets
-                # display names elsewhere; an empty string is fine.
-                "currency": "",
-                "name": sym,
+                "symbol": sym, "session": session,
+                "regular": regular, "regular_ts": regular_ts,
+                "declined": bool(declined), "unavailable": False,
+                # Today's early window pairs with `regular` only while that is
+                # the close before it (PRE / REGULAR); after the settle it
+                # would measure the day's move backwards.
+                "pre": reading(pre, pre_ts) if session in ("PRE", "REGULAR") else None,
+                "post": reading(post, post_ts),
+                "currency": "", "name": sym,
             }
         except Exception:
             return None
 
-    rows = []
+    rows = {}
     missing = []
     for sym in symbols:
         hist = _slice(sym)
         row = _row(sym, hist) if hist is not None else None
         if row is None:
             missing.append(sym)
-            row = _empty_ext_row(sym, _ext_session_label(now_et, sym, seen))
-        rows.append(row)
+            row = _empty_ext_row(sym, _ext_session_label(now_et))
+        rows[sym] = row
 
-    # A multi-symbol 1-minute download drops tickers intermittently — the same
-    # request returns AAPL on one call and omits it on the next, which is what
-    # made the dashboard's AFT column flicker symbols in and out. Ask again for
-    # the stragglers one at a time: a single-ticker request is far more
-    # reliable, and the misses are normally a handful out of the book.
-    #
-    # Symbols that genuinely have no intraday bars (mutual funds like FNILX)
-    # come back empty from the retry too, at the cost of one request that the
-    # daemon's 8-second result cache absorbs for repeat callers.
+    # A multi-symbol 1-minute download drops tickers intermittently; a single-
+    # ticker request is far more reliable. Small pool on purpose: it is per
+    # request, inside a network worker — not a rate-limit generator.
     if missing:
-        at = {r["symbol"]: i for i, r in enumerate(rows)}
         targets = missing[:_EXT_RETRY_MAX]
 
-        # A refusal yfinance raises (429 YFRateLimitError, a timeout, a
-        # transport error) is not an answer: the row is marked `unavailable`
-        # and the consumers ask again. An empty frame is taken as "no intraday
-        # bars" (a money-market fund) — yfinance swallows other failures into
-        # an empty frame too, which is why the consumers re-ask every symbol on
-        # every poll while an extended session is open rather than trusting it.
         def _retry_one(sym):
             try:
-                h = _yf.Ticker(sym).history(period="5d", interval="1m",
-                                            prepost=True, auto_adjust=False)
+                h = _yf.Ticker(sym).history(period="5d", interval="1m", prepost=True, auto_adjust=False)
             except Exception:
                 return sym, "unavailable"
             if h is None or getattr(h, "empty", True) or "Close" not in h.columns:
-                return sym, None
+                return sym, None   # no intraday bars (a fund): an answer
             return sym, _row(sym, h)
 
-        # Concurrently, not serially. Fifteen sequential single-ticker
-        # downloads held ONE network worker for the sum of their latencies —
-        # comfortably past the client's 10s deadline, so the whole
-        # extended-hours request timed out while still occupying a worker
-        # that other symbols were queued behind. Capped low: this runs
-        # inside a network worker, and the point is to stop being a
-        # head-of-line block, not to become a rate-limit generator.
-        # Small on purpose. This pool is PER REQUEST and different callers
-        # pass different symbol lists, so single-flight cannot collapse them:
-        # six network workers each servicing an extended_hours request would
-        # otherwise multiply out to 24 concurrent single-ticker downloads.
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(2, len(targets))) as ex:
             for sym, row in ex.map(_retry_one, targets):
                 if row == "unavailable":
-                    rows[at[sym]]["unavailable"] = True
+                    rows[sym]["unavailable"] = True
                 elif row is not None:
-                    rows[at[sym]] = row
-        # Past the retry cap nothing was asked: not an answer either.
+                    rows[sym] = row
         for sym in missing[_EXT_RETRY_MAX:]:
-            rows[at[sym]]["unavailable"] = True
+            rows[sym]["unavailable"] = True   # never asked: not an answer either
     return rows
 
 
@@ -6291,7 +6165,12 @@ def _v7_quotes(symbols, fields, chunk=50):
     for i in range(0, len(symbols), chunk):
         r = YfData().get_raw_json(_V7_QUOTE_URL, timeout=10, params={
             "symbols": ",".join(symbols[i:i + chunk]), "formatted": "false", "fields": fields})
-        rows += ((r or {}).get("quoteResponse") or {}).get("result") or []
+        # A body without a quoteResponse is not "Yahoo knows none of these":
+        # raise, so a caller can tell a refusal from an answer.
+        resp = r.get("quoteResponse") if isinstance(r, dict) else None
+        if not isinstance(resp, dict):
+            raise RuntimeError("batch quote: no quoteResponse in the answer")
+        rows += resp.get("result") or []
     return rows
 
 
@@ -6498,30 +6377,23 @@ def _empty_ext_row(sym, session, unavailable=False):
     """A row with nothing in it. `unavailable` = the source refused or dropped
     the request (ask again); without it, the symbol simply has no prints."""
     return {
-        "symbol": sym, "regular": None,
-        "pre_market": None, "post_market": None,
-        "ext_price": None, "ext_change": None, "ext_change_pct": None,
-        "regular_ts": None, "pre_market_ts": None, "post_market_ts": None,
-        "ext_ts": None,
-        "session": session, "currency": "", "name": sym,
+        "symbol": sym, "session": session,
+        "regular": None, "regular_ts": None,
+        "pre": None, "post": None,
+        "currency": "", "name": sym,
         "declined": False, "unavailable": bool(unavailable),
     }
 
 
-def _ext_session_label(now_et, symbol=None, seen=None):
-    """The session label (PRE/REGULAR/POST/CLOSED) of `symbol`'s row at `now_et`.
+def _ext_session_label(now_et):
+    """The session label (PRE/REGULAR/POST/CLOSED) of a bar-path row (a
+    future, FX pair, coin or foreign listing) at `now_et`.
 
-    Not cosmetic: quote_from_row pairs today's pre-market with `regular` only
-    under PRE/REGULAR, so the label must flip exactly when the reference does.
-    For a plain US stock that is extended_rules' — the real bell (13:00 on an
-    early close), CLOSED on a holiday or an unscheduled closure (`seen`: the ET
-    dates the market printed). Futures, FX and other listings keep the clock
-    rule their settle-based reference was written against: the US equity
-    calendar is not theirs (CME trades MLK Day and a full day after
-    Thanksgiving)."""
-    import extended_rules
-    if symbol is not None and extended_rules.has_us_extended_session(symbol):
-        return extended_rules.session_label(now_et, seen)
+    Not cosmetic: today's pre-market window pairs with `regular` only under
+    PRE/REGULAR, so the label must flip exactly when the reference does. The
+    plain clock rule the settle-based reference was written against — the US
+    equity calendar is not theirs (CME trades MLK Day and a full day after
+    Thanksgiving). Plain US stocks take extended_rules.session_label."""
     if now_et.weekday() >= 5:
         return "CLOSED"
     h, m = now_et.hour, now_et.minute

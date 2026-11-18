@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""The two extended-hours views must agree about the same session.
+"""The EXT% source and the ER Extended Hours box must agree about a session.
 
-yfinance_data.get_extended_hours_quotes (the AFT% column) and
-extended_sessions.fetch (the ER Overview's Extended Hours box) present Yahoo's
-1-minute prepost bars differently — one row against the last completed close,
-versus each session against its own close — but both take the facts from
-extended_rules. Here the SAME stubbed frames go through both real entry points
-at a frozen clock, and the after-hours price, the pre-market price and the
-close each is measured against must come out identical.
-
-Before the rules were shared they did not: the AFT row counted the 16:00 bar
-as the close when the daily frame lacked the symbol (its close is an
-after-hours print) and never as after-hours, the ER box the other way round;
-on an early close the AFT row kept the 16:00 bell; the ER box had no
-minute-bar fallback at all.
+yfinance_data.get_extended_hours_quotes (every EXT% surface, and the ER box's
+headline price) reads Yahoo's batch quote; extended_sessions.fetch (the ER
+box's range, volume and minutes) reads 1-minute prepost bars. Two sources,
+one set of rules (extended_rules): here the quote Yahoo would serve for a tape
+and the bars of that tape go through both real entry points at a frozen clock,
+and each session's print, its instant, its day and the close it is measured
+against must come out identical — on an ordinary week, an early close, after a
+holiday and around an unscheduled closure.
 
 Self-contained: no network, no pytest.
 """
@@ -91,12 +86,49 @@ def multi(frame):
     return pd.concat([frame], axis=1, keys=[SYM], names=["Ticker", "Price"])
 
 
-# ── both entry points, one clock, one set of frames ──────────────────────────
+# ── what Yahoo's batch quote says about the same tape ────────────────────────
+
+def _in(t, day, window):
+    return t.date() == day and window[0] <= t.time() < window[1]
+
+
+def quote_at(bars, closes, now, sym=SYM):
+    """The v7 quote row Yahoo serves at `now` for these bars: the last regular
+    price (the official close once the bell has rung), the close before it,
+    and the latest pre-market / after-hours print with its time."""
+    seen = [(t, p) for t, p in bars if t < now]
+    reg_days = sorted({t.date() for t, _ in seen if _in(t, t.date(), xr.regular_window(t.date()))})
+    q = {"symbol": sym, "marketState": "TEST"}
+    if reg_days:
+        d = reg_days[-1]
+        done = d < now.date() or now.time() >= xr.bell(d)
+        last_t, last_p = [(t, p) for t, p in seen if _in(t, d, xr.regular_window(d))][-1]
+        if done and d in closes:
+            q["regularMarketPrice"] = closes[d]
+            q["regularMarketTime"] = int(datetime.combine(d, xr.bell(d), tzinfo=ET).timestamp())
+        else:
+            q["regularMarketPrice"], q["regularMarketTime"] = last_p, int(last_t.timestamp())
+        if len(reg_days) > 1 and reg_days[-2] in closes:
+            q["regularMarketPreviousClose"] = closes[reg_days[-2]]
+    for key, window_of in (("postMarket", xr.post_window), ("preMarket", lambda d: xr.PRE_WINDOW)):
+        hits = [(t, p) for t, p in seen if _in(t, t.date(), window_of(t.date()))]
+        if hits:
+            q[key + "Price"], q[key + "Time"] = hits[-1][1], int(hits[-1][0].timestamp())
+    return q
+
+
+# ── both entry points, one clock, one tape ───────────────────────────────────
 
 def run_both(bars, closes, now):
-    """(AFT row, ER answer) for the frames as they stood at `now`."""
+    """(EXT row, ER answer) for the tape as it stood at `now`.
+
+    The EXT row reads the quote, the ER box reads bars — two sources, one set
+    of rules (extended_rules). Two symbols carry the same quote, as a book
+    would: the newest regular day across the book is the evidence of an
+    unscheduled closure."""
     one_min = minute_frame(bars, now)
     daily = daily_frame({d: c for d, c in closes.items() if d <= now.date()})
+    quote = quote_at(bars, closes, now)
 
     class FrozenDatetime(_datetime_mod.datetime):
         @classmethod
@@ -112,10 +144,6 @@ def run_both(bars, closes, now):
     yf = sys.modules["yfinance"]
     saved = {k: getattr(yf, k, None) for k in ("download", "Ticker")}
 
-    def download(symbols, **kw):
-        frame = daily if kw.get("interval") == "1d" else one_min
-        return multi(frame) if not frame.empty else pd.DataFrame()
-
     class Ticker:
         def __init__(self, sym):
             self.sym = sym
@@ -123,68 +151,50 @@ def run_both(bars, closes, now):
         def history(self, **kw):
             return daily if kw.get("interval") == "1d" else one_min
 
-    yf.download, yf.Ticker = download, Ticker
+    def no_download(*a, **kw):
+        raise AssertionError("the EXT row of a US stock must not download bars")
+
+    yf.download, yf.Ticker = no_download, Ticker
+    real_v7 = yd._v7_quotes
+    yd._v7_quotes = lambda symbols, fields, chunk=50: [dict(quote, symbol=s) for s in symbols]
     real_dt, real_es_dt, real_xs_dt, real_nasdaq = sys.modules["datetime"], es.datetime, xs.datetime, es._nasdaq
     sys.modules["datetime"] = shim
     es.datetime = xs.datetime = FrozenDatetime
     es._nasdaq = lambda *a, **k: None   # the volume is not under test
     es._daily_cache.clear()
     try:
-        aft = yd.get_extended_hours_quotes([SYM])[0]
+        ext = yd.get_extended_hours_quotes([SYM, "AAPL"])[0]
         er = es.fetch(SYM)
     finally:
         sys.modules["datetime"], es.datetime, es._nasdaq = real_dt, real_es_dt, real_nasdaq
         xs.datetime = real_xs_dt
+        yd._v7_quotes = real_v7
         for k, v in saved.items():
             if v is None:
                 yf.__dict__.pop(k, None)
             else:
                 setattr(yf, k, v)
-    return aft, er
-
-
-def ts_date(ts):
-    return datetime.fromtimestamp(ts, ET).date().isoformat() if ts is not None else None
+    return ext, er
 
 
 def same(a, b):
     return a is not None and b is not None and abs(a - b) < 1e-9
 
 
-def agree_after_hours(label, aft, er):
-    a = er.get("after_hours")
-    check(f"{label}: both see an after-hours session", a is not None and aft["post_market"] is not None,
-          f"aft={aft['post_market']} er={a}")
-    if a is None:
+def agree(label, name, ext_session, er_session):
+    """One session, as the EXT row and the ER box each see it: the same print,
+    the same instant, the same close of the same day."""
+    q, s = ext_session, er_session
+    check(f"{label}: both see the {name}", q is not None and s is not None, f"ext={q} er={s}")
+    if q is None or s is None:
         return
-    check(f"{label}: same after-hours price", same(aft["post_market"], a["last"]),
-          f"aft={aft['post_market']} er={a['last']}")
-    check(f"{label}: same after-hours instant", aft["post_market_ts"] == a["last_ts"],
-          f"aft={aft['post_market_ts']} er={a['last_ts']}")
-    check(f"{label}: after-hours against the same close", same(aft["regular"], a["ref_close"]),
-          f"aft={aft['regular']} er={a['ref_close']}")
-    check(f"{label}: ... of the same day", ts_date(aft["regular_ts"]) == a["ref_date"],
-          f"aft={ts_date(aft['regular_ts'])} er={a['ref_date']}")
-
-
-def agree_pre_market(label, aft, er, paired):
-    p = er.get("pre_market")
-    check(f"{label}: both see the pre-market", p is not None and aft["pre_market"] is not None,
-          f"aft={aft['pre_market']} er={p}")
-    if p is None:
-        return
-    check(f"{label}: same pre-market price", same(aft["pre_market"], p["last"]),
-          f"aft={aft['pre_market']} er={p['last']}")
-    check(f"{label}: same pre-market instant", aft["pre_market_ts"] == p["last_ts"],
-          f"aft={aft['pre_market_ts']} er={p['last_ts']}")
-    if paired:
-        # Before the bell the AFT row's `regular` IS the pre-market's close.
-        check(f"{label}: pre-market against the same close", same(aft["regular"], p["ref_close"]),
-              f"aft={aft['regular']} er={p['ref_close']}")
-        check(f"{label}: ... of the same day", ts_date(aft["regular_ts"]) == p["ref_date"],
-              f"aft={ts_date(aft['regular_ts'])} er={p['ref_date']}")
-        check(f"{label}: same pre-market percentage", same(aft["ext_change_pct"], p["pct"]),
-              f"aft={aft['ext_change_pct']} er={p['pct']}")
+    check(f"{label}: same {name} price", same(q["price"], s["last"]), f"ext={q['price']} er={s['last']}")
+    check(f"{label}: same {name} instant", q["ts"] == s["last_ts"], f"ext={q['ts']} er={s['last_ts']}")
+    check(f"{label}: same {name} day", q["day"] == s["date"], f"ext={q['day']} er={s['date']}")
+    check(f"{label}: {name} against the same close", same(q["ref"], s["ref_close"]),
+          f"ext={q['ref']} er={s['ref_close']}")
+    check(f"{label}: ... of the same day", q["ref_date"] == s["ref_date"],
+          f"ext={q['ref_date']} er={s['ref_date']}")
 
 
 # ── an ordinary week: Wed 12, Thu 13, Fri 14 August 2026 ─────────────────────
@@ -197,44 +207,31 @@ BARS = (minutes(WED, "08:00", 10, 498.0, 0.1) + minutes(WED, "15:50", 10, 499.0,
         + minutes(FRI, "07:00", 30, 512.0, 0.02))
 CLOSES = {WED: 500.00, THU: 510.00, FRI: 515.00}
 
-for official in (True, False):
-    closes = CLOSES if official else {}
-    tag = "official close" if official else "no daily frame"
+# POST: Thursday 18:00. After-hours against Thursday's close; this morning's
+# pre-market is still on show — against WEDNESDAY's close, in both.
+ext, er = run_both(BARS, CLOSES, datetime(2026, 8, 13, 18, 0, tzinfo=ET))
+check("POST: the EXT row is in POST", ext["session"] == "POST", ext["session"])
+agree("POST", "after-hours", ext["post"], er.get("after_hours"))
+agree("POST", "pre-market", ext["pre"], er.get("pre_market"))
+check("POST: this morning's pre-market is measured against Wednesday's close",
+      (ext["pre"] or {}).get("ref_date") == WED.isoformat(), str(ext["pre"]))
+check("POST: the last close is Thursday's official one",
+      same(ext["regular"], 510.00) and ext["regular_ts"] == int(xr.close_instant(THU).timestamp()), str(ext))
+# The bell-minute bar is after-hours AND strictly after the close's stamp —
+# ExtendedHoursMath.h's reading_from_json rejects ts <= ref_ts.
+first = run_both(BARS, CLOSES, datetime(2026, 8, 13, 16, 0, 30, tzinfo=ET))[0]
+check("POST: a print in the bell minute pairs, strictly after the close",
+      first["post"] is not None and first["post"]["ts"] > first["post"]["ref_ts"], str(first["post"]))
+check("POST: the 16:00 bar is after-hours, so the session has 60+ minutes",
+      (er.get("after_hours") or {}).get("minutes", 0) >= 60, str((er.get("after_hours") or {}).get("minutes")))
 
-    # POST: Thursday 18:00. After-hours runs; the reference is Thursday's close.
-    aft, er = run_both(BARS, closes, datetime(2026, 8, 13, 18, 0, tzinfo=ET))
-    check(f"POST/{tag}: AFT row is in POST", aft["session"] == "POST", aft["session"])
-    agree_after_hours(f"POST/{tag}", aft, er)
-    # The ER box shows this morning's pre-market against Wednesday's close;
-    # the AFT row, whose `regular` is now Thursday's, must not carry it at all.
-    check(f"POST/{tag}: the AFT row withholds this morning's pre-market",
-          aft["pre_market"] is None and aft["pre_market_ts"] is None, str(aft["pre_market"]))
-    check(f"POST/{tag}: the ER box shows it, against Wednesday's close",
-          (er.get("pre_market") or {}).get("ref_date") == WED.isoformat())
-    # The bell-minute bar is after-hours AND strictly after the close's stamp —
-    # ExtendedHoursMath.h's pairing_is_sound rejects ext_ts <= regular_ts.
-    first = run_both(BARS, closes, datetime(2026, 8, 13, 16, 0, 30, tzinfo=ET))[0]
-    check(f"POST/{tag}: a print in the bell minute pairs, strictly after the close",
-          first["post_market"] is not None and first["post_market_ts"] > first["regular_ts"]
-          and first["ext_change_pct"] is not None,
-          f"post={first['post_market']} ts={first['post_market_ts']} reg_ts={first['regular_ts']}")
-    a = er.get("after_hours") or {}
-    check(f"POST/{tag}: same after-hours percentage", same(aft["ext_change_pct"], a.get("pct")),
-          f"aft={aft['ext_change_pct']} er={a.get('pct')}")
-    want_close = 510.00 if official else 509.0 + 0.12 * 9
-    check(f"POST/{tag}: the close is {'the official one' if official else 'the 15:59 minute, not the 16:00 bar'}",
-          same(aft["regular"], want_close), f"got {aft['regular']}")
-    check(f"POST/{tag}: the 16:00 bar is after-hours, so the session has 60+ minutes",
-          a.get("minutes", 0) >= 60, str(a.get("minutes")))
-
-    # PRE: Friday 08:00. Today's pre-market against Thursday's close; the
-    # after-hours on show is Thursday's, against the same close.
-    aft, er = run_both(BARS, closes, datetime(2026, 8, 14, 8, 0, tzinfo=ET))
-    check(f"PRE/{tag}: AFT row is in PRE", aft["session"] == "PRE", aft["session"])
-    agree_pre_market(f"PRE/{tag}", aft, er, paired=True)
-    agree_after_hours(f"PRE/{tag}", aft, er)
-    check(f"PRE/{tag}: the pre-market's close is Thursday's",
-          ts_date(aft["regular_ts"]) == THU.isoformat(), ts_date(aft["regular_ts"]))
+# PRE: Friday 08:00. Today's pre-market and Thursday's after-hours, both
+# against Thursday's close.
+ext, er = run_both(BARS, CLOSES, datetime(2026, 8, 14, 8, 0, tzinfo=ET))
+check("PRE: the EXT row is in PRE", ext["session"] == "PRE", ext["session"])
+agree("PRE", "pre-market", ext["pre"], er.get("pre_market"))
+agree("PRE", "after-hours", ext["post"], er.get("after_hours"))
+check("PRE: the pre-market's close is Thursday's", (ext["pre"] or {}).get("ref_date") == THU.isoformat())
 
 # ── an early close: Black Friday 2026, bell at 13:00 ─────────────────────────
 
@@ -243,12 +240,12 @@ BF_BARS = (minutes(WED2, "15:50", 10, 99.0, 0.01) + minutes(WED2, "16:00", 30, 9
            + minutes(BF, "08:00", 10, 100.0, 0.0) + minutes(BF, "12:50", 10, 101.0, 0.01)
            + minutes(BF, "13:00", 45, 101.5, 0.01))
 BF_CLOSES = {WED2: 99.10, BF: 101.10}
-aft, er = run_both(BF_BARS, BF_CLOSES, datetime(2026, 11, 27, 14, 0, tzinfo=ET))
-check("early close: 14:00 is POST, not REGULAR", aft["session"] == "POST", aft["session"])
-agree_after_hours("early close", aft, er)
+ext, er = run_both(BF_BARS, BF_CLOSES, datetime(2026, 11, 27, 14, 0, tzinfo=ET))
+check("early close: 14:00 is POST, not REGULAR", ext["session"] == "POST", ext["session"])
+agree("early close", "after-hours", ext["post"], er.get("after_hours"))
+agree("early close", "pre-market", ext["pre"], er.get("pre_market"))
 check("early close: after-hours is the half day's own, against its close",
-      (er.get("after_hours") or {}).get("date") == BF.isoformat() and same(aft["regular"], 101.10),
-      f"{aft['regular']} {(er.get('after_hours') or {}).get('date')}")
+      (ext["post"] or {}).get("day") == BF.isoformat() and same(ext["regular"], 101.10), str(ext["post"]))
 check("early close: the after-hours session is live", (er.get("after_hours") or {}).get("live") is True)
 
 # ── after a holiday: Tuesday 8 September 2026, Labor Day on the Monday ───────
@@ -256,40 +253,39 @@ check("early close: the after-hours session is live", (er.get("after_hours") or 
 FRI2, TUE2 = date(2026, 9, 4), date(2026, 9, 8)
 HOL_BARS = (minutes(FRI2, "15:50", 10, 50.0, 0.01) + minutes(FRI2, "16:00", 20, 50.2, 0.0)
             + minutes(TUE2, "07:00", 30, 51.0, 0.01))
-aft, er = run_both(HOL_BARS, {FRI2: 50.05}, datetime(2026, 9, 8, 8, 0, tzinfo=ET))
-agree_pre_market("after Labor Day", aft, er, paired=True)
+ext, er = run_both(HOL_BARS, {FRI2: 50.05}, datetime(2026, 9, 8, 8, 0, tzinfo=ET))
+agree("after Labor Day", "pre-market", ext["pre"], er.get("pre_market"))
 check("after Labor Day: the pre-market's close is Friday's",
-      (er.get("pre_market") or {}).get("ref_date") == FRI2.isoformat() and same(aft["regular"], 50.05),
-      f"{aft['regular']} {(er.get('pre_market') or {}).get('ref_date')}")
+      (ext["pre"] or {}).get("ref_date") == FRI2.isoformat() and same(ext["regular"], 50.05), str(ext))
 
 # ── an unscheduled closure: Thursday 9 January 2025 (national day of mourning) ─
 # The holiday calendar calls it a trading day. The data does not: no print at
-# all that day. It must be neither the AFT row's reference day (its missing
+# all that day. It must be neither the EXT row's reference day (its missing
 # close would decline every row) nor the pre-market's "session before".
 
 WED3, THU3, FRI3 = date(2025, 1, 8), date(2025, 1, 9), date(2025, 1, 10)
 MOURN_BARS = (minutes(WED3, "15:50", 10, 200.0, 0.01) + minutes(WED3, "16:00", 30, 201.0, 0.01)
               + minutes(FRI3, "07:00", 30, 203.0, 0.01))
 check("the calendar alone calls 9 Jan 2025 a trading day", xr.is_trading_day(THU3))
-aft, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 9, 18, 0, tzinfo=ET))
-check("closure evening: CLOSED, not POST", aft["session"] == "CLOSED", aft["session"])
+ext, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 9, 18, 0, tzinfo=ET))
+check("closure evening: CLOSED, not POST", ext["session"] == "CLOSED", ext["session"])
 check("closure evening: not declined, measured against Wednesday's close",
-      aft["declined"] is False and same(aft["regular"], 200.05) and ts_date(aft["regular_ts"]) == WED3.isoformat(),
-      f"declined={aft['declined']} regular={aft['regular']}")
-agree_after_hours("closure evening", aft, er)
-aft, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 10, 8, 0, tzinfo=ET))
-agree_pre_market("morning after the closure", aft, er, paired=True)
+      ext["declined"] is False and same(ext["regular"], 200.05), f"declined={ext['declined']} regular={ext['regular']}")
+agree("closure evening", "after-hours", ext["post"], er.get("after_hours"))
+ext, er = run_both(MOURN_BARS, {WED3: 200.05}, datetime(2025, 1, 10, 8, 0, tzinfo=ET))
+check("morning after the closure: not declined", ext["declined"] is False, str(ext))
+agree("morning after the closure", "pre-market", ext["pre"], er.get("pre_market"))
 check("morning after the closure: the pre-market's close is Wednesday's",
       (er.get("pre_market") or {}).get("ref_date") == WED3.isoformat(), str(er.get("pre_market")))
 
 # ── the label is per row: the equity calendar is not a future's ──────────────
 
 MLK = datetime(2026, 1, 19, 10, 0, tzinfo=ET)          # NYSE shut, CME open
-check("MLK Day 10:00: a US stock's row is CLOSED", yd._ext_session_label(MLK, "MSFT") == "CLOSED")
-check("MLK Day 10:00: ES=F keeps the clock rule", yd._ext_session_label(MLK, "ES=F") == "REGULAR")
+check("MLK Day 10:00: a US stock's row is CLOSED", xr.session_label(MLK) == "CLOSED")
+check("MLK Day 10:00: ES=F keeps the clock rule", yd._ext_session_label(MLK) == "REGULAR")
 BF14 = datetime(2026, 11, 27, 14, 0, tzinfo=ET)
-check("Black Friday 14:00: a US stock is POST", yd._ext_session_label(BF14, "MSFT") == "POST")
-check("Black Friday 14:00: ES=F is not", yd._ext_session_label(BF14, "ES=F") == "REGULAR")
+check("Black Friday 14:00: a US stock is POST", xr.session_label(BF14) == "POST")
+check("Black Friday 14:00: ES=F is not", yd._ext_session_label(BF14) == "REGULAR")
 
 # ── the shared calendar itself ───────────────────────────────────────────────
 

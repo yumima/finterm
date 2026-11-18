@@ -55,7 +55,7 @@ struct Column {
 constexpr Column kColumns[] = {
     {"SYM", 3, Qt::AlignLeft},       {"SHARES", 2, Qt::AlignRight}, // share counts are short; give the space away
     {"PRICE", 3, Qt::AlignRight},    {"VALUE", 3, Qt::AlignRight},  {"P&L%", 3, Qt::AlignRight},
-    {"DAY CHG%", 3, Qt::AlignRight}, {"AFT%", 4, Qt::AlignRight}, // widest: carries a sign, 2dp and a '%'
+    {"DAY CHG%", 3, Qt::AlignRight}, {"EXT%", 4, Qt::AlignRight}, // widest: a sign, 2dp, a '%' and a session tag
 };
 constexpr int kColSym = 0, kColShares = 1, kColPrice = 2, kColValue = 3, kColPnl = 4, kColDayChg = 5, kColAft = 6;
 
@@ -377,21 +377,23 @@ void PortfolioSummaryWidget::update_aft_header() {
     using State = services::ExtendedHoursService::State;
     const auto& ext = services::ExtendedHoursService::instance();
     static const QString kBase =
-        QLatin1String("Extended-hours move against the last regular close (pre-market, post-market or "
-                      "overnight).\nDuring the regular session it is already inside DAY CHG% — not additive.");
+        exthours::ext_definition() +
+        QLatin1String("\nThe latest print is shown, tagged with its session (PRE / AH / ON).\n"
+                      "During the regular session it is already inside DAY CHG% — not additive.");
+    const QString title = exthours::ext_column_title();
     switch (ext.state()) {
         case State::Idle:
-            aft_header_->setText(QStringLiteral("AFT%"));
+            aft_header_->setText(title);
             aft_header_->setToolTip(kBase);
             break;
         case State::Loading:
             // A suffix, not a replacement: the column keeps its name and its
             // last values while the fetch is out.
-            aft_header_->setText(QStringLiteral("AFT% ·"));
+            aft_header_->setText(title + QStringLiteral(" ·"));
             aft_header_->setToolTip(QString("%1\n\nFetching extended-hours prices…").arg(kBase));
             break;
         case State::Failed:
-            aft_header_->setText(QStringLiteral("AFT% !"));
+            aft_header_->setText(title + QStringLiteral(" !"));
             aft_header_->setToolTip(QString("%1\nExtended-hours fetch failed: %2").arg(kBase, ext.error()));
             break;
     }
@@ -542,8 +544,8 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         }
         cell(kColDayChg, chg_pct_str, chg_pct_color);
 
-        // AFT% — the extended-hours move, from a different feed than the rest
-        // of the row and blank whenever there is no extended print to show.
+        // EXT% — the latest extended-hours move with its session tag, from a
+        // different feed than the rest of the row; blank with no print to show.
         QString aft_str = QStringLiteral("--");
         QString aft_color = QString(ui::colors::TEXT_SECONDARY());
         QString aft_tip = QStringLiteral("No extended-hours trades in this name since the "
@@ -555,24 +557,18 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // number and any "consistency" test between them measures the move.
         const auto it = services::ExtendedHoursService::instance().quote(h.symbol);
         if (it) {
-            aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
+            aft_str = exthours::ext_cell_text(*it, 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
-            aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
-                          .arg(it->session == QLatin1String("PRE")         ? QStringLiteral("Pre")
-                               : it->session == QLatin1String("OVERNIGHT") ? QStringLiteral("Overnight")
-                                                                           : QStringLiteral("Post"))
-                          .arg(it->price, 0, 'f', 2)
-                          .arg(it->regular, 0, 'f', 2)
-                          .arg(h.shares > 0
-                                   ? QString("\n%1 on this position")
-                                         .arg((it->price - it->regular) * h.shares * h.fx_rate >= 0
-                                                  ? QString("+$%1").arg(
-                                                        (it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2)
-                                                  : QString("-$%1").arg(
-                                                        -(it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2))
-                                   : QString())
-                          // EVENT-STAMP: when it last arrived — a fetch, or a live print's own time.
-                          .arg(QDateTime::fromSecsSinceEpoch(it->updated_at).toString("HH:mm:ss"));
+            const double pos = (it->price - it->regular) * h.shares * h.fx_rate;
+            // One multi-arg call: the quote line carries '%' signs.
+            aft_tip = QString("%1, as of %2%3")
+                          .arg(exthours::ext_quote_line(*it),
+                               // EVENT-STAMP: when it last arrived — a fetch, or a live print's own time.
+                               QDateTime::fromSecsSinceEpoch(it->updated_at).toString("HH:mm:ss"),
+                               h.shares > 0 ? QString("\n%1$%2 on this position")
+                                                  .arg(pos >= 0 ? "+" : "-")
+                                                  .arg(std::abs(pos), 0, 'f', 2)
+                                            : QString());
         }
         cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);
 

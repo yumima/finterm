@@ -1,45 +1,60 @@
 // tests/screens/test_extended_hours_math.cpp
 //
-// The AFT% column reports which way a holding moved after the bell, and a sign
-// error there is not a degraded answer — it is the opposite one. AAPL fell
-// 6.5% after its print and the dashboard showed it up 6.3%; the arithmetic
-// that produced that was unremarkable to read, which is why these cases exist.
+// The EXT% surfaces report how a holding moved outside the regular session.
+// Three numbers have been on screen and wrong: a sign inversion (AAPL down
+// 6.5% shown up 6.3%), today's pre-market against today's close (AMZN -7.82%
+// on a +3.9% day), and — 2026-11-18 — NVDA "+1.3%" on the portfolio beside
+// "+4.81%" in Equity Research: the overnight print and the after-hours print,
+// both real, neither named. Each case below is one of those.
 //
-// The fixtures below are real `extended_hours` payloads captured from the
-// daemon on 30 Jul 2026 after the close, not invented numbers.
+// Prices are real: AAPL/AMZN from the daemon on 30 Jul 2026 after the close;
+// NVDA from Yahoo's quote and push stream at 00:14 ET on 18 Nov 2026.
 
 #include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "services/equity/ExtendedSessions.h"
 
 #include <QtTest/QtTest>
 
 using namespace finterm::screens::widgets::exthours;
+namespace eq = finterm::services::equity;
 
 namespace {
 
-/// Captured verbatim: AAPL reported and sold off, AMZN reported and rallied.
-// Real bar times from the same capture: the close printed at 16:00 ET and the
-// last post-market bar at 19:59 ET on 30 Jul 2026.
-constexpr qint64 kClose30Jul = 1785441600;   // 16:00 ET
-constexpr qint64 kPost30Jul  = 1785455940;   // 19:59 ET
-constexpr qint64 kNow        = 1785470000;   // shortly after, same evening
+constexpr qint64 kClose30Jul = 1785441599; // 15:59:59 ET — the official close's instant
+constexpr qint64 kPost30Jul = 1785455940;  // 19:59 ET
+constexpr qint64 kNow = 1785470000;        // later that evening
 
-QJsonObject row(const QString& symbol, double regular, double pre, double post,
-                const QString& session = QStringLiteral("CLOSED")) {
-    QJsonObject o;
-    o.insert("symbol", symbol);
-    o.insert("regular", regular);
-    o.insert("pre_market", pre);
-    o.insert("post_market", post);
-    o.insert("session", session);
-    o.insert("regular_ts", static_cast<qint64>(kClose30Jul));
-    o.insert("post_market_ts", static_cast<qint64>(kPost30Jul));
-    o.insert("pre_market_ts", static_cast<qint64>(kClose30Jul - 8 * 3600));
-    return o;
+QJsonObject session_json(double price, qint64 ts, double ref, qint64 ref_ts, const QString& day,
+                         const QString& ref_date) {
+    return QJsonObject{{"price", price}, {"ts", ts},          {"day", day},
+                       {"ref", ref},     {"ref_ts", ref_ts}, {"ref_date", ref_date}};
 }
 
-QJsonObject aapl() { return row("AAPL", 334.16, 333.06, 312.33); }
-QJsonObject amzn() { return row("AMZN", 235.49, 233.30, 257.95); }
-QJsonObject msft() { return row("MSFT", 451.50, 438.44, 448.47); }
+QJsonObject post_row(const QString& sym, double close, double post) {
+    return QJsonObject{{"symbol", sym},
+                       {"regular", close},
+                       {"regular_ts", kClose30Jul},
+                       {"declined", false},
+                       {"pre", QJsonValue()},
+                       {"post", session_json(post, kPost30Jul, close, kClose30Jul, "2026-07-30", "2026-07-30")}};
+}
+
+// NVDA, 17 Nov 2026: close 155.46 (16:00), after-hours last 162.94 at 19:59:59,
+// overnight print 157.48 (+2.02 against that close) at 00:14 on the 18th.
+constexpr qint64 kNvdaClose = 1794949199;
+constexpr qint64 kNvdaPost = 1794963599;
+constexpr qint64 kNvdaOvernightMs = 1794985000000LL;
+constexpr qint64 kNvdaNow = 1794985100;
+
+QJsonObject nvda_row() {
+    return QJsonObject{
+        {"symbol", "NVDA"},
+        {"regular", 155.46},
+        {"regular_ts", kNvdaClose},
+        {"declined", false},
+        {"pre", QJsonValue()},
+        {"post", session_json(162.94, kNvdaPost, 155.46, kNvdaClose, "2026-11-17", "2026-11-17")}};
+}
 
 } // namespace
 
@@ -47,249 +62,281 @@ class TestExtendedHoursMath : public QObject {
     Q_OBJECT
 
   private slots:
-    // The sign, on the real numbers, stated as plainly as possible.
+    // ── the arithmetic ──────────────────────────────────────────────────────
+
     void direction_matches_the_market() {
-        const auto a = quote_from_row(aapl(), /*in_pre_session=*/false);
-        QVERIFY(a.has_value());
-        QVERIFY2(a->pct < 0, qPrintable(QString("AAPL fell after the bell but read %1%")
-                                            .arg(a->pct)));
+        QHash<QString, SymbolExt> all;
+        apply_row(all, post_row("AAPL", 334.16, 312.33), kNow);
+        apply_row(all, post_row("AMZN", 235.49, 257.95), kNow);
+        const auto a = latest(all["AAPL"]);
+        const auto z = latest(all["AMZN"]);
+        QVERIFY(a && z);
+        QVERIFY2(a->pct < 0, qPrintable(QString("AAPL fell after the bell but read %1%").arg(a->pct)));
         QVERIFY(std::abs(a->pct - (-6.533)) < 0.01);
-
-        const auto z = quote_from_row(amzn(), false);
-        QVERIFY(z.has_value());
-        QVERIFY2(z->pct > 0, qPrintable(QString("AMZN rose after the bell but read %1%")
-                                            .arg(z->pct)));
-        QVERIFY(std::abs(z->pct - 9.538) < 0.01);
-
-        const auto m = quote_from_row(msft(), false);
-        QVERIFY(m.has_value());
-        QVERIFY(m->pct < 0);
+        QVERIFY2(z->pct > 0, qPrintable(QString("AMZN rose after the bell but read %1%").arg(z->pct)));
+        QCOMPARE(a->side, ExtSide::Post);
     }
 
-    // The specific inversion that shipped: dividing by the extended price
-    // instead of the close. It doesn't just rescale — it flips the sign, and
-    // the magnitude stays plausible enough to look like a real reading.
     void the_close_is_the_base_not_the_extended_price() {
-        const auto a = quote_from_row(aapl(), false);
-        QVERIFY(a.has_value());
-        const double inverted = (a->regular - a->price) / a->price * 100.0;
-        QVERIFY2(inverted > 0, "fixture no longer demonstrates the inversion");
-        QVERIFY2(a->pct < 0, "the leg divided by the extended price again");
-        // Both readings are ~6.5% in magnitude, which is exactly why the wrong
-        // one survived review: nothing about it looks out of range.
-        QVERIFY(std::abs(std::abs(inverted) - std::abs(a->pct)) < 1.0);
+        Reading r;
+        r.price = 93.0;
+        r.regular = 100.0;
+        QCOMPARE(r.pct(), -7.0); // dividing by the print would read -7.53%
     }
 
-    // Pre-market belongs to the PREVIOUS close. Pairing it with today's close
-    // after the session has ended computes the day's move backwards — which is
-    // what put −7.82% beside AMZN on a day it closed up 3.9%.
-    void pre_market_is_never_paired_with_a_post_session_close() {
-        QJsonObject o = amzn();
-        o.insert("post_market", QJsonValue());   // no post print yet
-        const auto q = quote_from_row(o, /*in_pre_session=*/false);
-        QVERIFY2(!q.has_value(), "fell back to pre-market against the wrong close");
+    void a_print_before_its_close_is_not_a_reading() {
+        QVERIFY(!reading_from_json(session_json(1.0, kClose30Jul - 60, 2.0, kClose30Jul, "", ""), kNow));
+        QVERIFY(!reading_from_json(session_json(0.0, kPost30Jul, 2.0, kClose30Jul, "", ""), kNow));
+        QVERIFY(!reading_from_json(QJsonObject{{"price", 5.0}}, kNow)); // no close: absent, never 0
     }
 
-    // Before the open the fallback IS correct: yesterday's post-market and
-    // today's pre-market both reference the same close.
-    void before_the_open_the_prior_post_market_is_a_valid_fallback() {
-        QJsonObject o = row("AAPL", 334.16, 0, 312.33, QStringLiteral("PRE"));
-        o.insert("pre_market", QJsonValue());
-        const auto q = quote_from_row(o, true);
-        QVERIFY(q.has_value());
-        QVERIFY(!q->from_pre);
-        QVERIFY(q->pct < 0);
+    // ── one reading per session ─────────────────────────────────────────────
 
-        // With a pre-market print present it wins, and is labelled as such.
-        const auto with_pre = quote_from_row(row("AAPL", 334.16, 340.00, 312.33,
-                                                 QStringLiteral("PRE")), true);
-        QVERIFY(with_pre.has_value());
-        QVERIFY(with_pre->from_pre);
-        QVERIFY(with_pre->pct > 0);
+    // The 2026-11-18 report: both numbers are real, so both are kept — each
+    // under its own session — and the portfolio shows the latest, NAMED.
+    void overnight_and_after_hours_are_separate_readings() {
+        QHash<QString, SymbolExt> all;
+        QCOMPARE(apply_row(all, nvda_row(), kNvdaNow), RowEffect::Updated);
+        QVERIFY(apply_print(all, "NVDA", 4, 157.48, 2.02, kNvdaOvernightMs, kNvdaNow));
+        const SymbolExt& x = all["NVDA"];
+        QVERIFY(x.at(ExtSide::Post) && x.at(ExtSide::Overnight));
+        QVERIFY(std::abs(x.at(ExtSide::Post)->pct() - 4.81) < 0.01);
+        QVERIFY(std::abs(x.at(ExtSide::Overnight)->pct() - 1.30) < 0.01);
+        const auto q = latest(x);
+        QVERIFY(q);
+        QCOMPARE(q->side, ExtSide::Overnight);
+        QCOMPARE(ext_cell_text(*q, 2), QStringLiteral("+1.30% ON"));
+        QVERIFY(ext_quote_line(*q).startsWith(QStringLiteral("Overnight $157.48 vs the $155.46 close")));
     }
 
-    // A null extended print is "no trades", not a zero move.
-    void missing_prices_yield_no_quote() {
-        QJsonObject o = row("FNILX", 26.17, 0, 0);
-        o.insert("pre_market", QJsonValue());
-        o.insert("post_market", QJsonValue());
-        QVERIFY(!quote_from_row(o, false).has_value());
+    // The ER panel's headline for a session IS the service's reading — the
+    // same object — so it equals what the portfolio shows for that session.
+    void the_er_panel_headline_is_the_portfolio_reading() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, nvda_row(), kNvdaNow);
+        apply_print(all, "NVDA", 4, 157.48, 2.02, kNvdaOvernightMs, kNvdaNow);
+        const SymbolExt& x = all["NVDA"];
 
-        QJsonObject no_close = aapl();
-        no_close.insert("regular", QJsonValue());
-        QVERIFY(!quote_from_row(no_close, false).has_value());
+        // Bars (extended_sessions.py) for the same after-hours session, a minute
+        // behind the quote: last 162.90, with range and volume.
+        eq::ExtSessions bars;
+        bars.after_hours.valid = true;
+        bars.after_hours.date = QDate(2026, 11, 17);
+        bars.after_hours.last = 162.90;
+        bars.after_hours.ref_close = 155.46;
+        bars.after_hours.ref_date = QDate(2026, 11, 17);
+        bars.after_hours.high = 163.50;
+        bars.after_hours.low = 155.10;
+        bars.after_hours.volume = 1.2e7;
+        bars.pre_market.valid = true;
+        bars.pre_market.date = QDate(2026, 11, 17);
+        bars.pre_market.last = 158.0;
+        bars.pre_market.ref_close = 156.14;
 
-        QJsonObject zero_close = aapl();
-        zero_close.insert("regular", 0.0);
-        QVERIFY(!quote_from_row(zero_close, false).has_value());
+        const auto shown = eq::with_live_readings(bars, x, kNvdaNow);
+        const auto& post = *x.at(ExtSide::Post);
+        QCOMPARE(shown.after_hours.last, post.price);
+        QCOMPARE(shown.after_hours.pct, post.pct());
+        QCOMPARE(shown.after_hours.ref_close, post.regular);
+        QCOMPARE(shown.after_hours.volume, 1.2e7); // the bars' facts stay: same session
+        QCOMPARE(shown.after_hours.high, 163.50);
+        // Overnight: the stream's reading, nothing the bars could add.
+        QVERIFY(shown.overnight.valid);
+        const auto q = latest(x);
+        QCOMPARE(shown.overnight.last, q->price);
+        QCOMPARE(shown.overnight.pct, q->pct);
+        QVERIFY(!std::isfinite(shown.overnight.volume));
+        QVERIFY(!std::isfinite(shown.overnight.high));
+        // A session the service has no reading for keeps the bars' own.
+        QCOMPARE(shown.pre_market.last, 158.0);
     }
 
-    // THE regression this guard exists to prevent. A previous version compared
-    // the daemon's close against the price the row was quoting and dropped the
-    // pair when they differed. But the quote feed rolls over to extended-hours
-    // prices, so for a stock that moved after the bell the row price IS the
-    // extended print — AAPL's row read $312.33 against a $334.16 close — and
-    // the "mismatch" being measured was the after-hours move itself. The guard
-    // hid every symbol that moved, and only those.
-    void a_big_move_is_never_suppressed_for_being_a_big_move() {
-        for (const auto& r : {aapl(), amzn()}) {
-            const auto q = quote_from_row(r, false);
-            QVERIFY(q.has_value());
-            QVERIFY2(pairing_is_sound(*q, kNow),
-                     qPrintable(QString("suppressed a %1% move").arg(q->pct)));
-        }
+    // Bars of an OLDER session than the reading: their range is another day's.
+    void bars_of_another_day_lend_no_range() {
+        SymbolExt x;
+        x.regular = 100;
+        Reading r;
+        r.price = 101;
+        r.regular = 100;
+        r.print_ts = 2000;
+        r.day = QDate(2026, 11, 18);
+        x.at(ExtSide::Post) = r;
+        eq::ExtSessions bars;
+        bars.after_hours.valid = true;
+        bars.after_hours.date = QDate(2026, 11, 17);
+        bars.after_hours.last = 99;
+        bars.after_hours.high = 120;
+        bars.after_hours.low = 80;
+        bars.after_hours.volume = 5;
+        const auto shown = eq::with_live_readings(bars, x, 3000);
+        QCOMPARE(shown.after_hours.last, 101.0);
+        QCOMPARE(shown.after_hours.date, QDate(2026, 11, 18));
+        QVERIFY(!std::isfinite(shown.after_hours.high));
+        QVERIFY(!std::isfinite(shown.after_hours.volume));
     }
 
-    // What a real mismatch looks like: the close is from days ago, so the
-    // percentage against it is a multi-day return, not an after-hours move.
-    void a_stale_close_is_rejected() {
-        QJsonObject o = aapl();
-        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 9 * 86400));
-        const auto q = quote_from_row(o, false);
-        QVERIFY(q.has_value());
-        QVERIFY(!pairing_is_sound(*q, kNow));
+    // ── which reading is the latest move ────────────────────────────────────
+
+    // After the bell this morning's pre-market is still a true pre-market
+    // reading (against yesterday's close) — but not a move since TODAY's
+    // close, so the portfolio does not show it (the AMZN -7.82% inversion).
+    void this_mornings_pre_market_is_not_the_move_after_the_bell() {
+        QHash<QString, SymbolExt> all;
+        const qint64 yclose = kClose30Jul - 86400;
+        QJsonObject morning{{"symbol", "AMZN"},
+                            {"regular", 226.0},
+                            {"regular_ts", yclose},
+                            {"pre", session_json(218.0, kClose30Jul - 8 * 3600, 226.0, yclose, "2026-07-30",
+                                                 "2026-07-29")}};
+        apply_row(all, morning, kClose30Jul - 7 * 3600);
+        QCOMPARE(latest(all["AMZN"])->side, ExtSide::Pre); // in the morning it IS the move
+        // 16:05: today's close is in, no after-hours print yet.
+        QJsonObject evening{{"symbol", "AMZN"}, {"regular", 235.0}, {"regular_ts", kClose30Jul}};
+        QCOMPARE(apply_row(all, evening, kClose30Jul + 300), RowEffect::Updated);
+        QVERIFY(!latest(all["AMZN"]));
+        QVERIFY(all["AMZN"].at(ExtSide::Pre)); // kept for the ER panel, with its own close
+        QCOMPARE(all["AMZN"].at(ExtSide::Pre)->regular, 226.0);
     }
 
-    // The extended print must come after the close it is measured against.
-    void an_extended_print_before_the_close_is_rejected() {
-        QJsonObject o = aapl();
-        o.insert("post_market_ts", static_cast<qint64>(kClose30Jul - 3600));
-        const auto q = quote_from_row(o, false);
-        QVERIFY(q.has_value());
-        QVERIFY(!pairing_is_sound(*q, kNow));
+    // Before the open, yesterday's after-hours is still a move since the last
+    // close (they share it), until this morning's pre-market prints.
+    void before_the_open_the_prior_after_hours_is_the_move() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, post_row("MSFT", 500.0, 490.0), kNow);
+        QCOMPARE(latest(all["MSFT"])->side, ExtSide::Post);
+        QVERIFY(apply_print(all, "MSFT", 0, 505.0, 5.0, (kPost30Jul + 9 * 3600) * 1000, kNow));
+        const auto q = latest(all["MSFT"]);
+        QCOMPARE(q->side, ExtSide::Pre);
+        QCOMPARE(q->pct, 1.0);
     }
 
-    // Mid-session, `regular` is still YESTERDAY's close — today's bell hasn't
-    // rung — so this morning's pre-market print is both correctly paired
-    // against it and the most recent extended move there is. Preferring
-    // yesterday's post-market instead left a day-old number in a column whose
-    // tooltip promises the last one.
-    void during_the_regular_session_this_mornings_pre_market_wins() {
-        QJsonObject o = row("AAPL", 334.16, 340.00, 312.33,
-                            QStringLiteral("REGULAR"));
-        // Mid-session the daemon's reference is the PREVIOUS close, so the
-        // timestamps have to say so too — otherwise this morning's pre-market
-        // print predates its own reference and the soundness check drops it.
-        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 86400));
-        o.insert("pre_market_ts", static_cast<qint64>(kClose30Jul - 8 * 3600));
+    // ── merging fetch and stream ────────────────────────────────────────────
 
-        const auto q = quote_from_row(o, /*in_pre_session=*/false);
-        QVERIFY(q.has_value());
-        QVERIFY2(q->from_pre, "fell back to yesterday's post-market mid-session");
-        QCOMPARE(q->price, 340.00);
-        QVERIFY(q->pct > 0);
-        QVERIFY2(pairing_is_sound(*q, kNow),
-                 "the mid-session pre-market pairing was rejected as unsound");
-    }
-
-    // …and with no pre-market print yet, yesterday's post-market is still a
-    // valid answer mid-session: it references the same close.
-    void the_regular_session_still_falls_back_to_the_prior_post_market() {
-        QJsonObject o = row("AAPL", 334.16, 0, 312.33, QStringLiteral("REGULAR"));
-        o.insert("pre_market", QJsonValue());
-        const auto q = quote_from_row(o, false);
-        QVERIFY(q.has_value());
-        QVERIFY(!q->from_pre);
-        QCOMPARE(q->price, 312.33);
-    }
-
-    // An explicit null ext_price is the daemon withholding a pairing it judged
-    // dishonest — a reference bar from an earlier day. This function rebuilds
-    // the percentage from the raw prints and never reads ext_price, so without
-    // this it reconstructed the exact number that was withheld, and
-    // pairing_is_sound waved it through: a two-day-old close is well inside
-    // the five-day tolerance.
-    void an_explicitly_withheld_extended_price_is_not_recomputed() {
-        QJsonObject o = row("FNILX", 30.00, 0, 27.90);
-        o.insert("pre_market", QJsonValue());
-        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 2 * 86400));
-        o.insert("ext_price", QJsonValue());   // daemon: no honest pairing here
-        QVERIFY(!quote_from_row(o, false).has_value());
-
-        // Sanity: the fixture really would have produced a number, and the
-        // timestamp guard really would not have stopped it.
-        QJsonObject without_the_field = o;
-        without_the_field.remove("ext_price");
-        const auto q = quote_from_row(without_the_field, false);
-        QVERIFY(q.has_value());
-        QVERIFY(std::abs(q->pct - (-7.0)) < 0.01);
-        QVERIFY(pairing_is_sound(*q, kNow));
-    }
-
-    // Silence is not evidence of a bad pairing: a payload without times is
-    // shown rather than dropped.
-    void a_payload_without_timestamps_is_not_judged() {
-        QJsonObject o = aapl();
-        o.remove("regular_ts");
-        o.remove("post_market_ts");
-        const auto q = quote_from_row(o, false);
-        QVERIFY(q.has_value());
-        QVERIFY(pairing_is_sound(*q, kNow));
-    }
-
-    // ── apply_row / apply_print: the one merge rule every AFT surface uses ──
-
-    // 2026-11-17: Yahoo 429'd the app's first minute, the rows came back
-    // empty, and the heatmap read "empty" as "declined" — tiles blank for
-    // good, live prints shut out. A refused row keeps what is shown and
-    // leaves the symbol open to a print.
-    void a_refused_row_keeps_what_is_shown_and_admits_prints() {
-        QHash<QString, HeldQuote> quotes;
-        QSet<QString> declined;
-        QCOMPARE(apply_row(quotes, declined, aapl(), false, kNow), RowEffect::Updated);
-        QJsonObject refused{{"symbol", "AAPL"}, {"ext_price", QJsonValue::Null}, {"unavailable", true}};
-        QCOMPARE(apply_row(quotes, declined, refused, false, kNow), RowEffect::Unavailable);
-        QVERIFY(quotes.contains("AAPL"));
-
-        QJsonObject amzn_refused{{"symbol", "AMZN"}, {"ext_price", QJsonValue::Null}, {"unavailable", true}};
-        apply_row(quotes, declined, amzn_refused, false, kNow);
-        QVERIFY(!declined.contains("AMZN"));
-        // AMZN post-market print: 260.20, +2.31 on the 257.89 close.
-        QVERIFY(apply_print(quotes, declined, "AMZN", 2, 260.20, 2.31, kNow * 1000, kNow));
-        QVERIFY(quotes.contains("AMZN"));
-        QVERIFY(quotes["AMZN"].pct > 0);
-    }
-
-    // A null ext_price on its own is "no print yet", not a refusal.
-    void a_null_ext_price_is_not_a_decline() {
-        QHash<QString, HeldQuote> quotes;
-        QSet<QString> declined;
-        QJsonObject empty{{"symbol", "MSFT"}, {"ext_price", QJsonValue::Null}, {"regular", 505.0}};
-        apply_row(quotes, declined, empty, false, kNow);
-        QVERIFY(!declined.contains("MSFT"));
-        QVERIFY(apply_print(quotes, declined, "MSFT", 2, 510.0, 5.0, kNow * 1000, kNow));
-    }
-
-    // The explicit decline (a stale reference close) still shuts the door.
-    void a_declined_row_removes_and_blocks_prints() {
-        QHash<QString, HeldQuote> quotes;
-        QSet<QString> declined;
-        apply_row(quotes, declined, aapl(), false, kNow);
-        QJsonObject stale = aapl();
-        stale.insert("declined", true);
-        QCOMPARE(apply_row(quotes, declined, stale, false, kNow), RowEffect::Declined);
-        QVERIFY(!quotes.contains("AAPL"));
-        QVERIFY(!apply_print(quotes, declined, "AAPL", 2, 300.0, -34.16, kNow * 1000, kNow));
-    }
-
-    // A live print newer than the fetched bar, against the same close, wins.
     void a_newer_live_print_outlives_an_older_fetch() {
-        QHash<QString, HeldQuote> quotes;
-        QSet<QString> declined;
-        apply_row(quotes, declined, aapl(), false, kNow);
-        QVERIFY(apply_print(quotes, declined, "AAPL", 2, 310.0, 310.0 - 334.16, (kPost30Jul + 60) * 1000, kNow));
-        QCOMPARE(apply_row(quotes, declined, aapl(), false, kNow), RowEffect::Kept);
-        QCOMPARE(quotes["AAPL"].price, 310.0);
+        QHash<QString, SymbolExt> all;
+        apply_row(all, post_row("AAPL", 334.16, 312.33), kNow);
+        QVERIFY(apply_print(all, "AAPL", 2, 310.0, 310.0 - 334.16, (kPost30Jul + 60) * 1000, kNow));
+        QCOMPARE(apply_row(all, post_row("AAPL", 334.16, 312.33), kNow), RowEffect::Kept);
+        QCOMPARE(all["AAPL"].at(ExtSide::Post)->price, 310.0);
+        // The print-built reading learnt its close's day from the fetched one.
+        QCOMPARE(all["AAPL"].at(ExtSide::Post)->regular_day, QDate(2026, 7, 30));
     }
 
-    // No print against a NEW close: the old move (another close's) goes.
-    void a_move_against_another_close_is_dropped() {
-        QHash<QString, HeldQuote> quotes;
-        QSet<QString> declined;
-        apply_row(quotes, declined, aapl(), false, kNow);
-        QJsonObject next{{"symbol", "AAPL"}, {"regular", 320.0}, {"session", "POST"}};
-        QCOMPARE(apply_row(quotes, declined, next, false, kNow), RowEffect::Removed);
-        QVERIFY(!quotes.contains("AAPL"));
+    // A reconnect can replay prints: an older one changes nothing, in any session.
+    void a_replayed_older_print_changes_nothing() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, nvda_row(), kNvdaNow);
+        QVERIFY(apply_print(all, "NVDA", 4, 157.48, 2.02, kNvdaOvernightMs, kNvdaNow));
+        QVERIFY(!apply_print(all, "NVDA", 4, 150.00, 150.00 - 155.46, kNvdaOvernightMs - 60'000, kNvdaNow));
+        QVERIFY(!apply_print(all, "NVDA", 2, 140.00, 140.00 - 155.46, (kNvdaPost - 600) * 1000, kNvdaNow));
+        QCOMPARE(all["NVDA"].at(ExtSide::Overnight)->price, 157.48);
+        QCOMPARE(all["NVDA"].at(ExtSide::Post)->price, 162.94);
+    }
+
+    // A future / coin / foreign listing is measured against its settle by the
+    // fetch; its stream change is against something else, so a print may only
+    // move a reading against the SAME close — never start one or swap closes.
+    void a_non_us_print_never_starts_or_rebases_a_reading() {
+        QHash<QString, SymbolExt> all;
+        QVERIFY(!apply_print(all, "BTC-USD", 0, 91000.0, 1900.0, kNow * 1000, kNow));
+        QVERIFY(!all.value("BTC-USD").at(ExtSide::Pre));
+        QJsonObject es{{"symbol", "ES=F"},
+                       {"regular", 7359.0},
+                       {"regular_ts", kClose30Jul},
+                       {"post", session_json(7372.5, kPost30Jul, 7359.0, kClose30Jul, "2026-07-30", "2026-07-30")}};
+        apply_row(all, es, kNow);
+        QVERIFY(!apply_print(all, "ES=F", 2, 7380.0, 7380.0 - 7300.0, (kPost30Jul + 60) * 1000, kNow)); // other close
+        QCOMPARE(all["ES=F"].at(ExtSide::Post)->regular, 7359.0);
+        QVERIFY(apply_print(all, "ES=F", 2, 7380.0, 7380.0 - 7359.0, (kPost30Jul + 60) * 1000, kNow)); // same close
+        QCOMPARE(all["ES=F"].at(ExtSide::Post)->price, 7380.0);
+    }
+
+    // A session only the stream has seen yet (the bars trail it) is still
+    // shown as trading while it prints.
+    void a_print_only_session_is_live_while_it_prints() {
+        SymbolExt x;
+        Reading r;
+        r.price = 101;
+        r.regular = 100;
+        r.print_ts = 10'000;
+        r.day = QDate(2026, 11, 18);
+        x.at(ExtSide::Pre) = r;
+        QVERIFY(eq::with_live_readings({}, x, 10'060).pre_market.live);
+        QVERIFY(!eq::with_live_readings({}, x, 10'000 + 16 * 60).pre_market.live);
+    }
+
+    // A regular-session print is not an extended reading.
+    void a_regular_print_is_ignored() {
+        QHash<QString, SymbolExt> all;
+        QVERIFY(!apply_print(all, "NVDA", 1, 160.0, 4.0, kNvdaOvernightMs, kNvdaNow));
+        QVERIFY(!all.value("NVDA").at(ExtSide::Pre));
+    }
+
+    void the_same_print_again_is_not_news() {
+        QHash<QString, SymbolExt> all;
+        QCOMPARE(apply_row(all, nvda_row(), kNvdaNow), RowEffect::Updated);
+        QCOMPARE(apply_row(all, nvda_row(), kNvdaNow + 60), RowEffect::Kept);
+        QVERIFY(apply_print(all, "NVDA", 4, 157.48, 2.02, kNvdaOvernightMs, kNvdaNow));
+        QVERIFY(!apply_print(all, "NVDA", 4, 157.48, 2.02, kNvdaOvernightMs + 5000, kNvdaNow));
+    }
+
+    // ── the daemon's contract ───────────────────────────────────────────────
+
+    // 2026-11-17: Yahoo 429'd the app's first minute and the heatmap read the
+    // empty rows as declines — blank for good. A refusal keeps what is held
+    // and leaves the symbol open to prints.
+    void a_refused_row_keeps_what_is_held_and_admits_prints() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, post_row("AAPL", 334.16, 312.33), kNow);
+        QCOMPARE(apply_row(all, QJsonObject{{"symbol", "AAPL"}, {"unavailable", true}}, kNow),
+                 RowEffect::Unavailable);
+        QVERIFY(latest(all["AAPL"]));
+        QCOMPARE(apply_row(all, QJsonObject{{"symbol", "AMZN"}, {"unavailable", true}}, kNow),
+                 RowEffect::Unavailable);
+        QVERIFY(apply_print(all, "AMZN", 2, 260.20, 2.31, kNow * 1000, kNow));
+        QVERIFY(latest(all["AMZN"])->pct > 0);
+    }
+
+    void a_row_without_prints_is_not_a_decline() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, QJsonObject{{"symbol", "MSFT"}, {"regular", 505.0}, {"pre", QJsonValue()}}, kNow);
+        QVERIFY(!all["MSFT"].declined);
+        QVERIFY(apply_print(all, "MSFT", 2, 510.0, 5.0, kNow * 1000, kNow));
+    }
+
+    void a_declined_row_clears_and_blocks_prints() {
+        QHash<QString, SymbolExt> all;
+        apply_row(all, post_row("AAPL", 334.16, 312.33), kNow);
+        QJsonObject stale = post_row("AAPL", 334.16, 312.33);
+        stale.insert("declined", true);
+        QCOMPARE(apply_row(all, stale, kNow), RowEffect::Declined);
+        QVERIFY(!latest(all["AAPL"]));
+        QVERIFY(!all["AAPL"].at(ExtSide::Post));
+        QVERIFY(!apply_print(all, "AAPL", 2, 300.0, -34.16, kNow * 1000, kNow));
+    }
+
+    // ── one label set ───────────────────────────────────────────────────────
+
+    void every_session_has_one_key_tag_and_name() {
+        for (const ExtSide s : kSides) {
+            QCOMPARE(ext_side_from_key(ext_side_key(s)), std::optional<ExtSide>(s));
+            QVERIFY(!ext_side_tag(s).isEmpty());
+        }
+        QCOMPARE(ext_side_tag(ExtSide::Pre), QStringLiteral("PRE"));
+        QCOMPARE(ext_side_tag(ExtSide::Post), QStringLiteral("AH"));
+        QCOMPARE(ext_side_tag(ExtSide::Overnight), QStringLiteral("ON"));
+        QCOMPARE(ext_side_name(ExtSide::Post), QStringLiteral("After-hours"));
+        // Nothing but the after-hours session is ever called after-hours.
+        QVERIFY(!ext_side_name(ExtSide::Overnight).contains(QStringLiteral("fter")));
+        QVERIFY(!ext_side_name(ExtSide::Pre).contains(QStringLiteral("fter")));
+    }
+
+    // Mirrors extended_rules.has_us_extended_session (Python).
+    void only_plain_us_tickers_have_extended_sessions() {
+        for (const char* s : {"NVDA", "BRK.B", "BRK-B", "VFIAX"})
+            QVERIFY2(has_us_extended_session(s), s);
+        for (const char* s : {"^GSPC", "ES=F", "BTC-USD", "7203.T", "SHOP.TO", "", "TOOLONGX"})
+            QVERIFY2(!has_us_extended_session(s), s);
     }
 };
 

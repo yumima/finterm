@@ -23,10 +23,9 @@ namespace finterm::screens {
 ///      future (yfinance =F suffix, /XX TradingView, or a dated contract
 ///      code like ESZ6; a bare root is a stock ticker). Live quotes come from the DataHub's
 ///      `market:quote:<ROOT>=F` topics while the view is visible.
-///   2. **Extended hours** — every holding, with regular close + last
-///      pre/post-market price and the ext-hours move. Sourced from the
-///      yfinance daemon's `extended_hours` action (preMarketPrice /
-///      postMarketPrice fields on `Ticker.info`).
+///   2. **Extended hours** — every holding, with its regular close and its
+///      latest pre-market, after-hours or overnight print (the Session column
+///      names which). Read from services::ExtendedHoursService.
 class PortfolioFuturesView : public QWidget {
     Q_OBJECT
   public:

@@ -43,7 +43,7 @@ namespace {
 constexpr int kFutRefreshMs = 60'000;
 constexpr int kColFut = 4;
 constexpr auto kFutTip = "Each index's futures change since its previous close, live day and night — after the "
-                         "cash close, the index's after-hours move. Hover a cell for details.";
+                         "cash close, the index's move after-hours and overnight. Hover a cell for details.";
 } // namespace
 
 void QuoteTableWidget::build_table() {

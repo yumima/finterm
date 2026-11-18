@@ -7,6 +7,7 @@
 #include "services/markets/MarketDataService.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -23,9 +24,9 @@ namespace exthours = finterm::screens::widgets::exthours;
 
 namespace {
 
-// The heavy call: 5 days of 1-minute bars with pre/post for every watched
-// symbol. Between fetches the live stream moves each quote, so the poll only
-// has to catch what the stream can't (a symbol with no print yet, a new close).
+// One batch quote for the US names (~0.1 s), bars only for futures/FX/non-US.
+// Between fetches the live stream moves each reading, so the poll only has to
+// catch what the stream can't (a symbol with no print yet, a new close).
 constexpr int kPollMs = 60'000;
 // A cold Yahoo session (crumb handshake, one stalled symbol) has been measured
 // at 40 s for an 18-symbol book.
@@ -38,6 +39,11 @@ constexpr int kRetryMs = 5'000;
 // rate-limiting us is what keeps it rate-limiting us.
 constexpr qint64 kOwedBackoffSecs = 5 * 60;
 constexpr qint64 kOwedBackoffMaxSecs = 30 * 60;
+// How long an answer covers a symbol that leaves the screen and comes back.
+constexpr qint64 kCoveredSecs = 10 * 60;
+// A fetch slower than this is logged at INFO (with the first answer and any
+// refusal); the rest at DEBUG, so the log shows a slow start, not every poll.
+constexpr qint64 kSlowAnswerMs = 1500;
 
 /// Whether an extended-hours print can still arrive in the fetched window.
 /// During the regular session the pre-market is over and the post-market not
@@ -106,10 +112,6 @@ void ExtendedHoursService::recompute_watched() {
         return;
     watched_ = sorted;
     watched_set_ = all;
-    // A symbol nobody shows any more is forgotten as answered: shown again
-    // later (re-bought, AFT re-entered the next day) it is fetched afresh
-    // rather than trusted to an answer from another session.
-    covered_ &= all;
     owed_ &= all;
     MarketDataService::instance().set_stream_extras(this, watched_);
     if (watched_.isEmpty()) {
@@ -120,8 +122,19 @@ void ExtendedHoursService::recompute_watched() {
         timer_.start();
     // A symbol nobody has had an answer for yet is fetched now; otherwise the
     // shown values (and the stream) stand until the next poll.
-    if (!(all - covered_).isEmpty())
+    if (!uncovered(all).isEmpty())
         schedule_fetch();
+}
+
+QSet<QString> ExtendedHoursService::uncovered(const QSet<QString>& symbols) const {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    QSet<QString> out;
+    for (const auto& s : symbols) {
+        const auto it = answered_at_.constFind(s);
+        if (it == answered_at_.constEnd() || now - *it > kCoveredSecs)
+            out.insert(s);
+    }
+    return out;
 }
 
 void ExtendedHoursService::schedule_fetch() {
@@ -137,15 +150,15 @@ void ExtendedHoursService::schedule_fetch() {
 }
 
 void ExtendedHoursService::refresh() {
-    covered_.clear();
+    answered_at_.clear();
     fetch(/*force=*/true);
 }
 
 std::optional<ExtendedHoursService::Quote> ExtendedHoursService::quote(const QString& symbol) const {
-    const auto it = quotes_.constFind(symbol);
-    if (it == quotes_.constEnd())
+    const auto it = ext_.constFind(symbol);
+    if (it == ext_.constEnd())
         return std::nullopt;
-    return *it;
+    return exthours::latest(*it);
 }
 
 void ExtendedHoursService::set_state(State s, const QString& error) {
@@ -159,7 +172,7 @@ void ExtendedHoursService::set_state(State s, const QString& error) {
 bool ExtendedHoursService::fetch_could_help() const {
     if (fetch_window_open())
         return true; // prints are landing in the fetched window
-    const bool unanswered = !(watched_set_ - covered_).isEmpty() || !owed_.isEmpty() || state_ == State::Failed;
+    const bool unanswered = !uncovered(watched_set_).isEmpty() || !owed_.isEmpty() || state_ == State::Failed;
     if (!unanswered)
         return false; // every answer is in and nothing new can print
     if (refusal_streak_ == 0)
@@ -187,9 +200,14 @@ void ExtendedHoursService::fetch(bool force) {
     last_attempt_ = QDateTime::currentDateTime();
     set_state(State::Loading, error_);
     QPointer<ExtendedHoursService> guard(this);
+    // Submit → answer, queue wait included: the number a user feels as "the
+    // EXT column fills last". In the log so a slow start can be told apart
+    // from a slow source.
+    QElapsedTimer clock;
+    clock.start();
     python::PythonWorker::instance().submit(
         QStringLiteral("extended_hours"), payload,
-        [guard, symbols](bool ok, QJsonObject result, QString err) {
+        [guard, symbols, clock](bool ok, QJsonObject result, QString err) {
             if (!guard)
                 return;
             auto* self = guard.data();
@@ -197,7 +215,10 @@ void ExtendedHoursService::fetch(bool force) {
             if (!ok) {
                 // Keep what is shown: a failed refresh is no reason to blank
                 // a number someone may be reading.
-                LOG_WARN("ExtendedHours", QString("fetch failed: %1").arg(err.left(120)));
+                LOG_WARN("ExtendedHours", QString("fetch of %1 symbols failed after %2 ms: %3")
+                                              .arg(symbols.size())
+                                              .arg(clock.elapsed())
+                                              .arg(err.left(120)));
                 ++self->refusal_streak_;
                 self->set_state(State::Failed, err.left(120));
                 // One quick retry per streak; after that the back-off rules.
@@ -210,7 +231,6 @@ void ExtendedHoursService::fetch(bool force) {
                                         ? result.value(QStringLiteral("_value")).toArray()
                                         : result.value(QStringLiteral("data")).toArray();
             const qint64 now = QDateTime::currentSecsSinceEpoch();
-            const bool in_pre = exthours::before_the_close_et();
             QSet<QString> changed;
             QSet<QString> owed;
             for (const auto& v : rows) {
@@ -218,13 +238,11 @@ void ExtendedHoursService::fetch(bool force) {
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
                 if (sym.isEmpty())
                     continue;
-                const auto effect = exthours::apply_row(self->quotes_, self->declined_, o, in_pre, now);
+                const auto effect = exthours::apply_row(self->ext_, o, now);
                 if (effect == exthours::RowEffect::Unavailable) {
                     owed.insert(sym);
                     continue;
                 }
-                if (const auto reg = exthours::json_num(o, "regular"); reg && *reg > 0)
-                    self->regular_.insert(sym, *reg);
                 if (effect != exthours::RowEffect::Kept)
                     changed.insert(sym);
             }
@@ -232,8 +250,19 @@ void ExtendedHoursService::fetch(bool force) {
             // next poll, even in a window where nothing else would be fetched.
             for (const auto& s : symbols)
                 if (!owed.contains(s))
-                    self->covered_.insert(s);
+                    self->answered_at_.insert(s, now);
             self->owed_ = owed;
+            const qint64 ms = clock.elapsed();
+            const QString line = QString("%1 symbols answered in %2 ms (%3 refused, %4 changed)")
+                                     .arg(symbols.size())
+                                     .arg(ms)
+                                     .arg(owed.size())
+                                     .arg(changed.size());
+            if (!self->logged_first_answer_ || ms > kSlowAnswerMs || !owed.isEmpty())
+                LOG_INFO("ExtendedHours", line);
+            else
+                LOG_DEBUG("ExtendedHours", line);
+            self->logged_first_answer_ = true;
             self->refusal_streak_ = owed.isEmpty() ? 0 : self->refusal_streak_ + 1;
             self->last_answer_ = QDateTime::currentDateTime();
             self->set_state(State::Idle);
@@ -242,7 +271,7 @@ void ExtendedHoursService::fetch(bool force) {
             if (!changed.isEmpty())
                 emit self->quotes_changed(changed);
             // Symbols that arrived while this was out.
-            if (!(self->watched_set_ - self->covered_ - owed).isEmpty())
+            if (!(self->uncovered(self->watched_set_) - owed).isEmpty())
                 self->schedule_fetch();
         },
         kFetchTimeoutMs);
@@ -256,7 +285,7 @@ void ExtendedHoursService::on_ticks(const QVector<StreamTick>& ticks) {
     for (const auto& t : ticks) {
         if (!watched_set_.contains(t.symbol))
             continue;
-        if (exthours::apply_print(quotes_, declined_, t.symbol, t.market_hours, t.price, t.change, t.time_ms, now))
+        if (exthours::apply_print(ext_, t.symbol, t.market_hours, t.price, t.change, t.time_ms, now))
             changed.insert(t.symbol);
     }
     if (!changed.isEmpty())
@@ -264,29 +293,28 @@ void ExtendedHoursService::on_ticks(const QVector<StreamTick>& ticks) {
 }
 
 // ── Snapshot ────────────────────────────────────────────────────────────────
-// So the first paint after a restart shows the last known moves instead of
-// dashes for the seconds the fetch takes. Only within 12 hours: that spans the
+// So the first paint after a restart shows the last known readings instead of
+// dashes for the moment the fetch takes. Only within 12 hours: that spans the
 // overnight gap (a 16:30 ET save is still good at the 04:00 ET pre-open)
-// without reaching back past a regular session, after which the numbers are
-// measured against a close that is no longer the last one.
+// without reaching back past a regular session; is_current() then keeps any
+// reading older than the last close off the portfolio.
+
 
 void ExtendedHoursService::save_snapshot() const {
     QJsonArray arr;
-    for (auto it = quotes_.cbegin(); it != quotes_.cend(); ++it) {
-        QJsonObject o;
-        o.insert("symbol", it.key());
-        o.insert("pct", it->pct);
-        o.insert("price", it->price);
-        o.insert("regular", it->regular);
-        o.insert("session", it->session);
-        o.insert("print_ts", it->print_ts);
-        o.insert("updated_at", it->updated_at);
+    for (auto it = ext_.cbegin(); it != ext_.cend(); ++it) {
+        if (it->declined)
+            continue; // a decline is re-learnt from the next fetch
+        QJsonObject o{{"symbol", it.key()}, {"regular", it->regular}, {"regular_ts", it->regular_ts}};
+        for (const auto side : exthours::kSides)
+            if (const auto& r = it->at(side))
+                o.insert(exthours::ext_side_key(side), exthours::reading_to_json(*r));
         arr.append(o);
     }
     QJsonObject root;
-    root.insert("version", 2);
+    root.insert("version", 4);
     root.insert("saved_at", QDateTime::currentDateTime().toString(Qt::ISODate));
-    root.insert("quotes", arr);
+    root.insert("symbols", arr);
     QSaveFile f(snapshot_path());
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return;
@@ -299,22 +327,24 @@ void ExtendedHoursService::load_snapshot() {
     if (!f.open(QIODevice::ReadOnly))
         return;
     const auto doc = QJsonDocument::fromJson(f.readAll());
-    if (!doc.isObject() || doc.object().value("version").toInt() != 2)
-        return; // the old per-view format carried no print times: ignore it
+    // Before v4: one value per symbol with no session, not enough to say
+    // which session a number is — not shown at all.
+    if (!doc.isObject() || doc.object().value("version").toInt() != 4)
+        return;
     const auto saved_at = QDateTime::fromString(doc.object().value("saved_at").toString(), Qt::ISODate);
     if (!saved_at.isValid() || saved_at.secsTo(QDateTime::currentDateTime()) > 12 * 3600)
         return;
-    for (const auto& v : doc.object().value("quotes").toArray()) {
+    for (const auto& v : doc.object().value("symbols").toArray()) {
         const auto o = v.toObject();
         const QString sym = o.value("symbol").toString();
-        const double regular = o.value("regular").toDouble();
-        if (sym.isEmpty() || !(regular > 0))
+        if (sym.isEmpty())
             continue;
-        quotes_.insert(sym, Quote{o.value("pct").toDouble(), o.value("price").toDouble(), regular,
-                                  o.value("session").toString(),
-                                  static_cast<qint64>(o.value("print_ts").toDouble()),
-                                  static_cast<qint64>(o.value("updated_at").toDouble())});
-        regular_.insert(sym, regular);
+        Sessions x;
+        x.regular = o.value("regular").toDouble();
+        x.regular_ts = static_cast<qint64>(o.value("regular_ts").toDouble());
+        for (const auto side : exthours::kSides)
+            x.at(side) = exthours::reading_from_json(o.value(exthours::ext_side_key(side)), 0);
+        ext_.insert(sym, x);
     }
 }
 

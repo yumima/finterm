@@ -164,7 +164,7 @@ AlertEditDialog::AlertEditDialog(QWidget* parent, const std::optional<Rule>& exi
     session_lbl_ = new QLabel(QStringLiteral("Prints"));
     session_ = new QComboBox;
     session_->addItem(QStringLiteral("Regular session only"), int(Session::Regular));
-    session_->addItem(QStringLiteral("Including pre-, post-market and overnight"), int(Session::Extended));
+    session_->addItem(QStringLiteral("Including pre-market, after-hours and overnight"), int(Session::Extended));
     form->addRow(session_lbl_, session_);
     root->addLayout(form);
 
@@ -266,7 +266,7 @@ void AlertEditDialog::validate() {
                                        "back across first.")
                             .arg(above ? QStringLiteral("above") : QStringLiteral("below"));
             text += r.session == Session::Extended
-                        ? QStringLiteral(" Watches pre-, post-market and overnight prints too; each print is "
+                        ? QStringLiteral(" Watches pre-market, after-hours and overnight prints too; each print is "
                                          "checked against the quote's own close before it is used.")
                         : QStringLiteral(" Regular-session quotes only.");
             break;
