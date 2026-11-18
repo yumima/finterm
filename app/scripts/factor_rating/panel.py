@@ -62,6 +62,7 @@ def download_panel(symbols, years=12, force=False):
         age_days = (time.time() - os.path.getmtime(path)) / 86400
         if age_days < 1:
             raw = pd.read_parquet(path)
+            _prune_panels(keep=path)
             return _split_fields(raw)
 
     raw = yf.download(tickers, period=f"{years}y", interval="1d",
@@ -70,7 +71,25 @@ def download_panel(symbols, years=12, force=False):
     # yfinance returns a column MultiIndex (field, symbol); flatten for parquet.
     raw.columns = [f"{a}|{b}" for a, b in raw.columns]
     raw.to_parquet(path)
+    _prune_panels(keep=path)
     return _split_fields(raw)
+
+
+def _prune_panels(keep, max_age_days=1):
+    """Drop cached panels nothing will read: a panel is reused for a day only
+    (see load), and every universe change or key-scheme change writes a NEW
+    file — without this the directory only ever grows (437 MB of unreadable
+    hash()-keyed panels were found)."""
+    cutoff = time.time() - max_age_days * 86400
+    for name in os.listdir(CACHE_DIR):
+        p = os.path.join(CACHE_DIR, name)
+        if p == keep or not name.startswith("panel_") or not name.endswith(".parquet"):
+            continue
+        try:
+            if os.path.getmtime(p) < cutoff:
+                os.remove(p)
+        except OSError:
+            pass
 
 
 def _split_fields(raw):

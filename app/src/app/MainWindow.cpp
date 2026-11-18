@@ -796,9 +796,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     bool dock_restored = false;
 
     if (dock_manager_) {
-        QSettings persp_settings;
-        SessionManager::instance().load_perspectives(persp_settings);
-        dock_manager_->loadPerspectives(persp_settings);
+        dock_manager_->loadPerspectives(SessionManager::instance().perspective_store());
 
         const int saved_version = SessionManager::instance().dock_layout_version(window_id_);
         if (saved_version == kDockLayoutVersion) {
@@ -1629,9 +1627,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         SessionManager::instance().save_screen_name(window_id_, scr->name());
     if (dock_manager_) {
         SessionManager::instance().save_dock_layout(window_id_, dock_manager_->saveState());
-        QSettings tmp;
-        dock_manager_->savePerspectives(tmp);
-        SessionManager::instance().save_perspectives(tmp);
+        dock_manager_->savePerspectives(SessionManager::instance().perspective_store());
+        SessionManager::instance().perspective_store().sync(); // as save_dock_layout does: survive an unclean exit
     }
 
     // Persist the set of still-open windows (this one minus itself, since

@@ -11,6 +11,7 @@
 #include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
+#include <QRegularExpression>
 #include <QTimeZone>
 #include <QButtonGroup>
 #include <QComboBox>
@@ -582,6 +583,14 @@ void ScreenerScreen::showEvent(QShowEvent* e) {
     if (shown_once_)
         return;
     shown_once_ = true;
+    // Scans of an earlier format (scan_v1…v4) are never read again: retire
+    // them where the name scheme lives (the directory also holds the price
+    // store's files, which are not scans and are left alone).
+    static const QRegularExpression kScan(QStringLiteral("^scan_v(\\d+)_"));
+    services::util::DiskCache(QStringLiteral("screener")).prune([](const QString& name) {
+        const auto m = kScan.match(name);
+        return !m.hasMatch() || name.startsWith(QLatin1String("scan_v5_"));
+    });
     run_scan();
     const QJsonDocument doc = services::util::DiskCache(QStringLiteral("screener")).load(cache_name());
     if (doc.isObject())

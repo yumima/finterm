@@ -54,6 +54,9 @@ _SESSION = {"time-pre-market": "BMO", "time-after-hours": "AMC"}
 # row shape changes, or cached days come back without the new fields.
 EARN_KIND = "earn2"  # earn2: eps_last_year + last_year_report
 EARN_KIND_PREV = "earn"
+# Days are read from this week on; a day two months past is never asked for
+# again, and older key generations (earn:) age out with it.
+CACHE_KEEP_DAYS = 60
 
 
 # ── pure parsers (tests/scripts/test_whats_on_calendar.py) ───────────────────
@@ -253,7 +256,7 @@ def company_events(start, end, symbols):
     days = weekdays(start, end)
     dividends, div_failed = [], []
     if mine:
-        cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
+        cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"), keep_days=CACHE_KEEP_DAYS)
         div, div_failed = _fetch_days(cache, "div", DIV_URL, parse_dividends_day, days, today)
         for d in sorted(div):
             dividends += [r for r in div[d] if r["symbol"] in mine]
@@ -277,7 +280,7 @@ def earnings_days(start, end):
     import ipo_calendar as ic
     today = date.today()
     days = weekdays(start, end)
-    cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"))
+    cache = ic.Cache(ic.market_data_path("whats_on_calendar.sqlite"), keep_days=CACHE_KEEP_DAYS)
     earn, failed = _fetch_days(cache, EARN_KIND, EARN_URL, parse_earnings_day, days, today)
     rows = []
     for d in sorted(earn):

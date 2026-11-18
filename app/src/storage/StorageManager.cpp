@@ -60,18 +60,18 @@ QVector<StorageCategoryInfo> StorageManager::all_stats() const {
     // --- Cache (cache.db) ---
     stats.append({"cache", "Temporary Cache", "Cache", CacheManager::instance().entry_count(), true});
 
-    { // tab sessions from cache.db
+    { // each screen's saved UI state (cache.db screen_state)
         int ts_count = 0;
         auto& cdb = CacheDatabase::instance();
         if (cdb.is_open()) {
-            auto r = cdb.execute("SELECT COUNT(*) FROM tab_sessions", {});
+            auto r = cdb.execute("SELECT COUNT(*) FROM screen_state", {});
             if (r.is_ok()) {
                 auto& q = r.value();
                 if (q.next())
                     ts_count = q.value(0).toInt();
             }
         }
-        stats.append({"tab_sessions", "Tab Session State", "Cache", ts_count, true});
+        stats.append({"screen_state", "Screen State (filters, panes, selections)", "Cache", ts_count, true});
     }
 
     // --- AI & LLM ---
@@ -130,11 +130,11 @@ int StorageManager::count_for(const QString& category_id) const {
     if (category_id == "cache")
         return CacheManager::instance().entry_count();
 
-    if (category_id == "tab_sessions") {
+    if (category_id == "screen_state") {
         auto& cdb = CacheDatabase::instance();
         if (!cdb.is_open())
             return 0;
-        auto r = cdb.execute("SELECT COUNT(*) FROM tab_sessions", {});
+        auto r = cdb.execute("SELECT COUNT(*) FROM screen_state", {});
         if (r.is_err())
             return 0;
         auto& q = r.value();
@@ -189,11 +189,11 @@ Result<void> StorageManager::clear_category(const QString& category_id) {
         return Result<void>::ok();
     }
 
-    if (category_id == "tab_sessions") {
+    if (category_id == "screen_state") {
         auto& cdb = CacheDatabase::instance();
         if (!cdb.is_open())
             return Result<void>::err("Cache database not open");
-        auto r = cdb.exec("DELETE FROM tab_sessions");
+        auto r = cdb.exec("DELETE FROM screen_state");
         if (r.is_ok())
             emit category_cleared(category_id);
         return r;

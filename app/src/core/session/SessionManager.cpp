@@ -146,29 +146,6 @@ int SessionManager::dock_layout_version(int window_id) const {
     return settings_.value(prefix + "dock_layout_version", 0).toInt();
 }
 
-void SessionManager::save_perspectives(QSettings& source) {
-    // Copy all keys from the source QSettings (written by ADS savePerspectives)
-    // into our own settings_ under a "perspectives/" prefix.
-    source.beginGroup("Perspectives");
-    const QStringList keys = source.allKeys();
-    settings_.beginGroup("perspectives");
-    settings_.remove(""); // clear previous
-    for (const QString& k : keys)
-        settings_.setValue(k, source.value(k));
-    settings_.endGroup();
-    source.endGroup();
-}
-
-void SessionManager::load_perspectives(QSettings& target) const {
-    settings_.beginGroup("perspectives");
-    const QStringList keys = settings_.allKeys();
-    target.beginGroup("Perspectives");
-    for (const QString& k : keys)
-        target.setValue(k, settings_.value(k));
-    target.endGroup();
-    settings_.endGroup();
-}
-
 void SessionManager::set_last_screen(const QString& screen_id) {
     settings_.setValue("session/last_screen", screen_id);
 }

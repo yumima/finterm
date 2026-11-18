@@ -178,9 +178,16 @@ def _unit_price(d):
 # ── cache ─────────────────────────────────────────────────────────────────────
 
 class Cache:
-    def __init__(self, path=None):
+    def __init__(self, path=None, keep_days=None):
+        """`keep_days`: rows not rewritten within that many days are dropped
+        on open. Rows are otherwise only ever replaced, so a superseded key
+        (a format bump: earn: -> earn2:, sub: -> sub2:) or an entry nothing
+        asks for any more would sit in the file forever."""
         self.con = sqlite3.connect(path or market_data_path("ipo_calendar.sqlite"), timeout=10)
         self.con.execute("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT, at REAL)")
+        if keep_days is not None:
+            self.con.execute("DELETE FROM kv WHERE at < ?", (time.time() - keep_days * 86400,))
+            self.con.commit()
 
     def get(self, key, max_age_s):
         row = self.con.execute("SELECT v, at FROM kv WHERE k=?", (f"v{SCHEMA_V}:{key}",)).fetchone()
@@ -772,7 +779,10 @@ def enrich_deals(deals, cache, today, errors, offline=False):
 
 def build(today=None, enrich=False, cache=None):
     today = today or date.today()
-    cache = cache or Cache()
+    # Final overviews / submissions are written once and read for as long as
+    # the deal is in the window (13 months + lock-ups): two years clears
+    # history nobody asks for without touching a row still in use.
+    cache = cache or Cache(keep_days=730)
     months = months_to_read(today)
     docs, errors = fetch_months(cache, months, today)
     deals = merge_months(docs)

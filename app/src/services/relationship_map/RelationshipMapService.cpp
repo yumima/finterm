@@ -5,10 +5,8 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
-#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -28,26 +26,6 @@ double num_or_nan(const QJsonValue& v) {
     return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
 }
 
-// Persistent on-disk cache so the relationship-map panel paints the most
-// recently-viewed ticker immediately on next launch. One file per ticker;
-// directory bounded by the universe the user has actually browsed.
-finterm::services::util::DiskCache& disk_cache() {
-    static finterm::services::util::DiskCache c(QStringLiteral("relationship_map"));
-    return c;
-}
-
-// Sanitize a ticker into an alnum-only filename stem. Tickers can include
-// dots (BRK.B) or hyphens (BRK-B) which would break case-insensitive
-// filesystem lookups. ".json" is appended by the caller.
-QString ticker_filename(const QString& ticker) {
-    QString s;
-    s.reserve(ticker.size());
-    for (const QChar c : ticker)
-        if (c.isLetterOrNumber())
-            s.append(c.toUpper());
-    return s + QStringLiteral(".json");
-}
-
 } // namespace
 
 RelationshipMapService& RelationshipMapService::instance() {
@@ -55,45 +33,15 @@ RelationshipMapService& RelationshipMapService::instance() {
     return s;
 }
 
-RelationshipMapService::RelationshipMapService() {
-    // Cap per-ticker cache to last 500 viewed companies.
-    disk_cache().trim_to(500);
+// One store, cache.db, two lifetimes (the quote cache's pattern): relmap:<T>
+// is fresh for kRelMapTtlSec; relmap_last:<T> is the last known map, kept a
+// week so a relaunch paints at once — shown as last known while a fresh one
+// is fetched, never served as fresh. (A per-ticker JSON copy used to be
+// replayed into the cache at launch with a FULL fresh TTL.)
+RelationshipMapService::RelationshipMapService() = default;
 
-    // Hydrate: replay each cached ticker into CacheManager so the next
-    // fetch(ticker) hits warm in-memory cache and emits instantly. Deferred to
-    // the next event-loop tick so the file I/O stays off the startup path
-    // (nothing reads relmap:* before a panel navigates). The singleton lives
-    // for the process lifetime; the work touches only the disk and CacheManager.
-    QTimer::singleShot(0, []() {
-        const QStringList files = disk_cache().files();
-        for (const QString& fname : files) {
-            const QJsonDocument doc = disk_cache().load(fname);
-            if (!doc.isObject())
-                continue;
-            // Recover the ticker from the JSON (rather than parsing fname) so
-            // a corrupted filename doesn't poison the cache key. Falls back to
-            // fname stem if the payload doesn't carry company.ticker.
-            const QJsonObject root = doc.object();
-            // Pre-"peers_source" payloads carried peers from a hardcoded
-            // industry table and 0.0 for missing fields — don't replay them.
-            if (!root.contains(QStringLiteral("peers_source")))
-                continue;
-            QString ticker = root.value("company").toObject().value("ticker").toString();
-            if (ticker.isEmpty()) {
-                ticker = fname;
-                if (ticker.endsWith(QStringLiteral(".json")))
-                    ticker.chop(5);
-            }
-            const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-            // Use the same TTL the live fetch uses so a stale on-disk copy
-            // doesn't masquerade as fresh — CacheManager will expire it.
-            finterm::CacheManager::instance().put("relmap:" + ticker.toUpper(), QVariant(blob),
-                                                  /*ttl_sec=*/10 * 60, "relmap");
-        }
-    });
-}
-
-static constexpr int kRelMapTtlSec = 10 * 60; // 10 min
+static constexpr int kRelMapTtlSec = 10 * 60;           // fresh
+static constexpr int kRelMapLastKnownSec = 7 * 24 * 3600; // last known, for an instant first paint
 
 void RelationshipMapService::fetch(const QString& ticker) {
     if (loading_)
@@ -111,6 +59,12 @@ void RelationshipMapService::fetch(const QString& ticker) {
         emit progress_changed(100, "Loaded from cache");
         parse_result(cached.toString());
         return;
+    }
+    // Not fresh: show the last known map at once, then fetch a fresh one.
+    if (const auto last = finterm::CacheManager::instance().try_get_aged("relmap_last:" + current_ticker_)) {
+        emit progress_changed(5, QStringLiteral("Showing the map from %1 — refreshing…")
+                                     .arg(last->written_at.toString("MMM d HH:mm")));
+        parse_result(last->value);
     }
 
     loading_ = true;
@@ -130,13 +84,8 @@ void RelationshipMapService::fetch(const QString& ticker) {
 
             // Cache raw JSON output
             finterm::CacheManager::instance().put(cache_key, QVariant(result.output), kRelMapTtlSec, "relmap");
-
-            // Persist to disk so the next launch hydrates the CacheManager
-            // entry above without a Python round-trip. Save the parsed JSON
-            // (not the raw stdout) so we get a clean, validated payload.
-            const auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-            if (doc.isObject())
-                disk_cache().save(ticker_filename(current_ticker_), doc);
+            finterm::CacheManager::instance().put("relmap_last:" + current_ticker_, QVariant(result.output),
+                                                  kRelMapLastKnownSec, "relmap");
 
             emit progress_changed(70, "Parsing results...");
             parse_result(result.output);

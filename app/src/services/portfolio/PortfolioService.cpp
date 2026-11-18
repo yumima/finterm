@@ -44,7 +44,13 @@ double json_num_or_nan(const QJsonValue& v) {
 }
 
 finterm::services::util::DiskCache& portfolio_disk_cache() {
-    static finterm::services::util::DiskCache c(QStringLiteral("portfolio"));
+    static finterm::services::util::DiskCache c = [] {
+        finterm::services::util::DiskCache d(QStringLiteral("portfolio"));
+        // Only summary_v2_<id>.json is read (summary_filename): earlier
+        // generations are retired here, by the code that names them.
+        d.prune([](const QString& name) { return name.startsWith(QLatin1String("summary_v2_")); });
+        return d;
+    }();
     return c;
 }
 

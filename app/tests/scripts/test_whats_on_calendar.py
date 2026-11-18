@@ -81,7 +81,7 @@ def test_earnings_days_names_what_it_answered():
     import ipo_calendar as ic
     real_cache = ic.Cache
     w._fetch_days = fake_fetch
-    ic.Cache = lambda path: None
+    ic.Cache = lambda path, keep_days=None: None
     try:
         out = w.earnings_days(date(2026, 11, 16), date(2026, 11, 20))
     finally:

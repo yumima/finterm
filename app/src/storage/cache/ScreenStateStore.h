@@ -6,24 +6,11 @@
 
 namespace finterm {
 
-struct TabSession {
-    QString tab_id;
-    QString screen_name;
-    double scroll_position = 0;
-    QJsonObject filters;
-    QJsonObject selections;
-    QString last_accessed;
-};
-
-/// Persists per-tab UI state (scroll position, filters, selections) in cache.db.
-class TabSessionStore {
+/// Each screen's own UI state (ScreenStateManager), in cache.db's screen_state.
+/// (Window, dock and tab layout — titles included — live in QSettings.)
+class ScreenStateStore {
   public:
-    static TabSessionStore& instance();
-
-    Result<void> save(const TabSession& session);
-    Result<TabSession> load(const QString& tab_id);
-    Result<void> remove(const QString& tab_id);
-    Result<void> clear_all();
+    static ScreenStateStore& instance();
 
     /// Persist screen UI state keyed by screen_key.
     /// state_version is stored alongside — if the loaded version doesn't match
@@ -33,7 +20,7 @@ class TabSessionStore {
     Result<QJsonObject> load_screen_state(const QString& key, int expected_version);
 
   private:
-    TabSessionStore() = default;
+    ScreenStateStore() = default;
 };
 
 } // namespace finterm

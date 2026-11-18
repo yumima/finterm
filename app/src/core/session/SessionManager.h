@@ -59,8 +59,9 @@ class SessionManager : public QObject {
     int dock_layout_version(int window_id) const;
 
     // Named perspectives (saved layouts)
-    void save_perspectives(QSettings& source);
-    void load_perspectives(QSettings& target) const;
+    /// Where the dock manager keeps its saved perspectives (its own
+    /// "Perspectives" group): ADS reads and writes it directly — one copy.
+    QSettings& perspective_store() const { return settings_; }
 
     // Last EXCLUSIVE-nav target, distinct from last_screen (which is
     // overwritten by split_alongside with the secondary's id). Used to

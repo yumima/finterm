@@ -645,6 +645,7 @@ set(STORAGE_SOURCES
     # Core databases
     src/storage/sqlite/Database.cpp
     src/storage/sqlite/CacheDatabase.cpp
+    src/storage/sweep/RetiredStorage.cpp
 
     # Migration system
     src/storage/sqlite/migrations/MigrationRunner.cpp
@@ -660,7 +661,7 @@ set(STORAGE_SOURCES
     src/storage/StorageManager.cpp
     # Cache + tab sessions
     src/storage/cache/CacheManager.cpp
-    src/storage/cache/TabSessionStore.cpp
+    src/storage/cache/ScreenStateStore.cpp
 
     # Secure storage (unchanged)
     src/storage/secure/SecureStorage.cpp

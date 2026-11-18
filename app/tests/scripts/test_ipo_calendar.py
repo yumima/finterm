@@ -94,6 +94,25 @@ def test_months_are_history_plus_next_month_only():
     assert len(ms) == ic.MONTHS_BACK + 2
 
 
+def test_cache_drops_rows_past_keep_days():
+    """Rows are only ever replaced; keep_days is what retires a superseded
+    key generation (earn: -> earn2:) or an entry nothing asks for."""
+    import tempfile, time as _t
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "kv.sqlite")
+        c = ic.Cache(path)
+        c.put("old", 1)
+        c.put("new", 2)
+        c.con.execute("UPDATE kv SET at = ? WHERE k LIKE ?", (_t.time() - 90 * 86400, "%:old"))
+        c.con.commit()
+        c.con.close()
+        c2 = ic.Cache(path, keep_days=60)
+        assert c2.stale("old") is None, "a row older than keep_days survived"
+        assert c2.stale("new") == 2, "a fresh row was dropped"
+        c2.con.close()
+        assert ic.Cache(path).stale("new") == 2  # no keep_days: nothing dropped
+
+
 def test_spac_classification():
     assert ic.is_spac("Anything", sic="6770")
     assert not ic.is_spac("Acquisition Holdings Inc", sic="7372")   # SIC beats the name

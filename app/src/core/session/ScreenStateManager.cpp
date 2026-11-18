@@ -2,7 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "screens/IStatefulScreen.h"
-#include "storage/cache/TabSessionStore.h"
+#include "storage/cache/ScreenStateStore.h"
 
 #include <QJsonObject>
 #include <QTimer>
@@ -45,7 +45,7 @@ void ScreenStateManager::restore(screens::IStatefulScreen* screen) {
     const QString key = screen->state_key();
     const int expected = screen->state_version();
 
-    auto result = TabSessionStore::instance().load_screen_state(key, expected);
+    auto result = ScreenStateStore::instance().load_screen_state(key, expected);
     if (result.is_err()) {
         LOG_WARN("ScreenState", "Failed to load state for '" + key + "': " + QString::fromStdString(result.error()));
         return;
@@ -100,7 +100,7 @@ void ScreenStateManager::save_direct(const QString& key, const QVariantMap& stat
 }
 
 QVariantMap ScreenStateManager::load_direct(const QString& key, int expected_version) {
-    auto result = TabSessionStore::instance().load_screen_state(key, expected_version);
+    auto result = ScreenStateStore::instance().load_screen_state(key, expected_version);
     if (result.is_err() || result.value().isEmpty())
         return {};
 
@@ -148,7 +148,7 @@ void ScreenStateManager::write_async(const QString& key, const QVariantMap& stat
         for (auto it = state.constBegin(); it != state.constEnd(); ++it)
             obj.insert(it.key(), QJsonValue::fromVariant(it.value()));
 
-        auto r = TabSessionStore::instance().save_screen_state(key, obj, version, session_id);
+        auto r = ScreenStateStore::instance().save_screen_state(key, obj, version, session_id);
 
         if (r.is_err()) {
             LOG_WARN("ScreenState", "Write failed for '" + key + "': " + QString::fromStdString(r.error()));

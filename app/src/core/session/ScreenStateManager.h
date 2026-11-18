@@ -14,7 +14,7 @@ namespace finterm {
 ///
 /// Screens call notify_changed() whenever significant UI state changes
 /// (tab switched, filter applied, scroll moved). This class debounces rapid
-/// changes and async-writes to cache.db's screen_state table via TabSessionStore.
+/// changes and async-writes to cache.db's screen_state table via ScreenStateStore.
 ///
 /// DockScreenRouter calls save_now() on screen hide and restore() after a
 /// screen is first materialized.

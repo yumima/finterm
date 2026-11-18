@@ -51,6 +51,7 @@
 #include "storage/repositories/SettingsRepository.h"
 #include "storage/secure/SecureStorage.h"
 #include "storage/sqlite/CacheDatabase.h"
+#include "storage/sweep/RetiredStorage.h"
 #include "storage/sqlite/Database.h"
 #include "storage/sqlite/migrations/MigrationRunner.h"
 #include "trading/DataStreamManager.h"
@@ -490,6 +491,10 @@ int main(int argc, char* argv[]) {
     if (cache_result.is_err()) {
         LOG_WARN("App", "Cache DB failed (non-fatal): " + QString::fromStdString(cache_result.error()));
     }
+
+    // Storage the app no longer reads (retired caches, superseded files, dead
+    // settings groups) — off the startup path, a few seconds in.
+    QTimer::singleShot(3000, qApp, [] { finterm::storage::sweep_retired_storage(); });
 
     // Assign a unique session ID so ScreenStateManager can tag each state write.
     // This lets us distinguish cross-session restores from same-session saves.

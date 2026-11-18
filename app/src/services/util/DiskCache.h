@@ -110,6 +110,20 @@ class DiskCache {
 
     void remove(const QString& filename) const { QFile::remove(path(filename)); }
 
+    /// Remove every file `is_current` rejects — the owner's superseded
+    /// formats. The owner knows its current name scheme; a version bump that
+    /// changes it retires the old files here, in the same place, instead of
+    /// leaving them for nobody to read. Returns the number removed.
+    template <class Pred>
+    int prune(Pred is_current) const {
+        QDir d(dir());
+        int removed = 0;
+        for (const QString& name : d.entryList(QDir::Files | QDir::NoDotAndDotDot))
+            if (!is_current(name) && QFile::remove(d.filePath(name)))
+                ++removed;
+        return removed;
+    }
+
     // Lists every cached file under the service directory (top-level only,
     // no recursion). Used by services that key by symbol / series id and
     // need to enumerate at startup. Sorted by modification time, newest

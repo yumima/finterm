@@ -72,7 +72,7 @@ Result<void> CacheDatabase::exec(const QString& sql) {
 
 Result<void> CacheDatabase::apply_pragmas() {
     // synchronous=NORMAL under WAL is the standard safe/fast combo. OFF risked full DB
-    // corruption on power loss — now that cache.db also holds tab_sessions and
+    // corruption on power loss — now that cache.db also holds
     // screen_state, durability matters more than the marginal write gain of OFF.
     const char* pragmas[] = {
         "PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL", "PRAGMA cache_size = -10000",
@@ -116,24 +116,12 @@ Result<void> CacheDatabase::create_tables() {
     if (r.is_err())
         return r;
 
-    // Tab session state persistence
-    r = exec("CREATE TABLE IF NOT EXISTS tab_sessions ("
-             "  tab_id TEXT PRIMARY KEY,"
-             "  screen_name TEXT NOT NULL,"
-             "  scroll_position REAL DEFAULT 0,"
-             "  filters_json TEXT DEFAULT '{}',"
-             "  selections_json TEXT DEFAULT '{}',"
-             "  last_accessed TEXT DEFAULT (datetime('now')),"
-             "  updated_at TEXT DEFAULT (datetime('now'))"
-             ")");
+    // tab_sessions (per-tab scroll/filters/selections) never had a writer;
+    // screen_state below is the one store for a screen's own UI state.
+    r = exec("DROP TABLE IF EXISTS tab_sessions");
     if (r.is_err())
         return r;
 
-    r = exec("CREATE INDEX IF NOT EXISTS idx_tab_sessions_accessed ON tab_sessions(last_accessed)");
-    if (r.is_err())
-        return r;
-
-    // Screen UI state — survives crashes, restored per screen on next open
     r = exec("CREATE TABLE IF NOT EXISTS screen_state ("
              "  screen_key    TEXT PRIMARY KEY,"
              "  state_version INTEGER NOT NULL DEFAULT 1,"
