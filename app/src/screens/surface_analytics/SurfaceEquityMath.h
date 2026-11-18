@@ -50,17 +50,6 @@ inline double mean(const std::vector<double>& v) {
     return s / double(v.size());
 }
 
-/// Sample standard deviation (n-1). Returns 0 for fewer than two points.
-inline double stdev(const std::vector<double>& v) {
-    if (v.size() < 2)
-        return 0.0;
-    const double m = mean(v);
-    double ss = 0.0;
-    for (double x : v)
-        ss += (x - m) * (x - m);
-    return std::sqrt(ss / double(v.size() - 1));
-}
-
 /// Pearson correlation over the overlapping prefix of two return series.
 /// Returns NaN when either series is flat — a correlation with a constant is
 /// undefined, and reporting 0 would read as "uncorrelated", which is a claim.

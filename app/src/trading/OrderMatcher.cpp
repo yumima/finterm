@@ -55,59 +55,6 @@ void OrderMatcher::remove_order(const QString& order_id) {
     }
 }
 
-QVector<PtOrder> OrderMatcher::get_pending_orders(const QString& symbol, const QString& portfolio_id) {
-    QMutexLocker lock(&mutex_);
-
-    if (!symbol.isEmpty() && !portfolio_id.isEmpty()) {
-        auto key = scoped_key(portfolio_id, symbol);
-        return pending_orders_.value(key);
-    }
-
-    if (!symbol.isEmpty()) {
-        QVector<PtOrder> result;
-        QString suffix = ":" + symbol;
-        for (auto it = pending_orders_.constBegin(); it != pending_orders_.constEnd(); ++it) {
-            if (it.key().endsWith(suffix)) {
-                result.append(it.value());
-            }
-        }
-        return result;
-    }
-
-    QVector<PtOrder> all;
-    for (auto it = pending_orders_.constBegin(); it != pending_orders_.constEnd(); ++it) {
-        all.append(it.value());
-    }
-    return all;
-}
-
-void OrderMatcher::load_orders(const QVector<PtOrder>& orders) {
-    for (const auto& order : orders) {
-        if (order.status == "pending")
-            add_order(order);
-    }
-    LOG_INFO("OrderMatcher", QString("Loaded %1 pending orders").arg(orders.size()));
-}
-
-void OrderMatcher::clear_portfolio_orders(const QString& portfolio_id) {
-    QMutexLocker lock(&mutex_);
-    QString prefix = portfolio_id + ":";
-    QVector<QString> keys_to_delete;
-
-    for (auto it = pending_orders_.constBegin(); it != pending_orders_.constEnd(); ++it) {
-        if (it.key().startsWith(prefix)) {
-            for (const auto& order : it.value()) {
-                triggered_stops_.remove(order.id);
-            }
-            keys_to_delete.append(it.key());
-        }
-    }
-
-    for (const auto& key : keys_to_delete) {
-        pending_orders_.remove(key);
-    }
-}
-
 void OrderMatcher::clear_all() {
     QMutexLocker lock(&mutex_);
     pending_orders_.clear();
@@ -124,15 +71,6 @@ int OrderMatcher::on_order_fill(OrderFillCallback callback) {
 void OrderMatcher::remove_fill_callback(int id) {
     QMutexLocker lock(&mutex_);
     fill_callbacks_.remove(id);
-}
-
-int OrderMatcher::pending_order_count() const {
-    QMutexLocker lock(&mutex_);
-    int count = 0;
-    for (auto it = pending_orders_.constBegin(); it != pending_orders_.constEnd(); ++it) {
-        count += it.value().size();
-    }
-    return count;
 }
 
 // ============================================================================
@@ -175,14 +113,6 @@ bool OrderMatcher::check_stop_limit(const PtOrder& order, const PriceData& price
         }
     }
     return check_limit(order, price);
-}
-
-bool OrderMatcher::should_fill(const PtOrder& order, const PriceData& price) const {
-    if (order.order_type == "limit")
-        return check_limit(order, price);
-    if (order.order_type == "stop")
-        return check_stop(order, price);
-    return false;
 }
 
 double OrderMatcher::get_fill_price(const PtOrder& order, const PriceData& price) const {

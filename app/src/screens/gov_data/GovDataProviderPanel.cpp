@@ -402,7 +402,6 @@ void GovDataProviderPanel::on_result(const QString& request_id, const services::
         current_view_ = Datasets;
         update_breadcrumb();
     } else if (request_id.startsWith("gov_resources_")) {
-        current_resources_ = payload;
         populate_resources(payload);
         content_stack_->setCurrentIndex(Resources);
         current_view_ = Resources;

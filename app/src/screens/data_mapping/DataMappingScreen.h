@@ -80,7 +80,6 @@ class DataMappingScreen : public QWidget, public IStatefulScreen {
     void update_right_panel();
     void populate_json_tree(const QJsonValue& val, QTreeWidgetItem* parent, const QString& key);
     void populate_mapping_list();
-    void refresh_saved_mappings();
     void load_mappings_from_db();
     void build_mapping_config(QJsonObject& config);
 
@@ -90,7 +89,6 @@ class DataMappingScreen : public QWidget, public IStatefulScreen {
     // State
     int current_view_ = 0; // 0=list, 1=create, 2=templates
     int current_step_ = 0; // 0..4
-    bool loading_ = false;
 
     // Saved mappings (persisted via DataMappingRepository)
     QVector<DataMapping> saved_mappings_;
@@ -163,7 +161,6 @@ class DataMappingScreen : public QWidget, public IStatefulScreen {
 
     // Sample data from API test
     QJsonDocument sample_data_;
-    QJsonObject test_result_;
 };
 
 } // namespace finterm::screens

@@ -19,8 +19,7 @@ class IGroupLinked;
 struct SymbolRef;
 
 /// ADS-aware screen router. Each screen is wrapped in a CDockWidget that can be
-/// docked, tabbed, floated, or auto-hidden. Mirrors ScreenRouter's API so the
-/// transition is straightforward.
+/// docked, tabbed, floated, or auto-hidden.
 ///
 /// Lazy loading: factories are stored and only called when a screen is first
 /// navigated to (or when ensure_all_registered() pre-creates placeholders for
@@ -50,11 +49,6 @@ class DockScreenRouter : public QObject {
     /// brings it to the front. Creates from factory on first access.
     /// If exclusive is true, all other screens are closed first (single-screen mode).
     void navigate(const QString& id, bool exclusive = false);
-
-    /// Add screen as an ADS tab inside the currently focused dock area.
-    /// If the screen is already open somewhere, just raises it.
-    /// If no area is open yet, opens it as the only screen.
-    void tab_into(const QString& id);
 
     /// Open `primary` alone, then split `secondary` alongside it (side-by-side).
     void add_alongside(const QString& primary, const QString& secondary);
@@ -164,9 +158,6 @@ class DockScreenRouter : public QObject {
 
     /// Find an existing dock widget by screen id, or nullptr.
     ads::CDockWidget* find_dock_widget(const QString& id) const;
-
-    /// Returns all registered screen IDs (both eager and factory).
-    QStringList all_screen_ids() const;
 
     /// Cycle focus between all currently-open dock widgets in this manager.
     /// Wraps at either end. No-op if fewer than 2 panels are open.

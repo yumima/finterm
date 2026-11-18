@@ -691,7 +691,6 @@ QWidget* DataSourcesScreen::build_tab_bar() {
             btn->style()->polish(btn);
 
             page_stack_->setCurrentIndex(page_idx);
-            view_mode_ = (page_idx == 0) ? ViewMode::Gallery : ViewMode::Connections;
         });
         return btn;
     };
@@ -1169,12 +1168,6 @@ QWidget* DataSourcesScreen::build_command_bar() {
     w->setFixedHeight(0);
     return w;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// apply_screen_styles — no-op (styles applied inline in setup_ui)
-// ─────────────────────────────────────────────────────────────────────────────
-
-void DataSourcesScreen::apply_screen_styles() {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config dialog
@@ -1983,17 +1976,6 @@ void DataSourcesScreen::on_connection_edit(const QString& conn_id) {
     }
 }
 
-void DataSourcesScreen::on_connection_delete(const QString& conn_id) {
-    const auto result = DataSourceRepository::instance().remove(conn_id);
-    if (result.is_err()) {
-        LOG_ERROR(TAG, QString("Failed to remove connection %1").arg(conn_id));
-        return;
-    }
-    if (selected_connection_id_ == conn_id)
-        selected_connection_id_.clear();
-    refresh_connections();
-}
-
 void DataSourcesScreen::on_connection_enabled_changed(const QString& conn_id, bool enabled) {
     const auto result = DataSourceRepository::instance().set_enabled(conn_id, enabled);
     if (result.is_err()) {
@@ -2710,13 +2692,6 @@ void DataSourcesScreen::update_connection_status_cell(const QString& conn_id, bo
     }
 }
 
-void DataSourcesScreen::on_view_mode_toggle() {
-    // Legacy — now handled by tab bar
-    view_mode_ = (view_mode_ == ViewMode::Gallery) ? ViewMode::Connections : ViewMode::Gallery;
-    if (page_stack_)
-        page_stack_->setCurrentIndex(view_mode_ == ViewMode::Gallery ? 0 : 1);
-}
-
 void DataSourcesScreen::on_connections_search_changed(const QString& text) {
     conn_search_text_ = text;
     build_connections_table();
@@ -2732,17 +2707,6 @@ void DataSourcesScreen::apply_stat_filter(int stat_index) {
     build_connector_table();
     build_connections_table();
     update_stats_strip();
-}
-
-void DataSourcesScreen::on_connection_duplicate(const QString& conn_id) {
-    const auto result = DataSourceRepository::instance().get(conn_id);
-    if (result.is_err())
-        return;
-    const auto ds = result.value();
-    if (const auto* cfg = find_connector_config(ds.provider)) {
-        selected_connector_id_ = cfg->id;
-        show_config_dialog(*cfg, ds.id, /*duplicate=*/true);
-    }
 }
 
 void DataSourcesScreen::on_bulk_enable_all() {

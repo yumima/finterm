@@ -45,23 +45,6 @@ class LruMap {
     /// True if the key exists. Does NOT mark MRU.
     bool contains(const Key& key) const { return index_.find(key) != index_.end(); }
 
-    /// Returns the value if present, otherwise `default_value`. Does NOT
-    /// mark MRU — use this for the cheap-lookup path where readers should
-    /// not influence eviction order.
-    Value peek_or(const Key& key, const Value& default_value = Value{}) const {
-        auto it = index_.find(key);
-        return it != index_.end() ? it->second->second : default_value;
-    }
-
-    /// Like peek_or, but promotes the entry to MRU on a hit.
-    Value get_or(const Key& key, const Value& default_value = Value{}) {
-        auto it = index_.find(key);
-        if (it == index_.end())
-            return default_value;
-        order_.splice(order_.begin(), order_, it->second);
-        return it->second->second;
-    }
-
     void erase(const Key& key) {
         auto it = index_.find(key);
         if (it == index_.end())
@@ -77,15 +60,6 @@ class LruMap {
 
     int size() const { return static_cast<int>(order_.size()); }
     int max_size() const { return max_size_; }
-
-    void set_max_size(int n) {
-        max_size_ = (n > 0 ? n : 1);
-        while (static_cast<int>(order_.size()) > max_size_) {
-            const auto& victim = order_.back();
-            index_.erase(victim.first);
-            order_.pop_back();
-        }
-    }
 
   private:
     int max_size_;

@@ -626,13 +626,6 @@ void DashboardCanvas::hide_placeholder() {
     placeholder_->hide();
 }
 
-void DashboardCanvas::rebuild_grid_cache() {
-    // Grid lines are now painted directly in paintEvent using the clip rect.
-    // This avoids allocating a full-height pixmap that caused scroll jitter.
-    // Method kept for API compatibility; just triggers a repaint.
-    update();
-}
-
 void DashboardCanvas::connect_tile(WidgetTile* tile) {
     connect(tile, &WidgetTile::drag_started, this, &DashboardCanvas::on_drag_started);
     connect(tile, &WidgetTile::drag_moved, this, &DashboardCanvas::on_drag_moved);

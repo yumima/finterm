@@ -65,16 +65,6 @@ void NewsMonitorService::add_monitor(const QString& label, const QStringList& ke
     save_to_db(m);
 }
 
-void NewsMonitorService::update_monitor(const NewsMonitor& monitor) {
-    for (auto& m : monitors_) {
-        if (m.id == monitor.id) {
-            m = monitor;
-            save_to_db(m);
-            return;
-        }
-    }
-}
-
 void NewsMonitorService::delete_monitor(const QString& id) {
     monitors_.erase(
         std::remove_if(monitors_.begin(), monitors_.end(), [&](const NewsMonitor& m) { return m.id == id; }),

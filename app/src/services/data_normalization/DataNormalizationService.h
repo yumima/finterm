@@ -38,12 +38,6 @@ class DataNormalizationService : public QObject {
     /// Normalize already-fetched raw JSON (no HTTP call). Useful for testing.
     NormalizedRecord normalize_raw(const DataMapping& mapping, const QJsonDocument& raw);
 
-    /// Load the most recent normalized record for a mapping.
-    std::optional<NormalizedRecord> latest_for_mapping(const QString& mapping_id);
-
-    /// Load all normalized records for a schema (e.g. all OHLCV records).
-    QVector<NormalizedRecord> records_for_schema(const QString& schema_name);
-
   signals:
     void normalization_complete(const NormalizedRecord& record);
     void normalization_failed(const QString& mapping_id, const QString& error);

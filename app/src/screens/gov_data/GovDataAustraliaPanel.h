@@ -56,7 +56,6 @@ class GovDataAustraliaPanel : public QWidget {
 
     // ── Constants ────────────────────────────────────────────────────────────
     static constexpr const char* kScript = "datagov_au_api.py";
-    static constexpr const char* kColor = "#0EA5E9";
 
     // Enum order matches content_stack_ page indices
     enum View { Agencies = 0, Datasets, Resources, Status };

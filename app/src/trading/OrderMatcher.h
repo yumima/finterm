@@ -31,17 +31,13 @@ class OrderMatcher {
 
     void add_order(const PtOrder& order);
     void remove_order(const QString& order_id);
-    QVector<PtOrder> get_pending_orders(const QString& symbol = "", const QString& portfolio_id = "");
 
     void check_orders(const QString& symbol, const PriceData& price, const QString& portfolio_id);
 
-    void load_orders(const QVector<PtOrder>& orders);
-    void clear_portfolio_orders(const QString& portfolio_id);
     void clear_all();
 
     int on_order_fill(OrderFillCallback callback);
     void remove_fill_callback(int id);
-    int pending_order_count() const;
 
     // SL/TP trigger engine
     void set_sl_tp(const QString& portfolio_id, const QString& symbol, const QString& order_id, double sl_price,
@@ -74,7 +70,6 @@ class OrderMatcher {
     QMutex sl_tp_mutex_;
 
     QString scoped_key(const QString& portfolio_id, const QString& symbol) const;
-    bool should_fill(const PtOrder& order, const PriceData& price) const;
     bool check_limit(const PtOrder& order, const PriceData& price) const;
     bool check_stop(const PtOrder& order, const PriceData& price) const;
     bool check_stop_limit(const PtOrder& order, const PriceData& price) const;

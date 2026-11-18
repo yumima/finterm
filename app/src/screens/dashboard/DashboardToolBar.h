@@ -8,14 +8,13 @@
 
 namespace finterm::screens {
 
-/// Top toolbar for dashboard — terminal identity, clock, connection status, widget count, actions.
+/// Top toolbar for dashboard — terminal identity, clock, widget count, actions.
 class DashboardToolBar : public QWidget {
     Q_OBJECT
   public:
     explicit DashboardToolBar(QWidget* parent = nullptr);
 
     void set_widget_count(int count);
-    void set_connected(bool connected);
 
   signals:
     void add_widget_clicked();
@@ -35,13 +34,10 @@ class DashboardToolBar : public QWidget {
     QWidget* right_container_ = nullptr;
     QPushButton* clock_btn_ = nullptr;
     bool clock_is_utc_ = true;
-    QLabel* status_text_ = nullptr;
     QLabel* widget_count_ = nullptr;
     QPushButton* pulse_btn_ = nullptr;
     QPushButton* compact_btn_ = nullptr;
     QTimer clock_timer_;
-    bool connected_ = true;
-    bool pulse_visible_ = true;
 };
 
 } // namespace finterm::screens

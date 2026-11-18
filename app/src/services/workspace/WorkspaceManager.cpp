@@ -1,6 +1,6 @@
 #include "services/workspace/WorkspaceManager.h"
 
-#include "app/ScreenRouter.h"
+#include "app/DockScreenRouter.h"
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "core/symbol/SymbolContext.h"
@@ -39,17 +39,15 @@ void WorkspaceManager::set_main_window(QMainWindow* w) {
         windows_.append(w);
 }
 
-void WorkspaceManager::set_router(ScreenRouter* r) {
-    if (r && !routers_.contains(r))
-        routers_.append(r);
-}
-
 void WorkspaceManager::remove_window(QMainWindow* w) {
     windows_.removeAll(w);
 }
 
-void WorkspaceManager::remove_router(ScreenRouter* r) {
-    routers_.removeAll(r);
+void WorkspaceManager::set_router(DockScreenRouter* r) {
+    if (!r || routers_.contains(r))
+        return;
+    routers_.append(r);
+    connect(r, &QObject::destroyed, this, [this, r]() { routers_.removeAll(r); });
 }
 
 // ── Participant registration ──────────────────────────────────────────────────
@@ -263,28 +261,6 @@ QString WorkspaceManager::current_workspace_name() const {
     return current_workspace_.has_value() ? current_workspace_->metadata.name : QString{};
 }
 
-QString WorkspaceManager::current_workspace_path() const {
-    return current_workspace_.has_value() ? workspace_file_path(current_workspace_->metadata.id) : QString{};
-}
-
-// ── Screen changed slot ───────────────────────────────────────────────────────
-
-void WorkspaceManager::on_screen_changed(const QString& screen_id) {
-    if (!current_workspace_.has_value())
-        return;
-    current_workspace_->active_screen = screen_id;
-
-    // Track open screens
-    if (!current_workspace_->open_screens.contains(screen_id))
-        current_workspace_->open_screens.append(screen_id);
-
-    // Deliver pending state if participant is now registered
-    if (pending_states_.contains(screen_id) && participants_.contains(screen_id)) {
-        participants_[screen_id]->restore_state(pending_states_.take(screen_id));
-        LOG_DEBUG("WorkspaceManager", QString("Delivered pending state on navigate: %1").arg(screen_id));
-    }
-}
-
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 void WorkspaceManager::capture_from_ui() {
@@ -317,9 +293,6 @@ void WorkspaceManager::apply_to_ui() {
     if (!current_workspace_.has_value())
         return;
     const WorkspaceDef& ws = *current_workspace_;
-
-    // Store dashboard profile key so DashboardScreen picks it up
-    SettingsRepository::instance().set("workspace.active_dashboard_profile", ws.metadata.id, "workspace");
 
     // Store dashboard layout as base64 in the settings key DashboardScreen reads
     // We serialize the layout and write it so restore_layout() loads the right grid

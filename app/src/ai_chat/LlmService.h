@@ -41,17 +41,6 @@ inline bool is_hearth_provider(const QString& provider) {
     return p == QStringLiteral("hearth") || p == QStringLiteral("ollama");
 }
 
-/// Canonical id for storage and display.
-inline QString canonical_provider(const QString& provider) {
-    return is_hearth_provider(provider) ? QStringLiteral("hearth") : provider.toLower();
-}
-
-inline bool provider_supports_streaming(const QString& provider) {
-    return provider == "openai" || provider == "anthropic" || provider == "gemini" || provider == "google" ||
-           provider == "groq" || provider == "deepseek" || provider == "openrouter" || provider == "minimax" ||
-           provider == "kimi" || is_hearth_provider(provider) || provider == "xai";
-}
-
 inline bool provider_requires_api_key(const QString& provider) {
     return !is_hearth_provider(provider);
 }
@@ -483,7 +472,6 @@ class LlmService : public QObject {
     };
     static HttpResult blocking_post(const QString& url, const QJsonObject& body, const QMap<QString, QString>& headers,
                                     int timeout_ms = 120000);
-    static HttpResult blocking_get(const QString& url, const QMap<QString, QString>& headers, int timeout_ms = 30000);
 
     // QEventLoop-based HTTP for Cloudflare-protected endpoints
     static HttpResult eventloop_request(const QString& method, const QString& url, const QByteArray& body,

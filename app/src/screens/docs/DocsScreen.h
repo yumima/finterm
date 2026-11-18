@@ -92,7 +92,6 @@ class DocsScreen : public QWidget {
     // ── Members ──────────────────────────────────────────────────────────────
     QTreeWidget* sidebar_ = nullptr;
     QStackedWidget* pages_ = nullptr;
-    QLabel* page_title_ = nullptr;
     QLabel* breadcrumb_ = nullptr;
     QMap<QString, int> page_index_; // section_id → stacked widget index
 };

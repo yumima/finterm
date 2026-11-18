@@ -231,17 +231,4 @@ void QuantLibClient::call(const QString& endpoint, const QJsonObject& body, Quan
 
 // ── Sync call (MCP tool handlers only — never call from UI thread) ───────────
 
-mcp::ToolResult QuantLibClient::call_sync(const QString& endpoint, const QJsonObject& body) {
-    mcp::ToolResult result = mcp::ToolResult::fail("Timeout");
-
-    QEventLoop loop;
-    call(endpoint, body, [&](mcp::ToolResult r) {
-        result = std::move(r);
-        loop.quit();
-    });
-    loop.exec();
-
-    return result;
-}
-
 } // namespace finterm::services

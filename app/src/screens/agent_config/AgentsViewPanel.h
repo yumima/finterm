@@ -48,7 +48,6 @@ class AgentsViewPanel : public QWidget {
     void save_current_config();
     void delete_current_config();
     void run_query();
-    void toggle_json_editor();
     void refresh_llm_pill();
     void load_profile_combo();
 

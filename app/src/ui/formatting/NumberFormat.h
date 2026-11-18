@@ -206,12 +206,4 @@ inline QString format_datetime(const QDateTime& dt, DateStyle style = DateStyle:
     return placeholder();
 }
 
-/// Convenience: render a QDate as the canonical ISO "yyyy-MM-dd". Invalid dates
-/// yield placeholder().
-inline QString format_date(const QDate& d) {
-    if (!d.isValid())
-        return placeholder();
-    return d.toString(QStringLiteral("yyyy-MM-dd"));
-}
-
 } // namespace finterm::ui::formatting

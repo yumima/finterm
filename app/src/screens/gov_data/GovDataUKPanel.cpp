@@ -296,7 +296,6 @@ void GovDataUKPanel::on_result(const QString& request_id, const services::GovDat
         LOG_INFO("GovDataUKPanel", "Search returned " + QString::number(payload.size()) + " datasets");
 
     } else if (request_id.startsWith("ukgov_resources_")) {
-        current_resources_ = payload;
         populate_resources(payload);
         current_view_ = Resources;
         content_stack_->setCurrentIndex(Resources);

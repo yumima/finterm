@@ -118,7 +118,6 @@ class ReportBuilderService : public QObject {
 
     // ── Autosave ─────────────────────────────────────────────────────────────
 
-    QString autosave_path() const;
     void trigger_autosave();
 
   signals:
@@ -135,11 +134,6 @@ class ReportBuilderService : public QObject {
     void document_loaded(const QString& path);
     void document_cleared();
     void current_file_changed(const QString& path);
-
-    // Emitted when an LLM-driven mutation is about to happen and the report
-    // builder is not currently visible. Listeners can react
-    // to bring the tab into view.
-    void navigate_requested();
 
   private:
     ReportBuilderService();

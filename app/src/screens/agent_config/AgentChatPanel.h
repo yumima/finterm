@@ -56,7 +56,6 @@ class AgentChatPanel : public QWidget {
     // Header
     QLabel* hdr_model_lbl_ = nullptr;  // active model pill
     QLabel* hdr_status_lbl_ = nullptr; // Ready / Streaming…
-    QLabel* hdr_agent_lbl_ = nullptr;  // selected agent badge
     QComboBox* agent_selector_ = nullptr;
     QPushButton* route_toggle_ = nullptr;
     QPushButton* clear_btn_ = nullptr;
@@ -85,7 +84,6 @@ class AgentChatPanel : public QWidget {
     // ── State ──────────────────────────────────────────────────────────────────
     bool auto_routing_ = false;
     bool executing_ = false;
-    bool data_loaded_ = false;
     int typing_step_ = 0;
     QString last_query_;
     QString pending_request_id_;

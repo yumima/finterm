@@ -56,7 +56,6 @@ class PolymarketDetailPanel : public QWidget {
     void set_top_holders(const QVector<finterm::services::polymarket::TopHolder>& holders);
     void set_comments(const QVector<finterm::services::polymarket::Comment>& comments);
     void set_related_markets(const QVector<finterm::services::prediction::PredictionMarket>& markets);
-    void set_open_interest(double oi);
 
     /// Attach a long-form tooltip (e.g. series fee info) to the market
     /// question label. Pass an empty string to clear. Used by Kalshi to
@@ -151,8 +150,6 @@ class PolymarketDetailPanel : public QWidget {
     bool has_last_market_ = false;
 
     // Tab indices.
-    static constexpr int kTabTrade = 3;
-    static constexpr int kTabTrades = 4;
     static constexpr int kTabHolders = 5;
     static constexpr int kTabComments = 6;
     static constexpr int kTabRelated = 7;

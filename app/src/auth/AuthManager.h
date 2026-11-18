@@ -55,9 +55,6 @@ class AuthManager : public QObject {
     void logged_out();
     void loading_changed(bool loading);
 
-    /// Emitted after successful login when PIN setup is needed.
-    void pin_setup_required();
-
     /// Emitted after login + PIN verify (or setup) — terminal is fully unlocked.
     void terminal_unlocked();
 

@@ -74,7 +74,6 @@ class EarningsCallAudio : public QPushButton {
     bool page_open_ = false;
     QString painted_color_;
     bool active_ = false;    // the user asked for playback
-    bool resolving_ = false;
     int stall_ticks_ = 0;
     int retries_ = 0;
     qint64 last_position_ = -1;

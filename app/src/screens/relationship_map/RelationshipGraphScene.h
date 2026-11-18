@@ -9,7 +9,6 @@
 
 namespace finterm::relmap {
 
-class GraphNodeItem;
 class RelNode;
 
 /// Interactive graph scene for relationship map visualization.
@@ -27,24 +26,12 @@ class RelationshipGraphScene : public QGraphicsScene {
 
   signals:
     void center_card_clicked(const QString& ticker);
-    void background_clicked();
 
   private:
-    // kept as no-ops for ABI stability — layout is now pure radial/deterministic
-    void start_simulation();
-    void simulation_step();
-
-    void apply_layout(QVector<GraphNode>& nodes, const QVector<GraphEdge>& edges, LayoutMode mode);
-    void place_in_ring(const QVector<int>& indices, QVector<QPointF>& positions, double radius, double start_angle,
-                       const QPointF& center);
-
-    void add_node_item(const GraphNode& node, const QPointF& pos);
-    void add_edge_item(const QPointF& from, const QPointF& to, EdgeCategory cat, const QString& label);
 
     QMap<QString, QPointF> node_positions_;
     QVector<RelNode*> nodes_;
     QTimer* sim_timer_ = nullptr;
-    int timer_ticks_ = 0;
 };
 
 /// Zooming/panning view for the graph.
@@ -54,10 +41,6 @@ class RelationshipGraphView : public QGraphicsView {
     explicit RelationshipGraphView(QGraphicsScene* scene, QWidget* parent = nullptr);
 
     void fit_to_content();
-    void reset_zoom();
-
-  signals:
-    void zoom_changed(double factor);
 
   protected:
     void wheelEvent(QWheelEvent* event) override;

@@ -30,9 +30,6 @@ class GroupedPane : public QWidget {
     /// renders on the segmented button (uppercase recommended).
     void addSubPane(const QString& tab_label, QWidget* widget);
 
-    /// Number of sub-panes currently registered.
-    int subPaneCount() const;
-
     /// The widget currently shown in the stack, or nullptr if empty.
     QWidget* currentSubPane() const;
 

@@ -187,24 +187,13 @@ class TestFinGptPrompts : public QObject {
                                 "from {negative/neutral/positive}."));
         QCOMPARE(sentiment_frame(QStringLiteral("I"), QStringLiteral("text")),
                  QStringLiteral("Instruction: I\nInput: text\nAnswer: "));
-        const QStringList votes = sentiment_vote_instructions();
-        QCOMPARE(votes.size(), 5);
-        for (const QString& v : votes) {
-            QVERIFY(v.contains(QStringLiteral("news")));
-            QVERIFY(v.endsWith(QStringLiteral("Options: positive, negative, neutral")));
-        }
     }
 
-    void labels_parse_by_substring_and_votes_resolve_ties_neutral() {
+    void labels_parse_by_substring() {
         QCOMPARE(parse_sentiment_label(QStringLiteral("  Positive.")), QStringLiteral("positive"));
         QCOMPARE(parse_sentiment_label(QStringLiteral("the tone is NEGATIVE overall")),
                  QStringLiteral("negative"));
         QCOMPARE(parse_sentiment_label(QStringLiteral("mixed / unclear")), QStringLiteral("neutral"));
-
-        QCOMPARE(vote_sentiment({"positive", "positive", "negative", "neutral", "neutral"}),
-                 QStringLiteral("positive"));
-        QCOMPARE(vote_sentiment({"positive", "negative"}), QStringLiteral("neutral"));
-        QCOMPARE(vote_sentiment({}), QStringLiteral("neutral"));
     }
 };
 

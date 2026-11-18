@@ -107,8 +107,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     void update_monitors();
     void compute_deviations();
 
-    int64_t time_window_seconds() const;
-
     // Panels
     NewsCommandBar* command_bar_ = nullptr;
     NewsSidePanel* side_panel_ = nullptr;
@@ -195,9 +193,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // True when `a` is alertable and its key was not in `notified`; claims the
     // key either way so the next pass does not ask again.
     bool claim_alert(QSet<QString>& notified, const services::NewsArticle& a, int64_t now);
-
-    // Pulse animation timer
-    QTimer* pulse_timer_ = nullptr;
 
     // Debounced DB seen-writes
     QTimer* seen_flush_timer_ = nullptr;

@@ -51,9 +51,6 @@ void StatusPill::set_loading(const QString& message) {
 void StatusPill::set_stale(const QString& message) {
     apply_state(State::Stale, message);
 }
-void StatusPill::set_empty(const QString& message) {
-    apply_state(State::Empty, message);
-}
 
 void StatusPill::set_error(const QString& message, std::function<void()> on_retry) {
     on_retry_ = std::move(on_retry);
@@ -61,7 +58,6 @@ void StatusPill::set_error(const QString& message, std::function<void()> on_retr
 }
 
 void StatusPill::apply_state(State s, const QString& message) {
-    state_ = s;
     QString dot_color;
     switch (s) {
         case State::Idle:

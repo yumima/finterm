@@ -221,10 +221,6 @@ QString KalshiAdapter::account_label() const {
     return QStringLiteral("Kalshi:") + creds_.api_key_id.left(8);
 }
 
-void KalshiAdapter::stub_unsupported(const QString& ctx) {
-    emit error_occurred(ctx, QStringLiteral("Kalshi adapter: not supported in this call"));
-}
-
 // prediction_kalshi.py also exposes `settlements` and `decrease_order`
 // commands. They're reachable directly via PythonRunner for scripted
 // testing but intentionally not surfaced on the adapter because no UI
@@ -483,17 +479,8 @@ void KalshiAdapter::fetch_series_detail(const QString& series_ticker) {
     rest_->fetch_series_detail(series_ticker);
 }
 
-QJsonObject KalshiAdapter::cached_series(const QString& series_ticker) const {
-    return series_cache_.value(series_ticker);
-}
-
 void KalshiAdapter::fetch_historical_markets(const QString& series_ticker, int limit, const QString& cursor) {
     rest_->fetch_historical_markets(series_ticker, limit, cursor);
-}
-
-void KalshiAdapter::fetch_historical_candles(const QString& ticker, int period_interval_min, qint64 start_ts,
-                                             qint64 end_ts) {
-    rest_->fetch_historical_candlesticks(ticker, period_interval_min, start_ts, end_ts);
 }
 
 void KalshiAdapter::fetch_historical_trades(const QString& ticker, int limit, const QString& cursor) {

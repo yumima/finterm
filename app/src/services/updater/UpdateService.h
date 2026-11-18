@@ -38,17 +38,8 @@ class UpdateService : public QObject {
     /// - silent=false → show result either way (used by "Check for Updates" menu).
     void check_for_updates(bool silent = true);
 
-    /// Whether an update was found after the last check.
-    bool update_available() const { return update_available_; }
-
-    /// Latest version string from the manifest (empty until first successful check).
-    QString latest_version() const { return latest_version_; }
-
     /// Changelog text from the manifest.
     QString changelog() const { return changelog_; }
-
-    /// Override the manifest URL (default: GitHub raw updates.json).
-    void set_manifest_url(const QString& url) { manifest_url_ = url; }
 
     /// Parent widget for dialogs (defaults to QApplication::activeWindow()).
     void set_dialog_parent(QWidget* parent) { dialog_parent_ = parent; }
@@ -98,7 +89,6 @@ class UpdateService : public QObject {
     QString pending_expected_sha256_;
     QString pending_local_path_;
     QPointer<QWidget> dialog_parent_;
-    bool update_available_ = false;
     bool silent_ = true;
     bool in_progress_ = false;
     /// Silent auto-checks skip themselves after the first one per process run

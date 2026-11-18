@@ -746,7 +746,6 @@ void CryptoTradingScreen::on_mode_toggled() {
     mode_btn_->style()->unpolish(mode_btn_);
     mode_btn_->style()->polish(mode_btn_);
     order_entry_->set_mode(!is_live);
-    bottom_panel_->set_mode(!is_live);
 
     if (is_live) {
         live_data_timer_->start(5000);
@@ -1239,10 +1238,6 @@ void CryptoTradingScreen::refresh_market_info() {
     });
 }
 
-void CryptoTradingScreen::refresh_candles() {
-    async_fetch_candles(selected_symbol_, chart_->current_timeframe());
-}
-
 void CryptoTradingScreen::refresh_live_data() {
     if (trading_mode_ != TradingMode::Live)
         return;
@@ -1272,40 +1267,6 @@ void CryptoTradingScreen::async_fetch_my_trades() {
                     return;
                 self->bottom_panel_->update_my_trades(result);
                 self->live_inflight_.fetch_sub(1);
-            },
-            Qt::QueuedConnection);
-    });
-}
-
-void CryptoTradingScreen::async_fetch_trading_fees() {
-    QPointer<CryptoTradingScreen> self = this;
-    (void)QtConcurrent::run([self]() {
-        if (!self)
-            return;
-        auto result = ExchangeService::instance().fetch_trading_fees(self->selected_symbol_);
-        QMetaObject::invokeMethod(
-            self,
-            [self, result]() {
-                if (!self)
-                    return;
-                self->bottom_panel_->update_fees(result);
-            },
-            Qt::QueuedConnection);
-    });
-}
-
-void CryptoTradingScreen::async_fetch_mark_price() {
-    QPointer<CryptoTradingScreen> self = this;
-    (void)QtConcurrent::run([self]() {
-        if (!self)
-            return;
-        auto mp = ExchangeService::instance().fetch_mark_price(self->selected_symbol_);
-        QMetaObject::invokeMethod(
-            self,
-            [self, mp]() {
-                if (!self)
-                    return;
-                self->ticker_bar_->update_mark_price(mp.mark_price, mp.index_price);
             },
             Qt::QueuedConnection);
     });

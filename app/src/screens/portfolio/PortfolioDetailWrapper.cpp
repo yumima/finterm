@@ -94,7 +94,6 @@ QLabel* PortfolioDetailWrapper::make_partial_book_banner() {
 
 void PortfolioDetailWrapper::show_view(portfolio::DetailView view, const portfolio::PortfolioSummary& summary,
                                        const QString& currency) {
-    current_view_ = view;
     current_summary_ = summary;
     current_currency_ = currency;
 

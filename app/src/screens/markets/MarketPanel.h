@@ -35,7 +35,6 @@ class MarketPanel : public QWidget {
     void refresh();
     const QString& panel_id() const { return config_.id; }
     const QStringList& symbols() const { return config_.symbols; }
-    void update_config(const MarketPanelConfig& cfg);
     /// Drop this panel's quote subscriptions (its page is hidden); refresh()
     /// subscribes again.
     void hub_unsubscribe_all();
@@ -79,7 +78,6 @@ class MarketPanel : public QWidget {
     // can be hidden or moved, so a click must not read the cell text.
     QVector<QPair<QString, QString>> row_symbols_; // all fetched data; display subset shown
     bool has_data_ = false;
-    bool fetch_failed_ = false;
 
     QHash<QString, services::QuoteData> row_cache_;
     QSet<QString> pending_initial_; // symbols awaiting first delivery for refresh_finished

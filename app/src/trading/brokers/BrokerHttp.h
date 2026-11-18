@@ -28,9 +28,6 @@ class BrokerHttp {
     BrokerHttpResponse post_json(const QString& url, const QJsonObject& payload,
                                  const QMap<QString, QString>& headers = {});
 
-    BrokerHttpResponse post_json_array(const QString& url, const QJsonArray& payload,
-                                       const QMap<QString, QString>& headers = {});
-
     BrokerHttpResponse put_json(const QString& url, const QJsonObject& payload,
                                 const QMap<QString, QString>& headers = {});
 
@@ -45,10 +42,6 @@ class BrokerHttp {
 
     // Raw body PUT — caller provides pre-encoded body + headers (Tradier modify_order)
     BrokerHttpResponse put_raw(const QString& url, const QByteArray& body, const QMap<QString, QString>& headers = {});
-
-    // Timeout in ms (default 8s — tight enough to surface network issues fast,
-    // long enough to tolerate a cold TLS handshake).
-    void set_timeout(int ms) { timeout_ms_ = ms; }
 
   private:
     BrokerHttp() = default;

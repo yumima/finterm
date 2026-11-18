@@ -13,8 +13,6 @@ namespace finterm::screens::equity {
 
 // ── Enums ──────────────────────────────────────────────────────────────────
 
-enum class BottomTab { Positions, Holdings, Orders, Funds, Stats };
-
 enum class TradingMode { Paper, Live };
 
 // ── Default Watchlist (US / China / Europe mega-caps) ──────────────────────
@@ -53,9 +51,6 @@ inline const QStringList US_WATCHLIST = {
 
 inline constexpr double DEFAULT_PAPER_BALANCE = 100000.0; // USD
 inline constexpr int OHLCV_FETCH_COUNT = 200;
-inline constexpr int QUOTE_POLL_MS = 5000;
-inline constexpr int PORTFOLIO_POLL_MS = 3000;
-inline constexpr int WATCHLIST_POLL_MS = 10000;
 inline constexpr int CLOCK_UPDATE_MS = 1000;
 
 // ── Design System Colors — live from ThemeManager ──────────────────────────
@@ -66,12 +61,6 @@ inline QColor COLOR_BUY() {
 }
 inline QColor COLOR_SELL() {
     return QColor(finterm::ui::ThemeManager::instance().tokens().negative);
-}
-inline QColor COLOR_DIM() {
-    return QColor(finterm::ui::ThemeManager::instance().tokens().text_secondary);
-}
-inline QColor COLOR_ACCENT() {
-    return QColor(finterm::ui::ThemeManager::instance().tokens().accent);
 }
 
 inline QColor BG_BASE() {
@@ -107,12 +96,6 @@ inline QColor TEXT_TERTIARY() {
     return QColor(finterm::ui::ThemeManager::instance().tokens().text_tertiary);
 }
 
-inline QColor COLOR_WARNING() {
-    return QColor(finterm::ui::ThemeManager::instance().tokens().warning);
-}
-inline QColor COLOR_INFO() {
-    return QColor(finterm::ui::ThemeManager::instance().tokens().info);
-}
 inline QColor ROW_ALT() {
     return QColor(finterm::ui::ThemeManager::instance().tokens().row_alt);
 }

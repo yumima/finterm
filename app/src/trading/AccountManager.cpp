@@ -384,14 +384,6 @@ void AccountManager::set_connection_state(const QString& account_id, ConnectionS
     emit connection_state_changed(account_id, state);
 }
 
-ConnectionState AccountManager::connection_state(const QString& account_id) const {
-    QMutexLocker lock(&mutex_);
-    auto it = accounts_.find(account_id);
-    if (it != accounts_.end())
-        return it->state;
-    return ConnectionState::Disconnected;
-}
-
 // ── Convenience ─────────────────────────────────────────────────────────────
 
 IBroker* AccountManager::broker_for(const QString& account_id) const {

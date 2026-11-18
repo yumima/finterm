@@ -13,9 +13,6 @@ class SurfaceTableWidget : public QWidget {
   public:
     explicit SurfaceTableWidget(QWidget* parent = nullptr);
 
-    void show_surface(ChartType type,
-                      const void* data_ptr); // cast based on ChartType
-
     // Typed overloads for the most common ones
     void show_vol(const VolatilitySurfaceData& d);
     void show_greeks(const GreeksSurfaceData& d);

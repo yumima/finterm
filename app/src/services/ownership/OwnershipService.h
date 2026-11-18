@@ -184,7 +184,6 @@ class OwnershipService : public QObject {
     /// every 13F filed on EDGAR since, a few minutes after launch and every
     /// six hours after (sooner while a capped pass has more to read).
     void start_background_sync();
-    QString sync_status() const { return sync_status_; }
 
   signals:
     void snapshot_updated(QString symbol);

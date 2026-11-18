@@ -51,9 +51,6 @@ class McpService {
 
     // ── Validation ──────────────────────────────────────────────────────
 
-    /// Validate args against the tool's JSON schema
-    Result<void> validate_params(const QString& tool_name, const QJsonObject& args);
-
     // ── Lifecycle ───────────────────────────────────────────────────────
 
     void initialize();

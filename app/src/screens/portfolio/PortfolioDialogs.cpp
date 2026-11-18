@@ -205,7 +205,7 @@ ConfirmDeleteDialog::ConfirmDeleteDialog(const QString& portfolio_name, QWidget*
 static constexpr int kAssetSearchDebounceMs = 300;
 static constexpr int kAssetSearchLimit = 10;
 
-AddAssetDialog::AddAssetDialog(QWidget* parent, const QString& prefill_symbol) : QDialog(parent) {
+AddAssetDialog::AddAssetDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Add Asset");
     setFixedSize(400, 260);
     setStyleSheet(QString("QDialog { background:%1; color:%2; }"
@@ -322,17 +322,7 @@ AddAssetDialog::AddAssetDialog(QWidget* parent, const QString& prefill_symbol) :
         schedule_search(q);
     });
 
-    // Optional prefill from PortfolioScreen::open_buy_for(). The selecting_
-    // guard suppresses the search dropdown so the dialog opens clean; focus
-    // moves to quantity since the ticker is already chosen.
-    if (!prefill_symbol.isEmpty()) {
-        selecting_ = true;
-        symbol_edit_->setText(prefill_symbol);
-        selecting_ = false;
-        quantity_edit_->setFocus();
-    } else {
-        symbol_edit_->setFocus();
-    }
+    symbol_edit_->setFocus();
 }
 
 void AddAssetDialog::schedule_search(const QString& query) {
@@ -980,13 +970,6 @@ SectorMappingDialog::SectorMappingDialog(const QVector<portfolio::HoldingWithQuo
     btn_layout->addWidget(save_btn);
 
     layout->addLayout(btn_layout);
-}
-
-QHash<QString, QString> SectorMappingDialog::sector_map() const {
-    QHash<QString, QString> result;
-    for (auto it = combos_.begin(); it != combos_.end(); ++it)
-        result[it.key()] = it.value()->currentText();
-    return result;
 }
 
 // ── AddDividendDialog ─────────────────────────────────────────────────────────

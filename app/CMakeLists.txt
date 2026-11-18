@@ -612,7 +612,6 @@ set(CORE_SOURCES
     src/core/components/ComponentCatalog.cpp
     src/core/components/PopularityTracker.cpp
     src/core/crash/CrashHandler.cpp
-    src/core/util/VisibilityAwareTimer.cpp
     src/core/util/AppLifecycle.cpp
 )
 
@@ -671,7 +670,6 @@ set(STORAGE_SOURCES
     src/storage/repositories/SettingsRepository.cpp
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/NotesRepository.cpp
-    src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
     src/storage/repositories/NewsMonitorRepository.cpp
     src/storage/repositories/NewsArticleRepository.cpp
@@ -686,7 +684,6 @@ set(STORAGE_SOURCES
     src/storage/repositories/DataSourceRepository.cpp
     src/storage/repositories/McpServerRepository.cpp
     src/storage/repositories/AgentConfigRepository.cpp
-    src/storage/repositories/ContextRecordingRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
     src/storage/repositories/AiPredictionRepository.cpp
@@ -762,6 +759,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v055_chat_session_context.cpp
     src/storage/sqlite/migrations/v056_ai_prediction_source.cpp
     src/storage/sqlite/migrations/v057_saved_strategies.cpp
+    src/storage/sqlite/migrations/v058_drop_context_recordings.cpp
 )
 
 # Python runner
@@ -769,7 +767,6 @@ set(PYTHON_SOURCES
     src/python/PythonRunner.cpp
     src/python/PythonSetupManager.cpp
     src/python/PythonWorker.cpp
-    src/python/OptionGreeksWorker.cpp
 )
 
 # AI Chat
@@ -881,7 +878,6 @@ set(SERVICE_SOURCES
     src/services/news/NewsClusterService.cpp
     src/services/news/NewsMonitorService.cpp
     src/services/news/NewsNlpService.cpp
-    src/services/news/NewsCorrelationService.cpp
     src/services/databento/DatabentoService.cpp
     src/services/dbnomics/DBnomicsService.cpp
     src/services/gov_data/GovDataService.cpp
@@ -912,12 +908,8 @@ set(SERVICE_SOURCES
     src/services/agents/AgentService.cpp
     src/services/agents/AgentScheduler.cpp
     src/services/agents/BudgetService.cpp
-    src/services/agents/CapabilityRegistry.cpp
     src/services/agents/ElicitBridge.cpp
-    src/services/agents/InlineCompletionController.cpp
-    src/services/agents/MentionResolverService.cpp
     src/services/agents/SkillProposalService.cpp
-    src/services/agents/SlashCommandService.cpp
     src/services/file_manager/FileManagerService.cpp
 
     src/services/sectors/SectorResolver.cpp
@@ -947,10 +939,6 @@ set(SERVICE_SOURCES
     src/services/workflow/ExecutionHooks.cpp
     src/services/workflow/AuditLogger.cpp
     src/services/workflow/ConfirmationService.cpp
-    src/services/workflow/RiskManager.cpp
-    src/services/workflow/WorkflowCache.cpp
-    src/services/workflow/Extensions.cpp
-    src/services/workflow/ParameterProcessor.cpp
     src/services/workflow/adapters/ServiceBridges.cpp
     src/services/polymarket/PolymarketService.cpp
     src/services/polymarket/PolymarketWebSocket.cpp
@@ -995,7 +983,6 @@ set(SERVICE_SOURCES
 
 # UI framework
 set(UI_SOURCES
-    src/ui/error/ErrorPipeline.cpp
     src/ui/formatting/CsvWriter.cpp
     src/ui/markdown/MarkdownRenderer.cpp
     src/ui/notifications/ToastService.cpp
@@ -1003,21 +990,14 @@ set(UI_SOURCES
     src/ui/theme/ThemeManager.cpp
     src/ui/theme/StyleSheets.cpp
     src/ui/theme/Tooltips.cpp
-    src/ui/widgets/Card.cpp
     src/ui/widgets/GroupBadge.cpp
-    src/ui/widgets/StatusBadge.cpp
     src/ui/pushpins/SymbolChip.cpp
     src/ui/pushpins/PushpinBar.cpp
     src/ui/components/ComponentCard.cpp
     src/ui/components/ComponentBrowserDialog.cpp
-    src/ui/components/LayoutHelpers.cpp
-    src/ui/components/SectionHeader.cpp
-    src/ui/widgets/SearchBar.cpp
-    src/ui/widgets/GeometricBackground.cpp
     src/ui/widgets/WorldMapWidget.cpp
     src/ui/widgets/LoadingOverlay.cpp
     src/ui/widgets/StatusPill.cpp
-    src/ui/widgets/ConfettiOverlay.cpp
     src/ui/widgets/SpeedSparkline.cpp
     src/ui/tables/DataTable.cpp
     src/ui/tables/TickFlashDelegate.cpp
@@ -1067,7 +1047,6 @@ set(SCREEN_SOURCES
     src/screens/about/AboutScreen.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
     src/screens/docs/DocsScreen.cpp
-    src/screens/ComingSoonScreen.cpp
     src/screens/workbench/WorkbenchScreen.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/info/ContactScreen.cpp
@@ -1075,7 +1054,6 @@ set(SCREEN_SOURCES
     src/screens/info/PrivacyScreen.cpp
     src/screens/info/TrademarksScreen.cpp
     src/screens/info/HelpScreen.cpp
-    src/screens/knowledge/AITutorPanel.cpp
     src/screens/knowledge/AbbreviationsColumn.cpp
     src/screens/knowledge/CalculatorPanel.cpp
     src/screens/knowledge/CategoryColumn.cpp
@@ -1429,7 +1407,6 @@ set(SCREEN_SOURCES
 set(APP_SOURCES
     src/app/main.cpp
     src/app/MainWindow.cpp
-    src/app/ScreenRouter.cpp
     src/app/DockScreenRouter.cpp
 )
 
@@ -1437,7 +1414,6 @@ set(APP_SOURCES
 # collide when batched, and many use QLineEdit/etc without explicit includes.
 # Infrastructure layers (core, network, auth, storage, services) still benefit from unity.
 set_source_files_properties(
-    src/screens/ComingSoonScreen.cpp
     src/screens/about/AboutScreen.cpp
     src/screens/agent_config/AgentChatPanel.cpp
     src/screens/agent_config/AgentConfigScreen.cpp
@@ -1521,7 +1497,6 @@ set_source_files_properties(
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
     src/screens/dashboard/TickerBar.cpp
-    src/screens/dashboard/WidgetGrid.cpp
     src/screens/dashboard/canvas/AddWidgetDialog.cpp
     src/screens/dashboard/canvas/DashboardCanvas.cpp
     src/screens/dashboard/canvas/DashboardTemplates.cpp
@@ -1611,7 +1586,6 @@ set_source_files_properties(
     src/screens/info/PrivacyScreen.cpp
     src/screens/info/TermsScreen.cpp
     src/screens/info/TrademarksScreen.cpp
-    src/screens/knowledge/AITutorPanel.cpp
     src/screens/knowledge/AbbreviationsColumn.cpp
     src/screens/knowledge/CalculatorPanel.cpp
     src/screens/knowledge/CategoryColumn.cpp
@@ -1721,8 +1695,6 @@ set_source_files_properties(
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
-    src/storage/repositories/ContextRecordingRepository.cpp
-    src/storage/repositories/DashboardLayoutRepository.cpp
     src/storage/repositories/DataSourceRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
     src/storage/repositories/McpServerRepository.cpp
@@ -1731,7 +1703,6 @@ set_source_files_properties(
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
-    src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/SettingsRepository.cpp
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
@@ -1877,8 +1848,6 @@ set_source_files_properties(
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
-    src/storage/repositories/ContextRecordingRepository.cpp
-    src/storage/repositories/DashboardLayoutRepository.cpp
     src/storage/repositories/DataSourceRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
     src/storage/repositories/McpServerRepository.cpp
@@ -1887,7 +1856,6 @@ set_source_files_properties(
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
-    src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/SettingsRepository.cpp
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp

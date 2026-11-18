@@ -43,7 +43,6 @@ class AccountManager : public QObject {
 
     // --- Connection state (memory-only) ---
     void set_connection_state(const QString& account_id, ConnectionState state, const QString& error = {});
-    ConnectionState connection_state(const QString& account_id) const;
 
     // --- Convenience ---
     IBroker* broker_for(const QString& account_id) const;

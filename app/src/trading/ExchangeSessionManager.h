@@ -36,9 +36,6 @@ class ExchangeSessionManager : public QObject, public finterm::datahub::Producer
     /// the manager).
     ExchangeSession* session(const QString& exchange_id);
 
-    /// Snapshot of currently-live exchange ids.
-    QStringList active_exchange_ids() const;
-
     // ── Producer ───────────────────────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override; // no-op: push_only

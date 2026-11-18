@@ -5,7 +5,7 @@ PythonRunner passes the request JSON as argv[1]. Arguments larger than 8 KB
 are spilled to a temp file and passed as "@/path/to/file" — the script reads
 that file and deletes it. Manual runs may pipe the JSON on stdin instead.
 
-(news_nlp.py / news_geolocation.py / news_correlation.py each carry their own
+(news_nlp.py / news_geolocation.py each carry their own
 copy of resolve_arg(); new scripts should import this module instead.)
 """
 import os

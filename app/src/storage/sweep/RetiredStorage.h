@@ -6,13 +6,14 @@
 // again and never cleaned — 437 MB of unreachable parquet panels were found
 // this way. Superseded FILES are pruned by their owner, where the name scheme
 // lives (DiskCache::prune; the Python caches' keep_days). This sweep holds
-// what has no owner left: whole retired directories and settings groups.
+// what has no owner left: whole retired directories, settings groups and
+// single settings keys (QSettings and the settings table).
 // cache.db keys need no entry: every key carries a TTL and CacheDatabase
 // deletes expired rows at startup.
 
 namespace finterm::storage {
 
-/// Delete retired cache directories and dead settings groups.
+/// Delete retired cache directories and dead settings groups / keys.
 /// Idempotent and cheap once done; safe to run on every launch.
 void sweep_retired_storage();
 

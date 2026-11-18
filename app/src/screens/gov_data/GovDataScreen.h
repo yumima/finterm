@@ -45,7 +45,6 @@ class GovDataScreen : public QWidget, public IStatefulScreen {
     QWidget* header_bar_ = nullptr;
     QLabel* status_portal_ = nullptr;
     QLabel* status_country_ = nullptr;
-    QLabel* status_datasets_ = nullptr;
     QLabel* provider_badge_ = nullptr;
     QLabel* sidebar_count_ = nullptr;
 

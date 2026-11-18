@@ -52,7 +52,6 @@ class GovDataFrancePanel : public QWidget {
     void update_breadcrumb(const QString& text);
 
     static constexpr const char* kScript = "french_gov_api.py";
-    static constexpr const char* kColor = "#2563EB";
 
     View current_view_ = Services;
     QString selected_dataset_id_; // for resources drill-down
@@ -84,7 +83,6 @@ class GovDataFrancePanel : public QWidget {
     QJsonArray current_services_;
     QJsonArray current_datasets_;
     QJsonArray current_geo_;
-    QJsonArray current_resources_;
 };
 
 } // namespace finterm::screens

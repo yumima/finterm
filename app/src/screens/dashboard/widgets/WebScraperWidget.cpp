@@ -460,7 +460,6 @@ void WebScraperWidget::parse_payload(const QByteArray& body, const QString& cont
             try_csv(',', "CSV");
     }
 
-    last_format_ = detected_fmt;
     format_badge_->setText(detected_fmt.isEmpty() ? QStringLiteral("—") : detected_fmt);
 
     // Repopulate table-picker combo.

@@ -118,10 +118,6 @@ void GroupedPane::addSubPane(const QString& tab_label, QWidget* widget) {
     connect(btn, &QToolButton::clicked, this, [this, idx]() { setActiveIndex(idx, /*persist*/ true); });
 }
 
-int GroupedPane::subPaneCount() const {
-    return stack_->count();
-}
-
 QWidget* GroupedPane::currentSubPane() const {
     return stack_->currentWidget();
 }

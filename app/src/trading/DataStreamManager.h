@@ -31,7 +31,6 @@ class DataStreamManager : public QObject, public finterm::datahub::Producer {
 
     // --- Query ---
     bool has_stream(const QString& account_id) const;
-    QStringList active_stream_ids() const;
 
     // --- DataHub producer wiring (Phase 7) ---
     // Registers with the hub + installs broker:* policies. Idempotent.

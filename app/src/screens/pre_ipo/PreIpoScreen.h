@@ -38,7 +38,6 @@ class PreIpoScreen : public QWidget, public IStatefulScreen {
     // Kept as no-ops — PreIpoService still emits these but the consolidated
     // IpoWatchView fetches its own data via HttpClient + MarketDataService.
     void on_data_loaded(finterm::pre_ipo::PreIpoSummary summary);
-    void on_company_selected(const QString& id);
     void on_error(const QString& msg);
 
   private:

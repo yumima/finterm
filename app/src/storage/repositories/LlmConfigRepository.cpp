@@ -124,21 +124,4 @@ Result<QVector<LlmModelConfig>> LlmConfigRepository::list_models(const QString& 
     return Result<QVector<LlmModelConfig>>::ok(std::move(result));
 }
 
-Result<void> LlmConfigRepository::save_model(const LlmModelConfig& m) {
-    if (auto r = llm_secure_store(llm_secure_key_for_model(m.id), m.api_key); r.is_err()) {
-        return r;
-    }
-    return exec_write("INSERT OR REPLACE INTO llm_model_configs "
-                      "(id, provider, model_id, display_name, api_key, base_url, is_enabled, is_default, updated_at) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-                      {m.id, m.provider, m.model_id, m.display_name, null_text(), m.base_url, m.is_enabled ? 1 : 0,
-                       m.is_default ? 1 : 0});
-}
-
-Result<void> LlmConfigRepository::delete_model(const QString& id) {
-    auto r = exec_write("DELETE FROM llm_model_configs WHERE id = ?", {id});
-    llm_secure_remove(llm_secure_key_for_model(id));
-    return r;
-}
-
 } // namespace finterm

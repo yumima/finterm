@@ -5,11 +5,6 @@
 
 namespace finterm::screens {
 
-/// Returns the full list of available column identifiers for MarketPanel.
-inline QStringList all_market_columns() {
-    return {"SYMBOL", "LAST", "CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "NAME", "PRESSURE"};
-}
-
 /// Returns the default column set used for new panels.
 inline QStringList default_market_columns() {
     return {"SYMBOL", "LAST", "CHG", "CHG%", "HIGH", "LOW"};

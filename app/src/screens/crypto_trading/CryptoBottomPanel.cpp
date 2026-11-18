@@ -351,10 +351,6 @@ void CryptoBottomPanel::set_market_info(const MarketInfoData& info) {
         next_funding_label_->setText(QDateTime::fromSecsSinceEpoch(info.next_funding_time).toString("HH:mm:ss"));
 }
 
-void CryptoBottomPanel::set_mode(bool is_paper) {
-    is_paper_ = is_paper;
-}
-
 void CryptoBottomPanel::set_live_positions(const QJsonArray& positions) {
     const int n = positions.size();
     positions_table_->setUpdatesEnabled(false);
@@ -468,56 +464,6 @@ void CryptoBottomPanel::update_my_trades(const QJsonObject& json) {
         set(7, time_str, kColorTert());
     }
     my_trades_table_->setUpdatesEnabled(true);
-}
-
-void CryptoBottomPanel::update_fees(const QJsonObject& json) {
-    // Single-symbol response
-    if (json.contains("symbol")) {
-        fees_table_->setUpdatesEnabled(false);
-        fees_table_->setRowCount(1);
-        const QColor bg = kRowEven();
-
-        auto set = [&](int col, const QString& text, const QColor& fg = QColor()) {
-            auto* it = ensure_item(fees_table_, 0, col);
-            it->setText(text);
-            if (fg.isValid())
-                it->setForeground(fg);
-            it->setBackground(bg);
-            it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        };
-
-        set(0, json.value("symbol").toString());
-        set(1, QString::number(json.value("maker").toDouble() * 100.0, 'f', 4) + "%", kColorSec());
-        set(2, QString::number(json.value("taker").toDouble() * 100.0, 'f', 4) + "%", kColorSec());
-        fees_table_->setUpdatesEnabled(true);
-        return;
-    }
-
-    // Multi-symbol response
-    const QJsonArray fees = json.value("fees").toArray();
-    const int n = fees.size();
-    fees_table_->setUpdatesEnabled(false);
-    if (fees_table_->rowCount() != n)
-        fees_table_->setRowCount(n);
-
-    for (int i = 0; i < n; ++i) {
-        const auto f = fees[i].toObject();
-        const QColor bg = (i % 2 == 0) ? kRowEven() : kRowOdd();
-
-        auto set = [&](int col, const QString& text, const QColor& fg = QColor()) {
-            auto* it = ensure_item(fees_table_, i, col);
-            it->setText(text);
-            if (fg.isValid())
-                it->setForeground(fg);
-            it->setBackground(bg);
-            it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        };
-
-        set(0, f.value("symbol").toString());
-        set(1, QString::number(f.value("maker").toDouble() * 100.0, 'f', 4) + "%", kColorSec());
-        set(2, QString::number(f.value("taker").toDouble() * 100.0, 'f', 4) + "%", kColorSec());
-    }
-    fees_table_->setUpdatesEnabled(true);
 }
 
 void CryptoBottomPanel::set_live_balance(double balance, double equity, double used_margin) {

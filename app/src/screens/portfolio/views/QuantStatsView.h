@@ -70,16 +70,9 @@ class QuantStatsView : public QWidget {
     QLabel* mc_status_ = nullptr;
     QWidget* mc_results_ = nullptr;      // kept for compat
     QStackedWidget* mc_stack_ = nullptr; // 0 = placeholder, 1 = live content
-    QChartView* mc_chart_ = nullptr;
-
-    // ── Unused chart members (reserved for future time-series data) ───────────
-    QChartView* returns_chart_ = nullptr;
-    QChartView* drawdown_chart_ = nullptr;
-    QChartView* rolling_chart_ = nullptr;
 
     // ── State ─────────────────────────────────────────────────────────────────
     portfolio::PortfolioSummary summary_;
-    QString currency_;
     QJsonObject qs_data_; // parsed result from quantstats_analysis.py
     QJsonObject mc_data_; // parsed result from quantstats_monte_carlo.py
     bool qs_running_ = false;

@@ -144,10 +144,6 @@ void PortfolioSectorPanel::on_sector_legend_clicked(const QString& sector) {
     update_donut(); // refresh to show highlight
 }
 
-void PortfolioSectorPanel::set_currency(const QString& currency) {
-    currency_ = currency;
-}
-
 void PortfolioSectorPanel::update_donut() {
     auto* chart = donut_view_->chart();
     chart->removeAllSeries();

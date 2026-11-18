@@ -42,15 +42,11 @@ class ChatRepository : public BaseRepository<ChatSession> {
     /// how an embedded pane (per-stock, per-portfolio) finds its own thread.
     Result<std::optional<ChatSession>> latest_session_for_context(const QString& context_tag);
     Result<QVector<ChatSession>> list_sessions();
-    Result<void> update_session_title(const QString& id, const QString& title);
-    Result<void> update_session_persona(const QString& id, const QString& persona_id);
-    Result<void> delete_session(const QString& id);
 
     // Messages
     Result<void> add_message(const QString& session_id, const QString& role, const QString& content,
                              const QString& provider = {}, const QString& model = {}, int tokens = 0);
     Result<QVector<ChatMessage>> get_messages(const QString& session_id);
-    Result<void> delete_messages(const QString& session_id);
 
   private:
     ChatRepository() = default;

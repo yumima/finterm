@@ -30,17 +30,11 @@ class PortItem : public QGraphicsObject {
     void remove_edge(EdgeItem* edge);
     const QVector<EdgeItem*>& edges() const { return edges_; }
 
-    /// Set compatibility highlight during drag-to-connect.
-    /// 0 = none, 1 = compatible (green), -1 = incompatible (red)
-    void set_connect_highlight(int state);
-    int connect_highlight() const { return connect_highlight_; }
-
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
   signals:
     void connection_started(PortItem* from);
-    void connection_finished(PortItem* from, PortItem* to);
 
   protected:
     void hoverEnterEvent(QGraphicsSceneHoverEvent* event) override;

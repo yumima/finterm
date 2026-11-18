@@ -11,11 +11,7 @@ namespace finterm::workflow {
 /// Confirmation types that require user approval.
 enum class ConfirmationType {
     Trade,
-    RiskOverride,
-    LimitBreach,
-    LiveTrading,
     WorkflowStart,
-    DangerousAction,
 };
 
 /// Risk level for confirmation dialogs.
@@ -42,18 +38,12 @@ class ConfirmationService : public QObject {
     /// Request user confirmation. Calls callback with (approved, notes).
     void request(const ConfirmationRequest& req, std::function<void(bool approved, const QString& notes)> callback);
 
-    /// Whether paper trading auto-approve is enabled.
-    bool auto_approve_paper() const { return auto_approve_paper_; }
-    void set_auto_approve_paper(bool enabled) { auto_approve_paper_ = enabled; }
-
   signals:
     void confirmation_requested(const ConfirmationRequest& req);
     void confirmation_resolved(const QString& id, bool approved);
 
   private:
     ConfirmationService();
-
-    bool auto_approve_paper_ = true;
 
     struct PendingConfirmation {
         ConfirmationRequest request;

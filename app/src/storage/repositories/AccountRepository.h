@@ -16,8 +16,6 @@ class AccountRepository : public BaseRepository<trading::BrokerAccount> {
 
     std::optional<trading::BrokerAccount> find_by_id(const QString& account_id);
     Result<QVector<trading::BrokerAccount>> find_all();
-    Result<QVector<trading::BrokerAccount>> find_by_broker(const QString& broker_id);
-    Result<QVector<trading::BrokerAccount>> find_active();
 
   private:
     AccountRepository() = default;

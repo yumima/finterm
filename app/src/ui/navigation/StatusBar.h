@@ -19,7 +19,6 @@ class StatusBar : public QWidget {
     Q_OBJECT
   public:
     explicit StatusBar(QWidget* parent = nullptr);
-    void set_ready(bool ready);
     /// Append a widget at the far right (after the notification bell) — the
     /// AI assistant launcher lives here so it never overlays screen content.
     void add_trailing_widget(QWidget* w);

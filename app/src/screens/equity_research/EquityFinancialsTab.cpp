@@ -195,7 +195,6 @@ void EquityFinancialsTab::set_symbol(const QString& symbol) {
     if (symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
-    loaded_ = false;
     loading_overlay_->show_loading("LOADING FINANCIALS…");
 
     auto& store = services::query::QueryStore::instance();
@@ -660,13 +659,11 @@ void EquityFinancialsTab::apply_financials_state(const services::query::QuerySto
             loading_overlay_->hide_loading();
         // Deliveries are subscription-bound, so this error is for the current
         // symbol. If the tables still show a DIFFERENT symbol's statements,
-        // returning would leave them under the new symbol's header — and
-        // cached_data_ would let EXPORT CSV export them. Repaint empty.
+        // returning would leave them under the new symbol's header. Repaint
+        // empty.
         // (Same-symbol refresh failures keep the good data.)
         if (displayed_symbol_ != current_symbol_) {
             displayed_symbol_.clear();
-            cached_data_ = {};
-            loaded_ = false;
             const services::equity::FinancialsData empty;
             populate_income_view(empty);
             populate_balance_view(empty);
@@ -685,8 +682,6 @@ void EquityFinancialsTab::apply_financials_state(const services::query::QuerySto
     if (!s.data.isValid() || s.data.isNull())
         return;
     const auto payload = s.data.value<services::equity::FinancialsData>();
-    cached_data_ = payload;
-    loaded_ = true;
     displayed_symbol_ = current_symbol_;
     loading_overlay_->hide_loading();
 

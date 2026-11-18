@@ -40,23 +40,15 @@ class AccountDataStream : public QObject {
 
     // --- Symbol management ---
     void subscribe_symbols(const QStringList& symbols);
-    void set_selected_symbol(const QString& symbol, const QString& exchange);
+    void set_selected_symbol(const QString& symbol);
     QString selected_symbol() const { return selected_symbol_; }
 
     // --- On-demand fetches (for chart, orderbook, time & sales) ---
     void fetch_candles(const QString& symbol, const QString& timeframe);
     void fetch_orderbook(const QString& symbol);
     void fetch_time_sales(const QString& symbol);
-    void fetch_latest_trade(const QString& symbol);
     void fetch_calendar();
     void fetch_clock();
-
-    // --- Cached data access (main thread only) ---
-    QVector<BrokerPosition> cached_positions() const;
-    QVector<BrokerHolding> cached_holdings() const;
-    QVector<BrokerOrderInfo> cached_orders() const;
-    BrokerFunds cached_funds() const;
-    BrokerQuote cached_quote(const QString& symbol) const;
 
   signals:
     void quote_updated(const QString& account_id, const QString& symbol, const BrokerQuote& quote);
@@ -110,7 +102,6 @@ class AccountDataStream : public QObject {
 
     // Subscriptions
     QString selected_symbol_;
-    QString selected_exchange_;
     QStringList watchlist_symbols_;
 
     // Cached data (main thread only — no mutex needed since all updates are via QueuedConnection)

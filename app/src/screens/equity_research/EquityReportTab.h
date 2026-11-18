@@ -115,7 +115,6 @@ class EquityReportTab : public QWidget {
     QPushButton* pdf_btn_ = nullptr;
     QPushButton* html_btn_ = nullptr;
     QTimer* render_timer_ = nullptr;
-    int rendered_width_ = 0;
 };
 
 } // namespace finterm::screens

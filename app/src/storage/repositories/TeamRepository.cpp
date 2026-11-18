@@ -156,20 +156,4 @@ Result<std::optional<TeamRow>> TeamRepository::get(const QString& id) {
     return Out::ok(t);
 }
 
-Result<std::optional<TeamRow>> TeamRepository::get_by_name(const QString& name) {
-    using Out = Result<std::optional<TeamRow>>;
-    const QString sql = QStringLiteral("SELECT %1 FROM teams WHERE name = ? LIMIT 1").arg(kTeamCols);
-    auto r = Database::instance().execute(sql, {name});
-    if (r.is_err())
-        return Out::err(r.error());
-    auto& q = r.value();
-    if (!q.next())
-        return Out::ok(std::nullopt);
-    TeamRow t = map_row(q);
-    auto m = load_members(t.id);
-    if (m.is_ok())
-        t.member_agent_ids = m.value();
-    return Out::ok(t);
-}
-
 } // namespace finterm

@@ -215,7 +215,6 @@ struct PortfolioSummary {
     QStringList fx_unknown_symbols;
     /// Totals leave out whole holdings (no price, or no FX conversion).
     bool book_incomplete() const { return !unpriced_symbols.isEmpty() || !fx_unknown_symbols.isEmpty(); }
-    bool valuation_partial() const { return book_incomplete() || !stale_symbols.isEmpty(); }
     /// Every holding is left out: the totals are unknown, not 0.
     bool nothing_valued() const {
         if (holdings.isEmpty())
@@ -428,25 +427,6 @@ enum class DetailView {
 
 // ── Import/Export types ──────────────────────────────────────────────────────
 
-struct PortfolioExportTransaction {
-    QString date;
-    QString symbol;
-    QString type; // BUY, SELL, DIVIDEND, SPLIT
-    double quantity = 0;
-    double price = 0;
-    double total_value = 0;
-    QString notes;
-};
-
-struct PortfolioExportData {
-    QString format_version = "1.0";
-    QString portfolio_name;
-    QString owner;
-    QString currency;
-    QString export_date;
-    QVector<PortfolioExportTransaction> transactions;
-};
-
 enum class ImportMode { New, Merge };
 
 /// One transaction to import, whatever the file it came from.
@@ -462,7 +442,6 @@ struct ImportRecord {
 struct ImportResult {
     QString portfolio_id;
     QString portfolio_name;
-    int transactions_replayed = 0;
     QStringList errors;
 };
 

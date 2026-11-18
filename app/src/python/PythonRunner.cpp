@@ -77,7 +77,7 @@ static void strip_unmanaged_credentials(QProcessEnvironment& env, const QStringL
 
 // Scripts that require NumPy 1.x environment
 static const QStringList kNumpy1Scripts = {
-    "vectorbt", "backtesting", "gluonts", "functime", "financepy", "ffn", "ffn_wrapper",
+    "vectorbt", "backtesting", "gluonts", "functime", "financepy", "ffn",
 };
 
 PythonRunner& PythonRunner::instance() {

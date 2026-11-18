@@ -121,8 +121,6 @@ class PortfolioService : public QObject {
     /// (CAD → ^GSPTSE, USD → SPY, GBP → ^FTSE, EUR → ^STOXX50E, AUD → ^AXJO,
     /// JPY → ^N225, HKD → ^HSI). Falls back to SPY for unknown currencies.
     static QString default_benchmark_for_currency(const QString& currency);
-    /// Legacy shim — calls fetch_benchmark_history("SPY", period).
-    void fetch_spy_history(const QString& period = "1y");
 
     // ── 1D intraday ──────────────────────────────────────────────────────────
     /// Fetch intraday OHLC bars for a single symbol from yfinance.

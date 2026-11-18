@@ -42,7 +42,6 @@ class CftcPanel : public EconPanelBase {
     QLabel* sent_comm_net_ = nullptr;
     QLabel* sent_noncomm_net_ = nullptr;
 
-    QStackedWidget* content_stack_ = nullptr; // 0=base table, 1=sentiment
 };
 
 } // namespace finterm::screens

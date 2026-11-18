@@ -77,12 +77,6 @@ struct Strategy {
     QVector<StrategyParam> params;
 };
 
-/// Returns empty — Python is the source of truth. Strategies are loaded dynamically
-/// via BacktestingService::load_strategies() → result_ready("get_strategies").
-inline QVector<Strategy> default_strategies() {
-    return {};
-}
-
 /// Derive categories from a loaded strategy list (no hardcoded list needed).
 inline QStringList categories_from_strategies(const QVector<Strategy>& strategies) {
     QStringList cats;
@@ -161,12 +155,6 @@ struct Indicator {
     QString label;
     QVector<StrategyParam> params;
 };
-
-/// Returns empty — Python is the source of truth. Indicators are loaded dynamically
-/// via BacktestingService::execute(provider, "get_indicators", {}) → result_ready.
-inline QVector<Indicator> all_indicators() {
-    return {};
-}
 
 // ── Command options ─────────────────────────────────────────────────────────
 // These are compile-time fallbacks used ONLY when a provider does not support

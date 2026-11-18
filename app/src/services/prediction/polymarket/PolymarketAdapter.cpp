@@ -175,10 +175,6 @@ void PolymarketAdapter::reload_credentials() {
     emit credentials_changed();
 }
 
-void PolymarketAdapter::stub_unsupported(const QString& ctx) {
-    emit error_occurred(ctx, QStringLiteral("Polymarket adapter: not supported in this call"));
-}
-
 // ── Python bridge ───────────────────────────────────────────────────────────
 
 QJsonObject PolymarketAdapter::creds_to_json(const pr::PolymarketCredentials& c) const {

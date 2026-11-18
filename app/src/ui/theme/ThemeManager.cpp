@@ -75,17 +75,6 @@ void ThemeManager::apply_theme(const QString& /*name*/) {
     rebuild_and_apply();
 }
 
-void ThemeManager::apply_font(const QString& family, int size_px) {
-    // An empty family must NOT clobber the default — an empty QFont family makes
-    // Qt pick an arbitrary fallback (the "looks different after restart" bug).
-    // Guard it like size_px below: unset/empty → keep the current default.
-    if (!family.isEmpty())
-        font_family_ = family;
-    font_size_px_ = (size_px > 0) ? size_px : 14;
-    // rebuild_and_apply() will sync qApp->setFont() and QSS together.
-    rebuild_and_apply();
-}
-
 void ThemeManager::apply_density(const QString& density) {
     if (density == "Compact")
         density_pad_ = 2;
@@ -103,12 +92,6 @@ QString ThemeManager::current_theme_name() const {
 
 QStringList ThemeManager::available_densities() {
     return {"Compact", "Default", "Comfortable"};
-}
-
-QFont ThemeManager::current_font() const {
-    QFont f(font_family_);
-    f.setPixelSize(font_size_px_);
-    return f;
 }
 
 void ThemeManager::rebuild_and_apply() {

@@ -20,7 +20,6 @@ class UnifiedTrading : public QObject {
     // Session management (legacy single-session API — kept for backward compat)
     TradingSession init_session(const QString& broker, const QString& mode, const QString& paper_portfolio_id = "");
     std::optional<TradingSession> get_session() const;
-    TradingSession switch_mode(const QString& mode);
 
     // Order routing (legacy — uses session_)
     UnifiedOrderResponse place_order(const UnifiedOrder& order);
@@ -42,11 +41,6 @@ class UnifiedTrading : public QObject {
     };
     QVector<BroadcastResult> broadcast_order(const QStringList& account_ids, const UnifiedOrder& order);
 
-    // Order bridge for algo trading
-    void start_order_bridge();
-    void stop_order_bridge();
-    bool is_bridge_running() const;
-
     UnifiedTrading(const UnifiedTrading&) = delete;
     UnifiedTrading& operator=(const UnifiedTrading&) = delete;
 
@@ -62,9 +56,6 @@ class UnifiedTrading : public QObject {
 
     std::optional<TradingSession> session_;
     mutable QMutex mutex_;
-
-    // Order bridge
-    std::atomic<bool> bridge_running_{false};
 };
 
 } // namespace finterm::trading

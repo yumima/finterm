@@ -12,12 +12,12 @@
 
 namespace finterm {
 
-class ScreenRouter;
+class DockScreenRouter;
 
 /// Central workspace service — singleton QObject on the UI thread.
 ///
 /// Lifecycle:
-///   MainWindow creates it after setup_app_screens().
+///   MainWindow wires it up via set_main_window() during startup.
 ///   load_last_workspace() is called after auth resolves.
 ///   save_workspace() is called in closeEvent().
 class WorkspaceManager : public QObject {
@@ -25,13 +25,16 @@ class WorkspaceManager : public QObject {
   public:
     static WorkspaceManager& instance();
 
-    /// Register a window/router. Multiple windows supported (multi-window mode).
+    /// Register a window. Multiple windows supported (multi-window mode).
     void set_main_window(QMainWindow* w);
-    void set_router(ScreenRouter* r);
 
-    /// Unregister a closing window/router to prevent dangling pointers.
+    /// Unregister a closing window to prevent dangling pointers.
     void remove_window(QMainWindow* w);
-    void remove_router(ScreenRouter* r);
+
+    /// Register a window's screen router; the first one registered is the
+    /// primary router whose active screen a workspace saves and restores.
+    /// Unregisters itself when the router is destroyed.
+    void set_router(DockScreenRouter* r);
 
     // ── Screen participation ──────────────────────────────────────────────────
 
@@ -66,12 +69,6 @@ class WorkspaceManager : public QObject {
 
     QString current_workspace_name() const;
 
-    QString current_workspace_path() const;
-
-  public slots:
-    /// Connected to ScreenRouter::screen_changed — delivers pending states.
-    void on_screen_changed(const QString& screen_id);
-
   signals:
     void workspace_loaded(const WorkspaceDef& ws);
     void workspace_saved(const QString& id);
@@ -95,7 +92,7 @@ class WorkspaceManager : public QObject {
     // Multi-window aware: stores all registered windows and routers.
     // The first registered window is treated as primary for workspace operations.
     QList<QMainWindow*> windows_;
-    QList<ScreenRouter*> routers_;
+    QList<DockScreenRouter*> routers_;
     QTimer* autosave_timer_ = nullptr;
 };
 

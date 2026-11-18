@@ -108,8 +108,6 @@ class DataHub : public QObject {
     void unsubscribe(QObject* owner);
     /// Remove only the subscription for `owner` on `topic`.
     void unsubscribe(QObject* owner, const QString& topic);
-    /// Remove only the wildcard subscription for `owner` on `pattern`.
-    void unsubscribe_pattern(QObject* owner, const QString& pattern);
 
     // ── Error subscriptions ─────────────────────────────────────────────────
     //
@@ -130,7 +128,6 @@ class DataHub : public QObject {
                              std::function<void(const QString& topic, const QString& error)> slot);
 
     void unsubscribe_errors(QObject* owner, const QString& topic);
-    void unsubscribe_pattern_errors(QObject* owner, const QString& pattern);
 
     // ── Publishing (producer side) ──────────────────────────────────────────
 

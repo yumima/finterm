@@ -125,10 +125,4 @@ void StatusBar::add_trailing_widget(QWidget* w) {
     layout_->addWidget(w, 0, Qt::AlignVCenter);
 }
 
-void StatusBar::set_ready(bool ready) {
-    ready_label_->setText(ready ? "READY" : "BUSY");
-    ready_label_->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;")
-                                    .arg(ready ? colors::POSITIVE() : colors::TEXT_SECONDARY()));
-}
-
 } // namespace finterm::ui

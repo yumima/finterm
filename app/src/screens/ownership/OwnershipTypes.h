@@ -235,27 +235,6 @@ struct BookPosition {
     bool priced = false;
 };
 
-/// The last close ON OR BEFORE @p on, from a [["YYYY-MM-DD", close], ...]
-/// series. Quarter ends and anniversaries land on weekends and holidays
-/// often enough that an exact-date lookup would silently drop a return.
-inline std::optional<double> close_on_or_before(const QJsonArray& series, const QDate& on) {
-    std::optional<double> best;
-    QDate best_date;
-    for (const auto& v : series) {
-        const auto row = v.toArray();
-        if (row.size() < 2)
-            continue;
-        const QDate d = QDate::fromString(row.at(0).toString(), Qt::ISODate);
-        if (!d.isValid() || d > on)
-            continue;
-        if (!best || d > best_date) {
-            best = row.at(1).toDouble();
-            best_date = d;
-        }
-    }
-    return best;
-}
-
 /// The same lookup for several dates in ONE pass over the series.
 inline QVector<std::optional<double>> closes_on_or_before(const QJsonArray& series, const QVector<QDate>& on) {
     QVector<std::optional<double>> best(on.size());
@@ -349,10 +328,6 @@ struct OwnershipSnapshot {
     /// market-wide ranking has been computed for the same settlement date.
     std::optional<double> sirio_percentile;
     int sirio_universe = 0;
-
-    bool has_any() const {
-        return !transactions.isEmpty() || !stakes.isEmpty() || !holders.isEmpty() || short_history.has_data();
-    }
 };
 
 // ── Market-wide scans ────────────────────────────────────────────────────────

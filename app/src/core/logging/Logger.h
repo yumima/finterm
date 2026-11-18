@@ -20,7 +20,6 @@ class Logger {
     void set_level(LogLevel level);
     void set_file(const QString& path);
     void set_tag_level(const QString& tag, LogLevel level);
-    void clear_tag_level(const QString& tag);
     void clear_all_tag_levels();
 
     // JSON output mode — one JSON object per line when enabled (P3.17).
@@ -28,7 +27,6 @@ class Logger {
     bool json_mode() const;
 
     LogLevel global_level() const { return min_level_.load(std::memory_order_relaxed); }
-    QHash<QString, LogLevel> tag_levels() const;
 
     // Cheap level check used by the LOG_* macros to avoid evaluating args
     // when the level is filtered out (P2.11).

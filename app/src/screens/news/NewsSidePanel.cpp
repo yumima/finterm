@@ -176,8 +176,6 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
         return section;
     };
 
-    entities_section_ = build_hidden_section("ENTITIES", entities_layout_);
-    signals_section_ = build_hidden_section("SIGNALS", signals_layout_);
     saved_section_ = build_hidden_section("BOOKMARKS", saved_layout_);
 
     layout->addStretch();
@@ -418,65 +416,6 @@ void NewsSidePanel::update_deviations(const QVector<QPair<QString, double>>& dev
 }
 
 // ── Intelligence section update methods ────────────────────────────────────
-
-void NewsSidePanel::update_entities(const services::NerResult& ner) {
-    while (entities_layout_->count() > 0) {
-        auto* item = entities_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-    bool has_data = false;
-
-    for (const auto& c : ner.top_countries) {
-        auto* lbl = new QLabel(QString("%1  %2").arg(c.name, -6).arg(c.count), this);
-        lbl->setObjectName("newsCategoryBtn");
-        entities_layout_->addWidget(lbl);
-        has_data = true;
-    }
-    for (const auto& o : ner.top_organizations) {
-        auto* lbl = new QLabel(QString("%1  %2").arg(o.name.left(16), -16).arg(o.count), this);
-        lbl->setObjectName("newsMonitorLabel");
-        entities_layout_->addWidget(lbl);
-        has_data = true;
-    }
-    for (const auto& p : ner.top_people) {
-        auto* lbl = new QLabel(QString("%1  %2").arg(p.name.left(16), -16).arg(p.count), this);
-        lbl->setObjectName("newsMonitorLabel");
-        entities_layout_->addWidget(lbl);
-        has_data = true;
-    }
-
-    entities_section_->setVisible(has_data);
-}
-
-void NewsSidePanel::update_signals(const QVector<services::CorrelationSignal>& sigs) {
-    while (signals_layout_->count() > 0) {
-        auto* item = signals_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    if (sigs.isEmpty()) {
-        signals_section_->hide();
-        return;
-    }
-    signals_section_->show();
-
-    for (int i = 0; i < std::min(8, static_cast<int>(sigs.size())); ++i) {
-        const auto& sig = sigs[i];
-        QString color = sig.severity == "critical"
-                            ? "" + QString(ui::colors::NEGATIVE()) + ""
-                            : (sig.severity == "high" ? "" + QString(ui::colors::WARNING()) + ""
-                                                      : "" + QString(ui::colors::WARNING()) + "");
-        auto* lbl = new QLabel(sig.detail.left(40), this);
-        lbl->setObjectName("newsDeviationCategory");
-        lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
-        lbl->setToolTip(sig.detail);
-        signals_layout_->addWidget(lbl);
-    }
-}
 
 void NewsSidePanel::update_saved(const QVector<services::NewsArticle>& saved) {
     while (saved_layout_->count() > 0) {

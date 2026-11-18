@@ -55,7 +55,6 @@ class ToolsViewPanel : public QWidget {
     void update_assigned_dots();
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-    QString current_target_name() const;
     QStringList tools_of_target() const;
     void copy_tool_name(const QString& name);
 
@@ -89,7 +88,6 @@ class ToolsViewPanel : public QWidget {
     services::AgentToolsInfo all_tools_;
     QVector<services::AgentInfo> agent_configs_;
     bool data_loaded_ = false;
-    QString current_tool_; // tool shown in detail panel
 };
 
 } // namespace finterm::screens

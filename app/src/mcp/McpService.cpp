@@ -287,59 +287,6 @@ ToolResult McpService::execute_openai_function(const QString& function_name, con
 // Validation
 // ============================================================================
 
-Result<void> McpService::validate_params(const QString& tool_name, const QJsonObject& args) {
-    auto tools = get_all_tools();
-    for (const auto& tool : tools) {
-        if (tool.name != tool_name)
-            continue;
-
-        const QJsonObject& schema = tool.input_schema;
-
-        // Required field validation
-        if (schema.contains("required")) {
-            for (const auto& req : schema["required"].toArray()) {
-                QString field = req.toString();
-                if (!args.contains(field))
-                    return Result<void>::err("Missing required parameter: " + field.toStdString());
-            }
-        }
-
-        // Type validation
-        if (schema.contains("properties")) {
-            QJsonObject props = schema["properties"].toObject();
-            for (auto it = props.constBegin(); it != props.constEnd(); ++it) {
-                const QString& key = it.key();
-                if (!args.contains(key))
-                    continue;
-
-                QString expected = it.value().toObject()["type"].toString();
-                QJsonValue val = args[key];
-
-                bool valid = true;
-                if (expected == "string")
-                    valid = val.isString();
-                else if (expected == "number")
-                    valid = val.isDouble();
-                else if (expected == "integer")
-                    valid = val.isDouble();
-                else if (expected == "boolean")
-                    valid = val.isBool();
-                else if (expected == "array")
-                    valid = val.isArray();
-                else if (expected == "object")
-                    valid = val.isObject();
-
-                if (!valid)
-                    return Result<void>::err(("Parameter '" + key + "' should be " + expected).toStdString());
-            }
-        }
-
-        return Result<void>::ok();
-    }
-
-    return Result<void>::err("Tool not found: " + tool_name.toStdString());
-}
-
 // ============================================================================
 // Cache
 // ============================================================================

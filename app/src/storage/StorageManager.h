@@ -13,7 +13,6 @@ struct StorageCategoryInfo {
     QString label; // e.g. "Chat History"
     QString group; // e.g. "AI & LLM", "Trading", "Data"
     int count = 0; // number of rows / entries
-    bool clearable = true;
 };
 
 /// Centralized manager for querying and clearing all persistent data stores.
@@ -25,9 +24,6 @@ class StorageManager : public QObject {
 
     /// Returns stats for every data category.
     QVector<StorageCategoryInfo> all_stats() const;
-
-    /// Returns entry count for a single category.
-    int count_for(const QString& category_id) const;
 
     /// Clears all data in a single category. Returns error string on failure.
     Result<void> clear_category(const QString& category_id);

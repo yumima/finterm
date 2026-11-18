@@ -204,10 +204,6 @@ QKeySequence KeyConfigManager::key(KeyAction a) const {
     return {};
 }
 
-QKeySequence KeyConfigManager::default_key(KeyAction a) const {
-    return defaults_.value(a);
-}
-
 QString KeyConfigManager::display_name(KeyAction a) const {
     switch (a) {
         case KeyAction::Refresh:

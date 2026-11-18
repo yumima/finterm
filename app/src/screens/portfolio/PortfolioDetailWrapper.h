@@ -44,7 +44,6 @@ class PortfolioDetailWrapper : public QWidget {
 
     // Lazily created views
     QHash<int, QWidget*> views_;
-    portfolio::DetailView current_view_ = portfolio::DetailView::AnalyticsSectors;
 
     // Data passed to views
     portfolio::PortfolioSummary current_summary_;

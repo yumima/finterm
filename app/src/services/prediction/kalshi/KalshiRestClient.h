@@ -35,7 +35,6 @@ class KalshiRestClient : public QObject {
 
     /// Swap base URL between production and demo environments.
     void set_demo_mode(bool demo);
-    bool demo_mode() const { return demo_; }
     QString base_url() const;
 
     // ── Public endpoints ─────────────────────────────────────────────────

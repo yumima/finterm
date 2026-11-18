@@ -113,8 +113,6 @@ struct ConnectorConfig {
 
 // ── Connection status ──────────────────────────────────────────────────────
 
-enum class ConnStatus { Connected, Disconnected, Error, Testing };
-
 // ── UI view modes ──────────────────────────────────────────────────────────
 
 enum class ViewMode { Gallery, Connections };

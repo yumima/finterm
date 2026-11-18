@@ -31,12 +31,6 @@ BrokerHttpResponse BrokerHttp::post_json(const QString& url, const QJsonObject& 
     return execute("POST", url, body, "application/json", headers);
 }
 
-BrokerHttpResponse BrokerHttp::post_json_array(const QString& url, const QJsonArray& payload,
-                                               const QMap<QString, QString>& headers) {
-    QByteArray body = QJsonDocument(payload).toJson(QJsonDocument::Compact);
-    return execute("POST", url, body, "application/json", headers);
-}
-
 BrokerHttpResponse BrokerHttp::put_json(const QString& url, const QJsonObject& payload,
                                         const QMap<QString, QString>& headers) {
     QByteArray body = QJsonDocument(payload).toJson(QJsonDocument::Compact);

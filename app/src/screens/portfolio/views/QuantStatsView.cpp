@@ -281,9 +281,8 @@ void QuantStatsView::build_ui() {
 
 // ── set_data ──────────────────────────────────────────────────────────────────
 
-void QuantStatsView::set_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
+void QuantStatsView::set_data(const portfolio::PortfolioSummary& summary, const QString& /*currency*/) {
     summary_ = summary;
-    currency_ = currency;
 
     // Populate metrics immediately from live summary data
     update_metrics();
@@ -803,7 +802,6 @@ void QuantStatsView::update_monte_carlo_chart() {
         QWidget* old = mc_stack_->widget(1);
         mc_stack_->removeWidget(old);
         old->deleteLater();
-        mc_chart_ = nullptr;
     }
 
     auto* content = new QWidget(this);
@@ -969,7 +967,6 @@ void QuantStatsView::update_monte_carlo_chart() {
     auto* chart_view = new QChartView(chart);
     chart_view->setRenderHint(QPainter::Antialiasing, false);
     chart_view->setStyleSheet(QString("background:%1; border:none;").arg(ui::colors::BG_BASE()));
-    mc_chart_ = chart_view;
 
     cl->addWidget(chart_view, 1);
 

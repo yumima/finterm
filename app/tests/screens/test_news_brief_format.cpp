@@ -260,17 +260,8 @@ private slots:
         QVERIFY(categories_in_heading(QStringLiteral("CRY PTO, DEFENSE")).isEmpty());
     }
 
-    void the_prompt_menu_and_the_classifier_offer_the_same_names() {
-        // Two orders on purpose — keyword precedence decides classification,
-        // editorial order decides what the model reaches for first — but they
-        // must never hold different NAMES, or the prompt offers a category the
-        // renderer cannot recognise in a heading.
-        QStringList menu = finterm::news::prompt_menu();
-        QStringList rules = finterm::news::category_names();
-        QVERIFY2(menu != rules, "if these ever match, the editorial order was lost to a refactor");
-        menu.sort();
-        rules.sort();
-        QCOMPARE(menu, rules);
+    void portfolio_is_a_heading_but_not_a_classification() {
+        const QStringList rules = finterm::news::category_names();
         // PORTFOLIO is a heading but not a classification: no wording in a
         // headline can make a story belong to the reader's holdings.
         QVERIFY(finterm::news::heading_vocabulary().contains(QStringLiteral("PORTFOLIO")));

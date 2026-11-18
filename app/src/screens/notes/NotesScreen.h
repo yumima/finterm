@@ -53,7 +53,6 @@ class NotesScreen : public QWidget, public IStatefulScreen {
     QVector<finterm::FinancialNote> filtered_notes_;
     QString current_category_ = "ALL";
     int selected_note_id_ = -1;
-    bool is_editing_ = false;
 
     // Category sidebar
     QListWidget* category_list_ = nullptr;

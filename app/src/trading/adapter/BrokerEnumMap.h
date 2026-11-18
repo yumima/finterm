@@ -57,12 +57,10 @@ class BrokerEnumMap {
 
     std::optional<T> for_order_type(OrderType k) const { return lookup(order_type_, static_cast<int>(k)); }
     std::optional<T> for_side(OrderSide k) const { return lookup(side_, static_cast<int>(k)); }
-    std::optional<T> for_product(ProductType k) const { return lookup(product_, static_cast<int>(k)); }
 
     /// Convenience: return value or fallback.
     T order_type_or(OrderType k, T fallback) const { return for_order_type(k).value_or(std::move(fallback)); }
     T side_or(OrderSide k, T fallback) const { return for_side(k).value_or(std::move(fallback)); }
-    T product_or(ProductType k, T fallback) const { return for_product(k).value_or(std::move(fallback)); }
 
   private:
     static std::optional<T> lookup(const QHash<int, T>& m, int k) {

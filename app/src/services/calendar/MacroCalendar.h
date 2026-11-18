@@ -153,22 +153,6 @@ inline Bucket bucket_for(const QDate& d, const QDate& today) {
     return Bucket::Upcoming;
 }
 
-inline QString bucket_title(Bucket b) {
-    switch (b) {
-    case Bucket::Today:
-        return QStringLiteral("TODAY");
-    case Bucket::ThisWeek:
-        return QStringLiteral("THIS WEEK");
-    case Bucket::ThisMonth:
-        return QStringLiteral("THIS MONTH");
-    case Bucket::Upcoming:
-        return QStringLiteral("UPCOMING");
-    case Bucket::Past:
-        break;
-    }
-    return QStringLiteral("EARLIER");
-}
-
 /// Short local label: "Today 08:30", "Tue 08:30" (within 6 days), "Nov 20
 /// 08:30"; untimed items drop the clock ("Tue", "Nov 20").
 inline QString short_when(const QDateTime& when, bool timed, const QDate& today) {

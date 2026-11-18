@@ -158,20 +158,11 @@ void CryptoOrderBook::set_data(const QVector<QPair<double, double>>& bids, const
         QMutexLocker lock(&mutex_);
         bids_ = bids;
         asks_ = asks;
-        spread_ = spread;
-        spread_pct_ = spread_pct;
     }
     spread_label_->setText(QString("SPREAD  %1  (%2%)").arg(spread, 0, 'f', 2).arg(spread_pct, 0, 'f', 4));
     cache_dirty_ = true;
     if (repaint_timer_ && !repaint_timer_->isActive())
         repaint_timer_->start();
-}
-
-void CryptoOrderBook::add_tick_snapshot(const TickSnapshot& snap) {
-    QMutexLocker lock(&mutex_);
-    tick_history_.append(snap);
-    if (tick_history_.size() > OB_MAX_TICK_HISTORY)
-        tick_history_.remove(0, tick_history_.size() - OB_MAX_TICK_HISTORY);
 }
 
 void CryptoOrderBook::resizeEvent(QResizeEvent* event) {

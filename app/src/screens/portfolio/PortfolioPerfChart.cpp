@@ -458,10 +458,6 @@ void PortfolioPerfChart::set_currency(const QString& currency) {
     currency_ = currency;
 }
 
-void PortfolioPerfChart::set_spy_history(const QStringList& dates, const QVector<double>& closes) {
-    set_benchmark_history(QStringLiteral("SPY"), dates, closes);
-}
-
 void PortfolioPerfChart::set_benchmark_history(const QString& symbol, const QStringList& dates,
                                                const QVector<double>& closes) {
     benchmark_symbol_ = symbol.isEmpty() ? QStringLiteral("SPY") : symbol;
@@ -483,7 +479,6 @@ void PortfolioPerfChart::set_period(const QString& period) {
     // PortfolioService::fetch_*_intraday is invoked by the screen owner; the
     // chart paints a placeholder until set_*_intraday() lands.
     if (is_intraday_period()) {
-        intraday_requested_ = true;
         intraday_resolved_ = false;           // waiting for callback
         intraday_for_symbol_ = focus_symbol_; // empty if portfolio view
         // 1D gets a 2-point prev-close → current seed so the chart isn't
@@ -512,7 +507,6 @@ void PortfolioPerfChart::set_period(const QString& period) {
     // Switching away from an intraday-rendered period — clear the cache so
     // a return to it re-fetches fresh data, and restore the indexed-mode
     // toggle.
-    intraday_requested_ = false;
     intraday_ts_ms_.clear();
     intraday_values_.clear();
     if (indexed_btn_) {
@@ -601,7 +595,6 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
         // intraday fetch when the current period is rendered intraday (1D
         // always, 1W in focus mode) so we don't hit the daily-close path.
         if (is_intraday_period()) {
-            intraday_requested_ = true;
             intraday_resolved_ = false;
             if (current_period_ == QStringLiteral("1D"))
                 seed_intraday_from_summary();
@@ -637,7 +630,6 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     // prior symbol's intraday bars so the chart shows a "Loading…"
     // placeholder until the new symbol's bars land.
     if (is_intraday_period()) {
-        intraday_requested_ = true;
         intraday_resolved_ = false;
         intraday_for_symbol_ = focus_symbol_;
         intraday_ts_ms_.clear();
@@ -719,7 +711,6 @@ void PortfolioPerfChart::clear_focus_symbol() {
     intraday_values_.clear();
     intraday_for_symbol_.clear();
     if (current_period_ == QStringLiteral("1D")) {
-        intraday_requested_ = true;
         seed_intraday_from_summary(); // aggregate seed now that focus is gone
         emit intraday_requested(QString(), QStringLiteral("1d"), QStringLiteral("1m"));
     } else if (current_period_ == QStringLiteral("1W")) {

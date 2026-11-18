@@ -75,21 +75,6 @@ Result<QVector<AuditEntry>> AuditLogger::query(const QDateTime& from, const QDat
     return Result<QVector<AuditEntry>>::ok(std::move(entries));
 }
 
-Result<QVector<AuditEntry>> AuditLogger::by_workflow(const QString& workflow_id) const {
-    auto r = finterm::Database::instance().execute(
-        "SELECT id, action, workflow_id, node_id, symbol, details, metadata, paper, timestamp "
-        "FROM workflow_audit_log WHERE workflow_id = ? ORDER BY timestamp DESC",
-        {workflow_id});
-    if (r.is_err())
-        return Result<QVector<AuditEntry>>::err(r.error());
-
-    QVector<AuditEntry> entries;
-    auto& q = r.value();
-    while (q.next())
-        entries.append(map_entry(q));
-    return Result<QVector<AuditEntry>>::ok(std::move(entries));
-}
-
 Result<QVector<AuditEntry>> AuditLogger::recent(int limit) const {
     auto r = finterm::Database::instance().execute(
         "SELECT id, action, workflow_id, node_id, symbol, details, metadata, paper, timestamp "

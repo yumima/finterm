@@ -137,7 +137,6 @@ class PortfolioHeatmap : public QWidget {
     QLabel* pfund_breadth_ = nullptr;
 
     // Risk gauge
-    QLabel* risk_label_ = nullptr;
     QWidget* risk_bar_ = nullptr;
     QLabel* risk_value_ = nullptr;
 

@@ -81,20 +81,6 @@ void AppContextService::set_active_portfolio(const QString& id, const QString& n
     parked_portfolio_name_.clear();
 }
 
-void AppContextService::clear_symbol() {
-    QMutexLocker lock(&mutex_);
-    snap_.symbol.clear();
-    snap_.symbol_as_of = {};
-    parked_symbol_.clear();
-}
-
-void AppContextService::clear_portfolio() {
-    QMutexLocker lock(&mutex_);
-    clear_portfolio_locked();
-    parked_portfolio_id_.clear();
-    parked_portfolio_name_.clear();
-}
-
 void AppContextService::clear_portfolio_if(const QString& id) {
     QMutexLocker lock(&mutex_);
     if (!id.isEmpty() && snap_.portfolio_id == id)

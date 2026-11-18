@@ -115,12 +115,6 @@ struct RSSFeed {
 
 // ── AI Summarization ────────────────────────────────────────────────────────
 
-struct HeadlineSummary {
-    QString summary;
-    int64_t cached_at = 0;
-    QString headline_signature; // hash of headlines used to generate
-};
-
 // ── Service ─────────────────────────────────────────────────────────────────
 
 /// Phase 5 — DataHub producer for `news:general`, `news:symbol:*`,

@@ -49,8 +49,4 @@ class IpoCalendarWidget : public BaseWidget {
     QVector<IpoEntry> entries_;
 };
 
-inline BaseWidget* create_ipo_calendar_widget() {
-    return new IpoCalendarWidget;
-}
-
 } // namespace finterm::screens::widgets

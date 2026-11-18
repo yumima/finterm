@@ -38,8 +38,6 @@ class EquityOrderBook : public QWidget {
 
     QVector<QPair<double, double>> bids_;
     QVector<QPair<double, double>> asks_;
-    double spread_ = 0;
-    double spread_pct_ = 0;
 
     QPixmap cache_;
     bool cache_dirty_ = true;

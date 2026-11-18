@@ -1193,11 +1193,6 @@ LlmService::HttpResult LlmService::blocking_post(const QString& url, const QJson
 // Blocking GET helper (mirrors blocking_post but without a body)
 // ============================================================================
 
-LlmService::HttpResult LlmService::blocking_get(const QString& url, const QMap<QString, QString>& headers,
-                                                int timeout_ms) {
-    return eventloop_request("GET", url, {}, headers, timeout_ms);
-}
-
 // ============================================================================
 // Localhost-stub async LLM path — POST /research/llm/async → poll
 // /research/llm/status/{id}. Used for the primary LLM response;

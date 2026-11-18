@@ -299,10 +299,8 @@ void PortfolioFuturesView::build_ui() {
     }
 }
 
-void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summary, const QString& currency) {
+void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summary, const QString& /*currency*/) {
     summary_ = summary;
-    if (!currency.isEmpty())
-        currency_ = currency;
     populate_futures();
     populate_extended();
     // The futures holdings may have changed with the summary.

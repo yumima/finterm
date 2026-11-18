@@ -1,7 +1,5 @@
 #pragma once
-#include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsMonitorService.h"
-#include "services/news/NewsNlpService.h"
 #include "services/news/NewsService.h"
 
 #include <QLabel>
@@ -27,8 +25,6 @@ class NewsSidePanel : public QWidget {
     void update_monitors(const QVector<services::NewsMonitor>& monitors,
                          const QMap<QString, QVector<services::NewsArticle>>& matches);
     void update_deviations(const QVector<QPair<QString, double>>& deviations);
-    void update_entities(const services::NerResult& ner);
-    void update_signals(const QVector<services::CorrelationSignal>& sigs);
     void update_saved(const QVector<services::NewsArticle>& saved);
 
     /// DIGEST — the INTEL strip's whole-feed AI read renders here, in the
@@ -81,14 +77,6 @@ class NewsSidePanel : public QWidget {
     // Deviations
     QVBoxLayout* deviations_layout_ = nullptr;
     QWidget* deviations_section_ = nullptr;
-
-    // Entities (NER)
-    QVBoxLayout* entities_layout_ = nullptr;
-    QWidget* entities_section_ = nullptr;
-
-    // Correlation signals
-    QVBoxLayout* signals_layout_ = nullptr;
-    QWidget* signals_section_ = nullptr;
 
     // Saved / bookmarked articles
     QVBoxLayout* saved_layout_ = nullptr;

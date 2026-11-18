@@ -29,22 +29,6 @@ class EquityFinancialsTab : public QWidget {
     QWidget* build_balance_view();
     QWidget* build_cashflow_view();
 
-    // Section builders
-    QWidget* build_key_metrics_section();
-    QWidget* build_profitability_section();
-    QWidget* build_dupont_section();
-    QWidget* build_liquidity_section();
-    QWidget* build_balance_section();
-    QWidget* build_cashflow_detail_section();
-    QWidget* build_raw_table_section(QTableWidget*& tbl_out);
-
-    // Chart builders
-    QChartView* build_revenue_trend_chart();
-    QChartView* build_margin_trend_chart();
-    QChartView* build_balance_trend_chart();
-    QChartView* build_cashflow_trend_chart();
-    QChartView* build_return_trend_chart();
-
     // Populate helpers
     void populate_income_view(const services::equity::FinancialsData& d);
     void populate_balance_view(const services::equity::FinancialsData& d);
@@ -58,8 +42,6 @@ class EquityFinancialsTab : public QWidget {
 
     // Helpers
     static QFrame* make_section(const QString& title, const QString& color);
-    static QLabel* make_metric_card(QWidget* parent, const QString& label, const QString& value, const QString& color,
-                                    const QString& subtitle = {});
     static void set_metric(QLabel* lbl, const QString& val);
     /// Line-item value, or NaN when the filing does not report it (NaN
     /// propagates through ratios and renders as the placeholder).
@@ -70,14 +52,12 @@ class EquityFinancialsTab : public QWidget {
     static QString fmt_large(double v);
     static QString fmt_pct(double v);
     static QString fmt_ratio(double v);
-    static QColor growth_color(double v);
 
     QString current_symbol_;
     /// Symbol whose statements the tables currently show — compared by the
     /// error path so a failed fetch after a symbol switch repaints empty
     /// instead of leaving (and exporting) the previous symbol's financials.
     QString displayed_symbol_;
-    bool loaded_ = false;
 
     // Statement selector buttons
     QPushButton* btn_income_ = nullptr;
@@ -146,8 +126,6 @@ class EquityFinancialsTab : public QWidget {
     QLabel* cf_capex_rev_ = nullptr;
     QChartView* cf_chart_ = nullptr;
     QTableWidget* cf_table_ = nullptr;
-
-    services::equity::FinancialsData cached_data_;
 
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };

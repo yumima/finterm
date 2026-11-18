@@ -115,12 +115,10 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     sort_relevance_ = make_pill("REL", "RELEVANCE", hl);
     sort_newest_ = make_pill("NEW", "NEWEST", hl);
     connect(sort_relevance_, &QPushButton::clicked, this, [this]() {
-        active_sort_ = "RELEVANCE";
         update_pill_group({sort_relevance_, sort_newest_}, "REL");
         emit sort_changed("RELEVANCE");
     });
     connect(sort_newest_, &QPushButton::clicked, this, [this]() {
-        active_sort_ = "NEWEST";
         update_pill_group({sort_relevance_, sort_newest_}, "NEW");
         emit sort_changed("NEWEST");
     });
@@ -151,12 +149,10 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
 
     view_clusters_ = make_pill("CLST", "CLUSTERS", hl);
     connect(view_wire_, &QPushButton::clicked, this, [this]() {
-        active_view_ = "WIRE";
         update_pill_group({view_wire_, view_clusters_}, "WIRE");
         emit view_mode_changed("WIRE");
     });
     connect(view_clusters_, &QPushButton::clicked, this, [this]() {
-        active_view_ = "CLUSTERS";
         update_pill_group({view_wire_, view_clusters_}, "CLST");
         emit view_mode_changed("CLUSTERS");
     });
@@ -176,7 +172,6 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     // Click → reset the WIRE/CLUSTERS pill back to WIRE so the local
     // command-bar state matches what NewsScreen will do, then signal up.
     connect(unseen_label_, &QPushButton::clicked, this, [this]() {
-        active_view_ = "WIRE";
         update_pill_group({view_wire_, view_clusters_}, "WIRE");
         emit unseen_clicked();
     });
@@ -460,17 +455,6 @@ void NewsCommandBar::update_sentiment(int bullish, int bearish, int neutral) {
 }
 
 // ── PTF pill ───────────────────────────────────────────────────────────────
-
-void NewsCommandBar::set_portfolio_available(bool available) {
-    // The pill is always clickable regardless of this flag — holdings
-    // availability is signalled by the inline count badge (empty filter
-    // result IS the "no holdings" affordance). The flag is kept on the
-    // bar so callers can introspect it via the existing setter contract
-    // and for future UI variants (e.g., subtle tinting) without touching
-    // the click path.
-    portfolio_available_ = available;
-    refresh_portfolio_pill();
-}
 
 void NewsCommandBar::set_portfolio_match_count(int count) {
     portfolio_match_count_ = count;

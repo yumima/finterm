@@ -12,15 +12,6 @@ namespace finterm::screens::polymarket {
 using namespace finterm::ui;
 using namespace finterm::services::polymarket;
 
-static QString fmt_pnl(double v) {
-    QString sign = v >= 0 ? "+" : "";
-    if (qAbs(v) >= 1e6)
-        return sign + QString("$%1M").arg(v / 1e6, 0, 'f', 1);
-    if (qAbs(v) >= 1e3)
-        return sign + QString("$%1K").arg(v / 1e3, 0, 'f', 1);
-    return sign + QString("$%1").arg(v, 0, 'f', 0);
-}
-
 PolymarketLeaderboard::PolymarketLeaderboard(QWidget* parent) : QWidget(parent) {
     auto* vl = new QVBoxLayout(this);
     vl->setContentsMargins(0, 0, 0, 0);
@@ -61,37 +52,6 @@ PolymarketLeaderboard::PolymarketLeaderboard(QWidget* parent) : QWidget(parent) 
                               .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(), colors::BG_HOVER(),
                                    colors::BG_RAISED(), colors::TEXT_SECONDARY()));
     vl->addWidget(table_, 1);
-}
-
-void PolymarketLeaderboard::set_entries(const QVector<LeaderboardEntry>& entries) {
-    table_->setSortingEnabled(false);
-    table_->setRowCount(entries.size());
-
-    for (int i = 0; i < entries.size(); ++i) {
-        const auto& e = entries[i];
-
-        auto* rank_item = new QTableWidgetItem(QString::number(e.rank > 0 ? e.rank : i + 1));
-        rank_item->setTextAlignment(Qt::AlignCenter);
-        table_->setItem(i, 0, rank_item);
-
-        table_->setItem(i, 1, new QTableWidgetItem(e.display_name));
-
-        auto* pnl_item = new QTableWidgetItem(fmt_pnl(e.pnl));
-        pnl_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        pnl_item->setForeground(QColor(e.pnl >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
-        table_->setItem(i, 2, pnl_item);
-
-        auto* vol_item = new QTableWidgetItem(fmt_pnl(e.volume).replace("+", ""));
-        vol_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        table_->setItem(i, 3, vol_item);
-
-        auto* trades_item = new QTableWidgetItem(QString::number(e.num_trades));
-        trades_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        table_->setItem(i, 4, trades_item);
-    }
-
-    table_->resizeColumnsToContents();
-    table_->setSortingEnabled(true);
 }
 
 void PolymarketLeaderboard::set_loading(bool loading) {

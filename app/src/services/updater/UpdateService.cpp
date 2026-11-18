@@ -116,7 +116,6 @@ void UpdateService::check_for_updates(bool silent) {
         return;
     }
     silent_ = silent;
-    update_available_ = false;
     latest_version_.clear();
     changelog_.clear();
     pending_download_url_.clear();
@@ -222,7 +221,6 @@ void UpdateService::on_manifest_reply_finished() {
         return;
     }
 
-    update_available_ = true;
     LOG_INFO("UpdateService", QString("Update available: %1 → %2").arg(local_version, remote_version));
 
     // Prompt the user. Include changelog if present. Always offer a "view release

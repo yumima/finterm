@@ -155,11 +155,6 @@ class EquityOverviewTab : public QWidget {
     ///               (manual-refresh flow).
     void set_symbol(const QString& symbol, bool force = false);
 
-    /// Read-only accessor for the currently selected period button.
-    /// Used by external refresh paths that want to re-fetch historical
-    /// without overriding the user's period choice.
-    QString current_period() const { return current_period_; }
-
     static QString currency_symbol(const QString& currency_code);
 
     // ── Keyboard-shortcut entry points ──────────────────────────────────────
@@ -321,7 +316,6 @@ class EquityOverviewTab : public QWidget {
     QLabel* short_pct_val_ = nullptr;
 
     // Chart
-    QFrame* chart_panel_ = nullptr;
     ResearchCandleCanvas* candle_canvas_ = nullptr;
     QPushButton* btn_1m_ = nullptr;
     QPushButton* btn_3m_ = nullptr;
@@ -329,7 +323,6 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_1y_ = nullptr;
     QPushButton* btn_5y_ = nullptr;
     QPushButton* btn_custom_ = nullptr; // opens date-range picker
-    QPushButton* active_period_btn_ = nullptr;
     void open_custom_range_picker();
     /// Refresh the CUSTOM button's tooltip from current_period_. Must be
     /// called from EVERY path that changes current_period_ — see its comment.

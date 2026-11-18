@@ -56,8 +56,6 @@ class PythonEnvSection : public QWidget {
     QList<PackageRow> all_packages_;      // merged from both req files
     QMap<QString, QString> installed_v1_; // canonical_name → version, venv-numpy1
     QMap<QString, QString> installed_v2_; // canonical_name → version, venv-numpy2
-    bool v1_loaded_ = false;
-    bool v2_loaded_ = false;
 
     // ── Action queue — drained one batch at a time ────────────────────────────
     struct ActionBatch {

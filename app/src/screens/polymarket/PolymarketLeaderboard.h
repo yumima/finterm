@@ -13,11 +13,7 @@ class PolymarketLeaderboard : public QWidget {
   public:
     explicit PolymarketLeaderboard(QWidget* parent = nullptr);
 
-    void set_entries(const QVector<services::polymarket::LeaderboardEntry>& entries);
     void set_loading(bool loading);
-
-  signals:
-    void trader_clicked(const QString& address);
 
   private:
     QTableWidget* table_ = nullptr;

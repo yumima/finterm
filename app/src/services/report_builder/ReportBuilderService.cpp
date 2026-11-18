@@ -628,10 +628,6 @@ void ReportBuilderService::persist_current_file() {
     s.setValue(kCurrentFileKey, current_file_);
 }
 
-QString ReportBuilderService::autosave_path() const {
-    return autosave_path_;
-}
-
 void ReportBuilderService::trigger_autosave() {
     QString json;
     {

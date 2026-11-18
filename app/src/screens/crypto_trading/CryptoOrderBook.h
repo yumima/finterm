@@ -22,8 +22,6 @@ class CryptoOrderBook : public QWidget {
     void set_data(const QVector<QPair<double, double>>& bids, const QVector<QPair<double, double>>& asks, double spread,
                   double spread_pct);
 
-    void add_tick_snapshot(const TickSnapshot& snap);
-
   signals:
     void price_clicked(double price);
 
@@ -41,13 +39,10 @@ class CryptoOrderBook : public QWidget {
     // Mode buttons
     QPushButton* mode_btns_[4] = {};
     QLabel* spread_label_ = nullptr;
-    QWidget* canvas_ = nullptr;
 
     // Data (mutex-protected)
     QVector<QPair<double, double>> bids_;
     QVector<QPair<double, double>> asks_;
-    double spread_ = 0;
-    double spread_pct_ = 0;
     QVector<TickSnapshot> tick_history_;
 
     ObViewMode view_mode_ = ObViewMode::Book;

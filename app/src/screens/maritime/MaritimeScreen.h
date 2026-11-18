@@ -75,9 +75,6 @@ class MaritimeScreen : public QWidget, public IStatefulScreen {
     // Left panel
     QLabel* stat_vessels_ = nullptr;
     QLabel* stat_displayed_ = nullptr;
-    QLabel* stat_routes_ = nullptr;
-    QLabel* stat_volume_ = nullptr;
-    QLabel* stat_ports_ = nullptr;
     QLabel* threat_badge_ = nullptr;
 
     // Center

@@ -136,60 +136,6 @@ NormalizedRecord DataNormalizationService::normalize_raw(const DataMapping& mapp
     return record;
 }
 
-std::optional<NormalizedRecord> DataNormalizationService::latest_for_mapping(const QString& mapping_id) {
-    auto r = Database::instance().execute("SELECT id, mapping_id, source_id, schema_name, normalized_json, raw_json, "
-                                          "       validation_errors, extracted_at "
-                                          "FROM normalized_data WHERE mapping_id = ? "
-                                          "ORDER BY extracted_at DESC LIMIT 1",
-                                          {mapping_id});
-
-    if (r.is_err() || !r.value().next())
-        return std::nullopt;
-
-    auto& q = r.value();
-    NormalizedRecord rec;
-    rec.id = q.value(0).toString();
-    rec.mapping_id = q.value(1).toString();
-    rec.source_id = q.value(2).toString();
-    rec.schema_name = q.value(3).toString();
-    rec.normalized = QJsonDocument::fromJson(q.value(4).toString().toUtf8()).object();
-    rec.raw = QJsonDocument::fromJson(q.value(5).toString().toUtf8()).object();
-    const QJsonArray errs = QJsonDocument::fromJson(q.value(6).toString().toUtf8()).array();
-    for (const auto& e : errs)
-        rec.errors << e.toString();
-    rec.extracted_at = q.value(7).toString();
-    return rec;
-}
-
-QVector<NormalizedRecord> DataNormalizationService::records_for_schema(const QString& schema_name) {
-    auto r = Database::instance().execute("SELECT id, mapping_id, source_id, schema_name, normalized_json, raw_json, "
-                                          "       validation_errors, extracted_at "
-                                          "FROM normalized_data WHERE schema_name = ? "
-                                          "ORDER BY extracted_at DESC LIMIT 500",
-                                          {schema_name});
-
-    QVector<NormalizedRecord> results;
-    if (r.is_err())
-        return results;
-
-    auto& q = r.value();
-    while (q.next()) {
-        NormalizedRecord rec;
-        rec.id = q.value(0).toString();
-        rec.mapping_id = q.value(1).toString();
-        rec.source_id = q.value(2).toString();
-        rec.schema_name = q.value(3).toString();
-        rec.normalized = QJsonDocument::fromJson(q.value(4).toString().toUtf8()).object();
-        rec.raw = QJsonDocument::fromJson(q.value(5).toString().toUtf8()).object();
-        const QJsonArray errs = QJsonDocument::fromJson(q.value(6).toString().toUtf8()).array();
-        for (const auto& e : errs)
-            rec.errors << e.toString();
-        rec.extracted_at = q.value(7).toString();
-        results.append(rec);
-    }
-    return results;
-}
-
 // ── JSONPath extraction ────────────────────────────────────────────────────
 // Supports: $.key  $.a.b.c  $[0]  $[*][2]  $[*].key (returns array of values)
 

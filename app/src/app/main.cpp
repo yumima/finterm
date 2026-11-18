@@ -484,6 +484,7 @@ int main(int argc, char* argv[]) {
     finterm::register_migration_v055();
     finterm::register_migration_v056();
     finterm::register_migration_v057();
+    finterm::register_migration_v058();
 
     // Open cache database (non-fatal if fails)
     QString cache_path = finterm::AppPaths::data() + "/cache.db";

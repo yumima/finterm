@@ -14,11 +14,9 @@ namespace finterm::workflow {
 enum class HookEvent {
     WorkflowStart,
     WorkflowEnd,
-    WorkflowError,
     NodeStart,
     NodeEnd,
     NodeError,
-    PerformanceMetric,
 };
 
 /// Data passed to hook callbacks.
@@ -64,7 +62,6 @@ class ExecutionHooks : public QObject {
     // Convenience emitters
     void emit_workflow_start(const QString& workflow_id);
     void emit_workflow_end(const QString& workflow_id, bool success, int duration_ms);
-    void emit_workflow_error(const QString& workflow_id, const QString& error);
     void emit_node_start(const QString& workflow_id, const QString& node_id, const QString& node_type);
     void emit_node_end(const QString& workflow_id, const QString& node_id, bool success, int duration_ms);
     void emit_node_error(const QString& workflow_id, const QString& node_id, const QString& error);

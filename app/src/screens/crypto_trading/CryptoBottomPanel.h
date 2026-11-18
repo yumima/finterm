@@ -32,11 +32,9 @@ class CryptoBottomPanel : public QWidget {
     void set_live_positions(const QJsonArray& positions);
     void set_live_orders(const QJsonArray& orders);
     void set_live_balance(double balance, double equity, double used_margin);
-    void set_mode(bool is_paper);
 
     // New live tabs
     void update_my_trades(const QJsonObject& data);
-    void update_fees(const QJsonObject& data);
 
     // New widget forwarding
     void add_trade_entry(const TradeEntry& trade);
@@ -45,7 +43,6 @@ class CryptoBottomPanel : public QWidget {
 
   signals:
     void cancel_order_requested(const QString& order_id);
-    void close_position_requested(const QString& symbol);
 
   private:
     void setup_positions_tab();
@@ -86,7 +83,6 @@ class CryptoBottomPanel : public QWidget {
     CryptoTimeSales* time_sales_ = nullptr;
     CryptoDepthChart* depth_chart_ = nullptr;
 
-    bool is_paper_ = true;
 };
 
 } // namespace finterm::screens::crypto

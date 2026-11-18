@@ -55,7 +55,6 @@ class GovDataHKPanel : public QWidget {
     void update_breadcrumb(const QString& text);
 
     static constexpr const char* kScript = "data_gov_hk_api.py";
-    static constexpr const char* kColor = "#F43F5E";
 
     View current_view_ = Categories;
     QString selected_category_id_;
@@ -88,7 +87,6 @@ class GovDataHKPanel : public QWidget {
     // Cached for CSV
     QJsonArray current_categories_;
     QJsonArray current_datasets_;
-    QJsonArray current_resources_;
 };
 
 } // namespace finterm::screens

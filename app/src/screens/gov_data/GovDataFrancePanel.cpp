@@ -364,7 +364,6 @@ void GovDataFrancePanel::on_result(const QString& request_id, const services::Go
                           "");
         row_count_label_->setText(QString::number(payload.size()) + " results");
     } else if (request_id == "fr_resources") {
-        current_resources_ = payload;
         populate_resources(payload);
         current_view_ = Resources;
         content_stack_->setCurrentIndex(Resources);

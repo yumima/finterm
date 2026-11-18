@@ -126,11 +126,6 @@ void Logger::set_tag_level(const QString& tag, LogLevel level) {
     tag_levels_[tag] = level;
 }
 
-void Logger::clear_tag_level(const QString& tag) {
-    QMutexLocker lock(&mutex_);
-    tag_levels_.remove(tag);
-}
-
 void Logger::clear_all_tag_levels() {
     QMutexLocker lock(&mutex_);
     tag_levels_.clear();
@@ -142,11 +137,6 @@ void Logger::set_json_mode(bool enabled) {
 
 bool Logger::json_mode() const {
     return json_mode_.load(std::memory_order_relaxed);
-}
-
-QHash<QString, LogLevel> Logger::tag_levels() const {
-    QMutexLocker lock(const_cast<QMutex*>(&mutex_));
-    return tag_levels_;
 }
 
 bool Logger::is_enabled(LogLevel level, const QString& tag) const {

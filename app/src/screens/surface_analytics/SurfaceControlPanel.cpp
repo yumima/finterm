@@ -205,8 +205,8 @@ void SurfaceControlPanel::setup_ui() {
     body_layout->addWidget((dates_box_ = build_dates_section()));
     body_layout->addWidget((options_box_ = build_options_section()));
     body_layout->addWidget((basket_box_ = build_basket_section()));
-    body_layout->addWidget((metrics_box_ = build_metrics_section()));
-    body_layout->addWidget((lineage_box_ = build_lineage_section()));
+    body_layout->addWidget(build_metrics_section());
+    body_layout->addWidget(build_lineage_section());
     body_layout->addStretch();
 
     scroll->setWidget(body);

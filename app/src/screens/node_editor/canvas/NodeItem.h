@@ -17,7 +17,6 @@ class NodeItem : public QGraphicsObject {
     NodeItem(const NodeDef& def, const NodeTypeDef& type_def, QGraphicsItem* parent = nullptr);
 
     const NodeDef& node_def() const { return def_; }
-    NodeDef& node_def_mutable() { return def_; }
     const NodeTypeDef& type_def() const { return type_def_; }
 
     void set_name(const QString& name);

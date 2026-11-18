@@ -140,7 +140,6 @@ void EquityWatchlist::update_quotes(const QVector<trading::BrokerQuote>& quotes)
 }
 
 void EquityWatchlist::set_active_symbol(const QString& symbol) {
-    active_symbol_ = symbol;
     for (int row = 0; row < table_->rowCount(); ++row) {
         auto* item = table_->item(row, 0);
         if (!item)

@@ -546,65 +546,6 @@ const DockScreenRouter::PrimaryLayout* DockScreenRouter::reopenable_layout(const
     return has_primary ? &*it : nullptr;
 }
 
-void DockScreenRouter::tab_into(const QString& id) {
-    if (!factories_.contains(id) && !screens_.contains(id)) {
-        LOG_WARN("DockRouter", "Unknown screen: " + id);
-        return;
-    }
-
-    auto* dw = find_dock_widget(id);
-    bool needs_add = !dw || !dw->dockManager();
-
-    if (!dw) {
-        dw = create_dock_widget(id);
-        needs_add = true;
-    }
-
-    materialize_screen(id);
-
-    // If already visible somewhere just raise it — no need to re-tab.
-    if (!dw->isClosed() && dw->dockAreaWidget()) {
-        dw->raise();
-        dw->setAsCurrentTab();
-        current_id_ = id;
-        emit screen_changed(id);
-        return;
-    }
-
-    // Find the focused/active dock area to tab into.
-    // Prefer the focused widget's area; fall back to the first open area.
-    ads::CDockAreaWidget* target_area = nullptr;
-    if (auto* focused = manager_->focusedDockWidget())
-        target_area = focused->dockAreaWidget();
-    if (!target_area) {
-        const auto opened = manager_->openedDockAreas();
-        if (!opened.isEmpty())
-            target_area = opened.first();
-    }
-
-    if (needs_add || !dw->dockAreaWidget()) {
-        if (target_area)
-            // Tab into the existing area — CenterDockWidgetArea = same area, new tab
-            manager_->addDockWidget(ads::CenterDockWidgetArea, dw, target_area);
-        else
-            // No area open yet — open as the sole screen
-            manager_->addDockWidget(ads::CenterDockWidgetArea, dw);
-    }
-
-    dw->toggleView(true);
-    if (auto* tab = dw->tabWidget()) {
-        if (tab->isHidden())
-            tab->setVisible(true);
-    }
-    dw->raise();
-    dw->setAsCurrentTab();
-
-    current_id_ = id;
-    SessionManager::instance().set_last_screen(id);
-    LOG_INFO("DockRouter", "Tabbed into: " + id);
-    emit screen_changed(id);
-}
-
 bool DockScreenRouter::is_open(const QString& id) const {
     auto* dw = find_dock_widget(id);
     return dw && !dw->isClosed() && dw->dockAreaWidget() != nullptr;
@@ -1140,18 +1081,6 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
     connect(act_close, &QAction::triggered, this, [dw]() { dw->toggleView(false); });
 
     menu.exec(global_pos);
-}
-
-QStringList DockScreenRouter::all_screen_ids() const {
-    QStringList ids;
-    ids.reserve(dock_widgets_.size() + factories_.size());
-    for (auto it = dock_widgets_.cbegin(); it != dock_widgets_.cend(); ++it)
-        ids.append(it.key());
-    for (auto it = factories_.cbegin(); it != factories_.cend(); ++it) {
-        if (!ids.contains(it.key()))
-            ids.append(it.key());
-    }
-    return ids;
 }
 
 bool DockScreenRouter::eventFilter(QObject* obj, QEvent* event) {

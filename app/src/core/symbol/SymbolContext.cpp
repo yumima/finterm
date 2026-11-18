@@ -19,10 +19,6 @@ SymbolRef SymbolContext::group_symbol(SymbolGroup g) const {
     return groups_.value(g);
 }
 
-bool SymbolContext::has_group_symbol(SymbolGroup g) const {
-    return g != SymbolGroup::None && groups_.contains(g) && groups_[g].is_valid();
-}
-
 void SymbolContext::set_group_symbol(SymbolGroup g, const SymbolRef& ref, QObject* source) {
     // Update the "active anywhere" symbol regardless of group — this drives
     // the breadcrumb/titlebar even for unlinked panels.

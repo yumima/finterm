@@ -149,9 +149,8 @@ void PolymarketOrderBlotter::set_presentation(const ExchangePresentation& p) {
     rebuild_rows();
 }
 
-void PolymarketOrderBlotter::set_capabilities(bool supports_amend, bool supports_batch_cancel) {
+void PolymarketOrderBlotter::set_capabilities(bool supports_amend) {
     supports_amend_ = supports_amend;
-    supports_batch_cancel_ = supports_batch_cancel;
     rebuild_rows();
 }
 

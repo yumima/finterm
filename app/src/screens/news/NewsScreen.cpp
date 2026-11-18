@@ -343,8 +343,7 @@ void NewsScreen::connect_signals() {
     // Variant selector
     connect(command_bar_, &NewsCommandBar::variant_changed, this, [this](const QString& variant) {
         active_variant_ = variant;
-        settings_.setValue("news/variant", variant);
-        schedule_settings_write();
+        ScreenStateManager::instance().notify_changed(this);
         on_refresh();
     });
 
@@ -364,14 +363,6 @@ void NewsScreen::connect_signals() {
             return;
         LOG_WARN("NewsScreen", "brief watchdog fired — clearing a stuck in-flight gate");
         set_tldr_in_flight(false);
-    });
-
-    // Pulse animation timer (500ms cycle for new item glow)
-    pulse_timer_ = new QTimer(this);
-    pulse_timer_->setInterval(500);
-    connect(pulse_timer_, &QTimer::timeout, this, [this]() {
-        if (visible_)
-            feed_panel_->model()->advance_pulse();
     });
 
     // Debounced DB seen-write timer
@@ -558,13 +549,6 @@ void NewsScreen::showEvent(QShowEvent* e) {
     // after hours on another screen (see alert_since_ts_).
     alert_since_ts_ = QDateTime::currentSecsSinceEpoch();
     ticker_strip_->resume();
-    // Pulse animation intentionally disabled — the 500ms amber-glow cycle
-    // on unseen rows reads as visual flicker once you have >5 new articles.
-    // The static amber tint (alpha 40 at phase 0) + amber dot indicator are
-    // already enough to spot new items at a glance. To restore the
-    // animation, uncomment the next line and the matching stop() in
-    // hideEvent.
-    // pulse_timer_->start();
     services::NewsService::instance().start_auto_refresh();
     services::NewsService::instance().connect_live_feed();
 
@@ -609,7 +593,6 @@ void NewsScreen::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     visible_ = false;
     ticker_strip_->pause();
-    pulse_timer_->stop();
     services::NewsService::instance().stop_auto_refresh();
     services::NewsService::instance().disconnect_live_feed();
     filter_generation_.fetch_add(1, std::memory_order_relaxed);
@@ -1343,7 +1326,6 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     // an empty filtered feed (the user sees the empty-state instead of a
     // greyed-out button). Match count reflects the filtered feed when the
     // filter is on; previews potential matches when it's off.
-    command_bar_->set_portfolio_available(true);
     if (portfolio_filter_active_) {
         command_bar_->set_portfolio_match_count(filtered.size());
     } else {
@@ -1691,24 +1673,6 @@ void NewsScreen::compute_deviations() {
             NotificationService::instance().send(req);
         }
     }
-    // The baselines live in baselines_ above. (This used to also send them to
-    // news_correlation.py baseline_update on every render — a Python process
-    // per feed batch, ~20 in a burst, holding the shared Python slots — and
-    // throw the answer away.)
-}
-
-int64_t NewsScreen::time_window_seconds() const {
-    if (time_range_ == "1H")
-        return 3600;
-    if (time_range_ == "6H")
-        return 21600;
-    if (time_range_ == "24H")
-        return 86400;
-    if (time_range_ == "48H")
-        return 172800;
-    if (time_range_ == "7D")
-        return 604800;
-    return 86400;
 }
 
 // ── Portfolio holdings (PTF pill) ───────────────────────────────────────────

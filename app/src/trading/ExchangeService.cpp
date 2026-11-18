@@ -108,16 +108,9 @@ void ExchangeService::unwatch_symbol(const QString& symbol, const QString& portf
 // ============================================================================
 
 void ExchangeService::start_price_feed(int interval_seconds) {
-    feed_interval_ = interval_seconds;
     feed_running_ = true;
     feed_timer_->start(interval_seconds * 1000);
     LOG_INFO(kServiceTag, QString("Price feed started (interval=%1s)").arg(interval_seconds));
-}
-
-void ExchangeService::stop_price_feed() {
-    feed_running_ = false;
-    if (feed_timer_)
-        feed_timer_->stop();
 }
 
 bool ExchangeService::is_feed_running() const {
@@ -187,10 +180,6 @@ void ExchangeService::poll_prices() {
 
 bool ExchangeService::start_ws_stream(const QString& primary_symbol, const QStringList& all_symbols) {
     return active_session()->start_ws(primary_symbol, all_symbols);
-}
-
-void ExchangeService::stop_ws_stream() {
-    active_session()->stop_ws();
 }
 
 bool ExchangeService::is_ws_connected() const {

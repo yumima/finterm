@@ -79,11 +79,6 @@ Result<void> MigrationRunner::run() {
     return Result<void>::ok();
 }
 
-int MigrationRunner::current_version() const {
-    // const_cast because read uses QSqlQuery which needs non-const db
-    return const_cast<MigrationRunner*>(this)->read_current_version();
-}
-
 // ── Private helpers ──────────────────────────────────────────────────────────
 
 Result<void> MigrationRunner::ensure_schema_version_table() {

@@ -28,7 +28,6 @@ class AgentFeedbackRepository {
 
     Result<QVector<AgentFeedbackRow>> list_recent(int limit = 100);
     Result<QVector<AgentFeedbackRow>> list_by_request(const QString& request_id);
-    Result<int> count_by_verdict(const QString& verdict);
 
     AgentFeedbackRepository(const AgentFeedbackRepository&) = delete;
     AgentFeedbackRepository& operator=(const AgentFeedbackRepository&) = delete;

@@ -1,6 +1,5 @@
 #pragma once
 #include "screens/news/NewsBriefFormat.h"
-#include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsMonitorService.h"
 #include "services/news/NewsNlpService.h"
 #include "services/news/NewsService.h"
@@ -64,8 +63,6 @@ class NewsDetailPanel : public QWidget {
   signals:
     void analyze_requested(const QString& article_url);
     void related_article_clicked(const services::NewsArticle& article);
-    void open_in_browser(const QString& url);
-    void copy_url(const QString& url);
     void bookmark_requested(const services::NewsArticle& article);
 
   private:

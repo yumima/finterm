@@ -870,7 +870,6 @@ void PortfolioScreen::on_summary_error(QString portfolio_id, QString /*error*/) 
 }
 
 void PortfolioScreen::on_metrics_computed(portfolio::ComputedMetrics metrics) {
-    current_metrics_ = metrics;
     stats_ribbon_->set_metrics(metrics);
     if (heatmap_)
         heatmap_->set_metrics(metrics);
@@ -1432,8 +1431,7 @@ QWidget* PortfolioScreen::build_main_view() {
     order_panel_->raise();
     connect(order_panel_, &PortfolioOrderPanel::close_requested, this, &PortfolioScreen::on_order_panel_close);
     connect(order_panel_, &PortfolioOrderPanel::buy_submitted, this, [this]() {
-        AddAssetDialog dlg(this, pending_buy_symbol_);
-        pending_buy_symbol_.clear(); // one-shot prefill
+        AddAssetDialog dlg(this);
         if (dlg.exec() == QDialog::Accepted) {
             services::PortfolioService::instance().add_asset(selected_id_, dlg.symbol(), dlg.quantity(), dlg.price());
         }
@@ -1478,7 +1476,6 @@ void PortfolioScreen::update_main_view_data() {
     perf_chart_->set_currency(currency);
 
     sector_panel_->set_holdings(current_summary_.holdings);
-    sector_panel_->set_currency(currency);
 
     blotter_->set_holdings(current_summary_.holdings);
     if (positions_count_label_)
@@ -1539,14 +1536,6 @@ void PortfolioScreen::on_buy_requested() {
     animate_order_panel_in();
 }
 
-void PortfolioScreen::open_buy_for(const QString& symbol) {
-    // Stash the ticker so the buy_submitted lambda prefills AddAssetDialog,
-    // then drive the normal BUY flow. If no portfolio is selected yet there's
-    // nothing to add to, but the panel still opens so the user can pick one.
-    pending_buy_symbol_ = symbol.trimmed().toUpper();
-    on_buy_requested();
-}
-
 void PortfolioScreen::on_sell_requested() {
     order_panel_visible_ = true;
     order_panel_->set_side("SELL");
@@ -1556,7 +1545,6 @@ void PortfolioScreen::on_sell_requested() {
 void PortfolioScreen::on_order_panel_close() {
     order_panel_visible_ = false;
     order_panel_->setVisible(false);
-    pending_buy_symbol_.clear(); // don't leak a paper-buy prefill into a later manual buy
 }
 
 // ── Order panel overlay helpers ──────────────────────────────────────────────

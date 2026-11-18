@@ -47,10 +47,6 @@ QString ProfileManager::active() const {
     return active_profile_;
 }
 
-bool ProfileManager::is_custom_profile() const {
-    return active_profile_ != "default";
-}
-
 QString ProfileManager::profile_root() const {
     return profile_root_for(active_profile_);
 }
@@ -59,12 +55,6 @@ QString ProfileManager::profile_root_for(const QString& name) const {
     if (name == "default")
         return AppPaths::root();
     return AppPaths::root() + "/profiles/" + name;
-}
-
-QString ProfileManager::settings_group() const {
-    if (active_profile_ == "default")
-        return {};
-    return "profiles/" + active_profile_;
 }
 
 QString ProfileManager::secure_key_prefix() const {

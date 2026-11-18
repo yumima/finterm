@@ -71,12 +71,11 @@ void CryptoDepthChart::hideEvent(QHideEvent* e) {
 }
 
 void CryptoDepthChart::set_data(const QVector<QPair<double, double>>& bids, const QVector<QPair<double, double>>& asks,
-                                double spread, double /*spread_pct*/) {
+                                double /*spread*/, double /*spread_pct*/) {
     {
         QMutexLocker lock(&mutex_);
         bids_ = bids;
         asks_ = asks;
-        spread_ = spread;
     }
     cache_dirty_ = true;
     if (repaint_timer_ && !repaint_timer_->isActive())

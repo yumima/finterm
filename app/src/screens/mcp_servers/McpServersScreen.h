@@ -34,11 +34,9 @@ class McpServersScreen : public QWidget, public IStatefulScreen {
     void on_start_server();
     void on_stop_server();
     void on_remove_server();
-    void on_toggle_autostart();
     void on_server_selected(QListWidgetItem* item); // kept for compat
     void on_refresh();
     void on_search_changed(const QString& text);
-    void on_view_logs();
     void on_add_server();
     void on_tool_enabled_changed(int row, int col);
 

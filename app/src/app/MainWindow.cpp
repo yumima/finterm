@@ -17,7 +17,6 @@
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
-#include "screens/ComingSoonScreen.h"
 #include "screens/about/AboutScreen.h"
 #include "screens/agent_config/AgentConfigScreen.h"
 #include "screens/ai_quant_lab/AIQuantLabScreen.h"
@@ -315,6 +314,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             [this](const QString& msg) { QMessageBox::warning(this, "Workspace Error", msg); });
 
     dock_router_ = new DockScreenRouter(dock_manager_, this);
+    WorkspaceManager::instance().set_router(dock_router_);
     setup_dock_screens();
 
     // Boot prefetch — DEFERRED. Warming the PORTFOLIO caches kicks a
@@ -1199,9 +1199,6 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_screen("help", new screens::HelpScreen);
 }
 
-void MainWindow::setup_app_screens() {}
-void MainWindow::setup_navigation() {}
-
 void MainWindow::on_auth_state_changed() {
     auto& auth = auth::AuthManager::instance();
 
@@ -1348,14 +1345,6 @@ void MainWindow::show_info_terms() {
 }
 void MainWindow::show_info_privacy() {
     info_stack_->setCurrentIndex(2);
-    enter_auth_stack(info_stack_);
-}
-void MainWindow::show_info_trademarks() {
-    info_stack_->setCurrentIndex(3);
-    enter_auth_stack(info_stack_);
-}
-void MainWindow::show_info_help() {
-    info_stack_->setCurrentIndex(4);
     enter_auth_stack(info_stack_);
 }
 
@@ -1633,8 +1622,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
     // Persist the set of still-open windows (this one minus itself, since
     // we're about to be destroyed). On next launch, main.cpp will iterate
-    // this list and restore each secondary window. We also save the count
-    // for legacy callers.
+    // this list and restore each secondary window.
     QList<int> open_ids;
     const auto top_widgets = QApplication::topLevelWidgets();
     for (QWidget* w : top_widgets) {
@@ -1648,7 +1636,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         open_ids.append(window_id_);
     std::sort(open_ids.begin(), open_ids.end());
     SessionManager::instance().save_window_ids(open_ids);
-    SessionManager::instance().save_window_count(static_cast<int>(open_ids.size()));
 
     event->accept();
 }

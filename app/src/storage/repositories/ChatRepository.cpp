@@ -59,19 +59,6 @@ Result<QVector<ChatSession>> ChatRepository::list_sessions() {
                       map_session);
 }
 
-Result<void> ChatRepository::update_session_title(const QString& id, const QString& title) {
-    return exec_write("UPDATE chat_sessions SET title = ?, updated_at = datetime('now') WHERE id = ?", {title, id});
-}
-
-Result<void> ChatRepository::update_session_persona(const QString& id, const QString& persona_id) {
-    return exec_write("UPDATE chat_sessions SET persona_id = ?, updated_at = datetime('now') WHERE id = ?",
-                      {persona_id, id});
-}
-
-Result<void> ChatRepository::delete_session(const QString& id) {
-    return exec_write("DELETE FROM chat_sessions WHERE id = ?", {id});
-}
-
 Result<void> ChatRepository::add_message(const QString& session_id, const QString& role, const QString& content,
                                          const QString& provider, const QString& model, int tokens) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -98,10 +85,6 @@ Result<QVector<ChatMessage>> ChatRepository::get_messages(const QString& session
     while (q.next())
         result.append(map_message(q));
     return Result<QVector<ChatMessage>>::ok(std::move(result));
-}
-
-Result<void> ChatRepository::delete_messages(const QString& session_id) {
-    return exec_write("DELETE FROM chat_messages WHERE session_id = ?", {session_id});
 }
 
 } // namespace finterm

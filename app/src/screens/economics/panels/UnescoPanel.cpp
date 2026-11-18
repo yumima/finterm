@@ -205,13 +205,6 @@ void UnescoPanel::on_indicator_filter(const QString& text) {
     }
 }
 
-void UnescoPanel::load_indicators() {
-    // Fetch live indicator list from API — fires once per session
-    indicators_loaded_ = true;
-    services::EconomicsService::instance().execute(kUnescoSourceId, kUnescoScript, "list_indicators", {},
-                                                   "unesco_list_indicators");
-}
-
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 void UnescoPanel::on_fetch() {

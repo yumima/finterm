@@ -78,8 +78,6 @@ class MAAnalyticsScreen : public QWidget, public IStatefulScreen {
     QWidget* stats_card_ = nullptr;
     QLabel* tips_label_ = nullptr;
 
-    bool left_open_ = true;
-    bool right_open_ = true;
     bool first_show_ = true;
 };
 

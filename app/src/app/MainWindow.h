@@ -1,6 +1,5 @@
 #pragma once
 #include "ai_chat/AiChatBubble.h"
-#include "app/ScreenRouter.h"
 
 #include <QMainWindow>
 #include <QStackedWidget>
@@ -56,7 +55,6 @@ class MainWindow : public QMainWindow {
     /// state per-window in SessionManager. Safe to call with the current
     /// state (no-op). Also called from Phase 12's right-click context menu.
     void set_always_on_top(bool on);
-    bool is_always_on_top() const { return always_on_top_; }
 
   protected:
     void closeEvent(QCloseEvent* event) override;
@@ -105,7 +103,6 @@ class MainWindow : public QMainWindow {
     screens::LockScreen* lock_screen_ = nullptr;
 
     void setup_auth_screens();
-    void setup_app_screens();
     void setup_docking_mode();
     void setup_dock_screens();
     /// Deferred FUTURES/PORTFOLIO cache warm. No-ops while the terminal is
@@ -113,7 +110,6 @@ class MainWindow : public QMainWindow {
     /// on_terminal_unlocked() re-invokes it once the user is in. Runs once
     /// (guarded by boot_prefetched_).
     void try_boot_prefetch();
-    void setup_navigation();
     void on_auth_state_changed();
     void toggle_workbench();
     void show_lock_screen();
@@ -140,8 +136,6 @@ class MainWindow : public QMainWindow {
     void show_info_contact();
     void show_info_terms();
     void show_info_privacy();
-    void show_info_trademarks();
-    void show_info_help();
 };
 
 } // namespace finterm

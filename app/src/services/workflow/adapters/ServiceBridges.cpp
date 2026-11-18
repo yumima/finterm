@@ -8,7 +8,6 @@
 #include "services/workflow/AuditLogger.h"
 #include "services/workflow/ConfirmationService.h"
 #include "services/workflow/NodeRegistry.h"
-#include "services/workflow/RiskManager.h"
 #include "trading/AccountManager.h"
 #include "trading/ExchangeService.h"
 #include "trading/OrderMatcher.h"

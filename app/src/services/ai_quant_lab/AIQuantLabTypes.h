@@ -81,8 +81,4 @@ inline QVector<QuantModule> all_quant_modules() {
     };
 }
 
-inline QStringList quant_categories() {
-    return {"CORE", "AI_ML", "ADVANCED", "ANALYTICS"};
-}
-
 } // namespace finterm::services::quant

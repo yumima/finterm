@@ -464,7 +464,6 @@ class VideoPlayerWidget : public BaseWidget {
     QMenu* channel_menu_ = nullptr;
     QLabel* status_label_ = nullptr;
 
-    QString pending_title_;
     QString current_url_;
     QString current_title_;
     // Blocks refresh_data() from re-entering play_url() during startup.

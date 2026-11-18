@@ -113,91 +113,7 @@ class IBroker {
         return {false, std::nullopt, "Clock not supported for this broker"};
     }
 
-    // --- Stock market data (multi-symbol) ---
-    virtual ApiResponse<QVector<BrokerCandle>> get_latest_bars(const BrokerCredentials& creds,
-                                                               const QVector<QString>& symbols) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerCandle>> get_historical_bars(const BrokerCredentials& creds,
-                                                                   const QVector<QString>& symbols,
-                                                                   const QString& timeframe, const QString& start,
-                                                                   const QString& end) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        Q_UNUSED(timeframe);
-        Q_UNUSED(start);
-        Q_UNUSED(end);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerQuote>> get_latest_quotes(const BrokerCredentials& creds,
-                                                                const QVector<QString>& symbols) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerTrade>> get_latest_trades(const BrokerCredentials& creds,
-                                                                const QVector<QString>& symbols) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerTrade>> get_historical_trades(const BrokerCredentials& creds,
-                                                                    const QVector<QString>& symbols,
-                                                                    const QString& start, const QString& end,
-                                                                    int limit = 1000) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        Q_UNUSED(start);
-        Q_UNUSED(end);
-        Q_UNUSED(limit);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerAuction>> get_historical_auctions(const BrokerCredentials& creds,
-                                                                        const QVector<QString>& symbols,
-                                                                        const QString& start, const QString& end) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbols);
-        Q_UNUSED(start);
-        Q_UNUSED(end);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerMetaEntry>> get_condition_codes(const BrokerCredentials& creds,
-                                                                      const QString& ticktype, const QString& tape) {
-        Q_UNUSED(creds);
-        Q_UNUSED(ticktype);
-        Q_UNUSED(tape);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<QVector<BrokerMetaEntry>> get_exchange_codes(const BrokerCredentials& creds,
-                                                                     const QString& asset_class) {
-        Q_UNUSED(creds);
-        Q_UNUSED(asset_class);
-        return {false, std::nullopt, "Not supported"};
-    }
-
     // --- Stock market data (single symbol) ---
-    virtual ApiResponse<BrokerCandle> get_latest_bar(const BrokerCredentials& creds, const QString& symbol) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbol);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<BrokerQuote> get_latest_quote(const BrokerCredentials& creds, const QString& symbol) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbol);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<BrokerTrade> get_latest_trade(const BrokerCredentials& creds, const QString& symbol) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbol);
-        return {false, std::nullopt, "Not supported"};
-    }
-    virtual ApiResponse<BrokerQuote> get_snapshot(const BrokerCredentials& creds, const QString& symbol) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbol);
-        return {false, std::nullopt, "Not supported"};
-    }
     virtual ApiResponse<QVector<BrokerTrade>> get_historical_trades_single(const BrokerCredentials& creds,
                                                                            const QString& symbol, const QString& start,
                                                                            const QString& end, int limit = 1000) {
@@ -218,16 +134,6 @@ class IBroker {
         Q_UNUSED(limit);
         return {false, std::nullopt, "Not supported"};
     }
-    virtual ApiResponse<QVector<BrokerAuction>> get_historical_auctions_single(const BrokerCredentials& creds,
-                                                                               const QString& symbol,
-                                                                               const QString& start,
-                                                                               const QString& end) {
-        Q_UNUSED(creds);
-        Q_UNUSED(symbol);
-        Q_UNUSED(start);
-        Q_UNUSED(end);
-        return {false, std::nullopt, "Not supported"};
-    }
 
     // --- Margin Calculator ---
     /// Pre-trade margin check for a single order. Returns breakdown of margin required.
@@ -236,16 +142,6 @@ class IBroker {
         Q_UNUSED(order);
         return {false, std::nullopt, "Margin calculator not supported for this broker"};
     }
-    /// Pre-trade margin check for a basket of orders (with netting across legs).
-    virtual ApiResponse<BasketMargin> get_basket_margins(const BrokerCredentials& creds,
-                                                         const QVector<UnifiedOrder>& orders) {
-        Q_UNUSED(creds);
-        Q_UNUSED(orders);
-        return {false, std::nullopt, "Basket margin not supported for this broker"};
-    }
-
-    // --- WebSocket streaming ---
-    virtual const char* ws_adapter_name() const { return ""; }
 
     // --- Credential helpers ---
     BrokerCredentials load_credentials() const;

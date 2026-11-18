@@ -28,13 +28,6 @@ FinancialNote NotesRepository::map_note(QSqlQuery& q) {
     return n;
 }
 
-NoteTemplate NotesRepository::map_template(QSqlQuery& q) {
-    return {
-        q.value(0).toInt(),    q.value(1).toString(), q.value(2).toString(),
-        q.value(3).toString(), q.value(4).toString(), q.value(5).toString(),
-    };
-}
-
 static const char* kNoteColumns = "id, title, content, category, priority, tags, tickers, sentiment, "
                                   "is_favorite, is_archived, color_code, attachments, created_at, updated_at, "
                                   "reminder_date, word_count";
@@ -98,23 +91,6 @@ Result<void> NotesRepository::toggle_archive(int id) {
     return exec_write("UPDATE financial_notes SET is_archived = NOT is_archived, "
                       "updated_at = datetime('now') WHERE id = ?",
                       {id});
-}
-
-Result<QVector<NoteTemplate>> NotesRepository::list_templates() {
-    auto r = db().execute("SELECT id, name, description, content, category, created_at "
-                          "FROM note_templates ORDER BY name");
-    if (r.is_err())
-        return Result<QVector<NoteTemplate>>::err(r.error());
-    QVector<NoteTemplate> result;
-    auto& q = r.value();
-    while (q.next())
-        result.append(map_template(q));
-    return Result<QVector<NoteTemplate>>::ok(std::move(result));
-}
-
-Result<qint64> NotesRepository::create_template(const NoteTemplate& t) {
-    return exec_insert("INSERT INTO note_templates (name, description, content, category) VALUES (?, ?, ?, ?)",
-                       {t.name, t.description, t.content, t.category});
 }
 
 } // namespace finterm

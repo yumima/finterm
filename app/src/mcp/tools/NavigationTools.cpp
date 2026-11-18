@@ -24,7 +24,7 @@ struct TabEntry {
     int index;
 };
 
-// Indices must match ScreenRouter screen IDs used in MainWindow
+// Indices must match DockScreenRouter screen IDs used in MainWindow
 static const TabEntry TAB_MAP[] = {
     {"dashboard", "Dashboard", 0},
     {"markets", "Markets", 1},

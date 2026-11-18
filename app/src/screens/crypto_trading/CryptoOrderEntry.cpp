@@ -310,7 +310,6 @@ void CryptoOrderEntry::set_current_price(double price) {
 }
 
 void CryptoOrderEntry::set_mode(bool is_paper) {
-    is_paper_ = is_paper;
     mode_label_->setText(is_paper ? "PAPER" : "LIVE");
     mode_label_->setProperty("mode", is_paper ? "paper" : "live");
     mode_label_->style()->unpolish(mode_label_);
@@ -350,11 +349,6 @@ void CryptoOrderEntry::on_pct_clicked(int pct) {
     const double max_qty = balance_ / current_price_;
     const double qty = max_qty * pct / 100.0;
     qty_edit_->setText(QString::number(qty, 'f', 6));
-}
-
-void CryptoOrderEntry::set_futures_mode(bool is_futures) {
-    is_futures_ = is_futures;
-    futures_section_->setVisible(is_futures);
 }
 
 void CryptoOrderEntry::update_cost_preview() {

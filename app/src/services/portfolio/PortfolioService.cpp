@@ -1532,10 +1532,6 @@ QString PortfolioService::default_benchmark_for_currency(const QString& currency
     return QString::fromLatin1(kFallbackBenchmark);
 }
 
-void PortfolioService::fetch_spy_history(const QString& period) {
-    fetch_benchmark_history(QStringLiteral("SPY"), period);
-}
-
 void PortfolioService::fetch_benchmark_history(const QString& symbol, const QString& period) {
     // Allow callers to omit the symbol → defaults to SPY (legacy behaviour).
     const QString sym = symbol.isEmpty() ? QStringLiteral("SPY") : symbol;
@@ -2299,7 +2295,7 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
                                    const QString& merge_target_id) {
     QFile file(file_path);
     if (!file.open(QIODevice::ReadOnly)) {
-        emit import_complete({"", "", 0, {"Cannot open file: " + file_path}});
+        emit import_complete({"", "", {"Cannot open file: " + file_path}});
         return;
     }
 
@@ -2308,7 +2304,7 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
     file.close();
 
     if (doc.isNull()) {
-        emit import_complete({"", "", 0, {"Invalid JSON: " + parse_err.errorString()}});
+        emit import_complete({"", "", {"Invalid JSON: " + parse_err.errorString()}});
         return;
     }
 
@@ -2324,12 +2320,12 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
 
     if (!root.contains("portfolio_name") || !root.value("portfolio_name").isString() ||
         root.value("portfolio_name").toString().trimmed().isEmpty()) {
-        emit import_complete({"", "", 0, {schema_msg}});
+        emit import_complete({"", "", {schema_msg}});
         LOG_ERROR("PortfolioSvc", "Import rejected: missing/invalid 'portfolio_name'");
         return;
     }
     if (!root.contains("transactions") || !root.value("transactions").isArray()) {
-        emit import_complete({"", "", 0, {schema_msg}});
+        emit import_complete({"", "", {schema_msg}});
         LOG_ERROR("PortfolioSvc", "Import rejected: missing/invalid 'transactions' array");
         return;
     }
@@ -2340,7 +2336,7 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
     auto txn_arr = root["transactions"].toArray();
 
     if (txn_arr.isEmpty()) {
-        emit import_complete({"", name, 0, {"No transactions found in file. " + schema_msg}});
+        emit import_complete({"", name, {"No transactions found in file. " + schema_msg}});
         LOG_ERROR("PortfolioSvc", "Import rejected: 'transactions' array is empty");
         return;
     }
@@ -2387,14 +2383,14 @@ void PortfolioService::import_records(const QString& name, const QString& owner,
     if (mode == portfolio::ImportMode::New) {
         auto r = repo.create_portfolio(name, owner, currency);
         if (r.is_err()) {
-            emit import_complete({"", name, 0, {"Failed to create portfolio: " + QString::fromStdString(r.error())}});
+            emit import_complete({"", name, {"Failed to create portfolio: " + QString::fromStdString(r.error())}});
             return;
         }
         target_id = r.value();
     } else {
         target_id = merge_target_id;
         if (target_id.isEmpty()) {
-            emit import_complete({"", "", 0, {"No merge target specified"}});
+            emit import_complete({"", "", {"No merge target specified"}});
             return;
         }
     }
@@ -2463,7 +2459,7 @@ void PortfolioService::import_records(const QString& name, const QString& owner,
     invalidate_cache(target_id);
     load_portfolios();
 
-    emit import_complete({target_id, name, replayed, errors});
+    emit import_complete({target_id, name, errors});
     LOG_INFO("PortfolioSvc",
              QString("Imported %1 transactions into %2, %3 errors").arg(replayed).arg(target_id).arg(errors.size()));
 

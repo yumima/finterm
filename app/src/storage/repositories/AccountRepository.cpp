@@ -56,16 +56,4 @@ Result<QVector<trading::BrokerAccount>> AccountRepository::find_all() {
                       {}, map_row);
 }
 
-Result<QVector<trading::BrokerAccount>> AccountRepository::find_by_broker(const QString& broker_id) {
-    return query_list("SELECT id, broker_id, display_name, paper_portfolio_id, trading_mode, is_active, created_at "
-                      "FROM broker_accounts WHERE broker_id = ? ORDER BY created_at",
-                      {broker_id}, map_row);
-}
-
-Result<QVector<trading::BrokerAccount>> AccountRepository::find_active() {
-    return query_list("SELECT id, broker_id, display_name, paper_portfolio_id, trading_mode, is_active, created_at "
-                      "FROM broker_accounts WHERE is_active = 1 ORDER BY created_at",
-                      {}, map_row);
-}
-
 } // namespace finterm

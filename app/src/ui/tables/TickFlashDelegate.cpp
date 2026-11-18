@@ -26,14 +26,6 @@ TickFlashDelegate* TickFlashDelegate::install(QAbstractItemView* view, int key_c
     return d;
 }
 
-void TickFlashDelegate::set_key_column(int column) {
-    if (column == key_column_)
-        return;
-    key_column_ = column;
-    cells_.clear();
-    flashing_.clear();
-}
-
 bool TickFlashDelegate::eventFilter(QObject* obj, QEvent* ev) {
     if (obj == view_) {
         if (ev->type() == QEvent::Hide) {

@@ -2,6 +2,7 @@
 
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
+#include "storage/repositories/SettingsRepository.h"
 
 #include <QDir>
 #include <QtConcurrent>
@@ -37,6 +38,18 @@ constexpr const char* kRetiredSettingsGroups[] = {
     "power_trader", // no reader
 };
 
+// Single QSettings keys nothing reads.
+constexpr const char* kRetiredSettingsKeys[] = {
+    "window_count", // superseded by the window id list SessionManager restores
+    "news/variant", // the News variant persists in the screen's saved state
+};
+
+// Rows of the settings table (SettingsRepository) nothing reads.
+constexpr const char* kRetiredDbSettings[] = {
+    "inline_completion.enabled",          // the ghost-text completion it toggled never existed
+    "workspace.active_dashboard_profile", // the dashboard has no profiles; workspaces restore its layout
+};
+
 } // namespace
 
 void sweep_retired_storage() {
@@ -59,8 +72,21 @@ void sweep_retired_storage() {
             LOG_INFO("RetiredStorage", QString("removed settings group [%1]").arg(g));
         }
     }
+    for (const char* k : kRetiredSettingsKeys) {
+        if (settings.contains(QString::fromLatin1(k))) {
+            settings.remove(QString::fromLatin1(k));
+            changed = true;
+            LOG_INFO("RetiredStorage", QString("removed setting %1").arg(k));
+        }
+    }
     if (changed)
         settings.sync();
+    for (const char* k : kRetiredDbSettings) {
+        auto& repo = SettingsRepository::instance();
+        const auto r = repo.get(QString::fromLatin1(k));
+        if (r.is_ok() && !r.value().isEmpty() && repo.remove(QString::fromLatin1(k)).is_ok())
+            LOG_INFO("RetiredStorage", QString("removed settings row %1").arg(k));
+    }
 }
 
 } // namespace finterm::storage

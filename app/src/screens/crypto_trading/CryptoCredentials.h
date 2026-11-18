@@ -17,8 +17,6 @@ class CryptoCredentials : public QDialog {
     QString api_secret() const;
     QString password() const;
 
-    void set_values(const QString& key, const QString& secret, const QString& password);
-
   signals:
     void credentials_saved(const QString& api_key, const QString& api_secret, const QString& password);
 

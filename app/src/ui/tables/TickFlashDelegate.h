@@ -29,10 +29,6 @@ class TickFlashDelegate : public QStyledItemDelegate {
 
     void paint(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const override;
 
-    /// The column whose text identifies a row (the symbol). Changing it
-    /// forgets every remembered value. Negative = no key (nothing flashes).
-    void set_key_column(int column);
-
     /// Short and faint on purpose: a cue that a number moved, not a light
     /// show — a stronger, longer flash read as annoying on a busy table.
     static constexpr int kFlashMs = 450;

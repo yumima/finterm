@@ -15,7 +15,6 @@ class TabBar : public QWidget {
     explicit TabBar(QWidget* parent = nullptr);
 
     void set_active(const QString& tab_id);
-    QString active_tab() const { return active_id_; }
 
   signals:
     void tab_changed(const QString& tab_id);

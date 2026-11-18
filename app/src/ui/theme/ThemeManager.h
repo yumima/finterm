@@ -14,7 +14,6 @@ namespace finterm::ui {
 ///
 /// Usage:
 ///   ThemeManager::instance().apply_theme("Obsidian");
-///   ThemeManager::instance().apply_font("JetBrains Mono", 14);
 ///   connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this, [...]);
 class ThemeManager : public QObject {
     Q_OBJECT
@@ -27,10 +26,6 @@ class ThemeManager : public QObject {
     /// Emits theme_changed(tokens) so custom painters can update.
     void apply_theme(const QString& name);
 
-    /// Change the application font family and base size.
-    /// Calls qApp->setFont() immediately — takes effect on all widgets.
-    void apply_font(const QString& family, int size_px);
-
     /// Change content density: "Compact" (2px), "Default" (4px), "Comfortable" (8px).
     /// Adjusts padding token in global QSS and re-applies.
     void apply_density(const QString& density);
@@ -40,7 +35,6 @@ class ThemeManager : public QObject {
     const ThemeTokens& tokens() const { return current_; }
 
     QString current_theme_name() const;
-    QFont current_font() const;
     static QStringList available_densities(); // single source of truth for density names
 
     /// Returns QSS that must be applied directly to the CDockManager widget

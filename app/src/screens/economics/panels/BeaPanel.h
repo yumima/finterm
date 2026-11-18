@@ -39,7 +39,6 @@ class BeaPanel : public EconPanelBase {
     // Toolbar controls
     QLineEdit* start_input_ = nullptr;
     QLineEdit* end_input_ = nullptr;
-    QComboBox* freq_combo_ = nullptr;
 
     struct IndicatorDef {
         QString name;
