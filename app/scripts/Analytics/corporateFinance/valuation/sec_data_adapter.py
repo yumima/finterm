@@ -9,6 +9,13 @@ try:
 except ImportError:
     EDGAR_AVAILABLE = False
 
+if EDGAR_AVAILABLE:
+    try:  # pace edgartools' requests with every other SEC request (scripts/ on PYTHONPATH)
+        import sec_http
+        sec_http.route_edgartools()
+    except ImportError:
+        pass
+
 try:
     import yfinance as yf
     YFINANCE_AVAILABLE = True

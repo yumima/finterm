@@ -64,6 +64,11 @@ KEPT_TAGS = OPINC_TAGS + (EQUITY_TAG, EQUITY_TOTAL_TAG, DISCONTINUED_TAG)
 
 FACTS_TTL_S = 24 * 3600
 BACKOFF_S = 600
+# No request (or connection retry) starts later than this after it is asked
+# for: behind a 13F walk in sec_http's shared gate (SEC's limit is per user),
+# or with SEC unreachable, give up and back off instead of holding statements
+# already in hand.
+DEADLINE_S = 4.0
 TIMEOUT = (4, 8)  # connect, read — the statements are already in hand; do not hold them long
 
 
@@ -265,10 +270,11 @@ class _Unavailable(Exception):
 
 
 def _get(url: str) -> Any:
-    """One short SEC request (sec_http: contact identity, shared pacing, no
-    retries — the statements are already in hand; do not hold them long)."""
+    """One short SEC request (sec_http: contact identity, shared pacing; the
+    deadline keeps a slow gate or connection retries from holding statements
+    already in hand)."""
     import sec_http
-    r, status = sec_http.get(url, timeout=TIMEOUT)
+    r, status = sec_http.get(url, timeout=TIMEOUT, deadline=DEADLINE_S)
     if status == 404:
         raise _NoSuch(url)
     if r is None:

@@ -1,5 +1,6 @@
 """M&A Deal Tracker - Main API for deal tracking and analysis"""
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
@@ -21,6 +22,13 @@ except ImportError:
     PARSER_AVAILABLE = False
 
 
+# The app kills a Python call after 30 s; the scan stops starting requests at
+# its own budget (deal_scanner.SCAN_BUDGET_S), and parsing — more SEC requests
+# through edgartools — starts no new filing past this many seconds into the
+# update. Filings not parsed stay in sec_filings (parsed_flag = 0) for later.
+PARSE_UNTIL_S = 20.0
+
+
 class MADealTracker:
     def __init__(self, db_path: Optional[Path] = None):
         self.db = MADatabase(db_path)
@@ -30,9 +38,13 @@ class MADealTracker:
     def update_deal_database(self, days_back: int = 7, auto_parse: bool = True) -> Dict[str, Any]:
         """Update database with recent M&A deals"""
         print(f"[DealTracker] Scanning SEC filings from last {days_back} days...", file=sys.stderr)
+        started = time.monotonic()
         filings = self.scanner.scan_recent_filings(days_back=days_back)
 
         results = {
+            # A scan cut short by its time budget says so: the list is not
+            # "every M&A filing in the window".
+            'scan_coverage': self.scanner.last_scan,
             'filings_found': len(filings),
             'deals_parsed': 0,
             'deals_created': 0,
@@ -66,7 +78,12 @@ class MADealTracker:
             high_confidence = [f for f in filings if f['confidence_score'] > 0.75]
             print(f"[DealTracker] Parsing {len(high_confidence)} high-confidence filings...", file=sys.stderr)
 
-            for filing in high_confidence:
+            for n, filing in enumerate(high_confidence):
+                if time.monotonic() - started > PARSE_UNTIL_S:
+                    results['parse_deferred'] = len(high_confidence) - n
+                    print(f"[DealTracker] Time budget spent: {results['parse_deferred']} filings left unparsed",
+                          file=sys.stderr)
+                    break
                 try:
                     deal = self.parser.parse_filing(filing['accession_number'])
                     if deal:

@@ -37,6 +37,26 @@ def check(name, cond, detail=""):
 
 
 def main():
+    """The checks, with the process state they script (the data dir and
+    sec_http.get) restored however they end."""
+    import sec_http
+    saved = (sec_http.get, os.environ.get("FINTERM_DATA_DIR"))
+    try:
+        checks()
+    finally:
+        sec_http.get = saved[0]
+        if saved[1] is None:
+            os.environ.pop("FINTERM_DATA_DIR", None)
+        else:
+            os.environ["FINTERM_DATA_DIR"] = saved[1]
+    print()
+    if FAILURES:
+        print(f"{len(FAILURES)} FAILED: " + ", ".join(FAILURES))
+        sys.exit(1)
+    print("all passed")
+
+
+def checks():
     tmp = tempfile.mkdtemp(prefix="form4m")
     os.environ["FINTERM_DATA_DIR"] = tmp
 
@@ -148,7 +168,6 @@ def main():
                               {f"{dd}-read": f"a/{dd}-read.txt", f"{dd}-new": f"a/{dd}-new.txt"})
     class Ok:
         ok, text = True, "no ownership xml here"
-    real_sec_get = m.sec_http.get  # the one SEC client, scripted for the scan
     m.sec_http.get = lambda url, **_: (fetched.append(url) or (Ok(), 200))
     res = m.scan(days=8)
     check("scan: the interrupted day is walked again", partial in walked, str(walked))
@@ -202,13 +221,6 @@ def main():
     check("day_index: a refusal is None, not empty", real.day_index(today) is None)
     real.sec_http.get = lambda url, **_: (None, None)
     check("day_index: no answer is None, not empty", real.day_index(today) is None)
-    m.sec_http.get = real_sec_get
-
-    print()
-    if FAILURES:
-        print(f"{len(FAILURES)} FAILED: " + ", ".join(FAILURES))
-        sys.exit(1)
-    print("all passed")
 
 
 if __name__ == "__main__":

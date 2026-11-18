@@ -10,11 +10,11 @@ Every SEC request goes through sec_http (the user's contact, shared pacing).
 """
 import sys
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 scripts_path = Path(__file__).parent.parent.parent.parent
 sys.path.append(str(scripts_path))
@@ -30,9 +30,27 @@ import sec_http  # the one SEC client: contact identity, shared pacing
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-def _get(url: str, timeout: int = 15) -> Optional[dict]:
+# The app kills a Python call after 30 s (PythonRunner::kProcessTimeoutMs), and
+# every SEC request waits its turn in sec_http's gate (0.4 s apart). A scan
+# therefore stops STARTING requests SCAN_BUDGET_S after it begins and reports
+# what it did not reach; a request already sent is bounded by TIMEOUT.
+SCAN_BUDGET_S = 12.0
+TIMEOUT = (4, 8)  # connect, read
+_until: Optional[float] = None  # time.monotonic() past which no request starts (set by a scan)
+
+
+def _deadline() -> Optional[float]:
+    return None if _until is None else max(0.0, _until - time.monotonic())
+
+
+def _out_of_time() -> bool:
+    return _until is not None and time.monotonic() >= _until
+
+
+def _get(url: str, timeout: Any = TIMEOUT) -> Optional[dict]:
     """GET JSON from an SEC URL, return parsed dict or None on error."""
-    resp, status = sec_http.get(url, timeout=timeout, headers={"Accept": "application/json"})
+    resp, status = sec_http.get(url, timeout=timeout, headers={"Accept": "application/json"},
+                                deadline=_deadline())
     if resp is None:
         if status and status != 404:  # 404s are expected for optional index files — suppress
             print(f"[Scanner] HTTP {status} {url}", file=sys.stderr)
@@ -42,9 +60,10 @@ def _get(url: str, timeout: int = 15) -> Optional[dict]:
     except ValueError:
         return None
 
-def _get_text(url: str, timeout: int = 20) -> str:
+def _get_text(url: str, timeout: Any = TIMEOUT) -> str:
     """GET raw text from an SEC URL."""
-    resp, _ = sec_http.get(url, timeout=timeout, headers={"Accept": "text/html,text/plain"})
+    resp, _ = sec_http.get(url, timeout=timeout, headers={"Accept": "text/html,text/plain"},
+                           deadline=_deadline())
     if resp is None:
         return ""
     raw = resp.content
@@ -291,16 +310,29 @@ class MADealScanner:
 
     def __init__(self, db: Optional[MADatabase] = None):
         self.db = db or MADatabase()
+        # What the last scan covered: {"complete", "queries_run", "queries_total", "hits_unscored"}.
+        self.last_scan: Dict[str, Any] = {}
+
+    def _begin(self) -> None:
+        global _until
+        _until = time.monotonic() + SCAN_BUDGET_S
+
+    @staticmethod
+    def _end() -> None:
+        global _until
+        _until = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def scan_recent_filings(self, days_back: int = 30,
-                            max_workers: int = 4) -> List[Dict[str, Any]]:
+    def scan_recent_filings(self, days_back: int = 30) -> List[Dict[str, Any]]:
         """
         Scan SEC EDGAR for M&A filings in the last `days_back` days.
         Returns list of filing dicts suitable for storing in sec_filings table.
+        One query after another: sec_http's gate serialises SEC requests
+        anyway. Stops starting requests after SCAN_BUDGET_S; self.last_scan
+        says how much was covered.
         """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days_back)
@@ -311,21 +343,28 @@ class MADealScanner:
 
         all_filings: Dict[str, Dict[str, Any]] = {}   # keyed by accession_number to deduplicate
 
-        # Run all query terms in parallel
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._search_one_query, q, start_str, end_str): q
-                for q in self._SEARCH_QUERIES
-            }
-            for future in as_completed(futures):
+        self.last_scan = {"complete": True, "queries_run": 0,
+                          "queries_total": len(self._SEARCH_QUERIES), "hits_unscored": 0}
+        self._begin()
+        try:
+            for q in self._SEARCH_QUERIES:
+                if _out_of_time():
+                    break
                 try:
-                    hits = future.result()
-                    for h in hits:
-                        acc = h["accession_number"]
-                        if acc and acc not in all_filings:
-                            all_filings[acc] = h
+                    hits = self._search_one_query(q, start_str, end_str)
                 except Exception as exc:
                     print(f"[Scanner] Query error: {exc}", file=sys.stderr)
+                    continue
+                self.last_scan["queries_run"] += 1
+                for h in hits:
+                    acc = h["accession_number"]
+                    if acc and acc not in all_filings:
+                        all_filings[acc] = h
+        finally:
+            self._end()
+        if self.last_scan["queries_run"] < self.last_scan["queries_total"] or self.last_scan["hits_unscored"]:
+            self.last_scan["complete"] = False
+            print(f"[Scanner] Time budget spent: {self.last_scan}", file=sys.stderr)
 
         results = list(all_filings.values())
         print(f"[Scanner] Found {len(results)} unique filings", file=sys.stderr)
@@ -350,13 +389,23 @@ class MADealScanner:
             print(f"[Scanner] Could not resolve CIK for {ticker_or_cik}", file=sys.stderr)
             return []
 
-        raw = _get_company_recent_filings(cik, self._SCAN_FORMS, start_str, end_str)
-        results = []
-        for hit in raw:
-            scored = self._score_and_enrich(hit)
-            if scored and scored["confidence_score"] >= 0.5:
-                results.append(scored)
-                self._store_filing(scored)
+        self.last_scan = {"complete": True, "queries_run": 0, "queries_total": 1, "hits_unscored": 0}
+        self._begin()
+        try:
+            raw = _get_company_recent_filings(cik, self._SCAN_FORMS, start_str, end_str)
+            self.last_scan["queries_run"] = 1
+            results = []
+            for hit in raw:
+                if _out_of_time():
+                    self.last_scan["hits_unscored"] += 1
+                    continue
+                scored = self._score_and_enrich(hit)
+                if scored and scored["confidence_score"] >= 0.5:
+                    results.append(scored)
+                    self._store_filing(scored)
+        finally:
+            self._end()
+        self.last_scan["complete"] = not self.last_scan["hits_unscored"]
         return results
 
     def get_high_confidence_deals(self, min_confidence: float = 0.75) -> List[Dict[str, Any]]:
@@ -381,6 +430,9 @@ class MADealScanner:
         hits = _efts_search(query, self._SCAN_FORMS, start_str, end_str, max_hits=40)
         enriched = []
         for hit in hits:
+            if _out_of_time():
+                self.last_scan["hits_unscored"] = self.last_scan.get("hits_unscored", 0) + 1
+                continue
             scored = self._score_and_enrich(hit)
             if scored and scored["confidence_score"] >= 0.5:
                 enriched.append(scored)
@@ -483,7 +535,8 @@ def main():
         if command == "scan":
             days_back = int(sys.argv[2]) if len(sys.argv) > 2 else 30
             deals = scanner.scan_recent_filings(days_back=days_back)
-            print(_json.dumps({"success": True, "data": deals, "count": len(deals), "days_scanned": days_back}))
+            print(_json.dumps({"success": True, "data": deals, "count": len(deals), "days_scanned": days_back,
+                               "coverage": scanner.last_scan}))
 
         elif command == "scan_company":
             if len(sys.argv) < 3:
@@ -491,7 +544,8 @@ def main():
             ticker = sys.argv[2]
             years_back = int(sys.argv[3]) if len(sys.argv) > 3 else 3
             deals = scanner.scan_company_ma_history(ticker, years_back)
-            print(_json.dumps({"success": True, "data": deals, "ticker": ticker, "count": len(deals)}))
+            print(_json.dumps({"success": True, "data": deals, "ticker": ticker, "count": len(deals),
+                               "coverage": scanner.last_scan}))
 
         elif command == "high_confidence":
             min_conf = float(sys.argv[2]) if len(sys.argv) > 2 else 0.75
