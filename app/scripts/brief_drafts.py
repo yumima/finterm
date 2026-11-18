@@ -495,20 +495,20 @@ def theme_facts(tickers, days=30, today=None):
             os.environ[wb.CONTACT_KEY] = c
     today = today or date.today()
     cutoff = today - timedelta(days=days)
+    import sec_directory  # the app's one copy of SEC's ticker directory
     try:
-        directory = _sec_get("https://www.sec.gov/files/company_tickers.json")
+        sec_directory.rows()
     except Exception as e:  # noqa: BLE001
         return {"error": f"SEC refused the company list ({type(e).__name__}); is the contact email set in "
                          "Settings › Credentials?"}
-    by_ticker = {str(v.get("ticker", "")).upper(): v for v in directory.values()}
     companies, unknown = [], []
     for t in tickers:
-        row = by_ticker.get(t) or by_ticker.get(t.replace(".", "-"))
+        row = sec_directory.lookup(t)
         if not row:
             unknown.append(t)
             continue
-        cik = int(row["cik_str"])
-        c = {"ticker": t, "cik": cik, "name": row.get("title", ""), "sic": "", "filings": []}
+        cik = row["cik"]
+        c = {"ticker": t, "cik": cik, "name": row["title"], "sic": "", "filings": []}
         try:
             sub = _sec_get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
             c["name"] = sub.get("name") or c["name"]

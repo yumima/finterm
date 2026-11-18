@@ -98,17 +98,20 @@ def test_a_filed_zero_has_no_percentage_and_stays_json():
 
 
 def test_a_refused_directory_is_not_an_unknown_ticker():
-    import sec_statement_overlay as so
+    import tempfile
+    import sec_directory as sd
 
-    def refused(url):
-        raise OSError("403")
+    def refused():
+        raise sd.Unavailable("SEC refused the ticker directory (HTTP 403)")
 
-    real_get, real_read = so._get, so._read_cache
-    so._get, so._read_cache = refused, lambda path, ttl: None
+    saved = (sd._fetch, sd._path, sd._memo, sd._memo_at, sd._failed_until)
+    tmp = tempfile.mkdtemp()
+    sd._fetch, sd._path = refused, (lambda: os.path.join(tmp, "directory.json"))
+    sd._memo, sd._memo_at, sd._failed_until = None, 0.0, 0.0
     try:
         r = fx.check("AAPL")
     finally:
-        so._get, so._read_cache = real_get, real_read
+        sd._fetch, sd._path, sd._memo, sd._memo_at, sd._failed_until = saved
     assert "unavailable" in r["error"] and "registrant" not in r["error"]
 
 

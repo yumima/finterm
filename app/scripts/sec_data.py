@@ -47,9 +47,6 @@ class SECDataWrapper:
             'Accept': 'application/json'
         })
 
-        # Cache for company tickers
-        self._company_tickers_cache = None
-        self._cache_timestamp = None
 
         # Form types list (simplified from full SEC list)
         self.common_form_types = [
@@ -147,39 +144,19 @@ class SECDataWrapper:
             return date_str
 
     def _get_company_tickers(self) -> Dict[str, Any]:
-        """Fetch company tickers from SEC API with caching (1 hour cache)"""
+        """The SEC ticker directory, from sec_directory — the app's one copy
+        (weekly cache, SEC contact identity, last good copy on a refusal)."""
         try:
-            # Check cache validity (1 hour = 3600 seconds)
-            if self._company_tickers_cache is not None and self._cache_timestamp is not None:
-                cache_age = time.time() - self._cache_timestamp
-                if cache_age < 3600:
-                    return self._company_tickers_cache
-
-            # Fetch fresh data from SEC
-            url = "https://www.sec.gov/files/company_tickers.json"
-            data = self._make_request(url)
-
-            # Transform data structure for easier lookup
-            transformed = {}
-            cik_to_ticker = {}
-
-            for entry in data.values():
-                ticker = entry.get('ticker', '').upper()
-                cik = str(entry.get('cik_str', '')).zfill(10)
-                title = entry.get('title', '')
-
-                if ticker and cik:
-                    transformed[ticker] = {'cik': cik, 'name': title, 'ticker': ticker}
-                    cik_to_ticker[cik] = ticker
-
-            # Cache the result
-            self._company_tickers_cache = {'by_ticker': transformed, 'by_cik': cik_to_ticker, 'raw': data}
-            self._cache_timestamp = time.time()
-
-            return self._company_tickers_cache
-
+            import sec_directory
+            by_ticker, by_cik = {}, {}
+            for row in sec_directory.rows():
+                cik = str(row["cik"]).zfill(10)
+                if row["ticker"] not in by_ticker:
+                    by_ticker[row["ticker"]] = {'cik': cik, 'name': row["title"], 'ticker': row["ticker"]}
+                by_cik.setdefault(cik, row["ticker"])  # first row = primary listing
+            return {'by_ticker': by_ticker, 'by_cik': by_cik}
         except Exception as e:
-            return {'by_ticker': {}, 'by_cik': {}, 'raw': {}, 'error': str(e)}
+            return {'by_ticker': {}, 'by_cik': {}, 'error': str(e)}
 
     # COMPANY FILINGS ENDPOINTS
 

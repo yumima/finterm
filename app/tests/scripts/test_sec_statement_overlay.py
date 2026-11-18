@@ -197,16 +197,23 @@ class _Net:
         self.answers, self.calls, self.dir = answers, [], tempfile.mkdtemp()
 
     def __enter__(self):
-        self.saved = (so._get, so._cache_path)
+        import sec_directory as sd
+        self.saved = (so._get, so._cache_path, sd._fetch, sd._path, sd._memo, sd._memo_at, sd._failed_until)
         so._get = self.get
         so._cache_path = lambda *parts: os.path.join(self.dir, *parts)
+        # The ticker directory is sec_directory's (the app's one copy): the
+        # same scripted SEC answers it, cached in the same temp directory.
+        sd._fetch = lambda: sd.parse(self.get(sd.URL))
+        sd._path = lambda: os.path.join(self.dir, "directory.json")
+        sd._memo, sd._memo_at, sd._failed_until = None, 0.0, 0.0
         so._backoff_until = 0.0
         so._no_facts_until.clear()
         return self
 
     def __exit__(self, *exc):
         import shutil
-        so._get, so._cache_path = self.saved
+        import sec_directory as sd
+        so._get, so._cache_path, sd._fetch, sd._path, sd._memo, sd._memo_at, sd._failed_until = self.saved
         so._backoff_until = 0.0
         so._no_facts_until.clear()
         shutil.rmtree(self.dir, ignore_errors=True)

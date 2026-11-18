@@ -41,10 +41,10 @@ DECLARED = {  # host each file talks to
     "sec_form_d_data.py", "sec_data.py", "sec_s1_pipeline.py", "sec_form4_bulk.py", "sec_13f_bulk.py",
     "sec_xbrl_data.py", "sec_nport_marks.py", "sec_ownership_data.py",
     "ipo_calendar.py",                                           # EDGAR submissions only (Nasdaq gets no contact)
-    "pre_ipo_listings.py",                                       # EDGAR company_tickers.json only (Yahoo gets no contact)
     "finra_short_volume.py", "finra_short_interest.py",          # FINRA
     "nominatim_data.py", "overpass_api_data.py",                 # OpenStreetMap
     "yfinance_data.py",                                          # its EDGAR document fetch
+    "sec_http.py",                                               # the one SEC client: refuses any non-*.sec.gov host, redirects included
     "brief_drafts.py",                                           # EDGAR only: company_tickers.json + submissions (_sec_get)
     "earnings_links.py",                                         # EDGAR only: _get gives the contact to *.sec.gov hosts alone
     os.path.join("mcp", "edgar", "base.py"),                     # EDGAR
@@ -67,6 +67,20 @@ for root, _, files in os.walk(SCRIPTS):
         if leaky and rel not in DECLARED:
             fails.append(f"{rel} can send the user's contact ({', '.join(sorted(leaky))}) "
                          f"to a host the setting does not name")
+
+# sec_http.get carries the contact: it must refuse every host but *.sec.gov,
+# look-alikes included (redirects are followed by hand through the same test).
+sys.path.insert(0, SCRIPTS)
+import sec_http  # noqa: E402
+for url, ok in [("https://www.sec.gov/x", True), ("https://data.sec.gov/x", True), ("https://sec.gov/", True),
+                ("https://evilsec.gov/", False), ("https://sec.gov.evil.com/", False), ("https://example.com/", False)]:
+    if sec_http.is_sec_host(url) != ok:
+        fails.append(f"sec_http.is_sec_host({url!r}) should be {ok}")
+try:
+    sec_http.get("https://example.com/")
+    fails.append("sec_http.get sent a request to a non-SEC host")
+except ValueError:
+    pass
 
 for f in fails:
     print("FAIL:", f)

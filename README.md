@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`2b68642f4`](https://github.com/yumima/finterm/commit/2b68642f4) extended hours: review fixes — per-row labels, strict close order, closures from data
 - [`2e20e3788`](https://github.com/yumima/finterm/commit/2e20e3788) workflow nodes: read every dataset through the service that owns it
 - [`9fb509452`](https://github.com/yumima/finterm/commit/9fb509452) data owners: callback reads for FRED, financials, news, Form 4, filings, option chains
 - [`7d974777c`](https://github.com/yumima/finterm/commit/7d974777c) whats on: Treasury yields come from EconomicsService, not a direct script run

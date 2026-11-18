@@ -97,11 +97,11 @@ def _get(url, as_json=True, limit=None, sec=True, final_url=False):
 
 
 def _cik_for(symbol):
-    # The daemon's one ticker → CIK lookup (disk-cached a week, BRK.B/BRK-B
+    # The app's one ticker → CIK lookup (sec_directory: BRK.B/BRK-B
     # normalised) — not another private copy of company_tickers.json.
-    import sec_statement_overlay
+    import sec_directory
 
-    c = sec_statement_overlay.cik(symbol)
+    c = sec_directory.cik(symbol)
     return int(c) if c else None
 
 

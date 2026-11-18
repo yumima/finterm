@@ -172,15 +172,13 @@ class SourceUnavailable(RuntimeError):
 
 
 def cik_for(symbol: str) -> Optional[str]:
-    """CIK for a ticker: sec_statement_overlay's cached lookup, so there is one
-    implementation of the directory fetch and the "." → "-" rule. A refused
-    directory raises — no ticker is ever reported as "not an SEC registrant"
-    because the directory could not be read."""
-    import sec_statement_overlay as so
+    """CIK for a ticker from sec_directory (the app's one copy of SEC's
+    directory and its "." → "-" rule). A refused directory raises — no ticker
+    is ever reported as "not an SEC registrant" because the directory could
+    not be read."""
+    import sec_directory
     try:
-        return so.cik(symbol)
-    except SourceUnavailable:
-        raise
+        return sec_directory.cik(symbol)
     except Exception as e:  # noqa: BLE001
         raise SourceUnavailable(f"SEC ticker directory unavailable: {type(e).__name__}: {str(e)[:100]}") from e
 

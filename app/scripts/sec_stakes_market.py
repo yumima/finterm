@@ -129,24 +129,16 @@ def parse_structured(text):
     return pct, shares, event
 
 
-_TICKERS = None
-
-
 def ticker_for_cik(cik):
-    """The SEC's own CIK -> ticker list (company_tickers.json), once per run.
-    A failed fetch is not cached as an empty list: it is asked again, and
-    rows stored meanwhile without a ticker are filled in by the next scan."""
-    global _TICKERS
-    if _TICKERS is None:
-        r, _s = _get_status("https://www.sec.gov/files/company_tickers.json")
-        try:
-            got = {}
-            for row in r.json().values():
-                got.setdefault(_pad_cik(row.get("cik_str", "")), str(row.get("ticker", "")).upper())
-            _TICKERS = got or None
-        except Exception:
-            _TICKERS = None
-    return (_TICKERS or {}).get(_pad_cik(cik), "")
+    """The SEC's own CIK -> ticker list, from sec_directory (the app's one
+    copy; a registrant's first row is its primary listing). A refusal is not
+    an empty list: the row stays tickerless and the next scan fills it in."""
+    import sec_directory
+    try:
+        rows = sec_directory.by_cik().get(int(_pad_cik(cik) or 0))
+    except Exception:
+        return ""
+    return rows[0]["ticker"] if rows else ""
 
 
 def fill_missing_tickers(con):

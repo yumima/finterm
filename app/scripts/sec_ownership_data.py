@@ -133,33 +133,32 @@ def _norm_form(form):
     return f
 
 
-_TICKER_MAP = None
+def _directory_row(symbol):
+    """SEC's directory row for a ticker (sec_directory — the app's one copy),
+    or None when EDGAR does not list it. A directory SEC will not serve raises
+    sec_directory.Unavailable: a refusal is not "not a registrant"."""
+    import sec_directory
+    return sec_directory.lookup(str(symbol))
 
 
 def cik_for_symbol(symbol):
     """Resolve a ticker to a zero-padded CIK, or None when EDGAR does not list it."""
-    global _TICKER_MAP
-    if _TICKER_MAP is None:
-        r = _get("https://www.sec.gov/files/company_tickers.json")
-        if r is None:
-            return None
-        try:
-            raw = r.json()
-        except Exception:
-            return None
-        _TICKER_MAP = {}
-        for row in raw.values():
-            t = str(row.get("ticker", "")).upper()
-            if t:
-                _TICKER_MAP[t] = (_pad_cik(row.get("cik_str", "")), row.get("title", ""))
-    hit = _TICKER_MAP.get(str(symbol).upper())
-    return hit[0] if hit else None
+    row = _directory_row(symbol)
+    return _pad_cik(row["cik"]) if row else None
 
 
 def company_name_for_symbol(symbol):
-    cik_for_symbol(symbol)  # populates the map
-    hit = (_TICKER_MAP or {}).get(str(symbol).upper())
-    return hit[1] if hit else ""
+    row = _directory_row(symbol)
+    return row["title"] if row else ""
+
+
+def _company_name_or_blank(symbol):
+    # The name is decoration on an answer already in hand: the directory
+    # having been readable a moment ago, a refusal now just leaves it blank.
+    try:
+        return company_name_for_symbol(symbol)
+    except Exception:
+        return ""
 
 
 def _submissions(cik):
@@ -511,7 +510,10 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     """
     if requests is None:
         return {"error": "requests not available", "symbol": symbol}
-    cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
+    try:
+        cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
+    except Exception as e:  # sec_directory.Unavailable — SEC refused, ask again
+        return {"error": str(e), "transient": True, "symbol": symbol}
     if not cik:
         return {"error": f"No EDGAR CIK for {symbol}", "symbol": symbol}
 
@@ -583,7 +585,7 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     return {
         "symbol": str(symbol).upper(),
         "cik": cik,
-        "company": company_name_for_symbol(symbol),
+        "company": _company_name_or_blank(symbol),
         "window_months": months,
         "since": since,
         "filings_found": total,
@@ -674,7 +676,10 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     """
     if requests is None:
         return {"error": "requests not available", "symbol": symbol}
-    cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
+    try:
+        cik = _pad_cik(cik) if cik else cik_for_symbol(symbol)
+    except Exception as e:  # sec_directory.Unavailable — SEC refused, ask again
+        return {"error": str(e), "transient": True, "symbol": symbol}
     if not cik:
         return {"error": f"No EDGAR CIK for {symbol}", "symbol": symbol}
 
@@ -752,7 +757,7 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     return {
         "symbol": str(symbol).upper(),
         "cik": cik,
-        "company": company_name_for_symbol(symbol),
+        "company": _company_name_or_blank(symbol),
         "window_months": months,
         "since": since,
         "filings_found": total,

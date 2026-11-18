@@ -17,26 +17,20 @@ import json
 import sys
 from datetime import datetime, timezone
 
-import requests
-
-from finterm_identity import user_agent
-
-TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
-
 
 def pad(cik):
     digits = "".join(ch for ch in str(cik or "") if ch.isdigit())
     return digits.zfill(10) if digits else ""
 
 
-def listed_from(tickers_doc, ciks):
-    """{cik: ticker} for the requested CIKs that SEC lists as traded. A
-    registrant with several share classes appears once per class; the first
-    row is its primary listing."""
+def listed_from(rows, ciks):
+    """{cik: ticker} for the requested CIKs that SEC lists as traded, from
+    sec_directory rows. A registrant with several share classes appears once
+    per class; the first row is its primary listing."""
     wanted = {pad(c) for c in ciks if pad(c)}
     out = {}
-    for row in (tickers_doc or {}).values():
-        cik = pad(row.get("cik_str"))
+    for row in rows or []:
+        cik = pad(row.get("cik"))
         ticker = str(row.get("ticker") or "").strip().upper()
         if cik in wanted and ticker and cik not in out:
             out[cik] = ticker
@@ -67,9 +61,8 @@ def listings(ciks):
     if not ciks:
         return {"listed": {}, "checked": 0}
     try:
-        r = requests.get(TICKERS_URL, timeout=30, headers={"User-Agent": user_agent()})
-        r.raise_for_status()
-        found = listed_from(r.json(), ciks)
+        import sec_directory  # the app's one copy of SEC's directory
+        found = listed_from(sec_directory.rows(), ciks)
     except Exception as e:
         return {"error": f"SEC's ticker list did not load ({str(e)[:160]})"}
     try:

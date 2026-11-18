@@ -57,17 +57,10 @@ def get_frames(taxonomy: str = "us-gaap", tag: str = "Revenues",
 
 
 def get_company_tickers() -> Any:
+    """SEC's ticker directory, from sec_directory (the app's one copy)."""
+    import sec_directory
     try:
-        resp = session.get("https://www.sec.gov/files/company_tickers.json", timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        result = []
-        for key, val in data.items():
-            result.append({
-                "cik": val.get("cik_str"),
-                "ticker": val.get("ticker"),
-                "title": val.get("title")
-            })
+        result = [{"cik": r["cik"], "ticker": r["ticker"], "title": r["title"]} for r in sec_directory.rows()]
         return {"count": len(result), "tickers": result}
     except Exception as e:
         return {"error": f"Failed to fetch tickers: {str(e)}"}

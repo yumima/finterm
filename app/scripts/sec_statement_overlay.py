@@ -63,7 +63,6 @@ DISCONTINUED_TAG = "IncomeLossFromDiscontinuedOperationsNetOfTax"
 KEPT_TAGS = OPINC_TAGS + (EQUITY_TAG, EQUITY_TOTAL_TAG, DISCONTINUED_TAG)
 
 FACTS_TTL_S = 24 * 3600
-DIRECTORY_TTL_S = 7 * 24 * 3600
 BACKOFF_S = 600
 TIMEOUT = (4, 8)  # connect, read — the statements are already in hand; do not hold them long
 
@@ -275,19 +274,8 @@ def _get(url: str) -> Any:
 
 
 def cik(symbol: str) -> Optional[str]:
-    """CIK for a ticker — the one lookup both this module and the cross-check
-    script use. The directory is cached on disk for a week."""
-    path = _cache_path("tickers.json")
-    table = _read_cache(path, DIRECTORY_TTL_S)
-    if not isinstance(table, dict) or not table:
-        data = _get("https://www.sec.gov/files/company_tickers.json")
-        table = {str(v["ticker"]).upper(): str(v["cik_str"]) for v in data.values()
-                 if isinstance(v, dict) and v.get("ticker") and v.get("cik_str") is not None}
-        if not table:
-            raise fx.SourceUnavailable("SEC ticker directory came back empty")
-        _write_cache(path, table)
-    s = symbol.upper()
-    return table.get(s.replace(".", "-")) or table.get(s)
+    """CIK for a ticker (fundamentals_crosscheck.cik_for — sec_directory)."""
+    return fx.cik_for(symbol)
 
 
 def _facts(cik_: str) -> Optional[Dict[str, Any]]:
