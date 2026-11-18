@@ -25,13 +25,8 @@ same paced Nasdaq client (ipo_calendar._http_json). Each day is cached in
 market_data/whats_on_calendar.sqlite: a closed day for a week, today and later
 for 4 h; a failed refresh falls back to the last copy.
 
-    whats_on_calendar.py fred ID[,ID...] START
-
-prints {"series": {ID: "<fredgraph.csv text>"}, "failed": [ID...]} — FRED's
-public graph download (no API key; the keyed API is what fred_data.py needs
-and the app holds no key). The app derives the printed number itself
-(MacroReleases.h). Fetched here rather than from Qt because FRED's edge
-resets the HTTP/2 stream for the app's own User-Agent.
+(FRED actuals are fred_data.py's — the app's one FRED reader, keyless
+through FRED's public graph download when no API key is set.)
 """
 
 import json
@@ -290,58 +285,7 @@ def earnings_days(start, end):
             "days_answered": [d.isoformat() for d in sorted(earn)]}
 
 
-FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
-_FRED_ID = re.compile(r"^[A-Z0-9]{2,30}$")
-
-
-def is_fred_csv(text, series_id):
-    """A real download starts with the header naming the series; an error
-    page or a throttle notice does not — it is a failure, not an empty series."""
-    first = (text or "").lstrip().split("\n", 1)[0].strip()
-    return first.lower().startswith("observation_date,") and first.split(",", 1)[1].strip() == series_id
-
-
-def _fred_one(requests, sid, start):
-    """(sid, csv text) or (sid, None) — one refused series must not lose the others."""
-    if not _FRED_ID.match(sid):
-        return sid, None
-    try:
-        r = requests.get(FRED_CSV, params={"id": sid, "cosd": start.isoformat()}, timeout=15)
-        r.raise_for_status()
-        return sid, (r.text if is_fred_csv(r.text, sid) else None)
-    except Exception as e:
-        print(f"whats_on_calendar: FRED {sid} failed ({type(e).__name__})", file=sys.stderr)
-        return sid, None
-
-
-def fred(ids, start):
-    try:
-        import requests
-    except ImportError:  # pragma: no cover
-        return {"series": {}, "failed": list(ids)}
-    # Concurrent: the app gives the whole call 60 s, so a few slow series in a
-    # row must not run the deadline out and lose the ones that answered.
-    out, failed = {}, []
-    if ids:
-        with ThreadPoolExecutor(max_workers=min(6, len(ids))) as ex:
-            for sid, text in ex.map(lambda s: _fred_one(requests, s, start), ids):
-                if text is None:
-                    failed.append(sid)
-                else:
-                    out[sid] = text
-    return {"series": out, "failed": failed}
-
-
 def main(argv):
-    if len(argv) >= 3 and argv[0] == "fred":
-        try:
-            start = date.fromisoformat(argv[2])
-        except ValueError:
-            print(json.dumps({"error": "bad date"}))
-            return 2
-        ids = [s.strip().upper() for s in argv[1].split(",") if s.strip()]
-        print(json.dumps(fred(ids, start)))
-        return 0
     if len(argv) < 3 or argv[0] not in ("earnings", "company_events"):
         print(json.dumps({"error": "usage: whats_on_calendar.py earnings|company_events START END [SYM,...]"}))
         return 2

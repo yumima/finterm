@@ -2,7 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
-#include "python/PythonRunner.h"
+#include "services/calendar/CompanyEventsFeed.h"
 #include "services/calendar/EarningsCalendarFeed.h"
 #include "services/calendar/MacroCalendarFeed.h"
 #include "services/economics/EconomicsService.h"
@@ -15,7 +15,6 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QJsonDocument>
@@ -337,15 +336,11 @@ void WhatsOnPanel::fetch_macro(bool force) {
 namespace {
 constexpr const char* kFomcKey = "whatson:fomc:v1";
 constexpr const char* kEffrKey = "whatson:effr:v1";
-constexpr const char* kEventsKey = "whatson:company_events:v2:"; // + window + symbol-set hash (v2: no earnings)
 constexpr const char* kTdUpKey = "whatson:td:upcoming:v1";
 constexpr const char* kTdDoneKey = "whatson:td:auctioned:v1";
-constexpr const char* kFredKey = "whatson:fred:v1:"; // + series id
 constexpr int kFomcSec = 12 * 3600; // a published calendar
 constexpr int kEffrSec = 3600;      // one print a day
-constexpr int kEventsSec = 60 * 60;  // the script caches each day itself (4 h / 7 d)
 constexpr int kTdSec = 60 * 60;      // announcements land a few days ahead; results at the close
-constexpr int kFredSec = 20 * 60;    // short: an actual appears within the hour after 08:30
 
 std::optional<QJsonDocument> cached_doc(const QString& key) {
     if (const auto hit = CacheManager::instance().try_get(key)) {
@@ -540,44 +535,22 @@ void WhatsOnPanel::fetch_events(bool force) {
         },
         force);
 
-    // Dividends and insider clusters: the user's own names only.
-    QStringList syms(mine_.begin(), mine_.end());
-    syms.sort();
-    const QString sym_arg = syms.join(QLatin1Char(','));
-    const QString key =
-        QString::fromLatin1(kEventsKey) + from.toString(Qt::ISODate) + QLatin1Char(':') +
-        QString::fromLatin1(QCryptographicHash::hash(sym_arg.toUtf8(), QCryptographicHash::Sha1).toHex().left(12));
-    if (!force) {
-        if (const auto d = cached_doc(key); d && d->isObject()) {
-            apply_events(d->object());
-            return;
-        }
-    }
-    QStringList args = {QStringLiteral("company_events"), from.toString(Qt::ISODate), to.toString(Qt::ISODate)};
-    if (!sym_arg.isEmpty())
-        args << sym_arg;
-    // ~1 Nasdaq request per weekday on a cold cache, paced: well over the
-    // default 30 s process deadline the first time.
-    python::PythonRunner::instance().run( // D1-exempt: this panel is the only reader of the user's company events
-        QStringLiteral("whats_on_calendar.py"), args,
-        [self, key](python::PythonResult r) {
+    // Dividends and insider clusters: the user's own names only, from their
+    // one reader (a held answer, one run per window and symbol set).
+    company_events::fetch(
+        this, from, to, QStringList(mine_.begin(), mine_.end()),
+        [self](const company_events::EventsResult& r) {
             if (!self)
                 return;
-            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            if (!r.success || root.isEmpty() || root.contains("error")) {
+            if (!r.ok) {
                 // Dividends AND insider clusters come from this one call.
-                self->set_error(QStringLiteral("Company events"),
-                                root.value("error").toString(r.success ? QStringLiteral("calendar unreadable")
-                                                                       : QStringLiteral("script failed")));
+                self->set_error(QStringLiteral("Company events"), r.error);
                 return;
             }
             self->clear_error(QStringLiteral("Company events"));
-            // A partial answer is cached briefly so the missing days are retried.
-            const bool partial = !root.value("div_days_failed").toArray().isEmpty();
-            put_doc(key, QJsonDocument(root), partial ? 10 * 60 : kEventsSec);
-            self->apply_events(root);
+            self->apply_events(r.root);
         },
-        {}, 180'000);
+        force);
 }
 
 void WhatsOnPanel::apply_auctions() {
@@ -631,54 +604,53 @@ void WhatsOnPanel::fetch_fred(bool force) {
     const QDateTime now = QDateTime::currentDateTime();
     const QStringList need = wo::fred_series_needed(macro_, now, wo::week_start(now.date()), min_impact_ > wo::Impact::Low);
     QStringList fetch;
-    for (const QString& id : need) {
-        if (!force) {
-            if (const auto hit = CacheManager::instance().try_get(QString::fromLatin1(kFredKey) + id)) {
-                fred_[id] = mr::parse_fred_csv(*hit);
-                continue;
-            }
-        }
+    for (const QString& id : need)
         if (!fred_inflight_.contains(id))
             fetch << id;
-    }
     if (fetch.isEmpty())
         return;
+    fetch.sort(); // one cache key per series set
     for (const auto& id : fetch)
         fred_inflight_.insert(id);
-    // FRED's public graph download (no API key), through the script: FRED's
-    // edge resets the stream for the app's own User-Agent.
+    // FRED through its owner (fred_data.py — keyless via FRED's public series
+    // download when no API key is set): EconomicsService's cache and one run
+    // per series set. A partial answer is not cached, so a refused series is
+    // asked again on the next refresh.
+    const QString script = QStringLiteral("fred_data.py");
+    const QString command = QStringLiteral("multiple");
+    const QStringList args = fetch + QStringList{now.date().addYears(-2).addMonths(-2).toString(Qt::ISODate)};
+    auto& econ = services::EconomicsService::instance();
+    if (force)
+        econ.invalidate(script, command, args);
     QPointer<WhatsOnPanel> self = this;
-    python::PythonRunner::instance().run(
-        QStringLiteral("whats_on_calendar.py"),
-        {QStringLiteral("fred"), fetch.join(QLatin1Char(',')),
-         now.date().addYears(-2).addMonths(-2).toString(Qt::ISODate)},
-        [self, fetch](python::PythonResult r) {
-            if (!self)
-                return;
-            for (const auto& id : fetch)
-                self->fred_inflight_.remove(id);
-            const QJsonObject root = QJsonDocument::fromJson(python::extract_json(r.output).toUtf8()).object();
-            const QJsonObject series = root.value("series").toObject();
-            QStringList failed;
-            for (const auto& id : fetch) {
-                const QString csv = series.value(id).toString();
-                const auto obs = mr::parse_fred_csv(csv);
-                if (obs.isEmpty()) {
-                    failed << id; // refused or unreadable: the actual stays absent
-                    continue;
-                }
-                CacheManager::instance().put(QString::fromLatin1(kFredKey) + id, csv, kFredSec,
-                                             QStringLiteral("whatson"));
-                self->fred_[id] = obs;
+    econ.fetch(script, command, args, [self, fetch](const services::EconomicsResult& r) {
+        if (!self)
+            return;
+        for (const auto& id : fetch)
+            self->fred_inflight_.remove(id);
+        QHash<QString, QJsonArray> answered;
+        if (r.success)
+            for (const auto& v : r.data.value("data").toArray()) {
+                const QJsonObject s = v.toObject();
+                if (s.value("error").toString().isEmpty())
+                    answered.insert(s.value("series_id").toString(), s.value("observations").toArray());
             }
-            if (failed.isEmpty())
-                self->clear_error(QStringLiteral("FRED"));
-            else
-                self->set_error(QStringLiteral("FRED"),
-                                QStringLiteral("%1 unavailable — those actuals not shown").arg(failed.join(", ")));
-            self->render();
-        },
-        {}, 60'000);
+        QStringList failed;
+        for (const auto& id : fetch) {
+            const auto obs = mr::parse_fred_observations(answered.value(id));
+            if (obs.isEmpty()) {
+                failed << id; // refused or unreadable: the actual stays absent
+                continue;
+            }
+            self->fred_[id] = obs;
+        }
+        if (failed.isEmpty())
+            self->clear_error(QStringLiteral("FRED"));
+        else
+            self->set_error(QStringLiteral("FRED"),
+                            QStringLiteral("%1 unavailable — those actuals not shown").arg(failed.join(", ")));
+        self->render();
+    });
 }
 
 void WhatsOnPanel::set_headlines(const QVector<services::NewsArticle>& ranked) {

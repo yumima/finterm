@@ -23,13 +23,17 @@ QVector<Obs> monthly(const QDate& first, const QVector<double>& v) {
 class TestMacroReleases : public QObject {
     Q_OBJECT
   private slots:
-    void csv_parse_skips_missing_values() {
-        const auto obs = parse_fred_csv("observation_date,PAYEMS\n2026-08-01,159068\n2026-09-01,.\n"
-                                        "2026-10-01,159293\n\n");
+    void observations_skip_missing_values() {
+        const auto doc = QJsonDocument::fromJson(R"([{"date": "2026-08-01", "value": 159068},
+                                                      {"date": "2026-09-01", "value": null},
+                                                      {"date": "2026-09-15", "value": "."},
+                                                      {"date": "garbage", "value": 1},
+                                                      {"date": "2026-10-01", "value": 159293}])");
+        const auto obs = parse_fred_observations(doc.array());
         QCOMPARE(obs.size(), 2);
         QCOMPARE(obs[0].date, QDate(2026, 8, 1));
         QCOMPARE(obs[1].value, 159293.0);
-        QVERIFY(parse_fred_csv("<html>error</html>").isEmpty());
+        QVERIFY(parse_fred_observations(QJsonArray{}).isEmpty());
     }
 
     void spec_mapping() {

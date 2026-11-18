@@ -1,7 +1,8 @@
 #pragma once
 // TreasuryCurve.h — the US Treasury daily par yield curve rows the WORLD
 // board uses for the 2-year and the 2s10s spread (Yahoo has no cash 2-year).
-// Produced by `scripts/treasury_data.py par_curve`; parsed here so the
+// Produced by `scripts/treasury_data.py par_curve` (EconomicsService::
+// fetch_treasury_par_curve); parsed here so the
 // "absent is NaN, never 0" rule is unit-tested.
 
 #include "screens/markets/world/WorldMarketsModel.h"

@@ -147,16 +147,6 @@ def test_window_and_ttl():
     assert w.day_ttl(date(2026, 11, 10), today, date(2026, 11, 12)) == 7 * 86400
 
 
-def test_fred_csv_recognised_by_header_only():
-    good = "observation_date,CPIAUCSL\n2026-09-01,336.298\n2026-10-01,337.476\n"
-    assert w.is_fred_csv(good, "CPIAUCSL")
-    assert not w.is_fred_csv(good, "PAYEMS")          # another series' file
-    assert not w.is_fred_csv("<!DOCTYPE html><title>Error</title>", "CPIAUCSL")
-    assert not w.is_fred_csv("", "CPIAUCSL")
-    # Bad ids are refused before any request.
-    assert w.fred(["../etc", "a b"], date(2024, 9, 1))["failed"] == ["../etc", "a b"]
-
-
 def test_insider_clusters_from_local_store():
     with tempfile.TemporaryDirectory() as tmp:
         os.environ["FINTERM_DATA_DIR"] = tmp
