@@ -45,16 +45,12 @@ constexpr qint64 kCoveredSecs = 10 * 60;
 // refusal); the rest at DEBUG, so the log shows a slow start, not every poll.
 constexpr qint64 kSlowAnswerMs = 1500;
 
-/// Whether an extended-hours print can still arrive in the fetched window.
-/// During the regular session the pre-market is over and the post-market not
-/// open; after 20:00 ET and at weekends the window is closed (overnight prints
-/// come through the stream). Then a fetch can only repeat the last answer.
+/// Whether an extended-hours print can still arrive in the fetched window
+/// (exthours::fetch_window_open_at: the market calendar's bell, 13:00 on an
+/// early close). Outside it a fetch can only repeat the last answer; overnight
+/// prints come through the stream.
 bool fetch_window_open() {
-    const QDateTime et = QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York"));
-    if (et.date().dayOfWeek() >= 6)
-        return false;
-    const QTime t = et.time();
-    return (t >= QTime(4, 0) && t < QTime(9, 30)) || (t >= QTime(16, 0) && t < QTime(20, 0));
+    return exthours::fetch_window_open_at(QDateTime::currentDateTime());
 }
 
 QString snapshot_path() {

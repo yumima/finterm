@@ -1,5 +1,7 @@
 // src/screens/dashboard/widgets/ExtendedHoursMath.h
 #pragma once
+#include "services/calendar/MarketCalendar.h"
+
 #include <QDate>
 #include <QDateTime>
 #include <QHash>
@@ -71,6 +73,24 @@ inline QString ext_definition() {
 }
 /// Column / mode name.
 inline QString ext_column_title() { return QStringLiteral("EXT%"); }
+
+/// Whether a pre-market or after-hours print can land at `at`: a trading day,
+/// 04:00–09:30 ET, or the bell to the end of after-hours — 16:00–20:00, and
+/// 13:00–17:00 on an early close (the day after Thanksgiving, Christmas Eve,
+/// 3 July). The same calendar as extended_rules.py (bell / post_window), from
+/// services/calendar/MarketCalendar.h. Overnight prints come through the
+/// stream, so the overnight session is not a fetch window.
+inline bool fetch_window_open_at(const QDateTime& at) {
+    const QDateTime et = at.toTimeZone(QTimeZone("America/New_York"));
+    const QDate d = et.date();
+    if (!finterm::market_calendar::is_trading_day(d))
+        return false;
+    const bool early = finterm::market_calendar::is_early_close(d);
+    const QTime t = et.time();
+    const QTime bell = early ? QTime(13, 0) : QTime(16, 0);
+    const QTime post_end = early ? QTime(17, 0) : QTime(20, 0);
+    return (t >= QTime(4, 0) && t < QTime(9, 30)) || (t >= bell && t < post_end);
+}
 
 /// Only plain US tickers trade these sessions: no exchange suffix, index,
 /// future, FX pair or crypto. Same rule as extended_rules.has_us_extended_session

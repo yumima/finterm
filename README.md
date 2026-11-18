@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`3c480977c`](https://github.com/yumima/finterm/commit/3c480977c) extended hours: one reading per session, named everywhere, from the batch quote
+- [`c30433ca3`](https://github.com/yumima/finterm/commit/c30433ca3) credentials: EDGAR_IDENTITY reaches the scripts (sec_http honours a user-set identity)
 - [`dff029d5e`](https://github.com/yumima/finterm/commit/dff029d5e) sec http: every edgartools user gets the contact identity from one helper
 - [`738690969`](https://github.com/yumima/finterm/commit/738690969) sec http: one retry policy, a deadline, a byte cap; edgartools paced by the gate
 - [`7bb40ed94`](https://github.com/yumima/finterm/commit/7bb40ed94) sec directory: the C++ ticker -> CIK map reads the app's one copy

@@ -265,6 +265,28 @@ class TestExtendedHoursMath : public QObject {
         QVERIFY(!eq::with_live_readings({}, x, 10'000 + 16 * 60).pre_market.live);
     }
 
+    // The fetch window follows the market calendar's bell: Black Friday 2026
+    // (27 Nov) closes at 13:00 and its after-hours runs 13:00–17:00 ET.
+    void the_fetch_window_follows_the_early_close() {
+        const QTimeZone ny("America/New_York");
+        auto at = [&](int y, int m, int d, int h, int mi) { return QDateTime(QDate(y, m, d), QTime(h, mi), ny); };
+        QVERIFY(fetch_window_open_at(at(2026, 11, 27, 8, 0)));    // pre-market
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 27, 12, 59))); // regular session
+        QVERIFY(fetch_window_open_at(at(2026, 11, 27, 13, 0)));   // the early bell
+        QVERIFY(fetch_window_open_at(at(2026, 11, 27, 16, 59)));
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 27, 17, 0)));  // after-hours over
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 27, 18, 0)));
+        // An ordinary day: 16:00–20:00.
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 25, 13, 30)));
+        QVERIFY(fetch_window_open_at(at(2026, 11, 25, 19, 59)));
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 25, 20, 0)));
+        // Thanksgiving and a Saturday: no session at all.
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 26, 8, 0)));
+        QVERIFY(!fetch_window_open_at(at(2026, 11, 28, 17, 0)));
+        // Viewed from another zone, the same instant.
+        QVERIFY(fetch_window_open_at(at(2026, 11, 27, 13, 30).toTimeZone(QTimeZone("Asia/Tokyo"))));
+    }
+
     // A regular-session print is not an extended reading.
     void a_regular_print_is_ignored() {
         QHash<QString, SymbolExt> all;
