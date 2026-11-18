@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`f8d8f96db`](https://github.com/yumima/finterm/commit/f8d8f96db) scripts: delete script actions and CLI commands no caller sends
 - [`f2a03fd73`](https://github.com/yumima/finterm/commit/f2a03fd73) scripts: delete functions, classes and imports nothing calls
 - [`780ee79c8`](https://github.com/yumima/finterm/commit/780ee79c8) economic calendar: fetch the day the panel asks for, not a fixed Oct 16
 - [`bf5853cb9`](https://github.com/yumima/finterm/commit/bf5853cb9) analytics: delete the packages and modules that only a docstring mentions

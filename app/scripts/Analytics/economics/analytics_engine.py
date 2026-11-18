@@ -1174,24 +1174,6 @@ class ScenarioAnalyzer(EconomicsBase):
 
         return result
 
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-
-        # Calculate trend strength
-        trend_strength = abs(r_value)
-
-        return {
-            'linear_trend': {
-                'slope': self.to_decimal(slope),
-                'intercept': self.to_decimal(intercept),
-                'r_squared': self.to_decimal(r_value ** 2),
-                'p_value': self.to_decimal(p_value),
-                'standard_error': self.to_decimal(std_err)
-            },
-            'trend_direction': 'Increasing' if slope > 0 else 'Decreasing' if slope < 0 else 'Flat',
-            'trend_strength': self.to_decimal(trend_strength),
-            'trend_significance': p_value < 0.05
-        }
-
     def _analyze_seasonality(self, data: pd.Series) -> Dict[str, Any]:
         """Analyze seasonality in time series"""
 
