@@ -16,9 +16,8 @@ namespace finterm::ui {
 /// connect to `posted` and render their own toast UI. The service itself
 /// just queues + emits; rendering + animation lives in the consumer.
 ///
-/// Per design 10.7 we also keep a persistent dismissable history drawer.
-/// That UI lands with the full Phase 9 ErrorPipeline. v1 just keeps the
-/// last N notifications in memory for any drawer that wants them.
+/// The service also keeps the last N notifications in memory for any
+/// history drawer that wants them.
 ///
 /// Naming note: this is intentionally `ToastService`, distinct from
 /// `finterm::notifications::NotificationService` (the external-channel

@@ -55,9 +55,8 @@ void AiSystemSection::build_ui() {
     connect(refresh_btn_, &QPushButton::clicked, this, &AiSystemSection::on_refresh);
 
     // Track 8 / 107: inline completion toggle.  Reads / writes
-    // SettingsRepository directly — the InlineCompletionController
-    // re-reads the flag on every keystroke, so the change is live
-    // without restart.
+    // SettingsRepository directly.  Nothing reads the flag yet: the
+    // ghost-text controller was never wired into the chat composer.
     inline_completion_cb_ = new QCheckBox(QStringLiteral("Enable inline (ghost-text) completion in chat composer"));
     inline_completion_cb_->setToolTip(QStringLiteral("Suggests a continuation as you type · Tab accepts"));
     {

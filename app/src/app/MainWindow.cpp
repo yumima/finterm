@@ -17,7 +17,6 @@
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
-#include "screens/ComingSoonScreen.h"
 #include "screens/about/AboutScreen.h"
 #include "screens/agent_config/AgentConfigScreen.h"
 #include "screens/ai_quant_lab/AIQuantLabScreen.h"
