@@ -1312,6 +1312,13 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_economics_analytics_engine.py
     )
     set_tests_properties(economics_analytics_engine PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # Alpha Arena's technical features: agno_trading imports (it once could
+    # not, and every agent ran with empty features).
+    add_test(
+        NAME alpha_arena_features
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_alpha_arena_features.py
+    )
+    set_tests_properties(alpha_arena_features PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
     # Futures / FX day change: the settle BEFORE the last reopen (a Saturday
     # ES=F read +0.11% against Friday's own settle while it was down 0.42%),
     # and Columbus / Veterans Day are trading days. 77 without pandas.
