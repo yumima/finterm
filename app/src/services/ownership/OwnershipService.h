@@ -21,10 +21,12 @@
 #include "screens/ownership/OwnershipTypes.h"
 
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QSet>
 #include <QString>
 
+#include <functional>
 #include <optional>
 
 class QTimer;
@@ -96,6 +98,24 @@ class OwnershipService : public QObject {
     /// notification per new issuer, once. Idempotent across restarts through
     /// a small stamp file.
     void check_holdings_alerts();
+
+    // ── Reads for the alert checks ──────────────────────────────────────────
+    // Local stores only: no network, no recomputation (the scans and the 13F
+    // sync keep them current). `done` is always called once, later — never
+    // inside the call. Identical reads in flight share one script run. A
+    // failed or refused read carries the script's error text in `error`; its
+    // rows say nothing, least of all "none".
+
+    /// Scorable open-market buys (Form 4 store) on @p symbols filed in the
+    /// last @p days, with the store's reach.
+    void query_cluster_buys(const QStringList& symbols, int days, std::function<void(ownership::ClusterBuys)> done);
+    /// 13D / 13G filings on @p symbols in the last @p days (stakes store).
+    void query_stakes(const QStringList& symbols, int days, std::function<void(ownership::Stakes)> done);
+    /// The stored big 13F moves in @p symbols filed in the last @p filed_within
+    /// days, active books only — what the sync last worked out.
+    void query_big_moves(const QStringList& symbols, int filed_within, std::function<void(ownership::BigMoves)> done);
+    /// Each fund's newest 13F (from stored corrections only).
+    void query_fund_filings(const QStringList& ciks, std::function<void(ownership::FundFilings)> done);
 
     /// Holdings and watchlist symbols (upper-case, deduplicated), read from
     /// the signed-in user's store on the GUI thread.
@@ -196,6 +216,14 @@ class OwnershipService : public QObject {
     void run_form4_scan();
     void probe_index();
     void price_book(const QString& cik);
+
+    /// One script read behind the query_* calls: deduplicated while in flight,
+    /// answered on a later event-loop turn with the parsed object, or the
+    /// error text when the run failed, answered nothing, or refused.
+    using QueryDone = std::function<void(const QJsonObject& answer, const QString& error)>;
+    void run_query(const QString& script, const QString& action, const QJsonObject& payload, int timeout_ms,
+                   QueryDone done);
+    QHash<QString, QVector<QueryDone>> queries_in_flight_;
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;

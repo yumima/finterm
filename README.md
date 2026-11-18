@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`8d4383a7d`](https://github.com/yumima/finterm/commit/8d4383a7d) release notes: 4.0.9 adds one source for after-hours, IPO and earnings calendars
 - [`cee256ecc`](https://github.com/yumima/finterm/commit/cee256ecc) earnings calendar: the dashboard tile reads the same script as What's On
 - [`447643ef3`](https://github.com/yumima/finterm/commit/447643ef3) ipo calendar: one feed runs it; Private Market, What's On and the dashboard tile read it
 - [`b5f488f6c`](https://github.com/yumima/finterm/commit/b5f488f6c) extended hours: one source for every AFT surface; a refusal is not a decline

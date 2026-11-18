@@ -463,6 +463,7 @@ struct BigMove {
     QDate quarter;
     QDate prior_quarter;
     QString issuer;
+    QString cusip;
     QString ticker;
     QString kind; // new | added | trimmed | exited
     double shares = 0.0;
@@ -496,6 +497,7 @@ struct BigMoves {
 /// and shares are the filing's own fields (structured filings since Dec
 /// 2024); absent when the filing does not carry them, never estimated.
 struct Stake {
+    QString accession;
     QDate filed;
     QString form; // "SC 13D", "SC 13D/A", "SC 13G"
     QString ticker;
@@ -608,6 +610,42 @@ struct OwnershipCalendar {
     QVector<CalendarEntry> entries; ///< by date, soonest first
     QString error;
     bool loaded = false;
+};
+
+// ── Narrow reads for the alert checks ───────────────────────────────────────
+// OwnershipService answers these from the same stores and parsers the screens
+// use. `error` set means the read failed or was refused: the rows say nothing.
+
+/// One scorable open-market purchase (no 10% owner, no 10b5-1 plan), as the
+/// insider-cluster alert groups them.
+struct ClusterBuy {
+    QString symbol;
+    QString accession;
+    QString insider; ///< CIK when filed, else the name
+    QDate filed;
+    QDate traded;
+    std::optional<double> value;
+};
+
+struct ClusterBuys {
+    QVector<ClusterBuy> rows;
+    QDate scanned_to; ///< the newest day the Form 4 store has read
+    QString error;
+};
+
+/// A fund's newest 13F and its biggest buy and sell against the one before.
+struct FundFiling {
+    QString cik;
+    QString accession;
+    QString manager;
+    QDate quarter;
+    QDate filed;
+    std::optional<FirmMoveTop> top_buy, top_sell;
+};
+
+struct FundFilings {
+    QVector<FundFiling> rows;
+    QString error;
 };
 
 } // namespace finterm::ownership

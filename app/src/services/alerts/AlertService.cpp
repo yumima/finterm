@@ -4,7 +4,6 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "python/PythonRunner.h"
 #include "services/markets/MarketDataService.h"
 #include "services/ownership/OwnershipService.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -589,16 +588,11 @@ void AlertService::check_insiders() {
     if (covered.isEmpty())
         return;
     insider_checking_ = true;
-    QStringList syms(covered.begin(), covered.end());
-    syms.sort();
-    const QJsonObject payload{{QStringLiteral("symbols"), QJsonArray::fromStringList(syms)},
-                              {QStringLiteral("days"), kInsiderQueryDays}};
     const QString path = db_path_;
     QPointer<AlertService> self = this;
-    python::PythonRunner::instance().run(
-        QStringLiteral("ownership_watch.py"),
-        {QStringLiteral("cluster_rows"), QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
-        [self, covered, path](python::PythonResult result) {
+    services::OwnershipService::instance().query_cluster_buys(
+        QStringList(covered.begin(), covered.end()), kInsiderQueryDays,
+        [self, covered, path](const ownership::ClusterBuys& found) {
             if (!self)
                 return;
             self->insider_checking_ = false;
@@ -606,30 +600,15 @@ void AlertService::check_insiders() {
             self->insider_recheck_ = false;
             if (!self->running_ || self->db_path_ != path)
                 return; // signed out, or another user's rules now
-            // A failed read is not "no cluster": nothing is concluded from it.
-            if (!result.success) {
-                LOG_WARN("Alerts", "insider check failed: " + result.error.trimmed().right(160));
+            // A failed or refused read is not "no cluster": nothing is concluded from it.
+            if (!found.error.isEmpty()) {
+                LOG_WARN("Alerts", "insider check failed: " + found.error);
                 return;
             }
-            const QJsonObject o =
-                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
-            if (o.isEmpty() || o.contains(QStringLiteral("error"))) {
-                LOG_WARN("Alerts", "insider check refused: " + o.value(QStringLiteral("error")).toString());
-                return;
-            }
-            self->form4_scanned_to_ = o.value(QStringLiteral("scanned_to")).toString();
+            self->form4_scanned_to_ = found.scanned_to.toString(Qt::ISODate);
             QVector<InsiderBuy> rows;
-            for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                const QJsonObject r = v.toObject();
-                InsiderBuy b;
-                b.symbol = r.value(QStringLiteral("symbol")).toString().toUpper();
-                b.accession = r.value(QStringLiteral("accession")).toString();
-                b.insider = r.value(QStringLiteral("insider")).toString();
-                b.filed = QDate::fromString(r.value(QStringLiteral("filed")).toString(), Qt::ISODate);
-                b.traded = QDate::fromString(r.value(QStringLiteral("traded")).toString(), Qt::ISODate);
-                b.value = r.value(QStringLiteral("value")).toDouble(kNaN); // null stays unknown
-                rows.push_back(b);
-            }
+            for (const auto& r : found.rows)
+                rows.push_back({r.symbol, r.accession, r.insider, r.filed, r.traded, r.value.value_or(kNaN)});
             const QDate today = QDate::currentDate();
             bool dirty = false;
             const auto events = step_insider(rows, covered, self->set_.insider_seen, today, &dirty);
@@ -683,15 +662,14 @@ void AlertService::check_insiders() {
             emit self->rules_changed(); // the manager's Form 4 note
             if (again)
                 self->check_insiders();
-        },
-        /*on_line=*/{}, 60'000);
+        });
 }
 
 // ── Stakes, fund moves, fund filings ────────────────────────────────────────
 
 namespace {
-QString pct_text(const QJsonValue& v) {
-    return v.isDouble() ? QStringLiteral("%1%").arg(v.toDouble(), 0, 'f', 1) : QStringLiteral("an unstated share");
+QString pct_text(const std::optional<double>& v) {
+    return v ? QStringLiteral("%1%").arg(*v, 0, 'f', 1) : QStringLiteral("an unstated share");
 }
 QString quarter_text(const QDate& q) {
     return q.isValid() ? QStringLiteral("Q%1 %2").arg((q.month() - 1) / 3 + 1).arg(q.year()) : QString();
@@ -731,151 +709,118 @@ void AlertService::check_filings() {
             });
         }
     };
-    auto run = [&](const QString& script, const QString& action, const QJsonObject& payload,
-                   std::function<void(const QJsonObject&)> handle) {
+    // Every read answers once, later. A failed or refused read is not
+    // "nothing new": nothing is concluded from it.
+    auto usable = [self, path, done_one](const char* what, const QString& error) {
+        if (!self)
+            return false;
+        done_one();
+        if (!self->running_ || self->db_path_ != path)
+            return false; // signed out, or another user's rules now
+        if (!error.isEmpty()) {
+            LOG_WARN("Alerts", QStringLiteral("%1 check failed: %2").arg(QLatin1String(what), error));
+            return false;
+        }
+        return true;
+    };
+    auto list = [](const QSet<QString>& s) { return QStringList(s.begin(), s.end()); };
+    auto& own = services::OwnershipService::instance();
+
+    if (!stake_syms.isEmpty()) {
         ++filings_pending_;
-        python::PythonRunner::instance().run(
-            script, {action, QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
-            [self, path, handle, done_one](python::PythonResult result) {
-                if (!self)
-                    return;
-                done_one();
-                if (!self->running_ || self->db_path_ != path)
-                    return;
-                // A failed read is not "nothing new": nothing is concluded from it.
-                const QJsonObject o = result.success
-                                          ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
-                                          : QJsonObject{};
-                if (o.isEmpty() || o.contains(QStringLiteral("error")))
-                    return;
-                handle(o);
-            },
-            /*on_line=*/{}, 120'000);
-    };
-    auto list = [](const QSet<QString>& s) {
-        QStringList l(s.begin(), s.end());
-        l.sort();
-        return QJsonArray::fromStringList(l);
-    };
+        own.query_stakes(list(stake_syms), kInsiderFreshDays + 7, [self, usable, stake_syms](const ownership::Stakes& found) {
+            if (!usable("stake", found.error))
+                return;
+            QVector<FilingEvent> rows;
+            QHash<QString, QPair<QString, QString>> text;
+            for (const auto& r : found.rows) {
+                if (!stake_is_news(r.activist, r.amendment, r.pct.value_or(kNaN), r.prev_pct.value_or(kNaN)))
+                    continue;
+                FilingEvent e{QStringLiteral("stake:") + r.accession, r.ticker.toUpper(), r.filed};
+                const QString form = r.activist ? QStringLiteral("13D") : QStringLiteral("13G");
+                const QString was = r.prev_pct ? QStringLiteral(" (was %1)").arg(pct_text(r.prev_pct)) : QString();
+                text.insert(e.key,
+                            {QStringLiteral("%1 %2 — %3")
+                                 .arg(form, r.amendment ? QStringLiteral("amended") : QStringLiteral("filed"), e.subject),
+                             QStringLiteral("%1 reports %2 of %3%4%5; filed %6. %7 A filing, not a call.")
+                                 .arg(r.filer, pct_text(r.pct), e.subject, was,
+                                      r.event.isValid() ? QStringLiteral(", event date %1").arg(short_date(r.event))
+                                                        : QString(),
+                                      short_date(e.filed),
+                                      r.activist ? QStringLiteral("A 13D means the holder may seek influence.")
+                                                 : QStringLiteral("A 13G is a passive holder."))});
+                rows.push_back(e);
+            }
+            bool dirty = false;
+            const auto events = step_filings(rows, stake_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
+            self->deliver_filings(events, Kind::StakeFiling, text);
+            if (dirty)
+                self->save_states();
+        });
+    }
 
-    if (!stake_syms.isEmpty())
-        run(QStringLiteral("sec_stakes_market.py"), QStringLiteral("recent"),
-            QJsonObject{{"symbols", list(stake_syms)}, {"days", kInsiderFreshDays + 7}},
-            [self, stake_syms](const QJsonObject& o) {
-                QVector<FilingEvent> rows;
-                QHash<QString, QPair<QString, QString>> text;
-                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                    const auto r = v.toObject();
-                    const bool activist = r.value(QStringLiteral("activist")).toBool();
-                    const bool amendment = r.value(QStringLiteral("amendment")).toBool();
-                    if (!stake_is_news(activist, amendment, r.value(QStringLiteral("pct")).toDouble(kNaN),
-                                       r.value(QStringLiteral("prev_pct")).toDouble(kNaN)))
-                        continue;
-                    FilingEvent e{QStringLiteral("stake:") + r.value(QStringLiteral("accession")).toString(),
-                                  r.value(QStringLiteral("ticker")).toString().toUpper(),
-                                  QDate::fromString(r.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
-                    const QString form = activist ? QStringLiteral("13D") : QStringLiteral("13G");
-                    const QString was = r.value(QStringLiteral("prev_pct")).isDouble()
-                                            ? QStringLiteral(" (was %1)").arg(pct_text(r.value(QStringLiteral("prev_pct"))))
-                                            : QString();
-                    text.insert(e.key,
-                                {QStringLiteral("%1 %2%3 — %4").arg(form, amendment ? QStringLiteral("amended") : QStringLiteral("filed"),
-                                                                     QString(), e.subject),
-                                 QStringLiteral("%1 reports %2 of %3%4%5; filed %6. %7 A filing, not a call.")
-                                     .arg(r.value(QStringLiteral("filer")).toString(), pct_text(r.value(QStringLiteral("pct"))),
-                                          e.subject, was,
-                                          r.value(QStringLiteral("event_date")).toString().isEmpty()
-                                              ? QString()
-                                              : QStringLiteral(", event date %1")
-                                                    .arg(short_date(QDate::fromString(
-                                                        r.value(QStringLiteral("event_date")).toString(), Qt::ISODate))),
-                                          short_date(e.filed),
-                                          activist ? QStringLiteral("A 13D means the holder may seek influence.")
-                                                   : QStringLiteral("A 13G is a passive holder."))});
-                    rows.push_back(e);
-                }
-                bool dirty = false;
-                const auto events = step_filings(rows, stake_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
-                self->deliver_filings(events, Kind::StakeFiling, text);
-                if (dirty)
-                    self->save_states();
-            });
+    if (!move_syms.isEmpty()) {
+        ++filings_pending_;
+        own.query_big_moves(list(move_syms), kInsiderFreshDays + 7, [self, usable, move_syms](const ownership::BigMoves& found) {
+            if (!usable("13F move", found.error))
+                return;
+            QVector<FilingEvent> rows;
+            QHash<QString, QPair<QString, QString>> text;
+            for (const auto& r : found.rows) {
+                FilingEvent e{QStringLiteral("move:") + r.url + QLatin1Char('|') + r.cusip, r.ticker.toUpper(), r.filed};
+                // The share of the book is unknown when the filer's book value
+                // is: said nothing about, never "0.0%".
+                const QString of_book =
+                    r.book_pct ? QStringLiteral(" (%1% of its book)").arg(*r.book_pct, 0, 'f', 1) : QString();
+                text.insert(e.key,
+                            {QStringLiteral("13F: %1 %2 %3").arg(r.manager, r.kind, e.subject),
+                             QStringLiteral("%1 %2 %3 — about %4%5, %6 vs %7; filed %8. "
+                                            "Estimated from quarter-end holdings; a filing, not a call.")
+                                 .arg(r.manager, r.kind, e.subject,
+                                      (r.flow >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + money(std::fabs(r.flow)),
+                                      of_book, quarter_text(r.quarter), quarter_text(r.prior_quarter),
+                                      short_date(e.filed))});
+                rows.push_back(e);
+            }
+            bool dirty = false;
+            const auto events = step_filings(rows, move_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
+            self->deliver_filings(events, Kind::FundMove, text);
+            if (dirty)
+                self->save_states();
+        });
+    }
 
-    if (!move_syms.isEmpty())
-        run(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("big_moves"),
-            QJsonObject{{"symbols", list(move_syms)},
-                        {"filed_within", kInsiderFreshDays + 7},
-                        {"limit", 100},
-                        {"active_only", true},
-                        {"readonly", true}},
-            [self, move_syms](const QJsonObject& o) {
-                QVector<FilingEvent> rows;
-                QHash<QString, QPair<QString, QString>> text;
-                for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
-                    const auto r = v.toObject();
-                    FilingEvent e{QStringLiteral("move:") + r.value(QStringLiteral("url")).toString() + QLatin1Char('|') +
-                                      r.value(QStringLiteral("cusip")).toString(),
-                                  r.value(QStringLiteral("ticker")).toString().toUpper(),
-                                  QDate::fromString(r.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
-                    const double flow = r.value(QStringLiteral("flow")).toDouble();
-                    const QString kind = r.value(QStringLiteral("kind")).toString();
-                    text.insert(e.key,
-                                {QStringLiteral("13F: %1 %2 %3").arg(r.value(QStringLiteral("manager")).toString(), kind, e.subject),
-                                 QStringLiteral("%1 %2 %3 — about %4 (%5% of its book), %6 vs %7; filed %8. "
-                                                "Estimated from quarter-end holdings; a filing, not a call.")
-                                     .arg(r.value(QStringLiteral("manager")).toString(), kind, e.subject,
-                                          (flow >= 0 ? QStringLiteral("+") : QStringLiteral("−")) + money(std::fabs(flow)),
-                                          QString::number(r.value(QStringLiteral("book_pct")).toDouble(), 'f', 1),
-                                          quarter_text(QDate::fromString(r.value(QStringLiteral("quarter")).toString(), Qt::ISODate)),
-                                          quarter_text(QDate::fromString(r.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate)),
-                                          short_date(e.filed))});
-                    rows.push_back(e);
-                }
-                bool dirty = false;
-                const auto events = step_filings(rows, move_syms, self->set_.insider_seen, QDate::currentDate(), &dirty);
-                self->deliver_filings(events, Kind::FundMove, text);
-                if (dirty)
-                    self->save_states();
-            });
-
-    if (!funds.isEmpty())
-        run(QStringLiteral("sec_13f_bulk.py"), QStringLiteral("fund_filings"), QJsonObject{{"ciks", list(funds)}},
-            [self, funds](const QJsonObject& o) {
-                QVector<FilingEvent> rows;
-                QHash<QString, QPair<QString, QString>> text;
-                for (const auto& v : o.value(QStringLiteral("funds")).toArray()) {
-                    const auto f = v.toObject();
-                    const QString cik = f.value(QStringLiteral("cik")).toString().toUpper();
-                    FilingEvent e{QStringLiteral("fund:") + f.value(QStringLiteral("accession")).toString(), cik,
-                                  QDate::fromString(f.value(QStringLiteral("filed")).toString(), Qt::ISODate)};
-                    auto move = [](const QJsonValue& m) {
-                        const auto x = m.toObject();
-                        if (x.isEmpty())
-                            return QStringLiteral("—");
-                        const double val = x.value(QStringLiteral("value")).toDouble();
-                        const QString t = x.value(QStringLiteral("ticker")).toString();
-                        return QStringLiteral("%1 %2%3")
-                            .arg(t.isEmpty() ? x.value(QStringLiteral("issuer")).toString() : t,
-                                 val >= 0 ? QStringLiteral("+") : QStringLiteral("−"), money(std::fabs(val)));
-                    };
-                    text.insert(e.key,
-                                {QStringLiteral("13F filed — %1").arg(f.value(QStringLiteral("manager")).toString()),
-                                 QStringLiteral("%1 filed its %2 13F on %3. Biggest buy: %4. Biggest sell: %5 "
-                                                "(estimated dollars).")
-                                     .arg(f.value(QStringLiteral("manager")).toString(),
-                                          quarter_text(QDate::fromString(f.value(QStringLiteral("quarter")).toString(), Qt::ISODate)),
-                                          short_date(e.filed), move(f.value(QStringLiteral("top_buy"))),
-                                          move(f.value(QStringLiteral("top_sell"))))});
-                    rows.push_back(e);
-                }
-                bool dirty = false;
-                const auto events = step_filings(rows, funds, self->set_.insider_seen, QDate::currentDate(), &dirty);
-                self->deliver_filings(events, Kind::FundFiled, text);
-                if (dirty)
-                    self->save_states();
-            });
-    if (filings_pending_ == 0)
-        filings_checking_ = false;
+    if (!funds.isEmpty()) {
+        ++filings_pending_;
+        own.query_fund_filings(list(funds), [self, usable, funds](const ownership::FundFilings& found) {
+            if (!usable("fund filing", found.error))
+                return;
+            QVector<FilingEvent> rows;
+            QHash<QString, QPair<QString, QString>> text;
+            auto move = [](const std::optional<ownership::FirmMoveTop>& m) {
+                if (!m)
+                    return QStringLiteral("—");
+                return QStringLiteral("%1 %2%3")
+                    .arg(m->ticker.isEmpty() ? m->issuer : m->ticker,
+                         m->value >= 0 ? QStringLiteral("+") : QStringLiteral("−"), money(std::fabs(m->value)));
+            };
+            for (const auto& f : found.rows) {
+                FilingEvent e{QStringLiteral("fund:") + f.accession, f.cik, f.filed};
+                text.insert(e.key,
+                            {QStringLiteral("13F filed — %1").arg(f.manager),
+                             QStringLiteral("%1 filed its %2 13F on %3. Biggest buy: %4. Biggest sell: %5 "
+                                            "(estimated dollars).")
+                                 .arg(f.manager, quarter_text(f.quarter), short_date(e.filed), move(f.top_buy),
+                                      move(f.top_sell))});
+                rows.push_back(e);
+            }
+            bool dirty = false;
+            const auto events = step_filings(rows, funds, self->set_.insider_seen, QDate::currentDate(), &dirty);
+            self->deliver_filings(events, Kind::FundFiled, text);
+            if (dirty)
+                self->save_states();
+        });
+    }
 }
 
 void AlertService::deliver_filings(const QVector<FilingEvent>& events, Kind kind,
