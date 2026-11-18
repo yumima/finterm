@@ -22,6 +22,10 @@ class QPushButton;
 class QTimer;
 class QVBoxLayout;
 
+namespace finterm::services {
+struct EconomicsResult;
+}
+
 namespace finterm::screens {
 
 class WhatsOnPanel : public QWidget {
@@ -57,6 +61,7 @@ class WhatsOnPanel : public QWidget {
     void apply_fomc(const QVector<QDate>& dates);
     void apply_effr(const QJsonObject& r);
     bool apply_yields(const QJsonArray& rows);
+    void apply_yields_result(const services::EconomicsResult& r);
     void apply_events(const QJsonObject& root);
     void apply_auctions();
     void render();
