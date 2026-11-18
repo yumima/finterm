@@ -20,8 +20,11 @@ GOOD = "observation_date,CPIAUCSL\n2026-08-01,.\n2026-09-01,336.298\n2026-10-01,
 
 
 class _Resp:
-    def __init__(self, text, status=200):
-        self.text, self.status_code = text, status
+    def __init__(self, text, status=200, body=None):
+        self.text, self.status_code, self.headers, self._body = text, status, {}, body
+
+    def json(self):
+        return self._body
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -85,6 +88,48 @@ def test_one_refused_series_does_not_lose_the_others():
     assert [r["series_id"] for r in out] == ["CPIAUCSL", "PAYEMS", "UNRATE"]
     assert "error" not in out[0] and "error" not in out[2], out
     assert out[1].get("error_code") == "RATE_LIMITED", out[1]
+
+
+API_OBS = {"observations": [{"date": "2026-08-01", "value": "."}, {"date": "2026-09-01", "value": "336.298"},
+                            {"date": "2026-10-01", "value": "337.476"}]}
+SHAPE = {"series_id", "title", "units", "frequency", "seasonal_adjustment", "last_updated", "observations",
+         "observation_count", "source"}
+
+
+def _keyed(answer, fn):
+    real = f.FRED_API_KEY
+    f.FRED_API_KEY = "test-key"
+    try:
+        return _with_get(answer, fn)
+    finally:
+        f.FRED_API_KEY = real
+
+
+def test_keyed_and_keyless_answers_have_one_shape():
+    def api(meta_ok):
+        def answer(p):
+            if "series_id" in p and "observation_start" in p:
+                return _Resp("", body=API_OBS)
+            if meta_ok:
+                return _Resp("", body={"seriess": [{"title": "CPI", "units": "Index"}]})
+            return _Resp("", status=500, body={})
+        return answer
+
+    keyless, _ = _with_get(lambda p: _Resp(GOOD), lambda: f.get_series("CPIAUCSL", "2024-09-01"))
+    with_meta, _ = _keyed(api(True), lambda: f.get_series("CPIAUCSL", "2024-09-01"))
+    no_meta, _ = _keyed(api(False), lambda: f.get_series("CPIAUCSL", "2024-09-01"))
+    for out in (keyless, with_meta, no_meta):
+        assert set(out) == SHAPE, out
+        assert out["series_id"] == "CPIAUCSL"
+        # numbers, "." absent — the metadata failure no longer hands back FRED's raw strings
+        assert out["observations"] == [{"date": "2026-09-01", "value": 336.298},
+                                       {"date": "2026-10-01", "value": 337.476}], out
+    assert with_meta["title"] == "CPI" and no_meta["title"] == "N/A"
+
+
+def test_keyed_refusal_names_its_series():
+    out, _ = _keyed(lambda p: _Resp("", status=429, body={}), lambda: f.get_series("PAYEMS", "2024-09-01"))
+    assert out.get("error_code") == "RATE_LIMITED" and out["series_id"] == "PAYEMS", out
 
 
 def test_transform_still_needs_the_key():

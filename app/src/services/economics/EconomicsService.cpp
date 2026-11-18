@@ -19,10 +19,15 @@ namespace finterm::services {
 
 namespace {
 
-// fred_data.py `multiple` answers one entry per series, a refused one with its
-// own "error": the others are good and are shown, but the answer is not
-// cached, so the refused series is asked again on the next read.
-bool is_partial(const QString& command, const QJsonObject& data) {
+// An answer that is shown but not held, so the next read asks again:
+// - fred_data.py `multiple` with a refused series (one entry each, a refused
+//   one carrying its own "error"; the others are good);
+// - treasury_data.py `par_curve` with no rows (before Treasury publishes, or
+//   a page that listed nothing) — holding it would say "no curve" for the
+//   cache's ten minutes after the curve is out.
+bool hold_back(const QString& command, const QJsonObject& data) {
+    if (command == QLatin1String("par_curve"))
+        return data.value(QLatin1String("rows")).toArray().isEmpty();
     if (command != QLatin1String("multiple"))
         return false;
     for (const auto& v : data.value(QLatin1String("data")).toArray())
@@ -103,7 +108,8 @@ void EconomicsService::invalidate(const QString& script, const QString& command,
 
 // ── Execute ───────────────────────────────────────────────────────────────────
 
-void EconomicsService::run(const QString& script, const QString& command, const QStringList& args, RunDone done) {
+void EconomicsService::run(const QString& script, const QString& command, const QStringList& args, RunDone done,
+                           int timeout_ms) {
     const QString key = cache_key(script, command, args);
     {
         if (const auto cached = finterm::CacheManager::instance().try_get_aged(key)) {
@@ -128,55 +134,59 @@ void EconomicsService::run(const QString& script, const QString& command, const 
     LOG_INFO("EconomicsService", QString("Run %1 %2 [%3]").arg(script, command, args.join(", ")));
 
     QPointer<EconomicsService> self = this;
-    python::PythonRunner::instance().run(script, full_args, [self, key, script, command](python::PythonResult py) {
-        if (!self)
-            return;
+    python::PythonRunner::instance().run(
+        script, full_args,
+        [self, key, script, command](python::PythonResult py) {
+            if (!self)
+                return;
 
-        EconomicsResult res;
-        if (!py.success) {
-            res.error = python::failure_message(py);
-            LOG_ERROR("EconomicsService", "Script failed: " + res.error);
-        } else if (const QString json_str = python::extract_json(py.output); json_str.isEmpty()) {
-            res.error = "No JSON output from script";
-            LOG_ERROR("EconomicsService", res.error);
-        } else {
-            QJsonParseError err;
-            const QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &err);
-            if (doc.isNull()) {
-                res.error = "JSON parse error: " + err.errorString();
+            EconomicsResult res;
+            if (!py.success) {
+                res.error = python::failure_message(py);
+                LOG_ERROR("EconomicsService", "Script failed: " + res.error);
+            } else if (const QString json_str = python::extract_json(py.output); json_str.isEmpty()) {
+                res.error = "No JSON output from script";
                 LOG_ERROR("EconomicsService", res.error);
             } else {
-                // If the root is an array, wrap it
-                res.data = doc.isArray() ? QJsonObject{{"data", doc.array()}} : doc.object();
-                // Treat script-level error field as failure
-                if (res.data.contains("error") && !res.data["error"].isNull() &&
-                    !res.data["error"].toString().isEmpty() && !res.data.contains("data")) {
-                    const QString error_code = res.data.value("error_code").toString();
-                    const QString message = res.data["error"].toString();
-                    // Prefix with [CODE] so panels can branch on it without a schema change.
-                    res.error = error_code.isEmpty()
-                                    ? message
-                                    : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
-                } else if (const QString why = unusable_reason(command, res.data); !why.isEmpty()) {
-                    // Answered, but with nothing in it: every series inside
-                    // carried FRED's error. A failure, never cached.
-                    res.error = why;
-                    LOG_WARN("EconomicsService", script + " " + command + ": " + why);
+                QJsonParseError err;
+                const QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &err);
+                if (doc.isNull()) {
+                    res.error = "JSON parse error: " + err.errorString();
+                    LOG_ERROR("EconomicsService", res.error);
                 } else {
-                    res.success = true;
-                    res.as_of = QDateTime::currentDateTimeUtc();
-                    if (!is_partial(command, res.data))
-                        finterm::CacheManager::instance().put(
-                            key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
-                            kCacheTtlSec, "economics");
+                    // If the root is an array, wrap it
+                    res.data = doc.isArray() ? QJsonObject{{"data", doc.array()}} : doc.object();
+                    // Treat script-level error field as failure
+                    if (res.data.contains("error") && !res.data["error"].isNull() &&
+                        !res.data["error"].toString().isEmpty() && !res.data.contains("data")) {
+                        const QString error_code = res.data.value("error_code").toString();
+                        const QString message = res.data["error"].toString();
+                        // Prefix with [CODE] so panels can branch on it without a schema change.
+                        res.error = error_code.isEmpty()
+                                        ? message
+                                        : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
+                    } else if (const QString why = unusable_reason(command, res.data); !why.isEmpty()) {
+                        // Answered, but with nothing in it: every series inside
+                        // carried FRED's error. A failure, never cached.
+                        res.error = why;
+                        LOG_WARN("EconomicsService", script + " " + command + ": " + why);
+                    } else {
+                        res.success = true;
+                        res.as_of = QDateTime::currentDateTimeUtc();
+                        if (!hold_back(command, res.data))
+                            finterm::CacheManager::instance().put(
+                                key,
+                                QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))),
+                                kCacheTtlSec, "economics");
+                    }
                 }
             }
-        }
 
-        const QVector<RunDone> waiters = self->in_flight_.take(key);
-        for (const auto& w : waiters)
-            w(res, true);
-    });
+            const QVector<RunDone> waiters = self->in_flight_.take(key);
+            for (const auto& w : waiters)
+                w(res, true);
+        },
+        {}, timeout_ms);
 }
 
 void EconomicsService::execute(const QString& source_id, const QString& script, const QString& command,
@@ -220,16 +230,19 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
     });
 }
 
-void EconomicsService::fetch(const QString& script, const QString& command, const QStringList& args,
-                             ResultCallback cb) {
+void EconomicsService::fetch(const QString& script, const QString& command, const QStringList& args, ResultCallback cb,
+                             int timeout_ms) {
     QPointer<EconomicsService> self = this;
-    run(script, command, args, [self, cb = std::move(cb)](const EconomicsResult& res, bool) {
-        if (!self)
-            return;
-        // Queued even when the run already finished asynchronously: one rule
-        // for the caller, whatever the cache held.
-        QMetaObject::invokeMethod(self, [cb, res]() { cb(res); }, Qt::QueuedConnection);
-    });
+    run(
+        script, command, args,
+        [self, cb = std::move(cb)](const EconomicsResult& res, bool) {
+            if (!self)
+                return;
+            // Queued even when the run already finished asynchronously: one rule
+            // for the caller, whatever the cache held.
+            QMetaObject::invokeMethod(self, [cb, res]() { cb(res); }, Qt::QueuedConnection);
+        },
+        timeout_ms);
 }
 
 // ── DataHub producer wiring ─────────────────────────────────────────────────

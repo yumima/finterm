@@ -623,34 +623,43 @@ void WhatsOnPanel::fetch_fred(bool force) {
     if (force)
         econ.invalidate(script, command, args);
     QPointer<WhatsOnPanel> self = this;
-    econ.fetch(script, command, args, [self, fetch](const services::EconomicsResult& r) {
-        if (!self)
-            return;
-        for (const auto& id : fetch)
-            self->fred_inflight_.remove(id);
-        QHash<QString, QJsonArray> answered;
-        if (r.success)
-            for (const auto& v : r.data.value("data").toArray()) {
-                const QJsonObject s = v.toObject();
-                if (s.value("error").toString().isEmpty())
-                    answered.insert(s.value("series_id").toString(), s.value("observations").toArray());
+    // A minute, not the runner's 30 s: several keyless downloads (15 s each,
+    // five at a time) in one process, and a timeout loses every series. A
+    // series FRED refused comes back as its own error entry; the rest show.
+    constexpr int kFredRunTimeoutMs = 60'000;
+    econ.fetch(
+        script, command, args,
+        [self, fetch](const services::EconomicsResult& r) {
+            if (!self)
+                return;
+            for (const auto& id : fetch)
+                self->fred_inflight_.remove(id);
+            QHash<QString, QJsonArray> answered;
+            if (r.success)
+                for (const auto& v : r.data.value("data").toArray()) {
+                    const QJsonObject s = v.toObject();
+                    if (s.value("error").toString().isEmpty())
+                        answered.insert(s.value("series_id").toString(), s.value("observations").toArray());
+                }
+            QStringList failed;
+            for (const auto& id : fetch) {
+                const auto obs = mr::parse_fred_observations(answered.value(id));
+                if (obs.isEmpty()) {
+                    failed << id; // refused or unreadable: the actual stays absent
+                    continue;
+                }
+                self->fred_[id] = obs;
             }
-        QStringList failed;
-        for (const auto& id : fetch) {
-            const auto obs = mr::parse_fred_observations(answered.value(id));
-            if (obs.isEmpty()) {
-                failed << id; // refused or unreadable: the actual stays absent
-                continue;
-            }
-            self->fred_[id] = obs;
-        }
-        if (failed.isEmpty())
-            self->clear_error(QStringLiteral("FRED"));
-        else
-            self->set_error(QStringLiteral("FRED"),
-                            QStringLiteral("%1 unavailable — those actuals not shown").arg(failed.join(", ")));
-        self->render();
-    });
+            if (failed.isEmpty())
+                self->clear_error(QStringLiteral("FRED"));
+            else
+                self->set_error(
+                    QStringLiteral("FRED"),
+                    QStringLiteral("%1 unavailable — those actuals not shown%2")
+                        .arg(failed.join(", "), r.success ? QString() : QStringLiteral(" (%1)").arg(r.error)));
+            self->render();
+        },
+        kFredRunTimeoutMs);
 }
 
 void WhatsOnPanel::set_headlines(const QVector<services::NewsArticle>& ranked) {

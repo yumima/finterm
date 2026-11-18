@@ -4,6 +4,7 @@
 #pragma once
 
 #include "datahub/Producer.h"
+#include "python/PythonRunner.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -50,7 +51,9 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     /// series share one script run), never a second copy. Always answers
     /// after the call returns, cache hit included. `source_id` is empty.
     using ResultCallback = std::function<void(const EconomicsResult&)>;
-    void fetch(const QString& script, const QString& command, const QStringList& args, ResultCallback cb);
+    /// `timeout_ms`: the script's process deadline (a run already out keeps its own).
+    void fetch(const QString& script, const QString& command, const QStringList& args, ResultCallback cb,
+               int timeout_ms = python::PythonRunner::kProcessTimeoutMs);
 
     /// The US Treasury daily par yield curve (treasury_data.py par_curve —
     /// the 2-year Yahoo does not carry): data = {"rows": [{date, y2, y10, …}]},
@@ -98,7 +101,8 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
     /// caller waiting on it is answered from that run (`fresh` = true), and a
     /// success is cached.
     using RunDone = std::function<void(const EconomicsResult&, bool fresh)>;
-    void run(const QString& script, const QString& command, const QStringList& args, RunDone done);
+    void run(const QString& script, const QString& command, const QStringList& args, RunDone done,
+             int timeout_ms = python::PythonRunner::kProcessTimeoutMs);
     QHash<QString, QVector<RunDone>> in_flight_; // cache key -> callers waiting on the one run
 
     /// Compose hub topic: `econ:<source>:<request_id>`.

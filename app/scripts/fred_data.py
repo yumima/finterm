@@ -128,17 +128,39 @@ def get_series_keyless(series_id: str, start_date: Optional[str] = None,
         # An error page or a throttle notice: a failure, never an empty series.
         return {"error": f"FRED returned no data for {series_id}", "error_code": "NO_DATA",
                 "series_id": series_id}
-    observations = parse_fred_csv(response.text)
+    return _series_answer(series_id, parse_fred_csv(response.text), {}, 'fredgraph')
+
+
+def _numeric_observations(raw) -> List[Dict]:
+    """The keyed API's observations ({"date", "value": "324.5" | "."}) →
+    [{date, value: float}]; "." and unparseable values are absent, never 0."""
+    out = []
+    for obs in raw or []:
+        if not isinstance(obs, dict):
+            continue
+        try:
+            value = float(obs.get('value'))
+        except (TypeError, ValueError):
+            continue
+        if value != value or value in (float("inf"), float("-inf")) or not obs.get('date'):
+            continue
+        out.append({'date': obs['date'], 'value': value})
+    return out
+
+
+def _series_answer(series_id: str, observations: List[Dict], info: Dict, source: str) -> Dict:
+    """The ONE shape a series answer has, keyed or keyless, metadata or not:
+    series_id always, numeric observations, "N/A" for metadata not read."""
     return {
         'series_id': series_id,
-        'title': 'N/A',
-        'units': 'N/A',
-        'frequency': 'N/A',
-        'seasonal_adjustment': 'N/A',
-        'last_updated': 'N/A',
+        'title': info.get('title', 'N/A'),
+        'units': info.get('units', 'N/A'),
+        'frequency': info.get('frequency', 'N/A'),
+        'seasonal_adjustment': info.get('seasonal_adjustment', 'N/A'),
+        'last_updated': info.get('last_updated', 'N/A'),
         'observations': observations,
         'observation_count': len(observations),
-        'source': 'fredgraph',
+        'source': source,
     }
 
 
@@ -174,35 +196,15 @@ def get_series(series_id: str, start_date: Optional[str] = None, end_date: Optio
         obs_data = make_fred_request('series/observations', params)
 
         if 'error' in obs_data:
-            return obs_data
+            return {**obs_data, 'series_id': series_id}
 
-        # Get series metadata
+        # Metadata is a nicety: when its request fails the observations are
+        # still the answer, in the same shape ("N/A" metadata).
         metadata = make_fred_request('series', {'series_id': series_id})
+        seriess = metadata.get('seriess') if 'error' not in metadata else None
+        series_info = seriess[0] if isinstance(seriess, list) and seriess and isinstance(seriess[0], dict) else {}
 
-        if 'error' in metadata:
-            return obs_data  # Return observations even if metadata fails
-
-        series_info = metadata.get('seriess', [{}])[0] if 'seriess' in metadata else {}
-
-        # Format observations
-        observations = []
-        for obs in obs_data.get('observations', []):
-            if obs['value'] != '.':  # Skip missing values
-                observations.append({
-                    'date': obs['date'],
-                    'value': float(obs['value'])
-                })
-
-        return {
-            'series_id': series_id,
-            'title': series_info.get('title', 'N/A'),
-            'units': series_info.get('units', 'N/A'),
-            'frequency': series_info.get('frequency', 'N/A'),
-            'seasonal_adjustment': series_info.get('seasonal_adjustment', 'N/A'),
-            'last_updated': series_info.get('last_updated', 'N/A'),
-            'observations': observations,
-            'observation_count': len(observations)
-        }
+        return _series_answer(series_id, _numeric_observations(obs_data.get('observations')), series_info, 'fred_api')
     except Exception as e:
         return {"error": str(e), "series_id": series_id}
 

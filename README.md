@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`27bb0a86a`](https://github.com/yumima/finterm/commit/27bb0a86a) datahub, ipo watch: a forced refresh reaches the subscribers waiting on it
 - [`209fa1465`](https://github.com/yumima/finterm/commit/209fa1465) lint: D1 and D4 cover screens and ui with no opt-out comment
 - [`38188a652`](https://github.com/yumima/finterm/commit/38188a652) screener: the add-to-portfolio price reads its quote topic
 - [`428743ff4`](https://github.com/yumima/finterm/commit/428743ff4) datahub: a subscriber that joined while the value was stale gets an unchanged refresh
