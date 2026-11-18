@@ -16,7 +16,7 @@ namespace finterm::screens {
 /// Left drawer of the News screen — WHAT'S ON (set_whats_on(); NewsScreen owns
 /// the view so this widget stays free of its network dependencies), the
 /// DIGEST output, and a collapsed MORE group holding monitors, deviations,
-/// entities, locations, signals and bookmarks.
+/// entities, signals and bookmarks.
 /// Toggled via the INTEL button in the command bar.
 class NewsSidePanel : public QWidget {
     Q_OBJECT
@@ -28,7 +28,6 @@ class NewsSidePanel : public QWidget {
                          const QMap<QString, QVector<services::NewsArticle>>& matches);
     void update_deviations(const QVector<QPair<QString, double>>& deviations);
     void update_entities(const services::NerResult& ner);
-    void update_locations(const QVector<services::ArticleGeo>& geo);
     void update_signals(const QVector<services::CorrelationSignal>& sigs);
     void update_saved(const QVector<services::NewsArticle>& saved);
 
@@ -86,10 +85,6 @@ class NewsSidePanel : public QWidget {
     // Entities (NER)
     QVBoxLayout* entities_layout_ = nullptr;
     QWidget* entities_section_ = nullptr;
-
-    // Locations
-    QVBoxLayout* locations_layout_ = nullptr;
-    QWidget* locations_section_ = nullptr;
 
     // Correlation signals
     QVBoxLayout* signals_layout_ = nullptr;

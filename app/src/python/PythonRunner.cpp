@@ -15,6 +15,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLatin1String>
 #include <QPointer>
 #include <QProcessEnvironment>
@@ -695,6 +697,16 @@ QString extract_json(const QString& output) {
         return {};
 
     return output.mid(start).trimmed();
+}
+
+QString failure_message(const PythonResult& result) {
+    const QJsonObject answer = QJsonDocument::fromJson(extract_json(result.output).toUtf8()).object();
+    QString msg = answer.value(QStringLiteral("error")).toString().trimmed();
+    if (msg.isEmpty() && !result.success)
+        msg = result.error.trimmed();
+    if (msg.isEmpty() && !result.success)
+        msg = QStringLiteral("Script failed (exit code %1)").arg(result.exit_code);
+    return msg;
 }
 
 } // namespace finterm::python

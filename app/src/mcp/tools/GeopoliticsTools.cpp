@@ -377,20 +377,10 @@ std::vector<ToolDef> get_geopolitics_tools() {
                 hs.append(v.toString());
             auto* svc = &services::geo::GeopoliticsService::instance();
             AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, hs](auto resolve) {
-                auto* h = new QObject(svc);
-                QObject::connect(svc, &services::geo::GeopoliticsService::geolocation_ready, h,
-                                 [resolve, h](QJsonObject data) {
-                                     resolve(ToolResult::ok_data(data));
-                                     h->deleteLater();
-                                 });
-                QObject::connect(svc, &services::geo::GeopoliticsService::error_occurred, h,
-                                 [resolve, h](QString context, QString m) {
-                                     if (context != QLatin1String("geolocation"))
-                                         return; // another panel's HDX / trade failure
-                                     resolve(ToolResult::fail(m));
-                                     h->deleteLater();
-                                 });
-                svc->extract_geolocations(hs);
+                // Per-call answer: a concurrent call's indices never reach this one.
+                svc->extract_geolocations(hs, [resolve](bool ok, QJsonObject data, QString error) {
+                    resolve(ok ? ToolResult::ok_data(data) : ToolResult::fail(error));
+                });
             });
         };
         tools.push_back(std::move(t));

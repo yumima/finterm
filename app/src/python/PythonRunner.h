@@ -131,4 +131,10 @@ class PythonRunner : public QObject {
 /// Extract last JSON line/block from Python output
 QString extract_json(const QString& output);
 
+/// Why a run failed, one wording for every caller: the script's own
+/// {"error": ...} on stdout first (scripts often print it and exit non-zero
+/// with an empty stderr), then stderr, then "Script failed (exit code N)".
+/// Empty for a successful run whose answer carries no "error".
+QString failure_message(const PythonResult& result);
+
 } // namespace finterm::python

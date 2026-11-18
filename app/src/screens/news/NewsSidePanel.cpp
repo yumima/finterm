@@ -123,7 +123,7 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
 
     layout->addWidget(digest_section_);
 
-    // ── MORE: monitors, deviations, entities, locations, signals, bookmarks ──
+    // ── MORE: monitors, deviations, entities, signals, bookmarks ──
     // Kept (they hold user state — monitors and bookmarks live nowhere else)
     // but collapsed by default: WHAT'S ON is the drawer's job now.
     more_btn_ = new QPushButton(content);
@@ -177,7 +177,6 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     };
 
     entities_section_ = build_hidden_section("ENTITIES", entities_layout_);
-    locations_section_ = build_hidden_section("LOCATIONS", locations_layout_);
     signals_section_ = build_hidden_section("SIGNALS", signals_layout_);
     saved_section_ = build_hidden_section("BOOKMARKS", saved_layout_);
 
@@ -449,37 +448,6 @@ void NewsSidePanel::update_entities(const services::NerResult& ner) {
     }
 
     entities_section_->setVisible(has_data);
-}
-
-void NewsSidePanel::update_locations(const QVector<services::ArticleGeo>& geo) {
-    while (locations_layout_->count() > 0) {
-        auto* item = locations_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    if (geo.isEmpty()) {
-        locations_section_->hide();
-        return;
-    }
-    locations_section_->show();
-
-    QMap<QString, int> loc_counts;
-    for (const auto& g : geo) {
-        for (const auto& l : g.locations)
-            loc_counts[l.name]++;
-    }
-
-    auto sorted = loc_counts.keys();
-    std::sort(sorted.begin(), sorted.end(),
-              [&](const QString& a, const QString& b) { return loc_counts[a] > loc_counts[b]; });
-
-    for (int i = 0; i < std::min(8, static_cast<int>(sorted.size())); ++i) {
-        auto* lbl = new QLabel(QString("%1  %2").arg(sorted[i].left(18), -18).arg(loc_counts[sorted[i]]), this);
-        lbl->setObjectName("newsMonitorLabel");
-        locations_layout_->addWidget(lbl);
-    }
 }
 
 void NewsSidePanel::update_signals(const QVector<services::CorrelationSignal>& sigs) {

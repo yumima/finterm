@@ -54,9 +54,11 @@ class GeopoliticsService : public QObject, public finterm::datahub::Producer {
     void analyze_barrier_removal(const QJsonObject& params);
 
     // ── Geolocation (via NewsNlpService) ────────────────────────────────────
-    /// Emits geolocation_ready(the script's answer; geolocated_articles[].id is
-    /// the headline's index) or error_occurred("geolocation", the script's error).
-    void extract_geolocations(const QStringList& headlines);
+    /// Answers this call only, exactly once: `data` is the script's answer
+    /// (geolocated_articles[].id is the headline's index), or ok=false with
+    /// the script's error. Nothing is broadcast, cached or persisted.
+    using GeolocationCallback = std::function<void(bool ok, QJsonObject data, QString error)>;
+    void extract_geolocations(const QStringList& headlines, GeolocationCallback cb);
 
   signals:
     void events_loaded(QVector<finterm::services::geo::NewsEvent> events, int total);
@@ -65,7 +67,6 @@ class GeopoliticsService : public QObject, public finterm::datahub::Producer {
     void cities_loaded(QStringList cities);
     void hdx_results_loaded(QString context, QVector<finterm::services::geo::HDXDataset> datasets);
     void trade_result_ready(QString context, QJsonObject data);
-    void geolocation_ready(QJsonObject data);
     void error_occurred(QString context, QString message);
 
   private:

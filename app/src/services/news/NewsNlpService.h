@@ -34,37 +34,15 @@ struct NerResult {
     QVector<TopEntity> top_people;
 };
 
-// ── Geolocation Types ───────────────────────────────────────────────────────
-
-struct GeoLocation {
-    QString name;
-    QString code;
-    double lat = 0;
-    double lon = 0;
-    QString type; // "city" or "country"
-};
-
-struct ArticleGeo {
-    QString id;
-    QVector<GeoLocation> locations;
-    double primary_lat = 0;
-    double primary_lon = 0;
-};
-
-/// One answer of news_geolocation.py extract_and_geocode.
-struct GeoResult {
-    QVector<ArticleGeo> articles; // only the articles a location was found in
-    QJsonObject raw;              // the script's whole answer (also unique_locations, coverage)
-};
-
 // ── Service ─────────────────────────────────────────────────────────────────
 
 class NewsNlpService : public QObject {
     Q_OBJECT
   public:
     using EntitiesCallback = std::function<void(bool, NerResult)>;
-    /// On failure `error` carries the script's own message (or stderr / exit code).
-    using GeoCallback = std::function<void(bool ok, GeoResult result, QString error)>;
+    /// `answer` is the script's whole answer (geolocated_articles, unique_locations,
+    /// coverage). Always called once; on failure `error` says why.
+    using GeoCallback = std::function<void(bool ok, QJsonObject answer, QString error)>;
     using TranslateCallback = std::function<void(bool, QString translated, QString detected_lang)>;
     using SemanticClustersCallback = std::function<void(bool, QJsonArray clusters)>;
 

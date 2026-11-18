@@ -37,8 +37,8 @@ inline void publish_to_hub(const QString& topic, const QVariant& value) {
 }
 
 // Persistent on-disk cache so the geopolitics panels hydrate from the most
-// recent dataset on cold start. One file per category — HDX (per subtype),
-// trade analysis (per direction), and geolocation. Sanitized to alnum-only
+// recent dataset on cold start. One file per category — HDX (per subtype)
+// and trade analysis (per direction). Sanitized to alnum-only
 // basenames so user-supplied country/topic strings can't escape the dir.
 finterm::services::util::DiskCache& disk_cache() {
     static finterm::services::util::DiskCache c(QStringLiteral("geopolitics"));
@@ -151,8 +151,9 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
                 if (doc.isObject())
                     emit trade_result_ready(QStringLiteral("trade_barrier_removal"), doc.object());
             } else if (fname == QStringLiteral("geolocation.json")) {
-                if (doc.isObject())
-                    emit geolocation_ready(doc.object());
+                // Written by builds that broadcast geolocation answers; an
+                // answer now belongs to its call, so there is nothing to replay.
+                disk_cache().remove(fname);
             }
             // events.json reserved for future use when the conflict-monitor
             // endpoint comes back online (currently kApiBase is empty).
@@ -171,17 +172,7 @@ void GeopoliticsService::run_python(const QString& script, const QStringList& ar
             cb(true, result.output);
             return;
         }
-        // Scripts usually print {"error": ...} to stdout and exit 1 with an
-        // empty stderr; prefer that message, then stderr, then the exit code.
-        QString msg;
-        const auto doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
-        if (doc.isObject() && doc.object().value("error").isString())
-            msg = doc.object().value("error").toString();
-        if (msg.isEmpty())
-            msg = result.error.trimmed();
-        if (msg.isEmpty())
-            msg = QString("Script failed (exit code %1)").arg(result.exit_code);
-        cb(false, msg);
+        cb(false, python::failure_message(result));
     });
 }
 
@@ -593,9 +584,11 @@ void GeopoliticsService::analyze_barrier_removal(const QJsonObject& params) {
 // GEOLOCATION — Python
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void GeopoliticsService::extract_geolocations(const QStringList& headlines) {
+void GeopoliticsService::extract_geolocations(const QStringList& headlines, GeolocationCallback cb) {
     // NewsNlpService owns news_geolocation.py. Each headline goes in as an
     // article whose id is its index, so geolocated_articles[].id maps back.
+    // The answer belongs to this call only — nothing is broadcast or persisted,
+    // so a concurrent call can never be handed another call's indices.
     QVector<NewsArticle> articles;
     articles.reserve(headlines.size());
     for (int i = 0; i < headlines.size(); ++i) {
@@ -604,19 +597,7 @@ void GeopoliticsService::extract_geolocations(const QStringList& headlines) {
         a.headline = headlines[i];
         articles.append(a);
     }
-    QPointer<GeopoliticsService> self = this;
-    NewsNlpService::instance().geolocate_articles(articles, [self](bool ok, GeoResult geo, QString error) {
-        if (!self)
-            return;
-        if (!ok) {
-            emit self->error_occurred("geolocation", error);
-            return;
-        }
-        disk_cache().save(QStringLiteral("geolocation.json"), QJsonDocument(geo.raw));
-        emit self->geolocation_ready(geo.raw);
-        if (self->hub_registered_)
-            publish_to_hub(QStringLiteral("geopolitics:geolocation"), QVariant(geo.raw));
-    });
+    NewsNlpService::instance().geolocate_articles(articles, std::move(cb));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -635,7 +616,7 @@ QStringList GeopoliticsService::topic_patterns() const {
 
 void GeopoliticsService::refresh(const QStringList& topics) {
     // Hub-driven refresh for the lightweight reference endpoints. Anything
-    // parameterised (events:<filters>, hdx:*, trade:*, geolocation) is
+    // parameterised (events:<filters>, hdx:*, trade:*) is
     // user-invoked and not driven through the hub scheduler.
     for (const auto& topic : topics) {
         if (topic == QStringLiteral("geopolitics:events")) {
@@ -680,13 +661,12 @@ void GeopoliticsService::ensure_registered_with_hub() {
     hdx_policy.min_interval_ms = 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:hdx:*"), hdx_policy);
 
-    // Trade analysis + geolocation — user-invoked, treat as push-only so the
+    // Trade analysis — user-invoked, treat as push-only so the
     // hub caches the most recent result without scheduling a refresh.
     finterm::datahub::TopicPolicy push_policy;
     push_policy.push_only = true;
     push_policy.ttl_ms = 15 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:trade:*"), push_policy);
-    hub.set_policy_pattern(QStringLiteral("geopolitics:geolocation"), push_policy);
 
     hub_registered_ = true;
     LOG_INFO("GeopoliticsService", "Registered with DataHub (geopolitics:*)");
