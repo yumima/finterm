@@ -2,8 +2,14 @@
 #include "screens/markets/MarketChartDialog.h"
 
 #include "core/events/EventBus.h"
+#include "core/util/BarTime.h"
+#include "datahub/DataHubMetaTypes.h"
+#include "datahub/DataHub.h"
 #include "screens/equity_research/EquityOverviewTab.h"
+#include "services/markets/ConditionService.h"
 #include "services/markets/IndexFutures.h"
+#include "services/markets/LastKnownQuote.h"
+#include "services/markets/MarketConditions.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -17,9 +23,14 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScreen>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QPointer>
 #include <QTimeZone>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <limits>
 
 namespace finterm::screens {
 
@@ -102,7 +113,27 @@ QString price_text(double v) {
 /// Only plain listed securities have an Equity Research page worth opening;
 /// indices (^DJI), futures and FX (=X, =F) and coins (-USD) don't.
 bool has_research_page(const QString& sym) {
-    return !sym.startsWith('^') && !sym.contains('=') && !sym.endsWith(QLatin1String("-USD"));
+    return !sym.startsWith('^') && !sym.contains('=') && !sym.endsWith(QLatin1String("-USD")) &&
+           !services::ConditionService::is_derived(sym);
+}
+
+/// The first session a derived (daily, non-Yahoo) series shows for `period`;
+/// invalid = all of it. 1D / 5D have no meaning for a daily series and read
+/// as a month.
+QDate derived_start(const QString& period, const QDate& last) {
+    if (period == QLatin1String("1D") || period == QLatin1String("5D") || period == QLatin1String("1M"))
+        return last.addMonths(-1);
+    if (period == QLatin1String("3M"))
+        return last.addMonths(-3);
+    if (period == QLatin1String("6M"))
+        return last.addMonths(-6);
+    if (period == QLatin1String("YTD"))
+        return QDate(last.year(), 1, 1);
+    if (period == QLatin1String("1Y"))
+        return last.addYears(-1);
+    if (period == QLatin1String("5Y"))
+        return last.addYears(-5);
+    return {};
 }
 
 } // namespace
@@ -288,6 +319,15 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     // ── Crosshair readout ────────────────────────────────────────────────────
     readout_ = make_label(ui::colors::TEXT_SECONDARY(), 12, false, true);
     root->addWidget(readout_);
+    // The symbol's condition readings — the same cond:stats answer the
+    // condition lists show, so the chart and the row never disagree.
+    cond_ = make_label(ui::colors::TEXT_SECONDARY(), 12, false, true);
+    cond_->setTextFormat(Qt::RichText);
+    cond_->setToolTip(QStringLiteral(
+        "From the last 5 years of daily bars: distance from the 200-day mean, where the last close ranks in "
+        "the past 1 and 5 years (0 = lowest), RSI(14), and ADX(14) — TREND at 25+, RANGE under 20."));
+    cond_->hide();
+    root->addWidget(cond_);
 
     canvas_ = new ResearchCandleCanvas(this);
     root->addWidget(canvas_, 1);
@@ -421,11 +461,13 @@ void MarketChartDialog::sync_fut_stream() {
 void MarketChartDialog::showEvent(QShowEvent* e) {
     QDialog::showEvent(e);
     sync_fut_stream();
+    sync_conditions();
 }
 
 void MarketChartDialog::hideEvent(QHideEvent* e) {
     QDialog::hideEvent(e);
     sync_fut_stream();
+    sync_conditions(); // not visible: drops the subscription
 }
 
 void MarketChartDialog::sync_buttons() {
@@ -453,14 +495,112 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
                               .arg(label_.toHtmlEscaped(), ui::colors::TEXT_TERTIARY(), symbol_.toHtmlEscaped()));
     if (auto* er = findChild<QPushButton*>(QStringLiteral("er")))
         er->setVisible(has_research_page(symbol_));
+    const bool derived = services::ConditionService::is_derived(symbol_);
+    for (const char* p : {"1D", "5D"})
+        if (auto* b = period_btns_.value(QString::fromLatin1(p)))
+            b->setEnabled(!derived); // a daily series has no intraday view
     if (changed) {
         fut_quote_.reset();
         sync_fut_stream();
         fut_->clear();
         fut_->setToolTip({});
+        sync_conditions();
         load();
     }
     update_fut_visibility();
+}
+
+void MarketChartDialog::sync_conditions() {
+    auto& hub = datahub::DataHub::instance();
+    if (!cond_topic_.isEmpty()) {
+        hub.unsubscribe(this, cond_topic_);
+        hub.unsubscribe_errors(this, cond_topic_);
+        hub.unsubscribe(this, cond_quote_topic_);
+        cond_topic_.clear();
+        cond_quote_topic_.clear();
+    }
+    cond_data_ = {};
+    cond_error_.clear();
+    cond_live_ = std::numeric_limits<double>::quiet_NaN();
+    if (!isVisible() || symbol_.isEmpty() || services::ConditionService::is_derived(symbol_)) {
+        paint_conditions();
+        return;
+    }
+    auto& svc = services::ConditionService::instance();
+    svc.ensure_registered_with_hub();
+    cond_topic_ = services::ConditionService::stats_topic(symbol_);
+    cond_data_ = svc.last_known(cond_topic_); // painted at once; the hub's answer follows
+    QPointer<MarketChartDialog> self = this;
+    const QString topic = cond_topic_;
+    hub.subscribe(this, topic, [self, topic](const QVariant& v) {
+        if (!self || topic != self->cond_topic_ || !v.canConvert<QJsonObject>())
+            return;
+        self->cond_data_ = v.toJsonObject();
+        self->cond_error_.clear();
+        self->paint_conditions();
+    });
+    hub.subscribe_errors(this, topic, [self, topic](const QString& err) {
+        if (!self || topic != self->cond_topic_)
+            return;
+        self->cond_error_ = err;
+        self->paint_conditions();
+    });
+    // The live quote the condition lists read: vs 200D and the 1-year
+    // percentile are at the current price (conditions::live_reading).
+    cond_quote_topic_ = QStringLiteral("market:quote:") + symbol_;
+    const QString sym = symbol_;
+    hub.subscribe(this, cond_quote_topic_, [self, sym](const QVariant& v) {
+        if (!self || sym != self->symbol_ || !v.canConvert<services::QuoteData>())
+            return;
+        const auto q = v.value<services::QuoteData>();
+        self->cond_live_ = !services::last_known_is_stale(sym) && q.price > 0 ? q.price
+                                                                               : std::numeric_limits<double>::quiet_NaN();
+        self->paint_conditions();
+    });
+    paint_conditions();
+}
+
+void MarketChartDialog::paint_conditions() {
+    namespace cnd = services::conditions;
+    const QJsonObject& c = cond_data_;
+    if (c.isEmpty()) {
+        cond_->setVisible(isVisible() && !services::ConditionService::is_derived(symbol_));
+        cond_->setText(cond_error_.isEmpty()
+                           ? QStringLiteral("Conditions: loading daily history…")
+                           : QStringLiteral("Conditions unavailable: %1").arg(cond_error_.toHtmlEscaped()));
+        return;
+    }
+    auto n = [&c](const char* k) {
+        const QJsonValue v = c.value(QLatin1String(k));
+        return v.isDouble() ? v.toDouble() : cnd::kNaN;
+    };
+    auto fmt = [](double v, int dp, bool sign, const QString& suffix = {}) {
+        if (!std::isfinite(v))
+            return QString(QChar(0x2014));
+        return (sign && v > 0 ? QStringLiteral("+") : QString()) + QString::number(v, 'f', dp) + suffix;
+    };
+    QVector<cnd::DatedValue> closes;
+    for (const auto& v : c.value("closes").toArray()) {
+        const QJsonArray a = v.toArray();
+        const QDate d = QDate::fromString(a.at(0).toString(), Qt::ISODate);
+        if (d.isValid() && a.at(1).isDouble())
+            closes.append({d, a.at(1).toDouble()});
+    }
+    const auto lr = cnd::live_reading(closes, cond_live_, core::bartime::market_today_et());
+    const auto regime = cnd::regime_from_key(c.value("regime").toString());
+    const QString rcol = regime == cnd::Regime::TrendUp     ? ui::colors::POSITIVE()
+                         : regime == cnd::Regime::TrendDown ? ui::colors::NEGATIVE()
+                         : regime == cnd::Regime::Range     ? ui::colors::CYAN()
+                                                            : ui::colors::TEXT_SECONDARY();
+    const QString sep = QStringLiteral("   ·   ");
+    cond_->setText(QStringLiteral("vs 200D %1%2 1Y pctl %3%4 5Y pctl %5%6 RSI %7%8 ADX %9 "
+                                  "<span style='color:%10;font-weight:700'>%11</span>%12 daily bars to %13")
+                       .arg(fmt(lr.vs_sma200_pct, 1, true, QStringLiteral("%")), sep, fmt(lr.pctile_1y, 0, false), sep,
+                            fmt(n("p5y"), 0, false), sep, fmt(n("rsi"), 0, false), sep, fmt(n("adx"), 0, false))
+                       .arg(rcol, cnd::regime_label(regime), sep,
+                            c.value("as_of").toString() +
+                                (lr.live ? QStringLiteral(" (vs 200D, 1Y at the live price)") : QString())));
+    cond_->show();
 }
 
 void MarketChartDialog::load() {
@@ -474,6 +614,49 @@ void MarketChartDialog::load() {
     readout_->clear();
     QPointer<MarketChartDialog> self = this;
     const QString sym = symbol_;
+    if (services::ConditionService::is_derived(sym)) {
+        // FRED / Treasury / correlation: one daily value per session, drawn
+        // as a line (open = high = low = close), from the series the widget
+        // rows read.
+        canvas_->set_intraday(false);
+        const QString period = prefs().period;
+        services::ConditionService::instance().fetch_series(
+            sym, [self, seq, period](bool ok, QVector<QPair<QDate, double>> pts, QString err) {
+                if (!self || seq != self->request_seq_)
+                    return;
+                self->overlay_->hide_loading();
+                if (!ok) {
+                    self->canvas_->clear();
+                    self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+                    self->readout_->setText(err);
+                    return;
+                }
+                const QDate from = pts.isEmpty() ? QDate() : derived_start(period, pts.last().first);
+                QVector<services::equity::Candle> candles;
+                for (const auto& p : pts) {
+                    if (from.isValid() && p.first < from)
+                        continue;
+                    services::equity::Candle c;
+                    // A session, stamped at its midnight (UTC) — decoded with date().
+                    c.timestamp = QDateTime(p.first, QTime(0, 0), QTimeZone::utc()).toSecsSinceEpoch();
+                    c.open = c.high = c.low = c.close = p.second;
+                    candles.append(c);
+                }
+                // The canvas draws at most 1,500 bars: a long daily series
+                // (25 years of the fed funds rate) is thinned evenly, the
+                // newest value always kept.
+                constexpr int kMaxBars = 1500;
+                if (candles.size() > kMaxBars) {
+                    const int step = static_cast<int>((candles.size() + kMaxBars - 1) / kMaxBars);
+                    QVector<services::equity::Candle> thin;
+                    for (int i = static_cast<int>(candles.size()) - 1; i >= 0; i -= step)
+                        thin.prepend(candles[i]);
+                    candles = thin;
+                }
+                self->apply(candles);
+            });
+        return;
+    }
     services::MarketDataService::instance().fetch_bars(
         sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
         [self, seq](const services::MarketDataService::BarsReply& r) {
@@ -508,11 +691,23 @@ void MarketChartDialog::update_header(int hover_idx) {
     if (c.isEmpty())
         return;
     const auto& last = c.last();
-    last_->setText(price_text(last.close));
+    last_->setText(services::ConditionService::is_derived(symbol_)
+                       ? QString::number(last.close, 'f', std::abs(last.close) < 10 ? 3 : 2)
+                       : price_text(last.close));
     // Change over the window shown: first bar's close to the last. Against the
     // first OPEN a 1D chart would quietly drop the overnight gap.
     const double base = c.first().close;
-    if (base != 0.0) {
+    if (services::ConditionService::is_derived(symbol_)) {
+        // A rate, a spread or a correlation: the change is in its own units —
+        // a percent of a spread (or of a negative correlation) means nothing.
+        const double chg = last.close - base;
+        change_->setText(QStringLiteral("%1%2  %3")
+                             .arg(chg >= 0 ? "+" : "−", QString::number(std::abs(chg), 'f', std::abs(chg) < 10 ? 3 : 1),
+                                  prefs().period));
+        change_->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;font-family:monospace;"
+                                       "background:transparent;")
+                                   .arg(ui::colors::TEXT_PRIMARY()));
+    } else if (base != 0.0) {
         const double chg = last.close - base;
         const double pct = chg / base * 100.0;
         change_->setText(QStringLiteral("%1%2  (%3%4%)  %5")
@@ -530,8 +725,11 @@ void MarketChartDialog::update_header(int hover_idx) {
                                         .toTimeZone(QTimeZone("America/New_York"))
                                         .toString(QStringLiteral("ddd d MMM HH:mm 'ET'"))
                                   : b.date().toString(QStringLiteral("ddd d MMM yyyy"));
-    QString text = QStringLiteral("%1   O %2   H %3   L %4   C %5")
-                       .arg(when, price_text(b.open), price_text(b.high), price_text(b.low), price_text(b.close));
+    // A derived series (FRED, Treasury, correlation) has one value a session.
+    QString text = services::ConditionService::is_derived(symbol_)
+                       ? QStringLiteral("%1   %2").arg(when, QString::number(b.close, 'f', std::abs(b.close) < 10 ? 3 : 2))
+                       : QStringLiteral("%1   O %2   H %3   L %4   C %5")
+                             .arg(when, price_text(b.open), price_text(b.high), price_text(b.low), price_text(b.close));
     if (b.volume > 0)
         text += QStringLiteral("   Vol %1").arg(ui::formatting::format_compact_volume(b.volume));
     if (hover_idx < 0)

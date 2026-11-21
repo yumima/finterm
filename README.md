@@ -2,15 +2,10 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-18)
+## Today's commits (2026-11-20)
 
 Latest first.
 
-- [`79a047341`](https://github.com/yumima/finterm/commit/79a047341) equity research: CURRENT, BID and ASK in Today's Trading; one live price; a real book
-- [`932cf2420`](https://github.com/yumima/finterm/commit/932cf2420) knowledge: the "?" help works before KNOWLEDGE is opened, and Open in KNOWLEDGE goes there
-- [`005d2b5fc`](https://github.com/yumima/finterm/commit/005d2b5fc) equity research: Valuation and Share Stats above Extended Hours; overnight note on one line
-- [`efb44e1fc`](https://github.com/yumima/finterm/commit/efb44e1fc) extended hours: keep overnight prints across a restart; say why there is no Overnight block
-- [`3fde609e5`](https://github.com/yumima/finterm/commit/3fde609e5) **chore(release):** update README download links and updates.json for v4.0.9
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -84,8 +84,11 @@ PAR_CURVE_URL = (
     "daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve"
     "&field_tdr_date_value={year}&page&_format=csv"
 )
-# CSV column -> output key. Only the tenors the Markets WORLD board reads.
-_PAR_TENORS = {"2 Yr": "y2", "5 Yr": "y5", "10 Yr": "y10", "30 Yr": "y30"}
+# CSV column -> output key: every tenor of the par curve. Markets WORLD reads
+# y2 / y10; the yield-curve widget (ConditionService, cond:ust) reads them all.
+_PAR_TENORS = {"1 Mo": "m1", "2 Mo": "m2", "3 Mo": "m3", "4 Mo": "m4", "6 Mo": "m6", "1 Yr": "y1",
+               "2 Yr": "y2", "3 Yr": "y3", "5 Yr": "y5", "7 Yr": "y7", "10 Yr": "y10", "20 Yr": "y20",
+               "30 Yr": "y30"}
 
 
 def parse_par_curve_csv(text: str) -> List[Dict[str, Any]]:
@@ -119,34 +122,60 @@ def parse_par_curve_csv(text: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def get_par_curve(limit: int = 5) -> Dict[str, Any]:
-    """Latest rows of the daily par yield curve (end of day, keyless).
+def get_par_curve(limit: int = 520, today=None) -> Dict[str, Any]:
+    """The daily par yield curve, newest first (end of day, keyless).
 
-    Reads the current year's file, and the previous year's too when the
-    current one has fewer than two rows (early January), so a day-over-day
-    change is always available. A refused/failed fetch is {"error": ...}.
+    Reads this year's file AND last year's, so the answer reaches back a full
+    year whatever the date (the curve a year ago, a spread's 1-year range) and
+    a day-over-day change exists in early January. One answer for every
+    reader: Markets WORLD takes the newest two rows, the yield-curve widget
+    the history. A refused/failed fetch is {"error": ...}; one year's file
+    missing (1 January: the new year's does not exist yet) is not a failure
+    when the other answers.
     """
     from datetime import date as _date
 
-    year = _date.today().year
+    from concurrent.futures import ThreadPoolExecutor
+
+    today = today or _date.today()  # a parameter for the tests
+    year = today.year
+
+    def _fetch(y):
+        # treasury.gov takes ~15 s per year's file: both are read at once.
+        try:
+            resp = session.get(PAR_CURVE_URL.format(year=y), timeout=40)
+            resp.raise_for_status()
+            return parse_par_curve_csv(resp.text), None
+        except requests.exceptions.RequestException as e:
+            return [], f"Treasury par curve request failed: {e}"
+
     rows: List[Dict[str, Any]] = []
     failure = None
-    for y in (year, year - 1):
-        try:
-            resp = session.get(PAR_CURVE_URL.format(year=y), timeout=20)
-            resp.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            # Early January the new year's file may not exist yet: last
-            # year's still answers. A failure is reported only if nothing does.
-            failure = failure or f"Treasury par curve request failed: {e}"
-            continue
-        rows.extend(parse_par_curve_csv(resp.text))
-        if len(rows) >= 2:
-            break
+    current_failed = False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for y, (got, err) in zip((year, year - 1), pool.map(_fetch, (year, year - 1))):
+            rows.extend(got)
+            failure = failure or err
+            if y == year and (err or not got):
+                current_failed = True
     if not rows:
         return {"error": failure or "Treasury par curve returned no rows"}
-    rows.sort(key=lambda r: r["date"], reverse=True)
-    return {"source": "US Treasury daily par yield curve", "rows": rows[:limit]}
+    # This year's file missing is normal only in the first days of January;
+    # any other time last year's rows would pose as today's curve.
+    if current_failed and not (today.month == 1 and today.day <= 10):
+        return {"error": failure or "this year's Treasury par curve file is empty"}
+    # Early January: the curve a year before the newest (late-December) row
+    # is in the file before last.
+    if not any(r["date"].startswith(str(year)) for r in rows):
+        got, _err = _fetch(year - 2)
+        rows.extend(got)
+    seen = set()
+    unique = []
+    for r in sorted(rows, key=lambda r: r["date"], reverse=True):
+        if r["date"] not in seen:
+            seen.add(r["date"])
+            unique.append(r)
+    return {"source": "US Treasury daily par yield curve", "rows": unique[:limit]}
 
 
 def main(args=None):

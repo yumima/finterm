@@ -50,6 +50,8 @@ def main():
     check("blank tenor is None, not 0", rows[0]["y2"] is None, rows[0])
     check("N/A tenor is None", rows[0]["y30"] is None, rows[0])
     check("numbers parse", rows[1]["y2"] == 4.86 and rows[0]["y10"] == 5.15, rows)
+    check("short tenors decode too", rows[1]["m1"] == 4.12 and rows[1]["y20"] == 5.48, rows)
+    check("a tenor the file lacks is None", rows[1]["m3"] is None, rows)
     check("a junk date line is skipped", td.parse_par_curve_csv(HEADER + "Total,1,2,3,4,5,6\n") == [])
 
     # A refused request is an error, not "no rows".
@@ -62,15 +64,32 @@ def main():
         # One row this year: last year's file is read too.
         calls = []
 
+        # The two years are read concurrently: answer by the year in the URL.
+        from datetime import date
+        this_year = "/2027/"
+
         def fake(url, timeout=0):
             calls.append(url)
-            if len(calls) == 1:
+            if this_year in url:
                 return _Resp(HEADER + "01/02/2027,4.1,4.20,4.3,4.40,4.5,4.6\n")
             return _Resp(HEADER + "12/31/2026,4.1,4.25,4.3,4.38,4.5,4.6\n")
 
         td.session.get = fake
-        out = td.get_par_curve()
+        out = td.get_par_curve(today=date(2027, 1, 2))
         check("reaches into last year", len(calls) == 2 and len(out.get("rows", [])) == 2, out)
+        # Mid-year the previous year's file is read as well: the curve a year
+        # ago must be in the answer whatever the date.
+        calls.clear()
+
+        def midyear(url, timeout=0):
+            calls.append(url)
+            if this_year in url:
+                return _Resp(HEADER + "07/02/2027,4.1,4.20,4.3,4.40,4.5,4.6\n07/01/2027,4.1,4.2,4.3,4.4,4.5,4.6\n")
+            return _Resp(HEADER + "07/02/2026,4.0,4.10,4.2,4.30,4.4,4.5\n")
+
+        td.session.get = midyear
+        out2 = td.get_par_curve(today=date(2027, 7, 2))
+        check("always reads last year's file", len(calls) == 2 and out2["rows"][-1]["date"] == "2026-07-02", out2)
         check("cross-year order", [r["date"] for r in out["rows"]] == ["2027-01-02", "2026-12-31"], out)
 
         # 1 January: the new year's file does not exist yet — last year's answers.
@@ -78,13 +97,21 @@ def main():
 
         def jan1(url, timeout=0):
             calls.append(url)
-            if len(calls) == 1:
+            if this_year in url:
                 return _Resp("", 404)
             return _Resp(HEADER + "12/31/2026,4.1,4.25,4.3,4.38,4.5,4.6\n12/30/2026,4.1,4.2,4.3,4.3,4.5,4.6\n")
 
         td.session.get = jan1
-        out = td.get_par_curve()
+        out = td.get_par_curve(today=date(2027, 1, 1))
         check("missing new-year file falls back", len(out.get("rows", [])) == 2 and "error" not in out, out)
+        check("…and reads the file before last for the year-ago curve", any("/2025/" in u for u in calls), calls)
+
+        # Mid-year, this year's file failing is an error — last year's rows
+        # must not pose as today's curve.
+        calls.clear()
+        td.session.get = jan1
+        out = td.get_par_curve(today=date(2027, 7, 1))
+        check("mid-year missing current file is an error", "error" in out and "rows" not in out, out)
     finally:
         td.session.get = orig
 

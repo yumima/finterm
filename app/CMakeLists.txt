@@ -876,6 +876,7 @@ set(SERVICE_SOURCES
     src/services/markets/ExtendedHoursService.cpp
     src/services/markets/MarketDataService.cpp
     src/services/markets/IndexFutures.cpp
+    src/services/markets/ConditionService.cpp
     src/services/futures/FuturesService.cpp
     src/services/data_normalization/DataNormalizationService.cpp
     src/services/news/NewsService.cpp
@@ -1082,6 +1083,12 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/world/WorldMarketsView.cpp
+    src/screens/markets/conditions/ConditionsView.cpp
+    src/screens/dashboard/widgets/ConditionAddDialog.cpp
+    src/screens/dashboard/widgets/ConditionTableWidget.cpp
+    src/screens/dashboard/widgets/YieldCurveWidget.cpp
+    src/screens/dashboard/widgets/CorrelationWidget.cpp
+    src/screens/dashboard/widgets/MacroOddsWidget.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
@@ -1615,6 +1622,12 @@ set_source_files_properties(
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/MarketsScreen.cpp
     src/screens/markets/world/WorldMarketsView.cpp
+    src/screens/markets/conditions/ConditionsView.cpp
+    src/screens/dashboard/widgets/ConditionAddDialog.cpp
+    src/screens/dashboard/widgets/ConditionTableWidget.cpp
+    src/screens/dashboard/widgets/YieldCurveWidget.cpp
+    src/screens/dashboard/widgets/CorrelationWidget.cpp
+    src/screens/dashboard/widgets/MacroOddsWidget.cpp
     src/screens/mcp_servers/McpServersScreen.cpp
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsDetailPanel.cpp

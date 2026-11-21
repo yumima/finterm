@@ -3,6 +3,7 @@
 #include "screens/markets/MarketChartDialog.h"
 #include "screens/markets/MarketPanelEditor.h"
 #include "screens/markets/MarketPanelStore.h"
+#include "screens/markets/conditions/ConditionsView.h"
 #include "screens/markets/world/WorldMarketsView.h"
 #include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -34,6 +35,7 @@ namespace {
 constexpr const char* kViewModeKey = "markets_view";
 constexpr int kPanelsPage = 0;
 constexpr int kWorldPage = 1;
+constexpr int kConditionsPage = 2;
 } // namespace
 
 static QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
@@ -103,15 +105,44 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     if (const auto old = settings.get("markets_view_mode"); old.is_ok() && !old.value().isEmpty())
         settings.remove("markets_view_mode");
     const auto saved = settings.get(kViewModeKey);
-    set_mode(saved.is_ok() && saved.value() == QLatin1String("world") ? Mode::World : Mode::Panels, false);
+    const QString saved_mode = saved.is_ok() ? saved.value() : QString();
+    set_mode(saved_mode == QLatin1String("world")        ? Mode::World
+             : saved_mode == QLatin1String("conditions") ? Mode::Conditions
+                                                         : Mode::Panels,
+             false);
 }
 
 // ---------------------------------------------------------------------------
 // Mode (WORLD overview / user PANELS)
 // ---------------------------------------------------------------------------
 
+void MarketsScreen::ensure_conditions() {
+    if (conditions_)
+        return;
+    // Built on first use: twelve widgets nobody may ever open stay unbuilt.
+    conditions_ = new ConditionsView(stack_);
+    stack_->insertWidget(kConditionsPage, conditions_);
+    if (cond_add_slot_) {
+        cond_add_slot_->addWidget(conditions_->add_button());
+        style_add_button();
+    }
+}
+
+void MarketsScreen::style_add_button() {
+    if (!conditions_)
+        return;
+    conditions_->add_button()->setStyleSheet(
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;font-size:%2px;font-family:'%3';"
+                "font-weight:700;padding:0 8px;}")
+            .arg(ui::colors::AMBER())
+            .arg(ui::fonts::font_px(-3))
+            .arg(ui::fonts::DATA_FAMILY()));
+}
+
 void MarketsScreen::set_mode(Mode m, bool persist) {
-    const int page = m == Mode::World ? kWorldPage : kPanelsPage;
+    if (m == Mode::Conditions)
+        ensure_conditions();
+    const int page = m == Mode::World ? kWorldPage : m == Mode::Conditions ? kConditionsPage : kPanelsPage;
     const bool changed = m != mode_ || stack_->currentIndex() != page;
     mode_ = m;
     // Switching pages hides the other one, so WORLD unsubscribes and stops
@@ -119,9 +150,13 @@ void MarketsScreen::set_mode(Mode m, bool persist) {
     stack_->setCurrentIndex(page);
     for (QWidget* w : panel_only_controls_)
         w->setVisible(m == Mode::Panels);
+    if (conditions_)
+        conditions_->add_button()->setVisible(m == Mode::Conditions);
     update_mode_buttons();
     if (persist)
-        SettingsRepository::instance().set(kViewModeKey, m == Mode::World ? "world" : "panels");
+        SettingsRepository::instance().set(kViewModeKey, m == Mode::World        ? "world"
+                                                         : m == Mode::Conditions ? "conditions"
+                                                                                 : "panels");
     if (!changed || !isVisible())
         return;
     if (m == Mode::Panels) {
@@ -155,6 +190,8 @@ void MarketsScreen::update_mode_buttons() {
     };
     style(world_btn_, mode_ == Mode::World);
     style(panels_btn_, mode_ == Mode::Panels);
+    style(conditions_btn_, mode_ == Mode::Conditions);
+    style_add_button();
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +436,8 @@ QWidget* MarketsScreen::build_header_bar() {
     // PANELS / WORLD — two-state toggle; the choice is remembered.
     panels_btn_ = new QPushButton("PANELS");
     world_btn_ = new QPushButton("WORLD");
-    for (auto* b : {panels_btn_, world_btn_}) {
+    conditions_btn_ = new QPushButton("CONDITIONS");
+    for (auto* b : {panels_btn_, world_btn_, conditions_btn_}) {
         b->setFixedHeight(22);
         b->setCheckable(true);
         b->setCursor(Qt::PointingHandCursor);
@@ -408,6 +446,14 @@ QWidget* MarketsScreen::build_header_bar() {
     panels_btn_->setToolTip("Your configurable quote panels.");
     connect(world_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::World, true); });
     connect(panels_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::Panels, true); });
+    conditions_btn_->setToolTip("Market conditions: trend, 200-day, percentiles, yield curve, credit, macro, "
+                                "correlation and prediction-market odds — the same widgets the dashboard offers.");
+    connect(conditions_btn_, &QPushButton::clicked, this, [this]() { set_mode(Mode::Conditions, true); });
+    // The CONDITIONS page's "+ WIDGET" sits here (built with the page).
+    auto* slot_box = new QWidget;
+    cond_add_slot_ = new QHBoxLayout(slot_box);
+    cond_add_slot_->setContentsMargins(6, 0, 0, 0);
+    h->addWidget(slot_box);
 
     add_sep();
 
@@ -694,6 +740,11 @@ void MarketsScreen::hideEvent(QHideEvent* event) {
 // ---------------------------------------------------------------------------
 
 void MarketsScreen::refresh_all() {
+    if (mode_ == Mode::Conditions) {
+        if (conditions_)
+            conditions_->refresh_all();
+        return;
+    }
     if (mode_ == Mode::World) {
         if (world_)
             world_->refresh(/*force=*/true);

@@ -3,6 +3,7 @@
 #include "screens/dashboard/widgets/AgentErrorsWidget.h"
 #include "screens/dashboard/widgets/BrokerHoldingsWidget.h"
 #include "screens/dashboard/widgets/CommoditiesWidget.h"
+#include "screens/dashboard/widgets/ConditionWidgets.h"
 #include "screens/dashboard/widgets/CryptoTickerWidget.h"
 #include "screens/dashboard/widgets/CryptoWidget.h"
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
@@ -74,6 +75,16 @@ WidgetRegistry::WidgetRegistry() {
 
     register_widget({"sentiment", "Market Sentiment", "Markets", "Fear & greed, bull/bear indicators", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::MarketSentimentWidget; }});
+
+    // ── Market Conditions (also Markets ▸ CONDITIONS) ──────────────────────
+    // Indicators beyond the price: trend, 200-day, percentile, curve,
+    // correlation, macro and prediction-market odds. Every list is editable
+    // in place (+ ADD / −).
+    for (const auto& d : widgets::condition_widget_defs()) {
+        const QString id = d.type_id;
+        register_widget({id, d.name, "Market Conditions", d.description, d.w, d.h, 3, 1,
+                         [id](const QJsonObject& cfg) { return widgets::create_condition_widget(id, cfg); }});
+    }
 
     // ── Private Market (also the PRIVATE MARKET screen's MARKET canvas) ────────
     register_widget({"pm_c50", "C50 Private Market Index", "Private Market",

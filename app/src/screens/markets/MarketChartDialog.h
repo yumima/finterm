@@ -5,6 +5,7 @@
 
 #include <QDialog>
 #include <QHash>
+#include <QJsonObject>
 #include <QPointer>
 
 #include <optional>
@@ -68,6 +69,9 @@ class MarketChartDialog : public QDialog {
     void paint_fut();
     /// Stream fut_quote_'s contract while the readout is on screen.
     void sync_fut_stream();
+    /// Follow cond:stats:<symbol> while shown (not for derived series).
+    void sync_conditions();
+    void paint_conditions();
 
     QString symbol_;
     QString label_;
@@ -83,6 +87,12 @@ class MarketChartDialog : public QDialog {
     QLabel* change_ = nullptr;
     QLabel* readout_ = nullptr;
     QLabel* fut_ = nullptr;
+    QLabel* cond_ = nullptr;
+    QString cond_topic_;
+    QJsonObject cond_data_;
+    QString cond_quote_topic_;
+    QString cond_error_; ///< the reading's last refresh error, shown while there is no reading
+    double cond_live_ = 0; ///< live price for the condition strip; NaN = none (set in sync_conditions)
     QTimer* fut_timer_ = nullptr;
     int fut_seq_ = 0;
     std::optional<services::IndexFutureQuote> fut_quote_;

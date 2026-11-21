@@ -12,6 +12,7 @@
 #include <QVector>
 #include <QWidget>
 
+class QHBoxLayout;
 class QPushButton;
 
 namespace finterm::screens {
@@ -19,13 +20,16 @@ namespace finterm::screens {
 namespace world {
 class WorldMarketsView;
 }
+class ConditionsView;
 
-/// Markets terminal. Two modes behind a PANELS / WORLD toggle (the last choice
-/// is remembered):
+/// Markets terminal. Three modes behind a PANELS / WORLD / CONDITIONS toggle
+/// (the last choice is remembered):
 ///  - PANELS (default): the user-configurable workstation of quote panels in a
 ///    QSplitter layout; splitter state is persisted to SettingsRepository.
 ///  - WORLD: a fixed one-screen overview of global markets
 ///    (world::WorldMarketsView).
+///  - CONDITIONS: the market-condition widgets (ConditionsView) — the same
+///    classes the dashboard's "Market Conditions" widgets are.
 class MarketsScreen : public QWidget {
     Q_OBJECT
   public:
@@ -61,7 +65,9 @@ class MarketsScreen : public QWidget {
     void refresh_panels();
 
     // Mode
-    enum class Mode { World, Panels };
+    enum class Mode { World, Panels, Conditions };
+    void ensure_conditions();
+    void style_add_button();
     void set_mode(Mode m, bool persist);
     void update_mode_buttons();
 
@@ -76,6 +82,9 @@ class MarketsScreen : public QWidget {
     Mode mode_ = Mode::Panels;
     QPushButton* world_btn_ = nullptr;
     QPushButton* panels_btn_ = nullptr;
+    QPushButton* conditions_btn_ = nullptr;
+    ConditionsView* conditions_ = nullptr;
+    QHBoxLayout* cond_add_slot_ = nullptr;
     QVector<QWidget*> panel_only_controls_; // hidden in WORLD mode
 
     // Splitter tree

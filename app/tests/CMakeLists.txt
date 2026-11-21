@@ -1241,6 +1241,16 @@ target_link_libraries(test_world_markets PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_world_markets PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME world_markets COMMAND test_world_markets)
 
+# ── Market conditions: MAs, percentiles, RSI/ADX regime, correlation, FRED ──
+# A reading the history cannot support is NaN (never a guess); correlation
+# pairs only common dates; FRED keys parse strictly and YoY needs the exact
+# year-ago observation.
+add_executable(test_market_conditions services/test_market_conditions.cpp)
+target_include_directories(test_market_conditions PRIVATE ../src)
+target_link_libraries(test_market_conditions PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_market_conditions PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME market_conditions COMMAND test_market_conditions)
+
 # ── ER Report: derived figures, rule-based findings, prompts and parsers ─────
 # Every number the report prints and every rule it applies; a vendor null
 # stays NaN, and the model is never asked for a figure.

@@ -56,10 +56,12 @@ class EconomicsService : public QObject, public finterm::datahub::Producer {
                int timeout_ms = python::PythonRunner::kProcessTimeoutMs);
 
     /// The US Treasury daily par yield curve (treasury_data.py par_curve —
-    /// the 2-year Yahoo does not carry): data = {"rows": [{date, y2, y10, …}]},
-    /// newest first. fetch()'s cache and coalescing; a refusal is a failure.
+    /// the 2-year Yahoo does not carry): data = {"rows": [{date, m1 … y30}]},
+    /// newest first, this year's and last year's business days. fetch()'s cache and coalescing; a refusal is a failure.
     void fetch_treasury_par_curve(ResultCallback cb) {
-        fetch(QStringLiteral("treasury_data.py"), QStringLiteral("par_curve"), {}, std::move(cb));
+        // Two year-files from treasury.gov at ~15 s each (read concurrently):
+        // past the default 30 s deadline when the host is slow.
+        fetch(QStringLiteral("treasury_data.py"), QStringLiteral("par_curve"), {}, std::move(cb), 90'000);
     }
 
     /// Drop the cached answer for (script, command, args) so the next
