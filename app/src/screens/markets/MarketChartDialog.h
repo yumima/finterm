@@ -4,6 +4,7 @@
 #include "services/markets/IndexFutures.h"
 
 #include <QDialog>
+#include <QWidget>
 #include <QHash>
 #include <QJsonObject>
 #include <QPointer>
@@ -34,19 +35,22 @@ class ResearchCandleCanvas;
 /// The chart is ER's QPainter canvas (ResearchCandleCanvas) — crosshair, log
 /// scale, volume, moving averages — with a line/area style and an intraday
 /// axis added for 1D/5D.
-class MarketChartDialog : public QDialog {
+class MarketChartView : public QWidget {
     Q_OBJECT
   public:
-    /// Open (or retarget) the chart for `symbol`. `label` is the display name
-    /// shown in the title ("DOW JONES"); empty falls back to the symbol.
-    static void show_for(const QString& symbol, const QString& label, QWidget* from);
+    explicit MarketChartView(QWidget* parent = nullptr);
+    /// Show `symbol` ("DOW JONES" as `label`; empty = the symbol). A Yahoo
+    /// symbol, or a derived series (ConditionService::is_derived).
+    void set_symbol(const QString& symbol, const QString& label);
+    QString symbol() const;
+    /// Hide the ✕ (a host with its own close, e.g. a dashboard tile).
+    void set_closable(bool on);
 
-    /// Make a label-built row clickable: a left click on `w` (or on a child
-    /// that passes its clicks up, as a plain QLabel does) opens the chart for
-    /// the symbol `w` carries at that moment. Rows that change symbol in place
-    /// just call set_target() again — nothing is captured at install time.
-    static void make_clickable(QWidget* w);
-    static void set_target(QWidget* w, const QString& symbol, const QString& label = {});
+  signals:
+    void close_requested();
+    void title_changed(const QString& title);
+    /// set_symbol() moved the view to another symbol.
+    void symbol_changed(const QString& symbol, const QString& label);
 
   protected:
     void keyPressEvent(QKeyEvent* e) override;
@@ -54,8 +58,6 @@ class MarketChartDialog : public QDialog {
     void hideEvent(QHideEvent* e) override;
 
   private:
-    explicit MarketChartDialog(QWidget* parent);
-    void set_symbol(const QString& symbol, const QString& label);
     void load();
     void apply(const QVector<services::equity::Candle>& candles);
     void update_header(int hover_idx);
@@ -99,7 +101,38 @@ class MarketChartDialog : public QDialog {
     QHash<QString, QPushButton*> period_btns_;
     QHash<int, QPushButton*> style_btns_;
     QHash<QString, QPushButton*> toggle_btns_;
+};
 
+
+/// The chart as a window: opened by clicking a market data point wherever
+/// quotes are listed (Markets, the dashboard, the ticker bar …). Centred over
+/// the main window and non-modal; a second click retargets it.
+///
+/// Security linking: a canvas (or page) that holds a Chart widget registers it
+/// with link_chart(); a click inside that canvas then loads the symbol into
+/// the linked chart instead of opening this window.
+class MarketChartDialog : public QDialog {
+    Q_OBJECT
+  public:
+    /// Open (or retarget) the chart for `symbol` — or the linked chart of the
+    /// canvas `from` sits on, when one is on screen.
+    static void show_for(const QString& symbol, const QString& label, QWidget* from);
+
+    /// Make a label-built row clickable: a left click on `w` (or on a child
+    /// that passes its clicks up, as a plain QLabel does) opens the chart for
+    /// the symbol `w` carries at that moment. Rows that change symbol in place
+    /// just call set_target() again — nothing is captured at install time.
+    static void make_clickable(QWidget* w);
+    static void set_target(QWidget* w, const QString& symbol, const QString& label = {});
+
+    /// `view` follows clicks made inside `scope` (the newest link wins).
+    static void link_chart(QWidget* scope, MarketChartView* view);
+    static void unlink_chart(QWidget* scope, MarketChartView* view);
+
+  private:
+    explicit MarketChartDialog(QWidget* parent);
+    static bool route_to_linked(const QString& symbol, const QString& label, QWidget* from);
+    MarketChartView* view_ = nullptr;
     static QPointer<MarketChartDialog> instance_;
 };
 

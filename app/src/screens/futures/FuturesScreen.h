@@ -68,6 +68,9 @@ class FuturesScreen : public QWidget, public IStatefulScreen {
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("futures"); }
 
+    /// Show `root` ("ES", "CL" …): its board, chart, curve and months.
+    void open_market(const QString& root);
+
   protected:
     void showEvent(QShowEvent*) override;
     void hideEvent(QHideEvent*) override;

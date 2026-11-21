@@ -160,6 +160,15 @@ inline QString continuous_symbol(const QString& root) {
     return root + QStringLiteral("=F");
 }
 
+/// The catalogue root of a continuous futures symbol ("ES=F" → "ES");
+/// empty for anything else (a symbol not in the catalogue included).
+inline QString root_of(const QString& symbol) {
+    if (!symbol.endsWith(QLatin1String("=F")))
+        return {};
+    const QString root = symbol.left(symbol.size() - 2);
+    return find_contract(root) ? root : QString();
+}
+
 /// Decimals that show a price to its tick. Binary-fraction ticks (Treasuries'
 /// 64ths and 128ths) stop at five — what the feed itself carries.
 inline int price_decimals(double tick) {

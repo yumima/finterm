@@ -6,6 +6,8 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "datahub/DataHub.h"
 #include "screens/equity_research/EquityOverviewTab.h"
+#include "screens/markets/MarketsScreen.h"
+#include "services/futures/FuturesCatalog.h"
 #include "services/markets/ConditionService.h"
 #include "services/markets/IndexFutures.h"
 #include "services/markets/LastKnownQuote.h"
@@ -35,6 +37,15 @@
 namespace finterm::screens {
 
 QPointer<MarketChartDialog> MarketChartDialog::instance_;
+
+QString MarketChartView::symbol() const {
+    return symbol_;
+}
+
+void MarketChartView::set_closable(bool on) {
+    if (auto* b = findChild<QPushButton*>(QStringLiteral("close")))
+        b->setVisible(on);
+}
 
 namespace {
 
@@ -181,8 +192,48 @@ void MarketChartDialog::set_target(QWidget* w, const QString& symbol, const QStr
     w->setProperty(kLabelProp, label);
 }
 
+namespace {
+/// Linked charts by the canvas (or page) they sit on — security linking.
+QHash<QWidget*, QPointer<MarketChartView>>& linked() {
+    static QHash<QWidget*, QPointer<MarketChartView>> h;
+    return h;
+}
+} // namespace
+
+void MarketChartDialog::link_chart(QWidget* scope, MarketChartView* view) {
+    if (scope && view)
+        linked().insert(scope, view);
+}
+
+void MarketChartDialog::unlink_chart(QWidget* scope, MarketChartView* view) {
+    // Only this view's link: a second chart on the same canvas keeps its own.
+    const auto it = linked().find(scope);
+    if (it != linked().end() && (it.value() == view || !it.value()))
+        linked().erase(it);
+}
+
+bool MarketChartDialog::route_to_linked(const QString& symbol, const QString& label, QWidget* from) {
+    // The nearest ancestor of the clicked widget that has a linked chart
+    // takes the symbol when that chart is on screen — the click stays on the
+    // canvas (security linking). Otherwise the dialog opens.
+    for (QWidget* w = from; w; w = w->parentWidget()) {
+        const auto it = linked().constFind(w);
+        if (it == linked().constEnd())
+            continue;
+        MarketChartView* v = it.value();
+        if (v && v->isVisible()) {
+            v->set_symbol(symbol, label);
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 void MarketChartDialog::show_for(const QString& symbol, const QString& label, QWidget* from) {
     if (symbol.trimmed().isEmpty())
+        return;
+    if (route_to_linked(symbol.trimmed(), label, from))
         return;
     QWidget* host = from ? from->window() : nullptr;
     if (!instance_) {
@@ -198,7 +249,7 @@ void MarketChartDialog::show_for(const QString& symbol, const QString& label, QW
             instance_->resize(1000, 620);
         }
     }
-    instance_->set_symbol(symbol.trimmed(), label);
+    instance_->view_->set_symbol(symbol.trimmed(), label);
     instance_->show();
     instance_->raise();
     instance_->activateWindow();
@@ -208,9 +259,18 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     setAttribute(Qt::WA_DeleteOnClose);
     setModal(false);
     setStyleSheet(QString("QDialog{background:%1;}").arg(ui::colors::BG_SURFACE()));
-
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(14, 12, 14, 12);
+    view_ = new MarketChartView(this);
+    root->addWidget(view_);
+    connect(view_, &MarketChartView::close_requested, this, &QDialog::close);
+    connect(view_, &MarketChartView::title_changed, this, &QWidget::setWindowTitle);
+}
+
+MarketChartView::MarketChartView(QWidget* parent) : QWidget(parent) {
+    setFocusPolicy(Qt::StrongFocus); // number keys step the periods
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(8);
 
     // ── Header: what, where it is, how it moved over the window ─────────────
@@ -233,9 +293,21 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
         EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", symbol_}});
     });
     head->addWidget(er_btn);
+    auto* fut_btn = make_button(QStringLiteral("CURVE ▸"), ui::colors::AMBER(), false);
+    fut_btn->setObjectName(QStringLiteral("futures"));
+    fut_btn->setToolTip(QStringLiteral("Open this market in MARKETS ▸ FUTURES: forward curve, contract months, "
+                                       "spreads, positioning and the ticket"));
+    fut_btn->hide();
+    connect(fut_btn, &QPushButton::clicked, this, [this]() {
+        const QString root = services::futures::root_of(symbol_);
+        if (!root.isEmpty())
+            MarketsScreen::request_futures(root);
+    });
+    head->addWidget(fut_btn);
     auto* close_btn = make_button(QStringLiteral("✕"), ui::colors::AMBER(), false);
     close_btn->setToolTip(QStringLiteral("Close (Esc)"));
-    connect(close_btn, &QPushButton::clicked, this, &QDialog::close);
+    close_btn->setObjectName(QStringLiteral("close"));
+    connect(close_btn, &QPushButton::clicked, this, &MarketChartView::close_requested);
     head->addWidget(close_btn);
     root->addLayout(head);
 
@@ -362,7 +434,7 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     sync_buttons();
 }
 
-void MarketChartDialog::update_fut_visibility() {
+void MarketChartView::update_fut_visibility() {
     const bool has_future = services::index_future_for(symbol_) != nullptr;
     if (auto* b = toggle_btns_.value(QStringLiteral("fut")))
         b->setVisible(has_future);
@@ -389,7 +461,7 @@ QString fut_style(const QString& color) {
 }
 } // namespace
 
-void MarketChartDialog::fetch_futures() {
+void MarketChartView::fetch_futures() {
     const int seq = ++fut_seq_;
     const QString sym = symbol_;
     auto paint = [this](const QString& color) { ui::set_style_if_changed(fut_, fut_style(color)); };
@@ -433,7 +505,7 @@ void MarketChartDialog::fetch_futures() {
         });
 }
 
-void MarketChartDialog::paint_fut() {
+void MarketChartView::paint_fut() {
     if (!fut_quote_)
         return;
     const auto& q = *fut_quote_;
@@ -451,26 +523,26 @@ void MarketChartDialog::paint_fut() {
     ui::set_style_if_changed(fut_, fut_style(q.pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 
-void MarketChartDialog::sync_fut_stream() {
+void MarketChartView::sync_fut_stream() {
     QStringList contracts;
     if (fut_quote_ && isVisible() && prefs().fut)
         contracts << fut_quote_->contract;
     services::MarketDataService::instance().set_stream_extras(this, contracts);
 }
 
-void MarketChartDialog::showEvent(QShowEvent* e) {
-    QDialog::showEvent(e);
+void MarketChartView::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
     sync_fut_stream();
     sync_conditions();
 }
 
-void MarketChartDialog::hideEvent(QHideEvent* e) {
-    QDialog::hideEvent(e);
+void MarketChartView::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
     sync_fut_stream();
     sync_conditions(); // not visible: drops the subscription
 }
 
-void MarketChartDialog::sync_buttons() {
+void MarketChartView::sync_buttons() {
     const auto& pr = prefs();
     for (auto it = period_btns_.begin(); it != period_btns_.end(); ++it)
         it.value()->setChecked(it.key() == pr.period);
@@ -484,11 +556,15 @@ void MarketChartDialog::sync_buttons() {
     }
 }
 
-void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) {
+void MarketChartView::set_symbol(const QString& symbol, const QString& label) {
     const bool changed = symbol != symbol_;
     symbol_ = symbol;
     label_ = label.isEmpty() ? symbol : label;
-    setWindowTitle(QStringLiteral("%1 — chart").arg(label_));
+    emit title_changed(QStringLiteral("%1 — chart").arg(label_));
+    // A futures market: its curve and contract months are one click away.
+    const QString root = services::futures::root_of(symbol_);
+    if (auto* fb = findChild<QPushButton*>(QStringLiteral("futures")))
+        fb->setVisible(!root.isEmpty());
     title_->setText(label_ == symbol_
                         ? symbol_
                         : QStringLiteral("%1  <span style='color:%2;font-size:13px'>%3</span>")
@@ -499,6 +575,8 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
     for (const char* p : {"1D", "5D"})
         if (auto* b = period_btns_.value(QString::fromLatin1(p)))
             b->setEnabled(!derived); // a daily series has no intraday view
+    if (changed)
+        emit symbol_changed(symbol_, label_);
     if (changed) {
         fut_quote_.reset();
         sync_fut_stream();
@@ -510,7 +588,7 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
     update_fut_visibility();
 }
 
-void MarketChartDialog::sync_conditions() {
+void MarketChartView::sync_conditions() {
     auto& hub = datahub::DataHub::instance();
     if (!cond_topic_.isEmpty()) {
         hub.unsubscribe(this, cond_topic_);
@@ -530,7 +608,7 @@ void MarketChartDialog::sync_conditions() {
     svc.ensure_registered_with_hub();
     cond_topic_ = services::ConditionService::stats_topic(symbol_);
     cond_data_ = svc.last_known(cond_topic_); // painted at once; the hub's answer follows
-    QPointer<MarketChartDialog> self = this;
+    QPointer<MarketChartView> self = this;
     const QString topic = cond_topic_;
     hub.subscribe(this, topic, [self, topic](const QVariant& v) {
         if (!self || topic != self->cond_topic_ || !v.canConvert<QJsonObject>())
@@ -560,7 +638,7 @@ void MarketChartDialog::sync_conditions() {
     paint_conditions();
 }
 
-void MarketChartDialog::paint_conditions() {
+void MarketChartView::paint_conditions() {
     namespace cnd = services::conditions;
     const QJsonObject& c = cond_data_;
     if (c.isEmpty()) {
@@ -603,7 +681,7 @@ void MarketChartDialog::paint_conditions() {
     cond_->show();
 }
 
-void MarketChartDialog::load() {
+void MarketChartView::load() {
     const auto& def = period_def(prefs().period);
     canvas_->set_intraday(def.intraday);
     const int seq = ++request_seq_;
@@ -612,7 +690,7 @@ void MarketChartDialog::load() {
     last_->clear();
     change_->clear();
     readout_->clear();
-    QPointer<MarketChartDialog> self = this;
+    QPointer<MarketChartView> self = this;
     const QString sym = symbol_;
     if (services::ConditionService::is_derived(sym)) {
         // FRED / Treasury / correlation: one daily value per session, drawn
@@ -673,7 +751,7 @@ void MarketChartDialog::load() {
         });
 }
 
-void MarketChartDialog::apply(const QVector<services::equity::Candle>& candles) {
+void MarketChartView::apply(const QVector<services::equity::Candle>& candles) {
     overlay_->hide_loading();
     if (candles.isEmpty()) {
         canvas_->clear();
@@ -686,7 +764,7 @@ void MarketChartDialog::apply(const QVector<services::equity::Candle>& candles) 
     update_header(-1);
 }
 
-void MarketChartDialog::update_header(int hover_idx) {
+void MarketChartView::update_header(int hover_idx) {
     const auto& c = canvas_->candles();
     if (c.isEmpty())
         return;
@@ -737,8 +815,8 @@ void MarketChartDialog::update_header(int hover_idx) {
     readout_->setText(text);
 }
 
-void MarketChartDialog::keyPressEvent(QKeyEvent* e) {
-    // Number keys step through the periods; Esc closes (QDialog's default).
+void MarketChartView::keyPressEvent(QKeyEvent* e) {
+    // Number keys step through the periods.
     const int n = e->key() - Qt::Key_1;
     if (n >= 0 && n < static_cast<int>(std::size(kPeriods))) {
         prefs().period = QString::fromLatin1(kPeriods[n].label);
@@ -746,7 +824,7 @@ void MarketChartDialog::keyPressEvent(QKeyEvent* e) {
         load();
         return;
     }
-    QDialog::keyPressEvent(e);
+    QWidget::keyPressEvent(e);
 }
 
 } // namespace finterm::screens

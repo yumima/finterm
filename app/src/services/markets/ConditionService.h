@@ -1,6 +1,6 @@
 #pragma once
 // ConditionService — the ONE owner of every market-condition reading the app
-// draws (Markets ▸ CONDITIONS, the dashboard's condition widgets, the chart
+// draws (Markets ▸ OVERVIEW, the dashboard's condition widgets, the chart
 // dialog's condition strip). A DataHub producer, so the hub's scheduler keeps
 // each topic fresh while anything subscribes to it and stops when nothing does.
 //

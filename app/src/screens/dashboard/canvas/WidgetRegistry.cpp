@@ -12,6 +12,7 @@
 #include "screens/dashboard/widgets/IndicesWidget.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 #include "screens/dashboard/widgets/MarginUsageWidget.h"
+#include "screens/dashboard/widgets/MarketChartWidget.h"
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
 #include "screens/dashboard/widgets/MarketSentimentWidget.h"
 #include "screens/dashboard/widgets/NewsCategoryWidget.h"
@@ -76,7 +77,15 @@ WidgetRegistry::WidgetRegistry() {
     register_widget({"sentiment", "Market Sentiment", "Markets", "Fear & greed, bull/bear indicators", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::MarketSentimentWidget; }});
 
-    // ── Market Conditions (also Markets ▸ CONDITIONS) ──────────────────────
+    register_widget({"quote_list", "Quote List", "Markets",
+                     "Your own list of symbols — live quotes, columns you choose (incl. 200-day, percentile, trend); "
+                     "+ ADD / − in place",
+                     3, 4, 2, 1, [](const QJsonObject& cfg) { return widgets::create_condition_widget("quote_list", cfg); }});
+    register_widget({"market_chart", "Chart (linked)", "Markets",
+                     "A price chart that follows the rows you click on the same canvas — periods, MAs, condition strip",
+                     6, 8, 3, 2, [](const QJsonObject& cfg) { return new widgets::MarketChartWidget(cfg); }});
+
+    // ── Market Conditions (also on Markets ▸ OVERVIEW) ──────────────────────
     // Indicators beyond the price: trend, 200-day, percentile, curve,
     // correlation, macro and prediction-market odds. Every list is editable
     // in place (+ ADD / −).

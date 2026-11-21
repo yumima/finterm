@@ -1,18 +1,16 @@
 #pragma once
-#include "screens/markets/MarketPanel.h"
-#include "screens/markets/MarketPanelConfig.h"
+#include "screens/IStatefulScreen.h"
 
-#include <QDateTime>
 #include <QHideEvent>
 #include <QLabel>
+#include <QPointer>
 #include <QShowEvent>
-#include <QSplitter>
 #include <QStackedWidget>
 #include <QTimer>
+#include <QVariantMap>
 #include <QVector>
 #include <QWidget>
 
-class QHBoxLayout;
 class QPushButton;
 
 namespace finterm::screens {
@@ -20,100 +18,75 @@ namespace finterm::screens {
 namespace world {
 class WorldMarketsView;
 }
-class ConditionsView;
+class MarketsOverview;
+class FuturesScreen;
 
-/// Markets terminal. Three modes behind a PANELS / WORLD / CONDITIONS toggle
-/// (the last choice is remembered):
-///  - PANELS (default): the user-configurable workstation of quote panels in a
-///    QSplitter layout; splitter state is persisted to SettingsRepository.
-///  - WORLD: a fixed one-screen overview of global markets
-///    (world::WorldMarketsView).
-///  - CONDITIONS: the market-condition widgets (ConditionsView) — the same
-///    classes the dashboard's "Market Conditions" widgets are.
-class MarketsScreen : public QWidget {
+/// MARKETS — one tab for every market, three pages (the last one used is
+/// remembered):
+///  - OVERVIEW: a configurable canvas (the dashboard's grid and widgets) of
+///    quote lists, market-condition widgets and a chart linked to them —
+///    MarketsOverview.
+///  - FUTURES: one futures market at a time — board, chart, forward curve,
+///    contract months, spreads, positioning, ticket (FuturesScreen, which was
+///    its own tab; every route to "futures" now lands here).
+///  - WORLD: the fixed one-screen overview of global markets.
+class MarketsScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
     explicit MarketsScreen(QWidget* parent = nullptr);
+
+    enum class Page { Overview, Futures, World };
+    void set_page(Page p, bool persist = true);
+    /// MARKETS ▸ FUTURES on `root` ("ES", "CL" …; empty = as left).
+    void open_futures(const QString& root);
+    /// From anywhere (a chart's CURVE ▸, the old "futures" route): bring
+    /// MARKETS forward on FUTURES — the open screen, or the one about to be
+    /// built for the request.
+    static void request_futures(const QString& root = {});
+    /// request_futures() without the navigation (the router navigates itself).
+    static void prepare_futures(const QString& root = {});
+
+    void restore_state(const QVariantMap& state) override;
+    QVariantMap save_state() const override;
+    QString state_key() const override { return QStringLiteral("markets"); }
+    int state_version() const override { return 2; } // 2: pages + the futures page's own state
 
   protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
 
   private:
-    // Layout
-    void build_splitter_layout();
-    void rebuild_splitter_layout();
-    void wire_panel(MarketPanel* p);
-    void save_splitter_state();
-    void restore_splitter_state();
-    int column_with_fewest_panels() const;
-
-    // Panel management
-    void open_editor(const QString& panel_id);
-    void open_editor_for_new_panel(int col_index);
-    void on_panel_delete(const QString& panel_id);
-    void on_panel_config_changed(const MarketPanelConfig& cfg);
-
-    // Header bar (single 36px strip)
     QWidget* build_header_bar();
+    void ensure_futures();
     void update_session_status();
     void update_clocks();
+    void update_page_buttons();
     void refresh_theme();
-
-    // Refresh
     void refresh_all();
-    void refresh_panels();
 
-    // Mode
-    enum class Mode { World, Panels, Conditions };
-    void ensure_conditions();
-    void style_add_button();
-    void set_mode(Mode m, bool persist);
-    void update_mode_buttons();
-
-    // Data
-    QVector<MarketPanelConfig> configs_;
-    QVector<MarketPanel*> panels_;
-
-    // Pages
     QStackedWidget* stack_ = nullptr;
+    MarketsOverview* overview_ = nullptr;
+    FuturesScreen* futures_ = nullptr; ///< built on first use
     world::WorldMarketsView* world_ = nullptr;
-    QWidget* panels_page_ = nullptr;
-    Mode mode_ = Mode::Panels;
-    QPushButton* world_btn_ = nullptr;
-    QPushButton* panels_btn_ = nullptr;
-    QPushButton* conditions_btn_ = nullptr;
-    ConditionsView* conditions_ = nullptr;
-    QHBoxLayout* cond_add_slot_ = nullptr;
-    QVector<QWidget*> panel_only_controls_; // hidden in WORLD mode
+    QWidget* futures_slot_ = nullptr;   ///< placeholder page until FUTURES is built
+    Page page_ = Page::Overview;
+    QVariantMap pending_futures_state_; ///< restored state for a FUTURES page not built yet
+    static QPointer<MarketsScreen> live_; ///< the open MARKETS screen (one at a time)
+    static bool pending_request_;
+    static QString pending_root_;
 
-    // Splitter tree
-    QSplitter* h_splitter_ = nullptr;   // horizontal — columns
-    QVector<QSplitter*> col_splitters_; // vertical — panels within each column
-
-    // Header bar widgets
     QWidget* header_bar_ = nullptr;
+    QPushButton* overview_btn_ = nullptr;
+    QPushButton* futures_btn_ = nullptr;
+    QPushButton* world_btn_ = nullptr;
+    QVector<QWidget*> overview_only_; ///< + WIDGET, RESET
+    QWidget* clocks_box_ = nullptr;   ///< hidden on WORLD (it has its own sessions strip)
     QLabel* session_label_ = nullptr;
     QLabel* ny_label_ = nullptr;
     QLabel* lon_label_ = nullptr;
     QLabel* tok_label_ = nullptr;
-    QLabel* status_label_ = nullptr;
-    QLabel* last_upd_label_ = nullptr;
-
-    // Timers
-    QTimer* auto_refresh_timer_ = nullptr;
     QTimer* session_timer_ = nullptr;
     QTimer* clock_timer_ = nullptr;
-    QTimer* refresh_timeout_ = nullptr;
-
-    // State
-    bool refresh_in_progress_ = false;
-    bool auto_update_ = true;
-    int update_interval_ms_ = 600000;
-    int pending_refreshes_ = 0;
-
-    static constexpr int kRefreshTimeoutMs = 10000;
-    static constexpr int kNumColumns = 3;
 };
 
 } // namespace finterm::screens

@@ -1078,17 +1078,16 @@ set(SCREEN_SOURCES
     src/services/report_builder/ReportBuilderService.cpp
     src/services/report_builder/ReportBuilderTemplates.cpp
     src/screens/markets/MarketsScreen.cpp
-    src/screens/markets/MarketPanel.cpp
     src/screens/markets/MarketPanelStore.cpp
-    src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/world/WorldMarketsView.cpp
-    src/screens/markets/conditions/ConditionsView.cpp
     src/screens/dashboard/widgets/ConditionAddDialog.cpp
     src/screens/dashboard/widgets/ConditionTableWidget.cpp
     src/screens/dashboard/widgets/YieldCurveWidget.cpp
     src/screens/dashboard/widgets/CorrelationWidget.cpp
     src/screens/dashboard/widgets/MacroOddsWidget.cpp
+    src/screens/dashboard/widgets/MarketChartWidget.cpp
+    src/screens/markets/overview/MarketsOverview.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
@@ -1616,18 +1615,17 @@ set_source_files_properties(
     src/screens/ma_analytics/MAAnalyticsScreen.cpp
     src/screens/ma_analytics/MAModulePanel.cpp
     src/screens/maritime/MaritimeScreen.cpp
-    src/screens/markets/MarketPanel.cpp
     src/screens/markets/MarketPanelStore.cpp
-    src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/MarketsScreen.cpp
     src/screens/markets/world/WorldMarketsView.cpp
-    src/screens/markets/conditions/ConditionsView.cpp
     src/screens/dashboard/widgets/ConditionAddDialog.cpp
     src/screens/dashboard/widgets/ConditionTableWidget.cpp
     src/screens/dashboard/widgets/YieldCurveWidget.cpp
     src/screens/dashboard/widgets/CorrelationWidget.cpp
     src/screens/dashboard/widgets/MacroOddsWidget.cpp
+    src/screens/dashboard/widgets/MarketChartWidget.cpp
+    src/screens/markets/overview/MarketsOverview.cpp
     src/screens/mcp_servers/McpServersScreen.cpp
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsDetailPanel.cpp

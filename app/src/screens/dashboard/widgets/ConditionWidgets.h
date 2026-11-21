@@ -1,7 +1,7 @@
 #pragma once
 // ConditionWidgets.h — the market-condition widgets, built ONE way for both
 // places they appear: the dashboard (WidgetRegistry, category "Market
-// Conditions") and Markets ▸ CONDITIONS. Default lists are the ones asked for
+// Conditions") and Markets ▸ OVERVIEW. Default lists are the ones asked for
 // in the "Dashboard" design doc; every list is user-editable in place.
 //
 // What the doc asked for that has no free, real source is NOT shown (and the
@@ -33,7 +33,7 @@ struct ConditionWidgetDef {
     int w = 4, h = 5;
 };
 
-/// Every condition widget, in the CONDITIONS page's reading order.
+/// Every condition widget, in reading order.
 inline const QVector<ConditionWidgetDef>& condition_widget_defs() {
     static const QVector<ConditionWidgetDef> k = {
         {"cond_futures", "Futures Majors", "Front-month futures — live price, trend, 200-day and 1-year position", 4, 6},
@@ -75,6 +75,20 @@ inline QVector<ConditionRowDef> sectors_with_spx() {
 /// default list). nullptr for an unknown id.
 inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonObject& cfg, QWidget* parent = nullptr) {
     using M = ConditionTableWidget::Mode;
+    if (type_id == QLatin1String("quote_list")) {
+        // Markets ▸ OVERVIEW's list (what the PANELS tiles were): live quotes,
+        // columns chosen per list (right-click ▸ Columns), condition columns too.
+        auto* w = new ConditionTableWidget(QStringLiteral("QUOTE LIST"), M::Market,
+                                           {{"^GSPC", "S&P 500"},
+                                            {"^NDX", "Nasdaq 100"},
+                                            {"^DJI", "Dow Jones"},
+                                            {"^RUT", "Russell 2000"},
+                                            {"^VIX", "VIX"}},
+                                           {}, ui::colors::AMBER(), parent);
+        w->set_default_columns({"last", "chg", "pct", "high", "low"});
+        w->apply_config(cfg);
+        return w;
+    }
     if (type_id == QLatin1String("cond_futures")) {
         auto* w = new ConditionTableWidget(QStringLiteral("FUTURES MAJORS"), M::Market, condition_detail::futures_majors(),
                                            cfg, ui::colors::AMBER(), parent);

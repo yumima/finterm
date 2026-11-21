@@ -1080,7 +1080,6 @@ void MainWindow::setup_dock_screens() {
     // the floating bubble, and the FinGPT engines moved into Equity Research's
     // AI tab. A saved layout naming either resolves to the nearest live home
     // rather than a dead slot.
-    dock_router_->register_factory("futures", []() { return new screens::FuturesScreen; });
     dock_router_->register_factory("ai_chat", []() { return new screens::AgentConfigScreen; });
     dock_router_->register_factory("fingpt", []() { return new screens::EquityResearchScreen; });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });

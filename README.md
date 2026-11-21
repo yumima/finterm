@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`37f3e8797`](https://github.com/yumima/finterm/commit/37f3e8797) markets: market-condition widgets — trend, 200-day, percentile, curve, credit, macro, correlation, odds
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

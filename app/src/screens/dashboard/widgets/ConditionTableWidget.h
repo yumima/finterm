@@ -1,26 +1,25 @@
 #pragma once
-// ConditionTableWidget — a user-editable list of instruments with their
-// market-condition readings. The dashboard's condition widgets and the
-// Markets screen's CONDITIONS page are instances of this one class, so a
-// symbol reads the same wherever it is listed.
+// ConditionTableWidget — a user-edited list of instruments: the Quote List of
+// Markets ▸ OVERVIEW (what the old PANELS tiles were), the market-condition
+// lists, and the Macro list. One class, so a symbol reads the same wherever it
+// is listed and every list is edited the same way.
 //
-//   MARKET mode   NAME · LAST · CHG% · vs200D · 1Y PCTL · TREND · −
-//                 LAST / CHG% are the app's live quote (market:quote:<sym>);
-//                 the rest are ConditionService readings of the symbol's daily
-//                 bars (cond:stats:<sym>). A FRED row ("FRED:…") shows the
-//                 latest observation, its change in bp and its 1-year rank.
-//   MACRO mode    NAME · LATEST · CHG · AS OF · 10Y PCTL · −
-//                 FRED rows only (cond:fred:<key>).
+//   MARKET mode   columns chosen from a catalogue (right-click ▸ Columns):
+//                 NAME LAST CHG CHG% HIGH LOW OPEN PREV VOL — the app's live
+//                 quote (market:quote:<sym>) — and vs200D 1Y-PCTL 5Y-PCTL RSI
+//                 TREND — ConditionService readings (cond:stats:<sym>; fetched
+//                 only while such a column is shown). A FRED row ("FRED:…")
+//                 shows its latest value, its move in bp and its 1-year rank.
+//   MACRO mode    NAME · LATEST · CHG · AS OF · 10Y PCTL — FRED rows only.
 //
-// Editing, the way the Markets panels and quote strips are edited but in
-// place: the last row "+ ADD" opens ConditionAddDialog; the "−" at the end of
-// a row removes it; right-click moves a row up / down or removes it. Every
-// edit emits config_changed (the dashboard persists it; the CONDITIONS page
-// persists its own). Config: {"rows": [{"symbol": "...", "label": "..."}]}.
+// Editing in place: the last row "+ ADD" (ConditionAddDialog), the "−" ending
+// each row, right-click ▸ move / remove / columns / rename / reset. Every edit
+// emits config_changed (the canvas persists it).
+// Config: {"title"?, "rows": [{"symbol", "label"}], "columns"?: [key, …]}.
 //
-// Cache first: on show every row is painted from the last answer known
-// (ConditionService::last_known, the last quote) and dimmed until this
-// session's answer replaces it. Click a row: its chart (MarketChartDialog).
+// Cache first: rows paint from the last known quote and reading at once,
+// readings dimmed until this session's answer lands. Click a row: its chart
+// (the canvas's linked chart when there is one — MarketChartDialog::show_for).
 
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "services/markets/MarketDataService.h"
@@ -29,6 +28,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QSet>
+#include <QStringList>
 #include <QVector>
 
 #include <functional>
@@ -58,6 +58,12 @@ class ConditionTableWidget : public BaseWidget {
     QJsonObject config() const override;
     void apply_config(const QJsonObject& cfg) override;
 
+    /// The columns a fresh tile shows (MARKET mode; keys of column_catalogue()).
+    void set_default_columns(const QStringList& keys);
+    /// Every MARKET-mode column: key → header.
+    static const QVector<QPair<QString, QString>>& column_catalogue();
+    static const QStringList& condition_columns();
+
     /// A line under the table computed from live quotes (e.g. the VIX term
     /// structure). `extra` are quote symbols it needs beyond the rows.
     using FooterFn = std::function<QString(const QHash<QString, services::QuoteData>&)>;
@@ -71,22 +77,32 @@ class ConditionTableWidget : public BaseWidget {
     void on_theme_changed() override;
 
   private:
+    void rebuild_headers();
     void subscribe_all();
     void unsubscribe_all();
+    void resubscribe();
     void render();
     void on_cell_clicked(int row, int col);
     void on_context_menu(const QPoint& pos);
     void add_row();
     void remove_row(int i);
     void move_row(int i, int delta);
+    void rename();
     void edited();
+    bool wants_conditions() const;
     QString topic_for(const QString& sym) const;
     QString row_label(const ConditionRowDef& r) const;
     void restyle_labels();
+    QStringList columns() const; ///< the shown columns, "−" excluded
 
     Mode mode_;
+    QString default_title_;
+    QString title_; ///< user's title; empty = the default
     QVector<ConditionRowDef> defaults_;
     QVector<ConditionRowDef> rows_;
+    QStringList default_cols_;
+    QStringList cols_; ///< MARKET mode: user's columns; empty = the defaults
+    QStringList shown_headers_;
     ui::DataTable* table_ = nullptr;
     QLabel* footer_ = nullptr;
     QLabel* note_ = nullptr;
@@ -97,6 +113,7 @@ class ConditionTableWidget : public BaseWidget {
     QHash<QString, QJsonObject> cond_;             ///< condition payload by topic
     QSet<QString> cond_fresh_;                     ///< topics answered this session
     QHash<QString, QString> cond_error_;           ///< last refresh error by topic
+    QSet<QString> topics_;                         ///< condition topics subscribed now
     bool subscribed_ = false;
     QTimer* stale_timer_ = nullptr;
     ui::RenderCoalescer render_{this, [this]() { render(); }};

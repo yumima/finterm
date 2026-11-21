@@ -1,6 +1,6 @@
 #pragma once
 // MarketConditions.h — the arithmetic behind the market-condition readings
-// (Markets ▸ CONDITIONS, the dashboard's condition widgets and the chart
+// (Markets ▸ OVERVIEW, the dashboard's condition widgets and the chart
 // dialog's condition strip). Pure: Qt Core only, unit-tested in
 // tests/services/test_market_conditions.cpp.
 //

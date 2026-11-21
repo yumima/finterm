@@ -3,6 +3,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "screens/dashboard/canvas/AddWidgetDialog.h"
+#include "screens/dashboard/canvas/LayoutCodec.h"
 #include "screens/dashboard/canvas/DashboardTemplates.h"
 #include "screens/dashboard/canvas/TemplatePicker.h"
 #include "screens/dashboard/canvas/WidgetRegistry.h"
@@ -354,83 +355,20 @@ bool DashboardScreen::eventFilter(QObject* obj, QEvent* event) {
 
 // ── Save / Restore layout via SettingsRepository ──────────────────────────────
 
-// Header for the v1 layout blob that also persists per-widget config. The
-// magic distinguishes it from the legacy (config-less, header-less) format so
-// old saved layouts still load.
-static constexpr quint32 kLayoutMagic = 0xDA58B0A7; // "dashboard" sentinel
-static constexpr qint32 kLayoutVersion = 1;
-
 void DashboardScreen::save_layout() {
     save_timer_->stop();
-
-    GridLayout layout = canvas_->current_layout();
-
-    QByteArray buf;
-    QDataStream stream(&buf, QIODevice::WriteOnly);
-    stream << kLayoutMagic << kLayoutVersion;
-    stream << layout.cols << layout.row_h << layout.margin;
-    stream << static_cast<int>(layout.items.size());
-    for (const auto& item : layout.items) {
-        stream << item.id << item.instance_id;
-        stream << item.cell.x << item.cell.y << item.cell.w << item.cell.h;
-        stream << item.cell.min_w << item.cell.min_h;
-        stream << item.config; // per-instance gear config (broker/account/symbol/…)
-    }
-
-    finterm::SettingsRepository::instance().set("dashboard_canvas_layout", buf.toBase64(), "dashboard");
+    finterm::SettingsRepository::instance().set("dashboard_canvas_layout",
+                                                layout_codec::encode(canvas_->current_layout()), "dashboard");
 }
 
 void DashboardScreen::restore_layout() {
     auto result = finterm::SettingsRepository::instance().get("dashboard_canvas_layout");
-
-    if (result.is_err() || result.value().isEmpty()) {
+    const auto layout = result.is_ok() ? layout_codec::decode(result.value()) : std::nullopt;
+    if (!layout) {
         build_default_layout();
         return;
     }
-
-    QByteArray data = QByteArray::fromBase64(result.value().toUtf8());
-    QDataStream stream(&data, QIODevice::ReadOnly);
-
-    // v1 blobs start with a magic + version and persist per-widget config.
-    // Legacy blobs have no header (the first int was layout.cols) and no
-    // config — detect by the magic and rewind if it's the old format.
-    quint32 magic = 0;
-    stream >> magic;
-    bool has_config = (magic == kLayoutMagic);
-    if (has_config) {
-        qint32 version = 0;
-        stream >> version; // reserved for future migrations
-    } else {
-        stream.device()->seek(0); // old format — re-read from the start
-    }
-
-    GridLayout layout;
-    int count = 0;
-    stream >> layout.cols >> layout.row_h >> layout.margin >> count;
-
-    if (count <= 0 || count > 100) {
-        build_default_layout();
-        return;
-    }
-
-    for (int i = 0; i < count; ++i) {
-        GridItem item;
-        stream >> item.id >> item.instance_id;
-        stream >> item.cell.x >> item.cell.y >> item.cell.w >> item.cell.h;
-        stream >> item.cell.min_w >> item.cell.min_h;
-        if (has_config)
-            stream >> item.config;
-        layout.items.append(item);
-    }
-
-    // A truncated/corrupt blob would leave half-read items at default (0,0)
-    // positions — fall back to the template instead of a broken layout.
-    if (stream.status() != QDataStream::Ok) {
-        build_default_layout();
-        return;
-    }
-
-    canvas_->load_layout(layout);
+    canvas_->load_layout(*layout);
 }
 
 void DashboardScreen::build_default_layout() {

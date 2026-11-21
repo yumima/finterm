@@ -1,5 +1,7 @@
 #include "app/DockScreenRouter.h"
 
+#include "screens/markets/MarketsScreen.h"
+
 #include "auth/InactivityGuard.h"
 #include "core/components/PopularityTracker.h"
 #include "core/logging/Logger.h"
@@ -65,7 +67,6 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"pre_ipo", "PRIVATE MARKET"},
         {"ownership", "Ownership"},
         {"screener", "Screener"},
-        {"futures", "Futures"},
         {"ma_analytics", "M&A Analytics"},
         {"surface_analytics", "Surface Analytics"},
         {"quantlib", "QuantLib"},
@@ -260,6 +261,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // for keyboard/focus safety; this check catches programmatic callers.
     if (auth::InactivityGuard::instance().is_terminal_locked()) {
         LOG_DEBUG("DockRouter", QString("navigate('%1') suppressed — terminal locked").arg(id));
+        return;
+    }
+
+    // FUTURES is a page of MARKETS now: every route to the old tab (menu,
+    // command bar, F-keys, MCP, perspectives) lands on MARKETS ▸ FUTURES.
+    if (id == QLatin1String("futures")) {
+        screens::MarketsScreen::prepare_futures();
+        navigate(QStringLiteral("markets"), exclusive);
         return;
     }
 
@@ -579,6 +588,11 @@ void DockScreenRouter::raise(const QString& id) {
 }
 
 void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side, ads::CDockAreaWidget* anchor) {
+    if (id == QLatin1String("futures")) { // a page of MARKETS now (see navigate)
+        screens::MarketsScreen::prepare_futures();
+        split_alongside(QStringLiteral("markets"), side, anchor);
+        return;
+    }
     if (!factories_.contains(id) && !screens_.contains(id)) {
         LOG_WARN("DockRouter", "split_alongside: unknown screen: " + id);
         return;

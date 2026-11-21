@@ -846,6 +846,18 @@ void FuturesScreen::restore_state(const QVariantMap& state) {
     }
 }
 
+void FuturesScreen::open_market(const QString& root) {
+    const auto* s = find_contract(root);
+    if (!s)
+        return;
+    // Stay on the board being read when it lists the market; else its own group.
+    bool listed = false;
+    for (const auto* c : contracts_in(group_))
+        listed = listed || c->root == s->root;
+    root_ = s->root; // set_group keeps a listed root
+    set_group(listed && !group_.isEmpty() ? group_ : s->group);
+}
+
 QVariantMap FuturesScreen::save_state() const {
     return {{QStringLiteral("root"), root_}, {QStringLiteral("group"), group_}, {QStringLiteral("period"), period_}};
 }

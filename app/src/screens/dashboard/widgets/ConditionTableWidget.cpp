@@ -16,10 +16,13 @@
 #include <QHeaderView>
 #include <QJsonArray>
 #include <QLabel>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QMenu>
 #include <QPointer>
 #include <QTimer>
 
+#include <algorithm>
 #include <cmath>
 
 namespace finterm::screens::widgets {
@@ -129,33 +132,57 @@ QString regime_color(cnd::Regime r) {
 
 } // namespace
 
+const QVector<QPair<QString, QString>>& ConditionTableWidget::column_catalogue() {
+    static const QVector<QPair<QString, QString>> k = {
+        {"last", "LAST"},     {"chg", "CHG"},         {"pct", "CHG%"},        {"high", "HIGH"},
+        {"low", "LOW"},       {"open", "OPEN"},       {"prev", "PREV"},       {"vol", "VOL"},
+        {"bid", "BID"},       {"ask", "ASK"},
+        {"vs200", "vs200D"},  {"p1y", "1Y PCTL"},     {"p5y", "5Y PCTL"},     {"rsi", "RSI"},
+        {"trend", "TREND"},
+    };
+    return k;
+}
+
+const QStringList& ConditionTableWidget::condition_columns() {
+    static const QStringList k = {"vs200", "p1y", "p5y", "rsi", "trend"};
+    return k;
+}
+
+namespace {
+QString header_of(const QString& key) {
+    for (const auto& [k, h] : ConditionTableWidget::column_catalogue())
+        if (k == key)
+            return h;
+    return key.toUpper();
+}
+
+QString column_tip(const QString& key) {
+    if (key == QLatin1String("vs200"))
+        return QStringLiteral("The live price against its 200-day simple moving average (completed sessions + "
+                              "today's price).");
+    if (key == QLatin1String("p1y"))
+        return QStringLiteral("Where the live price ranks among the past year's daily closes (0 = lowest, 100 = "
+                              "highest). Amber at or beyond 10 / 90.");
+    if (key == QLatin1String("p5y"))
+        return QStringLiteral("Where the last daily close ranks among the past five years' closes. — when the "
+                              "history is shorter.");
+    if (key == QLatin1String("rsi"))
+        return QStringLiteral("RSI(14), Wilder, on daily closes. 70+ stretched up, 30− stretched down.");
+    if (key == QLatin1String("trend"))
+        return QStringLiteral("ADX(14) on daily bars: TREND ↑/↓ at 25 or above (direction from ±DI), RANGE below "
+                              "20 (mean-reverting conditions), MIXED between.");
+    if (key == QLatin1String("prev"))
+        return QStringLiteral("The close the change is measured against.");
+    return {};
+}
+} // namespace
+
 ConditionTableWidget::ConditionTableWidget(const QString& title, Mode mode, QVector<ConditionRowDef> defaults,
                                            const QJsonObject& cfg, const QString& accent, QWidget* parent)
-    : BaseWidget(title, parent, accent), mode_(mode), defaults_(std::move(defaults)) {
+    : BaseWidget(title, parent, accent), mode_(mode), default_title_(title), defaults_(std::move(defaults)),
+      default_cols_({"pct", "vs200", "p1y", "trend"}) {
     ConditionService::instance().ensure_registered_with_hub();
     table_ = new ui::DataTable;
-    if (mode_ == Mode::Market)
-        table_->set_headers({"NAME", "LAST", "CHG%", "vs200D", "1Y PCTL", "TREND", ""});
-    else
-        table_->set_headers({"NAME", "LATEST", "CHG", "AS OF", "10Y PCTL", ""});
-    auto* h = table_->horizontalHeader();
-    h->setStretchLastSection(false);
-    h->setSectionResizeMode(QHeaderView::ResizeToContents);
-    h->setSectionResizeMode(0, QHeaderView::Stretch);
-    if (auto* it = table_->horizontalHeaderItem(3))
-        it->setToolTip(mode_ == Mode::Market
-                           ? QStringLiteral("Last daily close against its 200-day simple moving average.")
-                           : QStringLiteral("The period the latest observation is for."));
-    if (auto* it = table_->horizontalHeaderItem(4))
-        it->setToolTip(mode_ == Mode::Market
-                           ? QStringLiteral("Where the last daily close ranks among the past year's closes (0 = "
-                                            "lowest, 100 = highest). Amber at or beyond 10 / 90.")
-                           : QStringLiteral("Where the latest value ranks among the past ten years' values. Amber "
-                                            "at or beyond 10 / 90; — when the series is shorter than ten years."));
-    if (mode_ == Mode::Market)
-        if (auto* it = table_->horizontalHeaderItem(5))
-            it->setToolTip(QStringLiteral("ADX(14) on daily bars: TREND ↑/↓ at 25 or above (direction from ±DI), "
-                                          "RANGE below 20 (mean-reverting conditions), MIXED between."));
     table_->viewport()->setCursor(Qt::PointingHandCursor);
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(table_, &QTableWidget::cellClicked, this, &ConditionTableWidget::on_cell_clicked);
@@ -176,15 +203,68 @@ ConditionTableWidget::ConditionTableWidget(const QString& title, Mode mode, QVec
     stale_timer_->setInterval(30'000); // a quote turning stale has no delivery of its own
     connect(stale_timer_, &QTimer::timeout, this, [this]() { render_.request(); });
     connect(this, &BaseWidget::refresh_requested, this, [this]() {
-        QStringList topics;
-        for (const auto& r : rows_) {
-            topics << topic_for(r.symbol);
+        QStringList topics(topics_.cbegin(), topics_.cend());
+        for (const auto& r : rows_)
             if (!cnd::is_fred_key(r.symbol))
                 topics << QStringLiteral("market:quote:") + r.symbol;
-        }
         datahub::DataHub::instance().request(topics, /*force=*/true);
     });
     apply_config(cfg);
+}
+
+QStringList ConditionTableWidget::columns() const {
+    if (mode_ == Mode::Macro)
+        return {"name", "last", "chg", "asof", "p10y"};
+    return QStringList{"name"} + (cols_.isEmpty() ? default_cols_ : cols_);
+}
+
+bool ConditionTableWidget::wants_conditions() const {
+    const QStringList c = columns();
+    for (const auto& k : condition_columns())
+        if (c.contains(k))
+            return true;
+    return false;
+}
+
+void ConditionTableWidget::set_default_columns(const QStringList& keys) {
+    default_cols_ = keys;
+    rebuild_headers();
+    resubscribe();
+}
+
+void ConditionTableWidget::rebuild_headers() {
+    QStringList headers;
+    for (const auto& k : columns()) {
+        if (k == QLatin1String("name"))
+            headers << QStringLiteral("NAME");
+        else if (mode_ == Mode::Macro)
+            headers << (k == QLatin1String("last")   ? QStringLiteral("LATEST")
+                        : k == QLatin1String("chg")  ? QStringLiteral("CHG")
+                        : k == QLatin1String("asof") ? QStringLiteral("AS OF")
+                                                     : QStringLiteral("10Y PCTL"));
+        else
+            headers << header_of(k);
+    }
+    headers << QString(); // the "−" column
+    if (headers == shown_headers_)
+        return;
+    shown_headers_ = headers;
+    table_->set_headers(headers);
+    auto* h = table_->horizontalHeader();
+    h->setStretchLastSection(false);
+    h->setSectionResizeMode(QHeaderView::ResizeToContents);
+    h->setSectionResizeMode(0, QHeaderView::Stretch);
+    const QStringList c = columns();
+    for (int i = 0; i < c.size(); ++i)
+        if (auto* it = table_->horizontalHeaderItem(i)) {
+            QString tip = column_tip(c[i]);
+            if (mode_ == Mode::Macro && c[i] == QLatin1String("asof"))
+                tip = QStringLiteral("The period the latest observation is for.");
+            if (mode_ == Mode::Macro && c[i] == QLatin1String("p10y"))
+                tip = QStringLiteral("Where the latest value ranks among the past ten years' values. Amber at or "
+                                     "beyond 10 / 90; — when the series is shorter than ten years.");
+            it->setToolTip(tip);
+        }
 }
 
 QString ConditionTableWidget::topic_for(const QString& sym) const {
@@ -204,7 +284,12 @@ QJsonObject ConditionTableWidget::config() const {
     QJsonArray arr;
     for (const auto& r : rows_)
         arr.append(QJsonObject{{"symbol", r.symbol}, {"label", r.label}});
-    return QJsonObject{{"rows", arr}};
+    QJsonObject o{{"rows", arr}};
+    if (!title_.isEmpty())
+        o["title"] = title_;
+    if (!cols_.isEmpty())
+        o["columns"] = QJsonArray::fromStringList(cols_);
+    return o;
 }
 
 void ConditionTableWidget::apply_config(const QJsonObject& cfg) {
@@ -217,12 +302,23 @@ void ConditionTableWidget::apply_config(const QJsonObject& cfg) {
                 rows.append({sym, o.value("label").toString()});
         }
     } else {
-        rows = defaults_; // a fresh tile: the list the doc asked for
+        rows = defaults_; // a fresh tile: its default list
     }
+    QStringList cols;
+    for (const auto& v : cfg.value(QLatin1String("columns")).toArray()) {
+        const QString k = v.toString();
+        if (!header_of(k).isEmpty() && std::any_of(column_catalogue().cbegin(), column_catalogue().cend(),
+                                                   [&k](const auto& c) { return c.first == k; }))
+            cols << k;
+    }
+    title_ = cfg.value(QLatin1String("title")).toString().trimmed();
+    set_title(title_.isEmpty() ? default_title_ : title_.toUpper());
     const bool was = subscribed_;
     if (was)
         unsubscribe_all();
     rows_ = rows;
+    cols_ = cols;
+    rebuild_headers();
     if (was)
         subscribe_all();
     render_.request();
@@ -231,10 +327,7 @@ void ConditionTableWidget::apply_config(const QJsonObject& cfg) {
 void ConditionTableWidget::set_footer(const QStringList& extra, FooterFn fn) {
     footer_syms_ = extra;
     footer_fn_ = std::move(fn);
-    if (subscribed_) {
-        unsubscribe_all();
-        subscribe_all();
-    }
+    resubscribe();
 }
 
 void ConditionTableWidget::set_note(const QString& note) {
@@ -267,6 +360,13 @@ void ConditionTableWidget::hideEvent(QHideEvent* e) {
     stale_timer_->stop();
 }
 
+void ConditionTableWidget::resubscribe() {
+    if (!subscribed_)
+        return;
+    unsubscribe_all();
+    subscribe_all();
+}
+
 void ConditionTableWidget::subscribe_all() {
     auto& hub = datahub::DataHub::instance();
     auto& svc = ConditionService::instance();
@@ -277,17 +377,22 @@ void ConditionTableWidget::subscribe_all() {
     for (const auto& s : footer_syms_)
         if (!quote_syms.contains(s))
             quote_syms << s;
+    // Readings only where a column shows them (a FRED row is its reading):
+    // a plain quote list never pulls five years of history per symbol.
+    const bool readings = wants_conditions();
+    topics_.clear();
+    for (const auto& r : rows_)
+        if (readings || cnd::is_fred_key(r.symbol))
+            topics_.insert(topic_for(r.symbol));
 
     // Cache first: whatever is known paints now; the hub's answers follow.
     services::seed_last_known_quotes(quote_syms, quotes_);
-    for (const auto& r : rows_) {
-        const QString t = topic_for(r.symbol);
+    for (const auto& t : std::as_const(topics_))
         if (!cond_.contains(t)) {
             const QJsonObject held = svc.last_known(t);
             if (!held.isEmpty())
                 cond_.insert(t, held);
         }
-    }
 
     QPointer<ConditionTableWidget> self = this;
     for (const auto& sym : quote_syms) {
@@ -298,8 +403,7 @@ void ConditionTableWidget::subscribe_all() {
             self->render_.request();
         });
     }
-    for (const auto& r : rows_) {
-        const QString t = topic_for(r.symbol);
+    for (const auto& t : std::as_const(topics_)) {
         hub.subscribe(this, t, [self, t](const QVariant& v) {
             if (!self || !v.canConvert<QJsonObject>())
                 return;
@@ -323,34 +427,32 @@ void ConditionTableWidget::subscribe_all() {
 void ConditionTableWidget::unsubscribe_all() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    for (const auto& r : rows_)
-        hub.unsubscribe_errors(this, topic_for(r.symbol));
+    for (const auto& t : std::as_const(topics_))
+        hub.unsubscribe_errors(this, t);
+    topics_.clear();
     subscribed_ = false;
 }
 
 void ConditionTableWidget::render() {
     if (!table_)
         return;
-    QVector<QStringList> rows;
-    rows.reserve(rows_.size() + 1);
-    const int ncols = mode_ == Mode::Market ? 7 : 6;
+    const QStringList cols = columns();
+    const int ncols = cols.size() + 1; // + the "−" column
     struct Paint {
-        QString c[7];
+        QVector<QString> color;
+        QVector<bool> reading; // a condition cell (dimmed while not fresh)
         QString tip;
         bool dim = false;
     };
+    QVector<QStringList> rows;
     QVector<Paint> paints;
+    rows.reserve(rows_.size() + 1);
     for (const auto& r : rows_) {
         const QString t = topic_for(r.symbol);
-        const QJsonObject c = cond_.value(t);
+        const QJsonObject c = topics_.contains(t) ? cond_.value(t) : QJsonObject();
         const bool fresh = cond_fresh_.contains(t);
-        const QString err = cond_error_.value(t);
-        QStringList cells(ncols);
-        Paint p;
-        cells[0] = row_label(r);
-        cells[ncols - 1] = QString::fromUtf8(kRemoveText);
-        p.c[0] = ui::colors::TEXT_PRIMARY();
-        p.c[ncols - 1] = ui::colors::TEXT_TERTIARY();
+        const QString err = topics_.contains(t) ? cond_error_.value(t) : QString();
+        QHash<QString, QPair<QString, QString>> cell; // key → (text, colour)
         QStringList tip{QStringLiteral("<b>%1</b> <span style='color:%2'>%3</span>")
                             .arg(row_label(r).toHtmlEscaped(), ui::colors::TEXT_TERTIARY(), r.symbol.toHtmlEscaped())};
 
@@ -360,27 +462,23 @@ void ConditionTableWidget::render() {
             if (mode_ == Mode::Market) {
                 // A FRED row here is a spread or rate in percent: its move is
                 // shown in bp, uncoloured (a widening spread is not "up = good").
-                cells[1] = num(ls.last, 2);
-                cells[2] = signed_num(ls.change() * 100.0, std::abs(ls.change() * 100.0) < 10 ? 1 : 0,
-                                      QStringLiteral("bp"));
-                cells[3] = dash();
+                const QString mv = signed_num(ls.change() * 100.0, std::abs(ls.change() * 100.0) < 10 ? 1 : 0,
+                                              QStringLiteral("bp"));
                 const double p1 = trailing_rank(pts, 1);
-                cells[4] = std::isfinite(p1) ? QString::number(std::lround(p1)) : dash();
-                cells[5] = dash();
-                p.c[1] = ui::colors::WHITE();
-                p.c[2] = ui::colors::TEXT_SECONDARY();
-                p.c[4] = pctile_color(p1);
+                cell["last"] = {num(ls.last, 2), ui::colors::WHITE()};
+                cell["chg"] = {mv, ui::colors::TEXT_SECONDARY()};
+                cell["pct"] = {mv, ui::colors::TEXT_SECONDARY()};
+                cell["prev"] = {num(ls.prev, 2), ui::colors::TEXT_SECONDARY()};
+                cell["p1y"] = {std::isfinite(p1) ? QString::number(std::lround(p1)) : dash(), pctile_color(p1)};
             } else {
-                cells[1] = num(ls.last, 2) + (r.symbol.toUpper().endsWith(QLatin1String("@YOY")) && ls.valid()
-                                                  ? QStringLiteral("%")
-                                                  : QString());
-                cells[2] = signed_num(ls.change(), 2);
-                cells[3] = period_text(ls.as_of, ls.prev_date);
-                cells[4] = std::isfinite(ls.pctile_10y) ? QString::number(std::lround(ls.pctile_10y)) : dash();
-                p.c[1] = ui::colors::WHITE();
-                p.c[2] = ui::colors::TEXT_SECONDARY();
-                p.c[3] = ui::colors::TEXT_SECONDARY();
-                p.c[4] = pctile_color(ls.pctile_10y);
+                cell["last"] = {num(ls.last, 2) + (r.symbol.toUpper().endsWith(QLatin1String("@YOY")) && ls.valid()
+                                                       ? QStringLiteral("%")
+                                                       : QString()),
+                                ui::colors::WHITE()};
+                cell["chg"] = {signed_num(ls.change(), 2), ui::colors::TEXT_SECONDARY()};
+                cell["asof"] = {period_text(ls.as_of, ls.prev_date), ui::colors::TEXT_SECONDARY()};
+                cell["p10y"] = {std::isfinite(ls.pctile_10y) ? QString::number(std::lround(ls.pctile_10y)) : dash(),
+                                pctile_color(ls.pctile_10y)};
             }
             if (ls.valid())
                 tip << QStringLiteral("Latest %1 for %2 · previous %3 (%4)")
@@ -394,71 +492,108 @@ void ConditionTableWidget::render() {
             const auto qit = quotes_.constFind(r.symbol);
             const bool has_q = qit != quotes_.constEnd() && std::isfinite(qit->price) && qit->price > 0;
             const bool q_stale = has_q && services::last_known_is_stale(r.symbol);
-            cells[1] = has_q ? num(qit->price, price_dp(qit->price)) : dash();
-            cells[2] = has_q ? ui::formatting::format_percent(qit->change_pct, 2, true) : dash();
-            p.c[1] = q_stale ? ui::colors::TEXT_SECONDARY() : ui::colors::WHITE();
-            p.c[2] = q_stale || !has_q ? ui::colors::TEXT_SECONDARY() : ui::change_color(qit->change_pct);
-            // At the live price against completed sessions (live_reading) —
-            // the chart's condition strip computes the very same.
-            QVector<cnd::DatedValue> closes;
-            for (const auto& v : c.value("closes").toArray()) {
-                const QJsonArray a = v.toArray();
-                const QDate d = QDate::fromString(a.at(0).toString(), Qt::ISODate);
-                if (d.isValid() && a.at(1).isDouble())
-                    closes.append({d, a.at(1).toDouble()});
-            }
-            const auto lr = cnd::live_reading(closes, has_q && !q_stale ? qit->price : cnd::kNaN,
-                                              core::bartime::market_today_et());
-            const double vs = lr.vs_sma200_pct, p1 = lr.pctile_1y;
-            const auto regime = cnd::regime_from_key(c.value("regime").toString());
-            cells[3] = signed_num(vs, 1, QStringLiteral("%"));
-            cells[4] = std::isfinite(p1) ? QString::number(std::lround(p1)) : dash();
-            cells[5] = cnd::regime_label(regime);
-            p.c[3] = std::isfinite(vs) ? ui::change_color(vs) : ui::colors::TEXT_TERTIARY();
-            p.c[4] = pctile_color(p1);
-            p.c[5] = regime_color(regime);
+            const QString pc = q_stale ? ui::colors::TEXT_SECONDARY() : ui::colors::WHITE();
+            const QString cc = q_stale || !has_q ? ui::colors::TEXT_SECONDARY() : ui::change_color(qit->change_pct);
+            const int dp = has_q ? price_dp(qit->price) : 2;
+            auto price = [&](double v) { return has_q && std::isfinite(v) && v > 0 ? num(v, dp) : dash(); };
+            cell["last"] = {price(has_q ? qit->price : cnd::kNaN), pc};
+            cell["chg"] = {has_q ? signed_num(qit->change, dp) : dash(), cc};
+            cell["pct"] = {has_q ? ui::formatting::format_percent(qit->change_pct, 2, true) : dash(), cc};
+            cell["high"] = {price(has_q ? qit->high : cnd::kNaN), ui::colors::TEXT_SECONDARY()};
+            cell["low"] = {price(has_q ? qit->low : cnd::kNaN), ui::colors::TEXT_SECONDARY()};
+            cell["open"] = {price(has_q ? qit->open : cnd::kNaN), ui::colors::TEXT_SECONDARY()};
+            cell["prev"] = {price(has_q ? qit->prev_close : cnd::kNaN), ui::colors::TEXT_SECONDARY()};
+            cell["vol"] = {has_q && std::isfinite(qit->volume) && qit->volume > 0
+                               ? ui::formatting::format_compact_volume(qit->volume)
+                               : dash(),
+                           ui::colors::TEXT_SECONDARY()};
+            // The feed reports no book for many symbols (0 = none, never a price).
+            cell["bid"] = {has_q && qit->bid > 0 ? num(qit->bid, dp) : dash(), ui::colors::TEXT_SECONDARY()};
+            cell["ask"] = {has_q && qit->ask > 0 ? num(qit->ask, dp) : dash(), ui::colors::TEXT_SECONDARY()};
             if (q_stale)
                 tip << QStringLiteral("Price: stale — waiting for a fresh quote");
-            if (c.contains("break_date"))
-                tip << QStringLiteral("<span style='color:%1'>Readings use the history since %2 only: the vendor's "
-                                      "series jumps ×%3 that day</span>")
-                           .arg(ui::colors::WARNING(), c.value("break_date").toString(),
-                                QString::number(c.value("break_ratio").toDouble(), 'f', 2));
-            if (!c.isEmpty()) {
-                tip << QStringLiteral("Daily bars to %1%2")
-                           .arg(c.value("as_of").toString(),
-                                lr.live ? QStringLiteral(" · vs 200D and 1Y at the live price") : QString())
-                    << QStringLiteral("SMA 20 / 50 / 200: %1 / %2 / %3")
-                           .arg(num(jnum(c, "sma20"), price_dp(jnum(c, "sma20"))),
-                                num(jnum(c, "sma50"), price_dp(jnum(c, "sma50"))),
-                                num(jnum(c, "sma200"), price_dp(jnum(c, "sma200"))))
-                    << QStringLiteral("RSI 14: %1 · ADX 14: %2 (+DI %3 / −DI %4)")
-                           .arg(num(jnum(c, "rsi"), 0), num(jnum(c, "adx"), 0), num(jnum(c, "pdi"), 0),
-                                num(jnum(c, "mdi"), 0))
-                    << QStringLiteral("1M %1 · 1Y percentile %2 · 5Y percentile %3")
-                           .arg(signed_num(jnum(c, "ret1m"), 1, QStringLiteral("%")),
-                                std::isfinite(p1) ? QString::number(std::lround(p1)) : dash(),
-                                std::isfinite(jnum(c, "p5y")) ? QString::number(std::lround(jnum(c, "p5y")))
-                                                               : QStringLiteral("— (under 5 years of history)"));
+            if (topics_.contains(t)) {
+                // At the live price against completed sessions (live_reading) —
+                // the chart's condition strip computes the very same.
+                QVector<cnd::DatedValue> closes;
+                for (const auto& v : c.value("closes").toArray()) {
+                    const QJsonArray a = v.toArray();
+                    const QDate d = QDate::fromString(a.at(0).toString(), Qt::ISODate);
+                    if (d.isValid() && a.at(1).isDouble())
+                        closes.append({d, a.at(1).toDouble()});
+                }
+                const auto lr = cnd::live_reading(closes, has_q && !q_stale ? qit->price : cnd::kNaN,
+                                                  core::bartime::market_today_et());
+                const double vs = lr.vs_sma200_pct, p1 = lr.pctile_1y, p5 = jnum(c, "p5y"), rs = jnum(c, "rsi");
+                const auto regime = cnd::regime_from_key(c.value("regime").toString());
+                cell["vs200"] = {signed_num(vs, 1, QStringLiteral("%")),
+                                 std::isfinite(vs) ? ui::change_color(vs) : ui::colors::TEXT_TERTIARY()};
+                cell["p1y"] = {std::isfinite(p1) ? QString::number(std::lround(p1)) : dash(), pctile_color(p1)};
+                cell["p5y"] = {std::isfinite(p5) ? QString::number(std::lround(p5)) : dash(), pctile_color(p5)};
+                cell["rsi"] = {num(rs, 0), std::isfinite(rs) && (rs >= 70 || rs <= 30) ? ui::colors::AMBER()
+                                                                                         : ui::colors::TEXT_PRIMARY()};
+                cell["trend"] = {cnd::regime_label(regime), regime_color(regime)};
+                if (c.contains("break_date"))
+                    tip << QStringLiteral("<span style='color:%1'>Readings use the history since %2 only: the "
+                                          "vendor's series jumps ×%3 that day</span>")
+                               .arg(ui::colors::WARNING(), c.value("break_date").toString(),
+                                    QString::number(c.value("break_ratio").toDouble(), 'f', 2));
+                if (!c.isEmpty())
+                    tip << QStringLiteral("Daily bars to %1%2")
+                               .arg(c.value("as_of").toString(),
+                                    lr.live ? QStringLiteral(" · vs 200D and 1Y at the live price") : QString())
+                        << QStringLiteral("SMA 20 / 50 / 200: %1 / %2 / %3")
+                               .arg(num(jnum(c, "sma20"), price_dp(jnum(c, "sma20"))),
+                                    num(jnum(c, "sma50"), price_dp(jnum(c, "sma50"))),
+                                    num(jnum(c, "sma200"), price_dp(jnum(c, "sma200"))))
+                        << QStringLiteral("RSI 14: %1 · ADX 14: %2 (+DI %3 / −DI %4)")
+                               .arg(num(rs, 0), num(jnum(c, "adx"), 0), num(jnum(c, "pdi"), 0),
+                                    num(jnum(c, "mdi"), 0))
+                        << QStringLiteral("1M %1 · 1Y percentile %2 · 5Y percentile %3")
+                               .arg(signed_num(jnum(c, "ret1m"), 1, QStringLiteral("%")), cell["p1y"].first,
+                                    std::isfinite(p5) ? QString::number(std::lround(p5))
+                                                      : QStringLiteral("— (under 5 years of history)"));
             }
         }
-        if (!c.isEmpty() && !fresh) {
-            p.dim = true;
-            tip << QStringLiteral("Readings from %1 — updating…").arg(age_text(c));
-        } else if (!c.isEmpty()) {
-            tip << QStringLiteral("Readings fetched %1").arg(age_text(c));
+        Paint p;
+        if (topics_.contains(t)) {
+            if (!c.isEmpty() && !fresh) {
+                p.dim = true;
+                tip << QStringLiteral("Readings from %1 — updating…").arg(age_text(c));
+            } else if (!c.isEmpty()) {
+                tip << QStringLiteral("Readings fetched %1").arg(age_text(c));
+            }
+            if (!err.isEmpty())
+                tip << QStringLiteral("<span style='color:%1'>Last refresh failed: %2</span>")
+                           .arg(ui::colors::NEGATIVE(), err.toHtmlEscaped());
+            else if (c.isEmpty())
+                tip << QStringLiteral("Loading…");
         }
-        if (!err.isEmpty())
-            tip << QStringLiteral("<span style='color:%1'>Last refresh failed: %2</span>")
-                       .arg(ui::colors::NEGATIVE(), err.toHtmlEscaped());
-        else if (c.isEmpty())
-            tip << QStringLiteral("Loading…");
-        tip << QStringLiteral("<i>Click for the chart · right-click to move or remove</i>");
+        tip << QStringLiteral("<i>Click for the chart · right-click to move, remove or choose columns</i>");
         p.tip = tip.join(QStringLiteral("<br>"));
+
+        QStringList cells;
+        for (const auto& k : cols) {
+            if (k == QLatin1String("name")) {
+                cells << row_label(r);
+                p.color << ui::colors::TEXT_PRIMARY();
+                p.reading << false;
+                continue;
+            }
+            const auto it = cell.constFind(k);
+            cells << (it != cell.constEnd() ? it->first : dash());
+            p.color << (it != cell.constEnd() ? it->second : ui::colors::TEXT_TERTIARY());
+            p.reading << (mode_ == Mode::Macro || condition_columns().contains(k));
+        }
+        cells << QString::fromUtf8(kRemoveText);
+        p.color << ui::colors::TEXT_TERTIARY();
+        p.reading << false;
         rows.append(cells);
         paints.append(p);
     }
-    QStringList add(ncols);
+    QStringList add;
+    for (int i = 0; i < ncols; ++i)
+        add << QString();
     add[0] = QString::fromUtf8(kAddText);
     rows.append(add);
 
@@ -469,10 +604,7 @@ void ConditionTableWidget::render() {
             auto* it = table_->item(i, col);
             if (!it)
                 continue;
-            QString color = p.c[col].isEmpty() ? ui::colors::TEXT_PRIMARY() : p.c[col];
-            const bool cond_col = mode_ == Mode::Market ? (col >= 3 && col <= 5) : (col >= 1 && col <= 4);
-            if (p.dim && cond_col)
-                color = ui::colors::TEXT_TERTIARY();
+            const QString color = p.dim && p.reading.value(col) ? ui::colors::TEXT_TERTIARY() : p.color.value(col);
             it->setForeground(QColor(color));
             it->setToolTip(col == ncols - 1 ? QStringLiteral("Remove from this list") : p.tip);
         }
@@ -497,8 +629,7 @@ void ConditionTableWidget::on_cell_clicked(int row, int col) {
     }
     if (row < 0 || row >= rows_.size())
         return;
-    const int ncols = mode_ == Mode::Market ? 7 : 6;
-    if (col == ncols - 1) {
+    if (col == columns().size()) {
         remove_row(row);
         return;
     }
@@ -521,11 +652,59 @@ void ConditionTableWidget::on_context_menu(const QPoint& pos) {
         menu.addSeparator();
     }
     connect(menu.addAction(QStringLiteral("Add…")), &QAction::triggered, this, [this]() { add_row(); });
+    if (mode_ == Mode::Market) {
+        auto* sub = menu.addMenu(QStringLiteral("Columns"));
+        const QStringList shown = columns();
+        for (const auto& [k, h] : column_catalogue()) {
+            auto* a = sub->addAction(h);
+            a->setCheckable(true);
+            a->setChecked(shown.contains(k));
+            a->setToolTip(column_tip(k));
+            const QString key = k;
+            connect(a, &QAction::toggled, this, [this, key](bool on) {
+                QStringList c = columns().mid(1); // without NAME
+                if (on && !c.contains(key)) {
+                    // Catalogue order, so columns land where a reader expects them.
+                    QStringList ordered;
+                    for (const auto& [kk, hh] : column_catalogue())
+                        if (c.contains(kk) || kk == key)
+                            ordered << kk;
+                    c = ordered;
+                } else if (!on) {
+                    c.removeAll(key);
+                }
+                QJsonObject cfg = config();
+                cfg["columns"] = QJsonArray::fromStringList(c);
+                apply_config(cfg);
+                edited();
+            });
+        }
+    }
+    connect(menu.addAction(QStringLiteral("Rename…")), &QAction::triggered, this, &ConditionTableWidget::rename);
     connect(menu.addAction(QStringLiteral("Reset to the default list")), &QAction::triggered, this, [this]() {
-        apply_config({});
+        QJsonObject cfg;
+        if (!title_.isEmpty())
+            cfg["title"] = title_;
+        apply_config(cfg);
         edited();
     });
     menu.exec(table_->viewport()->mapToGlobal(pos));
+}
+
+void ConditionTableWidget::rename() {
+    bool ok = false;
+    const QString t = QInputDialog::getText(this, QStringLiteral("Rename list"), QStringLiteral("Title"),
+                                            QLineEdit::Normal, title_.isEmpty() ? default_title_ : title_, &ok)
+                          .trimmed();
+    if (!ok)
+        return;
+    QJsonObject cfg = config();
+    if (t.isEmpty() || t == default_title_)
+        cfg.remove("title");
+    else
+        cfg["title"] = t;
+    apply_config(cfg);
+    edited();
 }
 
 void ConditionTableWidget::add_row() {
