@@ -4,9 +4,9 @@ description: "Companies where two or more insiders reported open-market purchase
 permalink: "/insider-cluster-buys/"
 ---
 
-_Updated November 14, 2026 · [this week's issue](https://yumima.github.io/finterm/brief/2026-11-09/) · [all issues](https://yumima.github.io/finterm/brief/)_
+_Updated November 22, 2026 · [this week's issue](https://yumima.github.io/finterm/brief/2026-11-16/) · [all issues](https://yumima.github.io/finterm/brief/)_
 
-<!-- issue 2026-W46 stamp 20261114T220856Z -->
+<!-- issue 2026-W47 stamp 20261122T171510Z -->
 
 {% raw %}
 ## Insider buying clusters
@@ -17,33 +17,33 @@ Context, not a forecast. finterm's own study of SEC filings from July 2025 to Ju
 
 | Symbol | Company | Insiders | Reported | Avg price | Trade dates | Roles |
 |---|---|---:|---:|---:|---|---|
-| FUN | Six Flags Entertainment Corporation/NEW | 3 | $24.3M | $10.62 | 2026-11-06 – 2026-11-13 | Chief Legal Officer, Director, Executive Chair |
-| STWD | STARWOOD PROPERTY TRUST, INC. | 2 | $16.7M | $11.81 | 2026-11-11 – 2026-11-12 | Director, CEO, Chairman of the Board |
-| MP | MP Materials Corp. / DE | 3 | $3.4M | $36.26 | 2026-11-10 – 2026-11-11 | Chief Financial Officer, Director, Chief Operating Officer |
-| FIP | FTAI Infrastructure Inc. | 2 | $1.5M | $3.82 | 2026-11-10 | CFO  and CAO, CEO and President |
-| MX | MAGNACHIP SEMICONDUCTOR Corp | 2 | $1.5M | $2.39 | 2026-11-06 – 2026-11-09 | Director, Chief Executive Officer |
-| COHR | COHERENT CORP. | 2 | $1.2M | $203.38 | 2026-11-09 – 2026-11-10 | Director, CEO |
-| FLOC | Flowco Holdings Inc. | 2 | $1.2M | $19.47 | 2026-11-05 | Director, President and CEO |
-| HPP | Hudson Pacific Properties, Inc. | 3 | $905.8K | $9.06 | 2026-11-09 – 2026-11-12 | Director, Chief Executive Officer, President |
-| ADTN | ADTRAN Holdings, Inc. | 2 | $847.0K | $4.08 | 2026-11-06 – 2026-11-09 | Director, Chairman & CEO, SVP of Finance; CFO |
-| EQPT | EquipmentShare.com Inc | 2 | $804.1K | $14.30 | 2026-11-11 | Director, Founder & CEO, Member of 10% owner group |
-| WCC | WESCO INTERNATIONAL INC | 2 | $603.4K | $292.08 | 2026-11-05 – 2026-11-06 | EVP & CFO, EVP & CHRO |
-| STVN | Stevanato Group S.p.A. | 2 | $601.1K | $13.36 | 2026-11-06 – 2026-11-09 | Director |
-| KGS | Kodiak Gas Services, Inc. | 3 | $544.1K | $44.80 | 2026-11-11 – 2026-11-12 | Director |
-| ALNY | ALNYLAM PHARMACEUTICALS, INC. | 2 | $543.1K | $154.74 | 2026-11-09 – 2026-11-10 | Director |
-| MTDR | Matador Resources Co | 5 | $541.7K | $50.68 | 2026-11-05 – 2026-11-10 | Director, Chairman and CEO, EVP and COO |
-| LUMN | Lumen Technologies, Inc. | 2 | $494.6K | $3.96 | 2026-11-06 | Director, Chief Executive Officer |
-| CSQR | Csquare, Inc. | 3 | $454.4K | $17.75 | 2026-11-11 | Director, Chief Executive Officer, Chief Financial Officer |
-| UPBD | UPBOUND GROUP, INC. | 2 | $450.1K | $24.76 | 2026-11-05 – 2026-11-09 | Director, Chief Executive Officer, EVP |
-| DKNG | DraftKings Inc. | 2 | $448.8K | $18.77 | 2026-11-09 – 2026-11-11 | Chief Financial Officer, Director |
-| SLQT | SelectQuote, Inc. | 5 | $446.3K | $0.49 | 2026-11-06 – 2026-11-09 | Director, CHIEF EXECUTIVE OFFICER, PRESIDENT |
-| TSM | TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD | 31 | $416.6K | $166.96 | 2026-11-05 – 2026-11-06 | Director, VP, SVP |
-| NXRT | NexPoint Residential Trust, Inc. | 2 | $402.2K | $16.31 | 2026-11-05 – 2026-11-10 | See Remarks |
-| LRMR | Larimar Therapeutics, Inc. | 7 | $382.1K | $2.71 | 2026-11-11 – 2026-11-12 | Director, President and CEO, Chief Financial Officer |
-| DTI | Drilling Tools International Corp | 5 | $369.6K | $1.67 | 2026-11-09 – 2026-11-12 | Director, Chief Executive Officer, Chief Financial Officer |
-| CTRI | Centuri Holdings, Inc. | 2 | $349.9K | $22.51 | 2026-11-10 – 2026-11-11 | Director |
+| PAM | Pampa Energy Inc. | 2 | $4.5M | $63.18 | 2026-11-12 – 2026-11-17 | Vicepresident, Vice President |
+| — | HPS Net Lease Income REIT | 3 | $4.1M | $25.00 | 2026-11-16 | Director, Chief Executive Officer, President |
+| STUB | StubHub Holdings, Inc. | 2 | $3.5M | $5.20 | 2026-11-13 – 2026-11-16 | Director |
+| CGON | CG Oncology, Inc. | 2 | $2.7M | $78.98 | 2026-11-18 | Chief Commercial Officer, Director, Chief Executive Officer |
+| EFC | Ellington Financial Inc. | 2 | $2.2M | $10.80 | 2026-11-17 – 2026-11-18 | Director, CEO and President, Co-Chief Investment Officer |
+| HMH | HMH Holding Inc | 2 | $1.7M | $11.73 | 2026-11-17 – 2026-11-18 | Chief Executive Officer, Chief Financial Officer |
+| ITG | ITG, Inc./DE/ | 5 | $1.2M | $5.63 | 2026-11-13 | Director, Chief Executive Officer |
+| FPS | Forgent Power Solutions, Inc. | 5 | $1.1M | $20.87 | 2026-11-16 – 2026-11-17 | Chief Financial Officer, Director, Chief Executive Officer |
+| RMIX | Suncrete, Inc. | 6 | $1.0M | $6.37 | 2026-11-17 – 2026-11-19 | Chief Financial Officer, Director, Chief Operating Officer |
+| OFRM | Once Upon a Farm, PBC | 5 | $815.5K | $11.20 | 2026-11-16 – 2026-11-19 | See Remarks, Director |
+| TSM | TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD | 2 | $802.9K | $125.94 | 2026-11-17 – 2026-11-20 | Director, VP |
+| DDD | 3D SYSTEMS CORP | 2 | $735.2K | $1.41 | 2026-11-16 – 2026-11-18 | Director |
+| EQPT | EquipmentShare.com Inc | 2 | $638.3K | $14.76 | 2026-11-12 – 2026-11-19 | Director, Founder & CEO, Member of 10% owner group |
+| CRMD | CorMedix Inc. | 4 | $588.2K | $4.84 | 2026-11-13 – 2026-11-19 | Director, Chief Executive Officer, Chief Financial Officer |
+| PICS | PicS N.V. | 3 | $556.7K | $4.84 | 2026-11-18 – 2026-11-19 | Director |
+| SEI | Solaris Energy Infrastructure, Inc. | 3 | $504.8K | $54.63 | 2026-11-12 – 2026-11-20 | Director, Co-Chief Executive Officer, President |
+| CTVA | Corteva, Inc. | 2 | $485.7K | $9.29 | 2026-11-13 – 2026-11-16 | Chief Executive Officer, Director |
+| CTGO | Contango Silver & Gold Inc. | 3 | $472.6K | $10.56 | 2026-11-17 – 2026-11-19 | Director, CEO |
+| NSPR | InspireMD, Inc. | 5 | $472.4K | $0.65 | 2026-11-13 – 2026-11-17 | Director, CEO and President, Chief Financial Officer |
+| PCT | PureCycle Technologies, Inc. | 2 | $470.3K | $1.69 | 2026-11-13 – 2026-11-16 | Director, Executive Chairman, Chief Executive Officer |
+| UPBD | UPBOUND GROUP, INC. | 2 | $447.8K | $25.88 | 2026-11-13 – 2026-11-18 | Director |
+| DOX | AMDOCS LTD | 3 | $421.6K | $43.04 | 2026-11-09 – 2026-11-12 | Director |
+| PAL | Proficient Auto Logistics, Inc | 5 | $415.2K | $2.65 | 2026-11-16 – 2026-11-18 | Director, President and COO |
+| DTI | Drilling Tools International Corp | 3 | $405.2K | $1.65 | 2026-11-13 – 2026-11-20 | Director, Vice President of Sales |
+| CWBC | Community West Bancshares | 3 | $376.0K | $24.44 | 2026-11-18 – 2026-11-20 | Director |
 
-_20 more companies met the conditions; the 25 largest by dollars are shown._
+_34 more companies met the conditions; the 25 largest by dollars are shown._
 
 {% endraw %}
 
