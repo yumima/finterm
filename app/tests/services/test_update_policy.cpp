@@ -77,7 +77,28 @@ class TestUpdatePolicy : public QObject {
         QCOMPARE(parse_manifest(manifest({{"download-url", "x"}}), "linux-x64", o), ManifestResult::Incomplete);
         QCOMPARE(parse_manifest("<html>rate limited</html>", "linux-x64", o), ManifestResult::Malformed);
         QCOMPARE(parse_manifest("[]", "linux-x64", o), ManifestResult::Malformed);
+        // An error body served with 200 is not "nothing for this platform".
+        QCOMPARE(parse_manifest("{\"message\":\"Not Found\"}", "linux-x64", o), ManifestResult::Malformed);
+        QCOMPARE(parse_manifest("{\"updates\":[]}", "linux-x64", o), ManifestResult::Malformed);
         QVERIFY(o.version.isEmpty());
+    }
+
+    void stored_offer_round_trips() {
+        Offer o{"4.0.11", "https://example.invalid/l.run", "34d8", "https://example.invalid/tag", "notes"};
+        const Offer back = offer_from_json(offer_to_json(o));
+        QCOMPARE(back.version, o.version);
+        QCOMPARE(back.download_url, o.download_url);
+        QCOMPARE(back.sha256, o.sha256);
+        QCOMPARE(back.open_url, o.open_url);
+        QCOMPARE(back.changelog, o.changelog);
+        QVERIFY(offer_from_json("").version.isEmpty());
+        QVERIFY(offer_from_json("garbage").version.isEmpty());
+        Offer bad = o;
+        bad.version = "4.0.11-dev";
+        QVERIFY(offer_from_json(offer_to_json(bad)).version.isEmpty());
+        bad = o;
+        bad.download_url.clear();
+        QVERIFY(offer_from_json(offer_to_json(bad)).version.isEmpty());
     }
 
     void daily_check_due() {

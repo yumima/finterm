@@ -76,6 +76,10 @@ namespace {
 // Install-wide (QSettings), not per profile — see the class comment.
 constexpr const char* kAutoCheckKey = "updates/auto_check"; // "on" | "off"; absent = never asked
 constexpr const char* kLastCheckKey = "updates/last_check"; // ISO-8601 UTC of the last successful check
+// The newer version that check found (update_policy::offer_to_json): kept so a
+// restart — or a second running profile, whose check isn't due — still shows
+// the badge. Absent when the last check found nothing newer.
+constexpr const char* kOfferKey = "updates/offer";
 constexpr int kFirstLookDelayMs = 10 * 1000;
 constexpr int kScheduleTickMs = 60 * 60 * 1000;
 } // namespace
@@ -110,7 +114,23 @@ void UpdateService::set_auto_check(bool on) {
 
 // ── Automatic schedule ──────────────────────────────────────────────────────
 
+void UpdateService::restore_saved_offer() {
+    if (auto_check() != AutoCheck::On || checking_ || downloading_)
+        return;
+    QSettings settings;
+    const auto saved = update_policy::offer_from_json(settings.value(kOfferKey).toByteArray());
+    if (saved.version.isEmpty() ||
+        !update_policy::is_newer(QApplication::applicationVersion(), saved.version)) {
+        // Installed since (or unusable): nothing to show.
+        settings.remove(kOfferKey);
+        return;
+    }
+    if (saved.version != offer_.version)
+        set_offer(saved);
+}
+
 void UpdateService::start_automatic() {
+    restore_saved_offer();
     if (!automatic_started_) {
         automatic_started_ = true;
         schedule_.setInterval(kScheduleTickMs);
@@ -127,6 +147,8 @@ void UpdateService::maybe_check_automatically() {
         return;
     if (checking_ || downloading_ || prompt_open_)
         return;
+    // Another profile's check may have found a version since the last look.
+    restore_saved_offer();
     const QDateTime last = QDateTime::fromString(QSettings().value(kLastCheckKey).toString(), Qt::ISODate);
     if (!update_policy::check_due(last, QDateTime::currentDateTimeUtc()))
         return;
@@ -212,6 +234,13 @@ void UpdateService::on_manifest_reply_finished() {
         return;
     }
 
+    // Turned off while this automatic check was in flight: drop its answer.
+    if (!interactive_ && auto_check() != AutoCheck::On) {
+        LOG_INFO("UpdateService", "Automatic checks were turned off — ignoring the in-flight check");
+        finish_check(false);
+        return;
+    }
+
     update_policy::Offer entry;
     const auto result = update_policy::parse_manifest(reply->readAll(), current_platform_key(), entry);
     if (result == update_policy::ManifestResult::Malformed) {
@@ -275,6 +304,11 @@ void UpdateService::set_offer(const update_policy::Offer& offer) {
     const bool changed = offer.version != offer_.version || offer.download_url != offer_.download_url ||
                          offer.sha256 != offer_.sha256;
     offer_ = offer;
+    QSettings settings;
+    if (offer.version.isEmpty())
+        settings.remove(kOfferKey);
+    else
+        settings.setValue(kOfferKey, update_policy::offer_to_json(offer));
     if (changed)
         emit offer_changed();
 }
@@ -304,10 +338,24 @@ void UpdateService::prompt_install() {
         return;
     }
     if (stage() == Stage::Handed) {
-        QMessageBox::information(dialog_parent(), QStringLiteral("finterm"),
-                                 QStringLiteral("The finterm %1 installer was started:\n%2\n\n"
-                                                "Finish it, then restart finterm.")
-                                     .arg(offer_.version, QDir::toNativeSeparators(pending_local_path_)));
+        // The installer may have been cancelled or the file deleted: offer to
+        // fetch it again rather than point at a file that may be gone.
+        QMessageBox box(dialog_parent());
+        box.setWindowTitle(QStringLiteral("finterm"));
+        box.setIcon(QMessageBox::Information);
+        box.setText(QStringLiteral("The finterm %1 installer was started:\n%2\n\n"
+                                   "Finish it, then restart finterm.")
+                        .arg(offer_.version, QDir::toNativeSeparators(pending_local_path_)));
+        QPushButton* again = box.addButton(QStringLiteral("Download Again"), QMessageBox::ActionRole);
+        box.addButton(QMessageBox::Ok);
+        prompt_open_ = true;
+        box.exec();
+        prompt_open_ = false;
+        if (box.clickedButton() != again || downloading_ || !has_offer())
+            return;
+        handed_version_.clear();
+        download_version_ = offer_.version;
+        start_download(offer_.download_url, offer_.sha256);
         return;
     }
     // The dialog runs a nested event loop in which the schedule can replace

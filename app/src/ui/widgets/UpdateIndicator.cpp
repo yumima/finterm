@@ -27,7 +27,7 @@ UpdateIndicator::UpdateIndicator(QWidget* parent) : QWidget(parent) {
                                          "Change it later in About › Check for updates automatically."));
     primary_ = new QPushButton;
     primary_->setObjectName("sbUpdatePrimary");
-    secondary_ = new QPushButton(QStringLiteral("NOT NOW"));
+    secondary_ = new QPushButton(QStringLiteral("NO THANKS"));
     secondary_->setObjectName("sbUpdateSecondary");
     for (QPushButton* b : {primary_, secondary_}) {
         b->setFlat(true);
@@ -96,7 +96,9 @@ void UpdateIndicator::refresh() {
         primary_->setText(QStringLiteral("TURN ON"));
         primary_->setToolTip(question_->toolTip());
         primary_->show();
-        secondary_->setToolTip(QStringLiteral("Don't check automatically. Help › Check for Updates still works."));
+        secondary_->setToolTip(QStringLiteral("Don't check automatically (not asked again). Help › Check for "
+                                              "Updates still works; About › Check for updates automatically "
+                                              "turns it on."));
         secondary_->show();
         show();
         return;

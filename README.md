@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`70d29f8eb`](https://github.com/yumima/finterm/commit/70d29f8eb) updater: opt-in daily check; a found version is a status-bar badge, not a dialog
 - [`5e134e35c`](https://github.com/yumima/finterm/commit/5e134e35c) markets: MY VIEW's default is the desk's new arrangement; condition widgets' note says what stands in for CDS / DX / UC
 - [`5aea6bc76`](https://github.com/yumima/finterm/commit/5aea6bc76) workspace/dock: a session resume never picks the screen; a tab opens in the main window
 - [`fda86588d`](https://github.com/yumima/finterm/commit/fda86588d) tabs: a view is the splitter tree it was left as; redirects keep the view

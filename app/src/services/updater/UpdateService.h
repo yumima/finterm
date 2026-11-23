@@ -106,6 +106,8 @@ class UpdateService : public QObject {
     /// The automatic schedule's tick: checks only when on, supported, idle
     /// and due.
     void maybe_check_automatically();
+    /// Show the offer an earlier run / another profile stored (auto only).
+    void restore_saved_offer();
     void set_offer(const update_policy::Offer& offer);
     void prompt_install();
     void start_download(const QString& url, const QString& expected_sha256);

@@ -37,7 +37,10 @@ ManifestResult parse_manifest(const QByteArray& body, const QString& platform_ke
     const QJsonDocument doc = QJsonDocument::fromJson(body, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject())
         return ManifestResult::Malformed;
-    const QJsonObject updates = doc.object().value(QStringLiteral("updates")).toObject();
+    const QJsonValue updates_v = doc.object().value(QStringLiteral("updates"));
+    if (!updates_v.isObject())
+        return ManifestResult::Malformed;
+    const QJsonObject updates = updates_v.toObject();
     if (platform_key.isEmpty() || !updates.contains(platform_key))
         return ManifestResult::NoEntry;
     const QJsonObject e = updates.value(platform_key).toObject();
@@ -51,6 +54,29 @@ ManifestResult parse_manifest(const QByteArray& body, const QString& platform_ke
         return ManifestResult::Incomplete;
     out = o;
     return ManifestResult::Ok;
+}
+
+QByteArray offer_to_json(const Offer& o) {
+    return QJsonDocument(QJsonObject{{"version", o.version},
+                                     {"download-url", o.download_url},
+                                     {"sha256", o.sha256},
+                                     {"open-url", o.open_url},
+                                     {"changelog", o.changelog}})
+        .toJson(QJsonDocument::Compact);
+}
+
+Offer offer_from_json(const QByteArray& json) {
+    const QJsonObject e = QJsonDocument::fromJson(json).object();
+    Offer o;
+    o.version = e.value(QStringLiteral("version")).toString();
+    o.download_url = e.value(QStringLiteral("download-url")).toString();
+    o.sha256 = e.value(QStringLiteral("sha256")).toString();
+    o.open_url = e.value(QStringLiteral("open-url")).toString();
+    o.changelog = e.value(QStringLiteral("changelog")).toString();
+    int a = 0, b = 0, c = 0;
+    if (!parse_version(o.version, a, b, c) || o.download_url.isEmpty())
+        return {};
+    return o;
 }
 
 bool check_due(const QDateTime& last, const QDateTime& now) {

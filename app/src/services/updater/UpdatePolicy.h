@@ -37,8 +37,16 @@ bool parse_version(const QString& s, int& major, int& minor, int& patch);
 /// parse on either side is never newer.
 bool is_newer(const QString& local, const QString& remote);
 
-/// Read the entry for `platform_key` from an updates.json body.
+/// Read the entry for `platform_key` from an updates.json body. A JSON object
+/// without an "updates" object (a proxy's or GitHub's error JSON served with
+/// 200) is Malformed, not "nothing for this platform".
 ManifestResult parse_manifest(const QByteArray& body, const QString& platform_key, Offer& out);
+
+/// The offer as stored between runs (and read by a second running profile,
+/// which shares the daily check). from_json yields an empty version for
+/// anything unusable.
+QByteArray offer_to_json(const Offer& o);
+Offer offer_from_json(const QByteArray& json);
 
 /// Whether an automatic check is due at `now`, given the last successful one.
 /// Never checked (invalid `last`) is due. A `last` in the future means the
