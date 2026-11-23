@@ -14,6 +14,8 @@
 
 #include <QHash>
 #include <QPointer>
+#include "ui/tables/RowMarkDelegate.h"
+
 #include <QStyledItemDelegate>
 
 class QAbstractItemView;
@@ -21,7 +23,7 @@ class QTimer;
 
 namespace finterm::ui {
 
-class TickFlashDelegate : public QStyledItemDelegate {
+class TickFlashDelegate : public RowMarkDelegate {
     Q_OBJECT
   public:
     /// Attach to `view` unless it already has a non-default delegate.
@@ -43,6 +45,8 @@ class TickFlashDelegate : public QStyledItemDelegate {
 
   private:
     TickFlashDelegate(QAbstractItemView* view, int key_column);
+    /// The fading overlay of a cell whose number just moved (none otherwise).
+    void paint_flash(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const;
 
     struct Cell {
         double value = 0;

@@ -20,20 +20,21 @@ namespace finterm::screens {
 
 class MarketScreenPage;
 
-/// MARKETS — every market in one tab, every page in ONE header row:
+/// MARKETS — every market in one tab, every page in ONE header row of
+/// three groups:
 ///
-///   FINTERM MARKETS  OVERVIEW: MARKETS | EQUITY | RATES & MACRO | +
-///                    FUTURES: MAJORS | INDEX | RATES | ENERGY | … | CRYPTO
-///                    WORLD
+///   FINTERM MARKETS  MY VIEW … +  │  MARKETS  EQUITY  RATES & MACRO  WORLD  │
+///                    FUTURES: MAJORS  INDEX  RATES  ENERGY  …  CRYPTO
 ///
 /// Every page is the same thing — a canvas of widgets the user arranges
 /// (MarketScreenPage), fitted to the view, with its chart (and on FUTURES
 /// pages the forward curve, months and detail) embedded and following the
 /// clicks made on that page only. One click reaches any page.
-///   OVERVIEW  the user's screens: "+" adds (blank / from a template / reset
-///             all), right-click renames, duplicates, moves, resets, deletes
+///   MINE      the user's screens, first: "+" adds one (blank or a copy of any
+///             page) or resets all; right-click renames, duplicates, moves,
+///             deletes
+///   MARKET    the market pages, fixed (their layout is the user's; RESET)
 ///   FUTURES   a page per group (the old FUTURES screen, as widgets)
-///   WORLD     the global price board as tiles
 /// "+ ADD" adds a widget to the page shown, a tile's ✕ removes it, RESET puts
 /// the page back — as on the dashboard. Every route to the old FUTURES tab
 /// opens the futures page of the market asked for.
@@ -55,7 +56,7 @@ class MarketsScreen : public QWidget, public IStatefulScreen {
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("markets"); }
-    int state_version() const override { return 4; } // 4: one-row pages
+    int state_version() const override { return 4; } // 4: one-row pages (page ids unchanged since)
 
   protected:
     void showEvent(QShowEvent* event) override;
@@ -66,19 +67,21 @@ class MarketsScreen : public QWidget, public IStatefulScreen {
         QString id;    ///< page id (also its layout's key)
         QString title; ///< button text
         QString tmpl;  ///< template
-        enum Kind { Overview, Futures, World } kind = Overview;
+        enum Kind { Mine, Market, Futures } kind = Mine;
     };
     QWidget* build_header_bar();
     void load_pages();
-    void save_overview();
+    static void migrate_pages(); ///< the one-time move to the three groups
+    void save_mine();
+    int mine_count() const;
     MarketScreenPage* ensure_page(int index);
     QPushButton* make_page_button(int index);
-    void rebuild_overview_buttons();
+    void rebuild_mine_buttons();
     void show_page(int index, bool persist = true);
     int index_of(const QString& id) const;
-    void show_overview_menu(int index, const QPoint& global);
+    void show_mine_menu(int index, const QPoint& global);
     void show_add_menu();
-    void add_overview(const QString& title, const QString& tmpl, const GridLayout* layout = nullptr);
+    void add_mine(const QString& title, const QString& tmpl, const GridLayout* layout = nullptr);
     void rename_screen(int index);
     void duplicate_screen(int index);
     void move_screen(int index, int delta);
@@ -88,15 +91,15 @@ class MarketsScreen : public QWidget, public IStatefulScreen {
     void refresh_theme();
     void refresh_all();
 
-    QVector<PageDef> pages_;              ///< overview screens first, then FUTURES groups, then WORLD
+    QVector<PageDef> pages_;              ///< the user's screens, then the market pages, then FUTURES
     QVector<MarketScreenPage*> widgets_;  ///< parallel to pages_ (nullptr until first shown)
     QVector<QPushButton*> buttons_;       ///< parallel to pages_
     int current_ = -1;
     bool answered_request_ = false; ///< a pending futures request was shown at construction
     QStackedWidget* stack_ = nullptr;
-    QWidget* overview_box_ = nullptr; ///< the OVERVIEW buttons (rebuilt on edits)
-    QHBoxLayout* overview_layout_ = nullptr;
-    QToolButton* add_btn_ = nullptr;          ///< "+" — add an OVERVIEW screen
+    QWidget* mine_box_ = nullptr; ///< the user's screens' buttons (rebuilt on edits)
+    QHBoxLayout* mine_layout_ = nullptr;
+    QToolButton* add_btn_ = nullptr;          ///< "+" — add a screen of the user's
     QPushButton* add_widget_btn_ = nullptr;   ///< "+ ADD" — add a widget (as on the dashboard)
     QPushButton* reset_btn_ = nullptr;
     QWidget* header_bar_ = nullptr;

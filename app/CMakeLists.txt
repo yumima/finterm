@@ -1079,7 +1079,6 @@ set(SCREEN_SOURCES
     src/services/report_builder/ReportBuilderService.cpp
     src/services/report_builder/ReportBuilderTemplates.cpp
     src/screens/markets/MarketsScreen.cpp
-    src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/world/WorldMarketsView.cpp
     src/screens/dashboard/widgets/ConditionAddDialog.cpp
@@ -1617,7 +1616,6 @@ set_source_files_properties(
     src/screens/ma_analytics/MAAnalyticsScreen.cpp
     src/screens/ma_analytics/MAModulePanel.cpp
     src/screens/maritime/MaritimeScreen.cpp
-    src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketChartDialog.cpp
     src/screens/markets/MarketsScreen.cpp
     src/screens/markets/world/WorldMarketsView.cpp

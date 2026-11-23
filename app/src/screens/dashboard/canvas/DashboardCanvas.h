@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <optional>
+
 namespace finterm::screens {
 
 /// Absolute-positioned canvas — react-grid-layout port.
@@ -82,6 +84,14 @@ class DashboardCanvas : public QWidget {
     WidgetTile* resizing_tile_ = nullptr;
     GridCell resize_origin_cell_;
     GridLayout pre_resize_layout_;
+    /// The layout with tile `id` resized to `target` (others pushed down and
+    /// packed up). On a fit-to-view canvas the page's rows are kept: a tile
+    /// pushed past the last row gives up height instead, and nullopt when it
+    /// cannot (the resize stops there).
+    std::optional<QVector<GridItem>> resized_items(const QString& id, const GridCell& target) const;
+    /// The layout with tile `id` dropped at `ghost` — what a drag shows while
+    /// moving and commits on release (the same function: they cannot differ).
+    std::optional<QVector<GridItem>> dragged_items(const QString& id, const GridCell& ghost) const;
 
     // Auto-scroll during drag
     QTimer* scroll_timer_ = nullptr;

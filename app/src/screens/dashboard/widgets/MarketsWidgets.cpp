@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/MarketsWidgets.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 
 #include "core/util/BarTime.h"
 #include "datahub/DataHub.h"
@@ -83,6 +84,9 @@ MarketRegimeWidget::MarketRegimeWidget(QWidget* parent)
             "VOLATILITY / CREDIT: STRESS at or above the 80th percentile of the past year, CALM at or below the "
             "20th.\nOthers: the trend (ADX ≥ 25) and its direction, RANGE under 20, MIXED between."));
     table_->viewport()->setCursor(Qt::PointingHandCursor);
+    SelectionLink::follow_rows(table_, [](int r) {
+        return r >= 0 && r < static_cast<int>(std::size(kRows)) ? QString::fromLatin1(kRows[r].symbol) : QString();
+    });
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
         if (row >= 0 && row < static_cast<int>(std::size(kRows)))
             MarketChartDialog::show_for(QString::fromLatin1(kRows[row].symbol),

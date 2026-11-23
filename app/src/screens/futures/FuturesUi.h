@@ -3,6 +3,7 @@
 // (moved from the old FUTURES screen so every futures widget reads alike).
 
 #include "ui/formatting/NumberFormat.h"
+#include "ui/tables/RowMarkDelegate.h"
 #include "ui/theme/Theme.h"
 
 #include <QColor>
@@ -78,6 +79,7 @@ inline QTableWidget* make_table(const QStringList& headers, QWidget* parent) {
     t->horizontalHeader()->setHighlightSections(false);
     t->horizontalHeader()->setDefaultAlignment(Qt::AlignRight | Qt::AlignVCenter);
     t->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    t->setItemDelegate(new ui::RowMarkDelegate(t)); // the selected market / month: an amber band
     return t;
 }
 

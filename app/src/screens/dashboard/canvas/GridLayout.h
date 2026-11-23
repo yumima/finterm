@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace finterm::screens {
 
@@ -39,6 +40,10 @@ struct GridLayout {
     int cols = 12;
     int row_h = 60; // px per row
     int margin = 4; // px gap between tiles
+    /// A fit-to-view canvas (a MARKETS page): the rows the view is divided
+    /// into. Resizing a tile within them changes no other tile's size; only
+    /// content running past them adds rows. 0 = as many as the tiles use.
+    int rows = 0;
 };
 
 // ── Pure math helpers ─────────────────────────────────────────────────────────
@@ -276,6 +281,26 @@ inline QVector<GridItem> refit_to_cols(QVector<GridItem> items, int cols) {
         placed.append(item);
     }
     return compact_vertical(placed);
+}
+
+/// A fit-to-view page keeps its rows when a tile grows: a tile pushed past
+/// the last row gives up height (down to two rows, or its minimum if larger)
+/// rather than adding a row — re-fitting the rows to taller content shrank
+/// every tile on the page. nullopt when that cannot be done (the growing tile
+/// itself, or a tile pushed too far): the resize stops at the last fit.
+inline std::optional<QVector<GridItem>> keep_within_rows(QVector<GridItem> items, const QString& growing_id,
+                                                         int rows) {
+    if (rows <= 0)
+        return items;
+    for (auto& it : items) {
+        if (it.cell.y + it.cell.h <= rows)
+            continue;
+        const int floor = std::max(it.cell.min_h, std::min(2, it.cell.h));
+        if (it.instance_id == growing_id || it.is_static || rows - it.cell.y < floor)
+            return std::nullopt;
+        it.cell.h = rows - it.cell.y;
+    }
+    return items;
 }
 
 /// Maximum row bottom edge across all items.

@@ -14,6 +14,7 @@ namespace finterm::screens {
 
 ResizeGrip::ResizeGrip(QWidget* parent) : QWidget(parent) {
     setCursor(Qt::SizeFDiagCursor);
+    setToolTip(QStringLiteral("Drag to resize"));
     setMouseTracking(true);
     setAttribute(Qt::WA_TranslucentBackground);
     // Ensure this widget stays on top of siblings
@@ -21,21 +22,22 @@ ResizeGrip::ResizeGrip(QWidget* parent) : QWidget(parent) {
 }
 
 void ResizeGrip::paintEvent(QPaintEvent*) {
+    // Always drawn: a grip found only by hovering over an invisible corner is
+    // not found. Quiet at rest, amber under the pointer, solid while held.
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
-
-    if (hovered_ || pressed_) {
-        QColor dot_color(ui::colors::AMBER());
-        dot_color.setAlpha(pressed_ ? 255 : 160);
-        const int dot = 2, gap = 3;
-        const int ox = width() - 14;
-        const int oy = height() - 14;
-        p.setPen(Qt::NoPen);
-        p.setBrush(dot_color);
-        for (int r = 0; r < 3; ++r)
-            for (int c = 0; c < 3; ++c)
-                p.drawRect(ox + c * (dot + gap), oy + r * (dot + gap), dot, dot);
-    }
+    QColor c(hovered_ || pressed_ ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY());
+    c.setAlpha(pressed_ ? 255 : hovered_ ? 220 : 150);
+    const int dot = 2, gap = 2, step = dot + gap;
+    const int ox = width() - 3 - 3 * step + gap; // flush with the corner, 3 px in
+    const int oy = height() - 3 - 3 * step + gap;
+    p.setPen(Qt::NoPen);
+    p.setBrush(c);
+    // The lower-right triangle of a 3 × 3 grid: the usual "drag me" corner.
+    for (int r = 0; r < 3; ++r)
+        for (int col = 0; col < 3; ++col)
+            if (r + col >= 2)
+                p.drawRect(ox + col * step, oy + r * step, dot, dot);
 }
 
 void ResizeGrip::mousePressEvent(QMouseEvent* e) {
@@ -76,7 +78,11 @@ void ResizeGrip::leaveEvent(QEvent*) {
 WidgetTile::WidgetTile(const QString& instance_id, widgets::BaseWidget* content, QWidget* parent)
     : QWidget(parent), instance_id_(instance_id), content_(content) {
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
-            [this](const ui::ThemeTokens&) { update(); });
+            [this](const ui::ThemeTokens&) {
+                update();
+                if (grip_)
+                    grip_->update(); // its colours are the theme's
+            });
 
     setMouseTracking(true); // track mouse for edge-resize cursor updates
 

@@ -7,6 +7,7 @@
 // share rows. refit_to_cols must leave no two tiles overlapping.
 
 #include "screens/dashboard/canvas/GridLayout.h"
+#include "screens/dashboard/canvas/LayoutCodec.h"
 
 #include <QtTest/QtTest>
 
@@ -49,6 +50,57 @@ class TestGridRefit : public QObject {
         const auto out = refit_to_cols(l, 12);
         QCOMPARE(out[0].cell, l[0].cell);
         QCOMPARE(out[1].cell, l[1].cell);
+    }
+
+    // A MARKETS page fits the view in a fixed number of rows. Growing a tile
+    // used to add rows and shrink every tile on the page; now the tile it
+    // pushes past the last row gives up height and nothing else changes.
+    void growing_a_tile_keeps_the_page_rows() {
+        // fx (rows 3-5) grows by one: idx (rows 5-8) is pushed to 6-9.
+        QVector<GridItem> l{item("chart", 3, 0, 6, 5), item("fx", 0, 3, 3, 3), item("idx", 0, 6, 3, 3),
+                            item("vol", 9, 0, 3, 2)};
+        const auto out = keep_within_rows(l, "fx", 8);
+        QVERIFY(out.has_value());
+        for (const auto& it : *out) {
+            QVERIFY(it.cell.y + it.cell.h <= 8);
+            if (it.instance_id == QLatin1String("idx"))
+                QCOMPARE(it.cell.h, 2); // gave up the row
+            if (it.instance_id == QLatin1String("chart"))
+                QCOMPARE(it.cell.h, 5); // untouched
+        }
+    }
+    void a_resize_stops_when_the_page_is_full() {
+        // idx would be left one row (below its floor of two): no.
+        QVERIFY(!keep_within_rows({item("fx", 0, 3, 3, 4), item("idx", 0, 7, 3, 3)}, "fx", 8).has_value());
+        // The growing tile itself past the last row: no.
+        QVERIFY(!keep_within_rows({item("fx", 0, 3, 3, 6)}, "fx", 8).has_value());
+        // A page with no fixed rows (the dashboard) grows as before.
+        QVERIFY(keep_within_rows({item("fx", 0, 3, 3, 9)}, "fx", 0).has_value());
+    }
+
+    // The saved form carries the page's rows (v2); a v1 blob still loads,
+    // its rows then taken from its tiles.
+    void layout_codec_keeps_rows() {
+        GridLayout l;
+        l.rows = 9;
+        l.items = {item("a", 0, 0, 3, 4)};
+        l.items[0].config = QJsonObject{{"symbol", "^VVIX"}};
+        const auto back = layout_codec::decode(layout_codec::encode(l));
+        QVERIFY(back.has_value());
+        QCOMPARE(back->rows, 9);
+        QCOMPARE(back->items.size(), 1);
+        QCOMPARE(back->items[0].cell.h, 4);
+        QCOMPARE(back->items[0].config.value("symbol").toString(), QStringLiteral("^VVIX"));
+
+        QByteArray buf; // a v1 blob, as the build before wrote it
+        QDataStream st(&buf, QIODevice::WriteOnly);
+        st << layout_codec::kMagic << qint32(1) << 12 << 60 << 4 << 1;
+        st << QStringLiteral("a") << QStringLiteral("a") << 0 << 0 << 3 << 4 << 1 << 1 << QJsonObject();
+        const auto v1 = layout_codec::decode(QString::fromLatin1(buf.toBase64()));
+        QVERIFY(v1.has_value());
+        QCOMPARE(v1->rows, 0);
+        QCOMPARE(v1->items.size(), 1);
+        QCOMPARE(v1->items[0].cell.w, 3);
     }
 };
 

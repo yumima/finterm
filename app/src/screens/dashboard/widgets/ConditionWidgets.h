@@ -37,14 +37,18 @@ struct ConditionWidgetDef {
 inline const QVector<ConditionWidgetDef>& condition_widget_defs() {
     static const QVector<ConditionWidgetDef> k = {
         {"cond_futures", "Futures Majors", "Front-month futures — live price, trend, 200-day and 1-year position", 4, 6},
-        {"cond_equity", "ETFs & SPDR Sectors", "SPY, QQQ, DIA and the 11 SPDR sectors with trend, 200-day, percentile", 4, 6},
+        {"cond_equity", "ETFs & SPDR Sectors",
+         "SPY, QQQ, DIA, the 11 SPDR sectors and broad / regional ETFs with trend, 200-day, percentile", 4, 6},
         {"cond_vol", "Volatility", "VIX, VVIX, VXN and MOVE with their 1-year percentile and VIX term structure", 4, 4},
         {"cond_curve", "US Yield Curve", "Treasury par curve vs 1M / 1Y ago, and spreads (2s10s, 3M10Y…)", 4, 6},
-        {"cond_credit", "Credit Stress", "High-yield and investment-grade OAS (FRED), MOVE, HYG / LQD / BND", 4, 5},
+        {"cond_credit", "Credit Stress",
+         "High-yield and investment-grade OAS (FRED), MOVE, Treasury yields, Treasury / bond / credit ETFs", 4, 5},
         {"cond_macro", "Macro Indicators", "Fed funds, CPI YoY, US debt/GDP, CAPE — level and 10-year percentile", 4, 5},
-        {"cond_commod", "Commodity Conditions", "Gold & miners, silver, gold futures, crude, gas, copper, GSCI, dry bulk", 4, 6},
-        {"cond_fx", "FX Spot", "Dollar index and major pairs incl. USD/CNH, with trend and percentile", 4, 4},
-        {"cond_crypto", "Crypto Spot", "Bitcoin, Ether and MSTR with trend and percentile", 4, 3},
+        {"cond_commod", "Commodity Conditions",
+         "Gold & miners, metals, energy, grains and softs futures, GSCI, dry bulk", 4, 6},
+        {"cond_fx", "FX Spot",
+         "Dollar index, the majors, crosses and Asian pairs incl. USD/CNH, with trend and percentile", 4, 4},
+        {"cond_crypto", "Crypto Spot", "Bitcoin, Ether, MSTR and the large coins with trend and percentile", 4, 3},
         {"cond_corr", "Cross-Asset Correlation", "63-day correlation of daily changes — S&P, 10Y, BTC, gold, oil, copper",
          6, 5},
         {"cond_sector_corr", "Sector Correlation", "63-day correlation of the S&P 500 and its 11 sector ETFs", 6, 6},
@@ -67,6 +71,124 @@ inline QVector<ConditionRowDef> sectors_with_spx() {
     return {{"^GSPC", "S&P 500"}, {"XLK", "Tech"},       {"XLF", "Financials"}, {"XLV", "Health"},
             {"XLE", "Energy"},    {"XLI", "Industrials"}, {"XLY", "Discretionary"}, {"XLP", "Staples"},
             {"XLU", "Utilities"}, {"XLB", "Materials"},  {"XLRE", "Real Estate"}, {"XLC", "Comm Svcs"}};
+}
+
+
+/// The list a condition widget starts with (its config's rows replace it).
+/// The old MARKETS PANELS folded into these: what a user's panel listed is
+/// covered when it is here (MarketsScreen's migration reads them).
+inline QVector<ConditionRowDef> default_rows(const QString& type_id) {
+    if (type_id == QLatin1String("cond_equity"))
+        return {
+            {"SPY", "S&P 500 (SPY)"},
+            {"QQQ", "Nasdaq 100 (QQQ)"},
+            {"DIA", "Dow (DIA)"},
+            {"XLK", "Tech (XLK)"},
+            {"XLF", "Financials (XLF)"},
+            {"XLV", "Health (XLV)"},
+            {"XLE", "Energy (XLE)"},
+            {"XLI", "Industrials (XLI)"},
+            {"XLY", "Discretionary (XLY)"},
+            {"XLP", "Staples (XLP)"},
+            {"XLU", "Utilities (XLU)"},
+            {"XLB", "Materials (XLB)"},
+            {"XLRE", "Real Estate (XLRE)"},
+            {"XLC", "Comm Svcs (XLC)"},
+            {"IWM", "Russell 2000 (IWM)"},
+            {"VTI", "Total US market (VTI)"},
+            {"VOO", "S&P 500 (VOO)"},
+            {"EEM", "Emerging markets (EEM)"},
+            {"FXI", "China large-cap (FXI)"},
+            {"GLD", "Gold (GLD)"},
+            {"VNQ", "US REITs (VNQ)"},
+        };
+    if (type_id == QLatin1String("cond_vol"))
+        return {
+            {"^VIX", "VIX"},
+            {"^VVIX", "VVIX (vol of VIX)"},
+            {"^VXN", "VXN (Nasdaq vol)"},
+            {"^MOVE", "MOVE (Treasury vol)"},
+        };
+    if (type_id == QLatin1String("cond_credit"))
+        return {
+            {"FRED:BAMLH0A0HYM2", "High-yield OAS, %"},
+            {"FRED:BAMLC0A0CM", "Investment-grade OAS, %"},
+            {"^MOVE", "MOVE (Treasury vol)"},
+            {"^IRX", "US 13-week yield, %"},
+            {"^FVX", "US 5Y yield, %"},
+            {"^TNX", "US 10Y yield, %"},
+            {"^TYX", "US 30Y yield, %"},
+            {"SHY", "1–3Y Treasuries (SHY)"},
+            {"IEF", "7–10Y Treasuries (IEF)"},
+            {"TLT", "20Y+ Treasuries (TLT)"},
+            {"AGG", "US aggregate (AGG)"},
+            {"BND", "Total bond (BND)"},
+            {"LQD", "IG corporate (LQD)"},
+            {"HYG", "High yield (HYG)"},
+            {"JNK", "High yield (JNK)"},
+        };
+    if (type_id == QLatin1String("cond_commod"))
+        return {
+            {"GLD", "Gold ETF (GLD)"},
+            {"GDX", "Gold miners (GDX)"},
+            {"SLV", "Silver ETF (SLV)"},
+            {"GC=F", "Gold futures (GC)"},
+            {"CL=F", "WTI crude (CL)"},
+            {"NG=F", "Natural gas (NG)"},
+            {"HG=F", "Copper (HG)"},
+            {"SI=F", "Silver (SI)"},
+            {"PL=F", "Platinum (PL)"},
+            {"PA=F", "Palladium (PA)"},
+            {"BZ=F", "Brent crude (BZ)"},
+            {"RB=F", "Gasoline (RB)"},
+            {"HO=F", "Heating oil (HO)"},
+            {"ZC=F", "Corn (ZC)"},
+            {"ZW=F", "Wheat (ZW)"},
+            {"ZS=F", "Soybeans (ZS)"},
+            {"KC=F", "Coffee (KC)"},
+            {"CT=F", "Cotton (CT)"},
+            {"SB=F", "Sugar (SB)"},
+            {"CC=F", "Cocoa (CC)"},
+            {"LBR=F", "Lumber (LBR)"},
+            {"^SPGSCI", "S&P GSCI"},
+            {"BDRY", "Dry-bulk freight ETF (BDRY)"},
+        };
+    if (type_id == QLatin1String("cond_fx"))
+        return {
+            {"DX-Y.NYB", "Dollar index (DXY)"},
+            {"EURUSD=X", "EUR/USD"},
+            {"USDJPY=X", "USD/JPY"},
+            {"GBPUSD=X", "GBP/USD"},
+            {"CNH=X", "USD/CNH"},
+            {"USDCHF=X", "USD/CHF"},
+            {"USDCAD=X", "USD/CAD"},
+            {"AUDUSD=X", "AUD/USD"},
+            {"NZDUSD=X", "NZD/USD"},
+            {"EURGBP=X", "EUR/GBP"},
+            {"EURJPY=X", "EUR/JPY"},
+            {"GBPJPY=X", "GBP/JPY"},
+            {"USDCNY=X", "USD/CNY"},
+            {"USDKRW=X", "USD/KRW"},
+            {"USDHKD=X", "USD/HKD"},
+            {"USDTWD=X", "USD/TWD"},
+            {"USDSGD=X", "USD/SGD"},
+        };
+    if (type_id == QLatin1String("cond_crypto"))
+        return {
+            {"BTC-USD", "Bitcoin"},
+            {"ETH-USD", "Ether"},
+            {"MSTR", "Strategy (MSTR)"},
+            {"SOL-USD", "Solana"},
+            {"BNB-USD", "BNB"},
+            {"XRP-USD", "XRP"},
+            {"ADA-USD", "Cardano"},
+            {"DOGE-USD", "Dogecoin"},
+            {"LINK-USD", "Chainlink"},
+            {"DOT-USD", "Polkadot"},
+            {"AVAX-USD", "Avalanche"},
+            {"ATOM-USD", "Cosmos"},
+        };
+    return {};
 }
 
 } // namespace condition_detail
@@ -98,26 +220,12 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
     }
     if (type_id == QLatin1String("cond_equity"))
         return new ConditionTableWidget(QStringLiteral("ETFs & SPDR SECTORS"), M::Market,
-                                        {{"SPY", "S&P 500 (SPY)"},
-                                         {"QQQ", "Nasdaq 100 (QQQ)"},
-                                         {"DIA", "Dow (DIA)"},
-                                         {"XLK", "Tech (XLK)"},
-                                         {"XLF", "Financials (XLF)"},
-                                         {"XLV", "Health (XLV)"},
-                                         {"XLE", "Energy (XLE)"},
-                                         {"XLI", "Industrials (XLI)"},
-                                         {"XLY", "Discretionary (XLY)"},
-                                         {"XLP", "Staples (XLP)"},
-                                         {"XLU", "Utilities (XLU)"},
-                                         {"XLB", "Materials (XLB)"},
-                                         {"XLRE", "Real Estate (XLRE)"},
-                                         {"XLC", "Comm Svcs (XLC)"}},
-                                        cfg, ui::colors::POSITIVE(), parent);
+                                        condition_detail::default_rows("cond_equity"), cfg, ui::colors::POSITIVE(),
+                                        parent);
     if (type_id == QLatin1String("cond_vol")) {
-        auto* w = new ConditionTableWidget(
-            QStringLiteral("VOLATILITY"), M::Market,
-            {{"^VIX", "VIX"}, {"^VVIX", "VVIX (vol of VIX)"}, {"^VXN", "VXN (Nasdaq vol)"}, {"^MOVE", "MOVE (Treasury vol)"}},
-            cfg, ui::colors::NEGATIVE(), parent);
+        auto* w = new ConditionTableWidget(QStringLiteral("VOLATILITY"), M::Market,
+                                           condition_detail::default_rows("cond_vol"), cfg, ui::colors::NEGATIVE(),
+                                           parent);
         // The WORLD board's term-structure reading, from the same live quotes.
         w->set_footer({"^VIX", "^VIX3M"}, [](const QHash<QString, services::QuoteData>& q) {
             const double vix = q.contains("^VIX") ? q.value("^VIX").price : world::kNaN;
@@ -133,13 +241,8 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
         return new YieldCurveWidget(cfg, parent);
     if (type_id == QLatin1String("cond_credit")) {
         auto* w = new ConditionTableWidget(QStringLiteral("BONDS & CREDIT"), M::Market,
-                                           {{"FRED:BAMLH0A0HYM2", "High-yield OAS, %"},
-                                            {"FRED:BAMLC0A0CM", "Investment-grade OAS, %"},
-                                            {"^MOVE", "MOVE (Treasury vol)"},
-                                            {"HYG", "High yield (HYG)"},
-                                            {"LQD", "IG corporate (LQD)"},
-                                            {"BND", "Total bond (BND)"}},
-                                           cfg, ui::colors::CYAN(), parent);
+                                           condition_detail::default_rows("cond_credit"), cfg, ui::colors::CYAN(),
+                                           parent);
         w->set_note(QStringLiteral("OAS: ICE BofA option-adjusted spreads via FRED (daily, a day behind) — the "
                                    "credit-stress gauges; a high percentile is stress."));
         return w;
@@ -157,16 +260,8 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
     }
     if (type_id == QLatin1String("cond_commod")) {
         auto* w = new ConditionTableWidget(QStringLiteral("COMMODITY CONDITIONS"), M::Market,
-                                           {{"GLD", "Gold ETF (GLD)"},
-                                            {"GDX", "Gold miners (GDX)"},
-                                            {"SLV", "Silver ETF (SLV)"},
-                                            {"GC=F", "Gold futures (GC)"},
-                                            {"CL=F", "WTI crude (CL)"},
-                                            {"NG=F", "Natural gas (NG)"},
-                                            {"HG=F", "Copper (HG)"},
-                                            {"^SPGSCI", "S&P GSCI"},
-                                            {"BDRY", "Dry-bulk freight ETF (BDRY)"}},
-                                           cfg, ui::colors::WARNING(), parent);
+                                           condition_detail::default_rows("cond_commod"), cfg, ui::colors::WARNING(),
+                                           parent);
         w->set_note(QStringLiteral("BDRY holds Capesize / Panamax / Supramax freight futures — it tracks dry-bulk "
                                    "rates, not the Baltic Dry Index itself, which has no free feed. Gold is COMEX GC: "
                                    "Yahoo's E-mini gold (QO=F) history is not a gold series."));
@@ -174,20 +269,15 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
     }
     if (type_id == QLatin1String("cond_fx")) {
         auto* w = new ConditionTableWidget(QStringLiteral("FX SPOT"), M::Market,
-                                           {{"DX-Y.NYB", "Dollar index (DXY)"},
-                                            {"EURUSD=X", "EUR/USD"},
-                                            {"USDJPY=X", "USD/JPY"},
-                                            {"GBPUSD=X", "GBP/USD"},
-                                            {"CNH=X", "USD/CNH"}},
-                                           cfg, ui::colors::CYAN(), parent);
+                                           condition_detail::default_rows("cond_fx"), cfg, ui::colors::CYAN(), parent);
         w->set_note(QStringLiteral("ICE DX futures and SGX USD/CNH (UC) futures have no free feed; the spot index "
                                    "and spot USD/CNH are shown."));
         return w;
     }
     if (type_id == QLatin1String("cond_crypto"))
         return new ConditionTableWidget(QStringLiteral("CRYPTO SPOT"), M::Market,
-                                        {{"BTC-USD", "Bitcoin"}, {"ETH-USD", "Ether"}, {"MSTR", "Strategy (MSTR)"}}, cfg,
-                                        ui::colors::AMBER(), parent);
+                                        condition_detail::default_rows("cond_crypto"), cfg, ui::colors::AMBER(),
+                                        parent);
     if (type_id == QLatin1String("cond_corr"))
         return new CorrelationWidget(QStringLiteral("CROSS-ASSET CORRELATION"),
                                      {{"^GSPC", "S&P 500"},

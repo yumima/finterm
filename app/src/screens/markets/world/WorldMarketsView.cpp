@@ -3,11 +3,13 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 #include "screens/dashboard/widgets/SectorHeatmapStyle.h"
 #include "screens/markets/world/MarketSessions.h"
 #include "screens/markets/world/OvernightSummary.h"
 #include "services/economics/EconomicsService.h"
 #include "services/markets/LastKnownQuote.h"
+#include "ui/tables/RowMarkDelegate.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -369,6 +371,15 @@ void WorldSectionWidget::paintEvent(QPaintEvent*) {
     const QColor primary(ui::colors::TEXT_PRIMARY()), secondary(ui::colors::TEXT_SECONDARY()),
         tertiary(ui::colors::TEXT_TERTIARY());
 
+    // The row the page's chart draws (a tile on a canvas) carries the mark
+    // every list on the page uses.
+    if (!link_) {
+        link_ = SelectionLink::of(this);
+        if (link_)
+            connect(link_, &SelectionLink::marked, this, [this](const QString&) { update(); });
+    }
+    const QString linked = link_ ? link_->symbol() : QString();
+
     int y = title_h() + kColH;
     for (int i = 0; i < section_.rows.size(); ++i, y += kRowH) {
         const Instrument& in = section_.rows[i];
@@ -376,6 +387,8 @@ void WorldSectionWidget::paintEvent(QPaintEvent*) {
         const Cols c = columns(y);
         if (i % 2 == 1)
             p.fillRect(QRect(0, y, width(), kRowH), QColor(ui::colors::ROW_ALT()));
+        if (!linked.isEmpty() && in.symbol == linked)
+            ui::RowMarkDelegate::paint_mark(&p, QRect(0, y, width(), kRowH), true);
         const bool live = rv.status == RowStatus::Live;
         const bool missing = rv.status == RowStatus::Missing;
 

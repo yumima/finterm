@@ -10,6 +10,7 @@
 #include <QIODevice>
 #include <QString>
 
+#include <algorithm>
 #include <optional>
 
 namespace finterm::screens::layout_codec {
@@ -18,7 +19,7 @@ namespace finterm::screens::layout_codec {
 // distinguishes it from the legacy (config-less, header-less) format so old
 // saved layouts still load.
 inline constexpr quint32 kMagic = 0xDA58B0A7;
-inline constexpr qint32 kVersion = 1;
+inline constexpr qint32 kVersion = 2; // 2: + rows (fit-to-view canvases), after the tiles
 
 inline QString encode(const GridLayout& layout) {
     QByteArray buf;
@@ -32,6 +33,8 @@ inline QString encode(const GridLayout& layout) {
         stream << item.cell.min_w << item.cell.min_h;
         stream << item.config; // per-instance config (broker/account/symbol/…)
     }
+    // v2: after the tiles, so a build that reads v1 stops before it.
+    stream << qint32(layout.rows);
     return QString::fromLatin1(buf.toBase64());
 }
 
@@ -45,9 +48,9 @@ inline std::optional<GridLayout> decode(const QString& b64) {
     quint32 magic = 0;
     stream >> magic;
     const bool has_config = magic == kMagic;
+    qint32 version = 0;
     if (has_config) {
-        qint32 version = 0;
-        stream >> version; // reserved for future migrations
+        stream >> version;
     } else {
         stream.device()->seek(0); // the legacy format — re-read from the start
     }
@@ -64,6 +67,11 @@ inline std::optional<GridLayout> decode(const QString& b64) {
         if (has_config)
             stream >> item.config;
         layout.items.append(item);
+    }
+    if (version >= 2) {
+        qint32 rows = 0;
+        stream >> rows;
+        layout.rows = std::max(0, int(rows));
     }
     if (stream.status() != QDataStream::Ok)
         return std::nullopt;

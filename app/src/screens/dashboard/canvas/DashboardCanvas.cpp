@@ -5,6 +5,7 @@
 
 #include "core/logging/Logger.h"
 #include "screens/dashboard/canvas/DashboardTemplates.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 #include "screens/dashboard/canvas/WidgetRegistry.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -125,6 +126,25 @@ void DashboardCanvas::load_layout(const GridLayout& layout) {
         item.cell.w = std::min(std::max(item.cell.w, meta->min_w), layout_.cols);
         item.cell.x = std::max(0, std::min(item.cell.x, layout_.cols - item.cell.w));
         item.cell.h = std::max(item.cell.h, meta->min_h);
+    }
+    // A fit-to-view canvas keeps the rows it was saved with; a layout from
+    // before rows were saved: the rows its tiles use (after the minimums
+    // above), and an empty page the blank page's twelve.
+    if (fit_exact_ && layout_.rows <= 0)
+        layout_.rows = layout_.items.isEmpty() ? 12 : max_row(layout_.items);
+    // A new arrangement: the page's selection starts again from its chart.
+    if (auto* link = findChild<SelectionLink*>(QString(), Qt::FindDirectChildrenOnly))
+        link->reset();
+
+    // Tiles are built from a copy: a widget shown here can already talk back
+    // (a chart selecting its symbol, a futures widget saving the contract it
+    // follows → config_changed → layout_.items written while shared), and a
+    // reference into layout_.items held across that pointed at freed memory.
+    const QVector<GridItem> to_build = layout_.items;
+    for (const auto& item : to_build) {
+        const WidgetMeta* meta = WidgetRegistry::instance().find(item.id);
+        if (!meta)
+            continue;
         auto* widget = meta->factory(item.config);
         auto* tile = new WidgetTile(item.instance_id, widget, this);
         connect_tile(tile);
@@ -240,7 +260,12 @@ void DashboardCanvas::set_row_height(int px) {
 }
 
 void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
-    const int rows = max_row(layout_.items);
+    // A fit-to-view canvas divides the view into a FIXED number of rows (the
+    // page's, saved): sizing it by the tiles (the old way) re-sized every tile
+    // whenever one grew or shrank. Tiles running past the last row — a widget
+    // added to a full page — are shown by fitting more rows for as long as
+    // they are there; the page's own rows do not change.
+    const int rows = fit_exact_ ? std::max(layout_.rows, max_row(layout_.items)) : max_row(layout_.items);
     if (rows <= 0 || vp_h <= 0)
         return;
 
@@ -306,17 +331,17 @@ void DashboardCanvas::on_drag_moved(WidgetTile* tile, QPoint canvas_pos) {
 
     if (new_ghost == ghost_cell_)
         return;
+    const GridCell prev_ghost = ghost_cell_;
     ghost_cell_ = new_ghost;
 
-    // Swap-based collision resolution
-    GridItem moving_item;
-    moving_item.instance_id = tile->instance_id();
-    moving_item.cell = ghost_cell_;
-    auto resolved = resolve_collisions_with_swap(pre_drag_layout_.items, moving_item);
-    resolved = compact_vertical(resolved);
+    auto resolved = dragged_items(tile->instance_id(), ghost_cell_);
+    if (!resolved) { // it would push a tile off the page: the tile stays at the last place that fit
+        ghost_cell_ = prev_ghost;
+        return;
+    }
 
     // Reflow non-dragging tiles
-    for (const auto& ri : resolved) {
+    for (const auto& ri : *resolved) {
         if (ri.instance_id == tile->instance_id())
             continue;
         auto* t = tile_for_id(ri.instance_id);
@@ -332,20 +357,11 @@ void DashboardCanvas::on_drag_released(WidgetTile* tile, QPoint /*canvas_pos*/) 
         return;
     scroll_timer_->stop();
 
-    // Apply swap resolution to the actual layout
-    GridItem moving_item;
-    moving_item.instance_id = tile->instance_id();
-    moving_item.cell = ghost_cell_;
-
-    layout_.items = resolve_collisions_with_swap(pre_drag_layout_.items, moving_item);
-    // Update the moving item's cell
-    for (auto& li : layout_.items) {
-        if (li.instance_id == tile->instance_id()) {
-            li.cell = ghost_cell_;
-            break;
-        }
-    }
-    layout_.items = compact_vertical(layout_.items);
+    // ghost_cell_ is the last place on_drag_moved accepted: the same layout.
+    if (auto resolved = dragged_items(tile->instance_id(), ghost_cell_))
+        layout_.items = *resolved;
+    else
+        layout_.items = pre_drag_layout_.items;
 
     dragging_tile_ = nullptr;
     tile->set_dragging(false);
@@ -406,23 +422,12 @@ void DashboardCanvas::on_resize_moved(WidgetTile* tile, QPoint canvas_pos) {
     // Early-out: skip expensive collision resolution if nothing changed
     if (target == ghost_cell_)
         return;
+
+    auto resized = resized_items(tile->instance_id(), target);
+    if (!resized)
+        return; // no room left on the page: the tile stays at the last size that fit
     ghost_cell_ = target;
-
-    // Build working layout with resized item
-    auto working = pre_resize_layout_.items;
-    for (auto& wi : working) {
-        if (wi.instance_id == tile->instance_id()) {
-            wi.cell = target;
-            break;
-        }
-    }
-
-    // Resolve + compact ALL tiles
-    GridItem moving;
-    moving.instance_id = tile->instance_id();
-    moving.cell = target;
-    working = resolve_collisions(working, moving);
-    working = compact_vertical(working);
+    const auto& working = *resized;
 
     // Reflow non-resizing tiles only.
     // The resizing tile stays where it is — we only update its geometry
@@ -447,15 +452,9 @@ void DashboardCanvas::on_resize_released(WidgetTile* tile) {
     if (!resizing_tile_ || resizing_tile_ != tile)
         return;
 
-    auto* item = item_for_id(tile->instance_id());
-    if (item)
-        item->cell = ghost_cell_;
-
-    GridItem moving;
-    moving.instance_id = tile->instance_id();
-    moving.cell = ghost_cell_;
-    layout_.items = resolve_collisions(layout_.items, moving);
-    layout_.items = compact_vertical(layout_.items);
+    // ghost_cell_ is the last size that fit (resized_items accepted it).
+    if (auto resized = resized_items(tile->instance_id(), ghost_cell_))
+        layout_.items = *resized;
 
     resizing_tile_ = nullptr;
     tile->set_resizing(false);
@@ -463,6 +462,38 @@ void DashboardCanvas::on_resize_released(WidgetTile* tile) {
     reflow_tiles(true);
     update_canvas_height();
     notify_layout_changed(/*user_edit=*/true);
+}
+
+std::optional<QVector<GridItem>> DashboardCanvas::dragged_items(const QString& id, const GridCell& ghost) const {
+    GridItem moving;
+    moving.instance_id = id;
+    moving.cell = ghost;
+    auto items = resolve_collisions_with_swap(pre_drag_layout_.items, moving);
+    for (auto& it : items)
+        if (it.instance_id == id)
+            it.cell = ghost;
+    items = compact_vertical(items);
+    if (!fit_exact_)
+        return items;
+    // The rows on screen when the drag began (a page holding an added widget
+    // below its own rows shows those too).
+    return keep_within_rows(items, id, std::max(layout_.rows, max_row(pre_drag_layout_.items)));
+}
+
+std::optional<QVector<GridItem>> DashboardCanvas::resized_items(const QString& id, const GridCell& target) const {
+    auto working = pre_resize_layout_.items;
+    for (auto& wi : working)
+        if (wi.instance_id == id)
+            wi.cell = target;
+    GridItem moving;
+    moving.instance_id = id;
+    moving.cell = target;
+    working = compact_vertical(resolve_collisions(working, moving));
+    if (!fit_exact_)
+        return working;
+    // The page keeps its rows: growing a tile takes room from the tiles it
+    // pushes, never from the rest of the page.
+    return keep_within_rows(working, id, std::max(layout_.rows, max_row(pre_resize_layout_.items)));
 }
 
 // ── Close / scroll ────────────────────────────────────────────────────────────
@@ -600,6 +631,8 @@ void DashboardCanvas::reflow_tiles(bool animate) {
 
 void DashboardCanvas::update_canvas_height() {
     int rows = max_row(layout_.items);
+    if (fit_exact_)
+        rows = std::max(rows, layout_.rows); // the empty rows below are the page's too
     int h = layout_.margin + rows * (layout_.row_h + layout_.margin);
     int min_h = std::max(h, 400);
     setMinimumHeight(min_h);

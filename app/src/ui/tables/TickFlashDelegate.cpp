@@ -14,14 +14,20 @@ namespace finterm::ui {
 TickFlashDelegate* TickFlashDelegate::install(QAbstractItemView* view, int key_column) {
     if (!view)
         return nullptr;
-    if (auto* cur = view->itemDelegate()) {
+    auto* cur = view->itemDelegate();
+    if (cur) {
         if (auto* mine = qobject_cast<TickFlashDelegate*>(cur))
             return mine;
-        if (cur->metaObject() != &QStyledItemDelegate::staticMetaObject)
-            return nullptr; // someone else's painting — leave it alone
+        // The default delegate, or the row mark every DataTable starts with
+        // (TickFlashDelegate marks rows too): replaced. Anything else is
+        // someone else's painting — left alone.
+        if (cur->metaObject() != &QStyledItemDelegate::staticMetaObject && !dynamic_cast<RowMarkDelegate*>(cur))
+            return nullptr;
     }
     auto* d = new TickFlashDelegate(view, key_column);
     view->setItemDelegate(d);
+    if (cur && cur->parent() == view)
+        cur->deleteLater(); // ours to drop: the view does not delete a replaced delegate
     view->installEventFilter(d);
     return d;
 }
@@ -40,7 +46,7 @@ bool TickFlashDelegate::eventFilter(QObject* obj, QEvent* ev) {
 }
 
 TickFlashDelegate::TickFlashDelegate(QAbstractItemView* view, int key_column)
-    : QStyledItemDelegate(view), view_(view), key_column_(key_column) {
+    : RowMarkDelegate(view), view_(view), key_column_(key_column) {
     anim_ = new QTimer(this);
     anim_->setInterval(40); // ~25 fps fade; stops itself once every flash is over
     connect(anim_, &QTimer::timeout, this, [this]() {
@@ -104,7 +110,15 @@ bool TickFlashDelegate::parse_number(const QString& s, double* out) {
 }
 
 void TickFlashDelegate::paint(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const {
-    QStyledItemDelegate::paint(p, opt, idx);
+    // The cell, the tick flash over it, and the selected row's mark on top:
+    // a flash painted over the mark broke the band for its length.
+    paint_plain(p, opt, idx);
+    paint_flash(p, opt, idx);
+    if (opt.state & QStyle::State_Selected)
+        paint_mark(p, opt.rect, idx.column() == 0);
+}
+
+void TickFlashDelegate::paint_flash(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const {
     if (key_column_ < 0 || idx.column() == key_column_)
         return;
     const QString key_text = idx.siblingAtColumn(key_column_).data(Qt::DisplayRole).toString();

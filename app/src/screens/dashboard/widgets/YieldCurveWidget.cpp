@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/YieldCurveWidget.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 
 #include "datahub/DataHub.h"
 #include "screens/markets/MarketChartDialog.h"
@@ -255,6 +256,9 @@ YieldCurveWidget::YieldCurveWidget(const QJsonObject& cfg, QWidget* parent)
         it->setToolTip(QStringLiteral("Where today's spread ranks among the past year's business days (0 = lowest)."));
     table_->viewport()->setCursor(Qt::PointingHandCursor);
     content_layout()->addWidget(table_, 2);
+    SelectionLink::follow_rows(table_, [this](int r) {
+        return r >= 0 && r < spreads_.size() ? QStringLiteral("UST:") + spreads_[r] : QString();
+    });
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
         if (row == spreads_.size()) {
             add_spread();

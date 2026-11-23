@@ -19,10 +19,15 @@
 #include <QHash>
 #include <QSet>
 #include <QVector>
+#include <QPointer>
 #include <QWidget>
 
 class QLabel;
 class QTimer;
+
+namespace finterm::screens {
+class SelectionLink;
+}
 
 namespace finterm::screens::world {
 
@@ -82,6 +87,7 @@ class WorldSectionWidget : public QWidget {
 
     Section section_;
     const WorldMarketsView* view_;
+    QPointer<SelectionLink> link_; ///< the canvas's (a tile); none on the plain board
 };
 
 class WorldMarketsView : public QWidget {

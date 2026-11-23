@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/ConditionTableWidget.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 
 #include "core/util/BarTime.h"
 #include "datahub/DataHub.h"
@@ -186,6 +187,7 @@ ConditionTableWidget::ConditionTableWidget(const QString& title, Mode mode, QVec
     table_->viewport()->setCursor(Qt::PointingHandCursor);
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(table_, &QTableWidget::cellClicked, this, &ConditionTableWidget::on_cell_clicked);
+    SelectionLink::follow_rows(table_, [this](int r) { return r >= 0 && r < rows_.size() ? rows_[r].symbol : QString(); });
     connect(table_, &QWidget::customContextMenuRequested, this, &ConditionTableWidget::on_context_menu);
     content_layout()->addWidget(table_, 1);
 

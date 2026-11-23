@@ -167,8 +167,8 @@ void FuturesWidgetBase::showEvent(QShowEvent* e) {
         if (link_) {
             connect(link_, &SelectionLink::selected, this,
                     [this](const QString& sym, const QString&) { on_selected(sym); });
-            // Selected before this widget was first shown (its page built for it).
-            if (!link_->symbol().isEmpty())
+            // Picked before this widget was first shown (its page built for it).
+            if (link_->picked())
                 on_selected(link_->symbol());
         }
     }
@@ -1278,7 +1278,9 @@ void FuturesBoardWidget::showEvent(QShowEvent* e) {
     if (!link_) {
         link_ = SelectionLink::of(this);
         if (link_) {
-            connect(link_, &SelectionLink::selected, this, [this](const QString& sym, const QString&) {
+            // The board's selected root is a mark: it follows clicks and,
+            // before any, the market the page's chart draws.
+            connect(link_, &SelectionLink::marked, this, [this](const QString& sym) {
                 const QString r = root_for(sym);
                 if (!r.isEmpty()) {
                     selected_root_ = r;

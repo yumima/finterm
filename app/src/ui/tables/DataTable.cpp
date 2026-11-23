@@ -1,5 +1,6 @@
 #include "ui/tables/DataTable.h"
 
+#include "ui/tables/RowMarkDelegate.h"
 #include "ui/tables/TickFlashDelegate.h"
 #include "ui/theme/Theme.h"
 
@@ -23,10 +24,12 @@ DataTable::DataTable(QWidget* parent) : QTableWidget(parent) {
     // visibly different sizes when nested under different parent stylesheets.
     setStyleSheet(QString("QTableWidget { background: %1; alternate-background-color: %2; "
                           "gridline-color: %3; border: none; font-size: %4px; }"
-                          "QTableWidget::item { padding: 4px 8px; height: 26px; font-size: %4px; }"
-                          "QTableWidget::item:selected { background: #111111; }")
+                          "QTableWidget::item { padding: 4px 8px; height: 26px; font-size: %4px; }")
                       .arg(colors::DARK(), colors::ROW_ALT(), colors::BORDER())
                       .arg(fonts::font_px(0)));
+    // The selected row (on a canvas: the one its chart draws) is marked in
+    // amber over its own colours — see RowMarkDelegate.
+    setItemDelegate(new RowMarkDelegate(this));
 }
 
 void DataTable::set_headers(const QStringList& headers) {

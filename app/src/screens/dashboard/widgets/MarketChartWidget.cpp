@@ -60,9 +60,13 @@ void MarketChartWidget::link(bool on) {
     counted_ = true;
     connect(link_, &SelectionLink::selected, this,
             [this](const QString& sym, const QString& label) { view_->set_symbol(sym, label); });
-    // Selected while this tile was off screen (another page, another tab).
-    if (!link_->symbol().isEmpty() && link_->symbol() != symbol_)
+    // Picked while this tile was off screen (another page, another tab).
+    if (link_->picked() && link_->symbol() != symbol_)
         view_->set_symbol(link_->symbol(), link_->label());
+    // Nothing picked on this canvas yet: what the chart draws is what the
+    // lists mark (no other widget is moved by it).
+    else if (!link_->picked())
+        link_->seed(symbol_, label_);
 }
 
 void MarketChartWidget::showEvent(QShowEvent* e) {

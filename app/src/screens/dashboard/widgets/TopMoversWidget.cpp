@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/TopMoversWidget.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -64,6 +65,10 @@ void TopMoversWidget::build_body() {
     // Left click opens the row's chart. Rows are a reused pool, so read the
     // symbol off the row at click time; a blank pool row has none.
     table_->viewport()->setCursor(Qt::PointingHandCursor);
+    SelectionLink::follow_rows(table_, [this](int r) {
+        auto* it = table_->item(r, 0);
+        return it ? it->text().trimmed() : QString();
+    });
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
         auto* it = table_->item(row, 0);
         const QString sym = it ? it->text().trimmed() : QString();
