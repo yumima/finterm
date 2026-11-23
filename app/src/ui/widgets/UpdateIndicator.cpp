@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 
 namespace finterm::ui {
@@ -22,8 +23,9 @@ UpdateIndicator::UpdateIndicator(QWidget* parent) : QWidget(parent) {
     question_ = new QLabel(QStringLiteral("CHECK FOR UPDATES DAILY?"));
     question_->setObjectName("sbUpdateQuestion");
     question_->setToolTip(QStringLiteral("Once a day, finterm would fetch its update list from github.com "
-                                         "(sending only its version and platform) and show a note here when a "
-                                         "new version is out. It never installs anything without asking.\n"
+                                         "(sending only its version and platform). A new version is downloaded "
+                                         "in the background and installs when you restart or quit finterm — "
+                                         "a note here says when it is ready.\n"
                                          "Change it later in About › Check for updates automatically."));
     primary_ = new QPushButton;
     primary_->setObjectName("sbUpdatePrimary");
@@ -45,6 +47,14 @@ UpdateIndicator::UpdateIndicator(QWidget* parent) : QWidget(parent) {
     auto& svc = UpdateService::instance();
     connect(primary_, &QPushButton::clicked, this, [this]() {
         auto& s = UpdateService::instance();
+        if (!s.last_result().isEmpty() && (!s.has_offer() || !s.last_result_ok())) {
+            const QString text = s.last_result();
+            const bool ok = s.last_result_ok();
+            s.clear_last_result();
+            if (!ok)
+                QMessageBox::warning(window(), QStringLiteral("finterm update"), text);
+            return;
+        }
         if (s.has_offer()) {
             s.set_dialog_parent(window());
             s.show_offer();
@@ -68,6 +78,18 @@ void UpdateIndicator::refresh() {
         hide();
         return;
     }
+    // What the last update did — said once, until clicked. A problem comes
+    // before any offer (after a rollback the failed version is still offered).
+    if (!svc.last_result().isEmpty() && (!svc.has_offer() || !svc.last_result_ok())) {
+        question_->hide();
+        secondary_->hide();
+        primary_->setText(svc.last_result_ok() ? QStringLiteral("UPDATED TO v%1 ✓").arg(QCoreApplication::applicationVersion())
+                                               : QStringLiteral("UPDATE PROBLEM — DETAILS"));
+        primary_->setToolTip(svc.last_result());
+        primary_->show();
+        show();
+        return;
+    }
     if (svc.has_offer()) {
         question_->hide();
         secondary_->hide();
@@ -75,7 +97,16 @@ void UpdateIndicator::refresh() {
         switch (svc.stage()) {
         case UpdateService::Stage::Downloading:
             primary_->setText(QStringLiteral("DOWNLOADING v%1…").arg(v));
-            primary_->setToolTip(QStringLiteral("The finterm %1 installer is downloading; it opens when done.").arg(v));
+            primary_->setToolTip(svc.can_update_in_place()
+                                     ? QStringLiteral("finterm %1 is downloading in the background.").arg(v)
+                                     : QStringLiteral("The finterm %1 installer is downloading; it opens when done.")
+                                           .arg(v));
+            break;
+        case UpdateService::Stage::Ready:
+            primary_->setText(QStringLiteral("v%1 READY · RESTART").arg(v));
+            primary_->setToolTip(QStringLiteral("finterm %1 is downloaded and verified. Click to restart into it — "
+                                                "or keep working: it installs when you quit.")
+                                     .arg(v));
             break;
         case UpdateService::Stage::Handed:
             primary_->setText(QStringLiteral("v%1 INSTALLER STARTED").arg(v));

@@ -1934,6 +1934,7 @@ add_executable(finterm ${_FINTERM_EXE_FLAGS}
     ${APP_SOURCES}
     src/services/updater/UpdateService.cpp
     src/services/updater/UpdatePolicy.cpp
+    src/services/updater/UpdateInstaller.cpp
     ${_FINTERM_PLATFORM_SOURCES}
 )
 
@@ -2308,6 +2309,14 @@ if(WIN32)
         message(WARNING "OpenSSL DLLs not found for POST_BUILD copy — deploy manually")
     endif()
 endif()
+
+# ── In-place update helpers, embedded (UpdateInstaller writes them out) ──────
+qt_add_resources(finterm "updater_scripts"
+    PREFIX "/updater"
+    BASE "src/services/updater/scripts"
+    FILES
+        src/services/updater/scripts/apply-update.sh
+        src/services/updater/scripts/apply-update.ps1)
 
 # ── Application version (single source of truth) ─────────────────────────────
 # FINTERM_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()

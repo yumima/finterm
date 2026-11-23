@@ -151,7 +151,7 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         auto_box->setStyleSheet(MUTED());
         auto_box->setToolTip(QStringLiteral("Once a day, fetch finterm's update list from github.com (only the "
                                             "version and platform are sent). A new version shows as a note in "
-                                            "the status bar; nothing installs without asking."));
+                                            "the status bar; it downloads in the background and installs when you restart or quit."));
         auto sync_auto_box = [auto_box]() {
             auto& svc = services::UpdateService::instance();
             const QSignalBlocker block(auto_box);

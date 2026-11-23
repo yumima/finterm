@@ -267,6 +267,43 @@ jobs:
             exit 1
           fi
 
+      # ── In-place update: the helper the app runs, on the real install ─────
+      # apply-update.ps1 (embedded in the app) removes the install with its own
+      # maintenance tool and reinstalls into the same folder, unattended —
+      # the same installer stands in for the next version. Then a rollback.
+      # Run with Windows PowerShell (5.1) — what the app starts.
+      - name: In-place update and rollback (apply-update.ps1)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = $env:FINTERM_INSTALLED_EXE -replace '/', '\'
+          $dir = Split-Path -Parent $exe
+          # A copy: the helper deletes the installer it consumes, and this one
+          # is the release asset uploaded below.
+          $built = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          $setup = Join-Path $env:RUNNER_TEMP "update-test-setup.exe"
+          Copy-Item -Force $built $setup
+          $helper = "app/src/services/updater/scripts/apply-update.ps1"
+          $status = Join-Path $env:RUNNER_TEMP "update-status.json"
+          $prev = "$dir.previous"
+          Set-Content -Path (Join-Path $dir "marker-old.txt") -Value "old"
+          & powershell -NoProfile -ExecutionPolicy Bypass -File $helper -AppPid 0 -Installer $setup -InstallDir $dir -Previous $prev `
+              -Status $status -From 0.0.1 -To 0.0.2
+          Get-Content $status
+          $s = Get-Content $status | ConvertFrom-Json
+          if (-not $s.ok) { throw "update failed: $($s.message)" }
+          if (-not (Test-Path $exe)) { throw "finterm.exe missing after the update" }
+          if (-not (Test-Path (Join-Path $dir "scripts/yfinance_data.py"))) { throw "scripts missing after the update" }
+          if (Test-Path (Join-Path $dir "marker-old.txt")) { throw "the old install was not replaced" }
+          if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
+          & powershell -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
+          Get-Content $status
+          $s = Get-Content $status | ConvertFrom-Json
+          if (-not $s.ok) { throw "rollback failed: $($s.message)" }
+          if (-not (Test-Path (Join-Path $dir "marker-old.txt"))) { throw "the rollback did not restore the previous version" }
+          if (-not (Test-Path $built)) { throw "the release installer is gone" }
+          Write-Host "in-place update + rollback OK"
+
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
       # would also catch the main finterm.exe binary, which we don't
@@ -1107,6 +1144,40 @@ jobs:
             echo "::error::the installed app could not fetch market data (see the report and log above)"
             exit 1
           fi
+
+      # ── In-place update: the helper the app runs, on the real disk image ──
+      # apply-update.sh (embedded in the app) opens the DMG, copies the bundle
+      # beside the installed one, swaps them and keeps the previous; then a
+      # rollback. The same DMG stands in for the next version.
+      - name: In-place update and rollback (apply-update.sh, macapp)
+        working-directory: app
+        run: |
+          set -euo pipefail
+          # A copy: the helper deletes the disk image it consumes, and this one
+          # is the release asset uploaded below.
+          cp "$(ls build/finterm-*-macos-arm64-setup.dmg | head -1)" "${RUNNER_TEMP}/update-test.dmg"
+          DMG="${RUNNER_TEMP}/update-test.dmg"
+          DEST="${RUNNER_TEMP}/finterm-update-test"
+          STATUS="${RUNNER_TEMP}/update-status.json"
+          rm -rf "${DEST}"; mkdir -p "${DEST}/finterm.app/Contents/MacOS"
+          echo old > "${DEST}/finterm.app/Contents/MacOS/marker-old"
+          sh src/services/updater/scripts/apply-update.sh --kind macapp --staged "${DMG}" \
+              --target "${DEST}/finterm.app" --previous "${DEST}/.finterm-previous.app" \
+              --status "${STATUS}" --from 0.0.1 --to 0.0.2
+          cat "${STATUS}"
+          grep -q '"ok":true' "${STATUS}" || { echo "::error::macapp update failed"; exit 1; }
+          [ -x "${DEST}/finterm.app/Contents/MacOS/${{ env.APP_NAME }}" ] || { echo "::error::no app after the update"; exit 1; }
+          [ ! -e "${DEST}/finterm.app/Contents/MacOS/marker-old" ] || { echo "::error::old bundle not replaced"; exit 1; }
+          [ -e "${DEST}/.finterm-previous.app/Contents/MacOS/marker-old" ] || { echo "::error::previous not kept"; exit 1; }
+          codesign --verify --deep --strict "${DEST}/finterm.app" || { echo "::error::the swapped bundle fails codesign"; exit 1; }
+          sh src/services/updater/scripts/apply-update.sh --kind macapp-rollback \
+              --target "${DEST}/finterm.app" --previous "${DEST}/.finterm-previous.app" \
+              --status "${STATUS}" --from 0.0.2 --to 0.0.1
+          cat "${STATUS}"
+          grep -q '"ok":true' "${STATUS}" || { echo "::error::macapp rollback failed"; exit 1; }
+          [ -e "${DEST}/finterm.app/Contents/MacOS/marker-old" ] || { echo "::error::rollback did not restore"; exit 1; }
+          ls build/finterm-*-macos-arm64-setup.dmg >/dev/null || { echo "::error::the release DMG is gone"; exit 1; }
+          echo "in-place update + rollback OK"
 
       # ── Upload ────────────────────────────────────────────────────────────
       - name: Upload artifact

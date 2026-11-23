@@ -1,6 +1,12 @@
 #pragma once
 
+#include "services/updater/UpdateInstaller.h"
 #include "services/updater/UpdatePolicy.h"
+
+#include <QCryptographicHash>
+#include <QFile>
+#include <memory>
+#include <optional>
 
 #include <QNetworkAccessManager>
 #include <QObject>
@@ -64,10 +70,27 @@ class UpdateService : public QObject {
     bool has_offer() const { return !offer_.version.isEmpty(); }
     QString offered_version() const { return offer_.version; }
 
-    /// Where the offer stands: its installer downloading, or already handed
-    /// to the user (launched or revealed) this session.
-    enum class Stage { Offered, Downloading, Handed };
+    /// Where the offer stands: its download running; verified and staged to
+    /// replace this build in place (applied when the app quits, or now on
+    /// Restart Now); or — where the build can't replace itself — its
+    /// installer handed to the user (launched or revealed) this session.
+    enum class Stage { Offered, Downloading, Ready, Handed };
     Stage stage() const;
+
+    /// Whether this build replaces itself (an AppImage, a writable .app, an
+    /// IFW install) — else an update is the installer the user runs.
+    bool can_update_in_place() const { return in_place_.has_value(); }
+
+    /// Apply the staged update now: the helper waits for this process, puts
+    /// the new version in place and starts it; every window closes (saving
+    /// its workspace) and the app quits.
+    void restart_now();
+
+    /// What the last update did, reported once by the launch after it
+    /// ("Updated to 4.0.11" / why it failed); empty when there is nothing.
+    QString last_result() const { return last_result_; }
+    bool last_result_ok() const { return last_result_ok_; }
+    void clear_last_result();
 
     /// Open the install prompt for the current offer (the status-bar badge).
     void show_offer();
@@ -94,6 +117,7 @@ class UpdateService : public QObject {
   private slots:
     void on_manifest_reply_finished();
     void on_download_reply_finished();
+    void on_download_ready_read();
     void on_download_progress(qint64 received, qint64 total);
 
   private:
@@ -110,8 +134,18 @@ class UpdateService : public QObject {
     void restore_saved_offer();
     void set_offer(const update_policy::Offer& offer);
     void prompt_install();
-    void start_download(const QString& url, const QString& expected_sha256);
-    void launch_installer(const QString& path);
+    void prompt_restart();
+    /// `quiet`: started by the automatic schedule — a failure is logged and
+    /// the badge goes back to the offer, no dialog.
+    void start_download(const update_policy::Offer& offer, bool quiet);
+    void download_failed(const QString& why);
+    /// Another finterm runs from the install and the swap would pull files
+    /// from under it (macOS bundle, Windows install — not an AppImage).
+    bool blocked_by_other_instance() const;
+    /// At quit: a staged update goes in (no relaunch).
+    void apply_on_quit();
+    void report_last_update();
+    void launch_installer(const QString& path); // not in place: the user runs it
     void reveal_in_file_manager(const QString& path);
     void finish_check(bool update_found);
     /// `handed`: the verified installer was launched or revealed.
@@ -125,10 +159,18 @@ class UpdateService : public QObject {
     QNetworkAccessManager net_;
     QString manifest_url_ = DEFAULT_MANIFEST_URL;
     update_policy::Offer offer_;
-    QString pending_local_path_;
-    QString download_version_; ///< the version being downloaded
-    QString handed_version_;   ///< the version whose installer was handed over this session
+    QString pending_local_path_; ///< where the verified download goes (staged / temp)
+    QString download_version_;   ///< the version being downloaded
+    QString handed_version_;     ///< the version whose installer was handed over this session
     QString pending_expected_sha256_;
+    QString ready_version_; ///< staged, verified, waiting to be applied in place
+    bool download_quiet_ = false;
+    bool applied_ = false; ///< the helper has been started (no second one at quit)
+    std::optional<update_install::Target> in_place_;
+    std::unique_ptr<QFile> part_; ///< the download being written (<path>.part)
+    std::unique_ptr<QCryptographicHash> hasher_;
+    QString last_result_;
+    bool last_result_ok_ = false;
     QPointer<QWidget> dialog_parent_;
     QTimer schedule_;
     bool interactive_ = false;

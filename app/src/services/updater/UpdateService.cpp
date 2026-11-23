@@ -33,6 +33,22 @@ UpdateService::UpdateService(QObject* parent) : QObject(parent) {
     net_.setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
     // GitHub release asset downloads redirect across origins — allow the jump.
     net_.setStrictTransportSecurityEnabled(true);
+    // Only a release build replaces itself (a dev tree is updated from git).
+    if (updates_supported())
+        in_place_ = update_install::in_place_target();
+    // Downloads staged by a session that was killed, or replaced by a newer
+    // one, stay behind (100+ MB each) — swept while no other instance (which
+    // may be using one) runs.
+    if (in_place_ && !update_install::other_instance_running()) {
+        const QDir dir(in_place_->staging_dir);
+        const QStringList pattern = in_place_->kind == QLatin1String("appimage")
+                                        ? QStringList{QStringLiteral(".finterm-*.AppImage*")}
+                                        : QStringList{QStringLiteral("finterm-*-setup*")};
+        for (const QString& f : dir.entryList(pattern, QDir::Files | QDir::Hidden))
+            QFile::remove(dir.filePath(f));
+    }
+    // A staged update goes in when the app quits.
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &UpdateService::apply_on_quit);
 }
 
 QWidget* UpdateService::dialog_parent() {
@@ -82,6 +98,24 @@ constexpr const char* kLastCheckKey = "updates/last_check"; // ISO-8601 UTC of t
 // restart — or a second running profile, whose check isn't due — still shows
 // the badge. Absent when the last check found nothing newer.
 constexpr const char* kOfferKey = "updates/offer";
+// A version that failed to start and was rolled back: never staged by the
+// automatic schedule again (a check on request still offers it).
+constexpr const char* kBadVersionKey = "updates/rolled_back_version";
+
+// A version whose apply failed (not a rollback), and how many times: past two
+// the automatic schedule stops staging it — it would fail at every quit.
+constexpr const char* kFailedVersionKey = "updates/failed_version";
+constexpr const char* kFailedCountKey = "updates/failed_count";
+
+/// Not staged automatically again (a check on request still offers it).
+bool auto_blocked(const QString& version) {
+    if (version.isEmpty())
+        return false;
+    QSettings s;
+    if (s.value(kBadVersionKey).toString() == version)
+        return true;
+    return s.value(kFailedVersionKey).toString() == version && s.value(kFailedCountKey).toInt() >= 2;
+}
 constexpr int kFirstLookDelayMs = 10 * 1000;
 constexpr int kScheduleTickMs = 60 * 60 * 1000;
 } // namespace
@@ -135,9 +169,13 @@ void UpdateService::restore_saved_offer() {
     // Always: a re-published release keeps its version but not its URL/sha256
     // (set_offer signals only on a real change).
     set_offer(saved);
+    // Found by an earlier run / another profile and not staged here yet.
+    if (in_place_ && auto_check() == AutoCheck::On && stage() == Stage::Offered && !auto_blocked(offer_.version))
+        start_download(offer_, /*quiet=*/true);
 }
 
 void UpdateService::start_automatic() {
+    report_last_update();
     restore_saved_offer();
     if (!automatic_started_) {
         automatic_started_ = true;
@@ -300,10 +338,13 @@ void UpdateService::on_manifest_reply_finished() {
     set_offer(entry);
     const bool ask_now = interactive_;
     finish_check(true);
-    // On request: ask right away. Automatic: the status-bar badge carries the
-    // offer until the user opens it.
+    // On request: ask right away. Automatic: where this build replaces itself
+    // the download starts in the background (the badge then says READY);
+    // otherwise the badge carries the offer until the user opens it.
     if (ask_now)
         prompt_install();
+    else if (in_place_ && stage() == Stage::Offered && !auto_blocked(offer_.version))
+        start_download(offer_, /*quiet=*/true);
 }
 
 // ── Offer ───────────────────────────────────────────────────────────────────
@@ -324,13 +365,18 @@ void UpdateService::set_offer(const update_policy::Offer& offer) {
 UpdateService::Stage UpdateService::stage() const {
     if (downloading_)
         return Stage::Downloading;
+    if (has_offer() && ready_version_ == offer_.version)
+        return Stage::Ready;
     if (has_offer() && handed_version_ == offer_.version)
         return Stage::Handed;
     return Stage::Offered;
 }
 
 void UpdateService::show_offer() {
-    prompt_install();
+    if (stage() == Stage::Ready)
+        prompt_restart();
+    else
+        prompt_install();
 }
 
 void UpdateService::prompt_install() {
@@ -347,6 +393,10 @@ void UpdateService::prompt_install() {
                                  QStringLiteral("finterm %1 is downloading. Its installer opens when the "
                                                 "download is complete.")
                                      .arg(download_version_));
+        return;
+    }
+    if (stage() == Stage::Ready) {
+        prompt_restart();
         return;
     }
     if (stage() == Stage::Handed) {
@@ -371,8 +421,7 @@ void UpdateService::prompt_install() {
         }
         prompt_pending_ = false; // the download it starts answers it
         handed_version_.clear();
-        download_version_ = offer_.version;
-        start_download(offer_.download_url, offer_.sha256);
+        start_download(offer_, /*quiet=*/false);
         return;
     }
     // The dialog runs a nested event loop in which the schedule can replace
@@ -391,13 +440,16 @@ void UpdateService::prompt_install() {
             snippet = snippet.left(500) + QStringLiteral("\n…");
         prompt += QStringLiteral("What's new:\n%1\n\n").arg(snippet);
     }
-    prompt += QStringLiteral("Download the installer now?");
+    prompt += in_place_ ? QStringLiteral("Download it now? It installs when you restart finterm — "
+                                         "your workspace and data stay as they are.")
+                        : QStringLiteral("Download the installer now?");
 
     QMessageBox box(dialog_parent());
     box.setWindowTitle(QStringLiteral("Update Available"));
     box.setIcon(QMessageBox::Information);
     box.setText(prompt);
-    QPushButton* install_btn = box.addButton(QStringLiteral("Download && Install"), QMessageBox::AcceptRole);
+    QPushButton* install_btn = box.addButton(in_place_ ? QStringLiteral("Download") : QStringLiteral("Download && Install"),
+                                             QMessageBox::AcceptRole);
     QPushButton* release_btn = offer.open_url.isEmpty()
                                    ? nullptr
                                    : box.addButton(QStringLiteral("View Release Notes"), QMessageBox::HelpRole);
@@ -414,8 +466,7 @@ void UpdateService::prompt_install() {
 
     QAbstractButton* clicked = box.clickedButton();
     if (clicked == install_btn) {
-        download_version_ = offer.version;
-        start_download(offer.download_url, offer.sha256);
+        start_download(offer, /*quiet=*/false);
     } else if (release_btn && clicked == release_btn) {
         QDesktopServices::openUrl(QUrl(offer.open_url));
     } else {
@@ -423,29 +474,173 @@ void UpdateService::prompt_install() {
     }
 }
 
-// ── Download + verify ───────────────────────────────────────────────────────
+// ── Restart ─────────────────────────────────────────────────────────────────
 
-void UpdateService::start_download(const QString& url, const QString& expected_sha256) {
+void UpdateService::prompt_restart() {
+    if (prompt_open_) {
+        prompt_pending_ = true;
+        return;
+    }
+    QMessageBox box(dialog_parent());
+    box.setWindowTitle(QStringLiteral("Update Ready"));
+    box.setIcon(QMessageBox::Information);
+    box.setText(QStringLiteral("finterm %1 is downloaded and verified.\n\n"
+                               "Restart now to switch to it, or keep working — it installs when you quit "
+                               "finterm. Your workspace and data stay as they are.")
+                    .arg(ready_version_));
+    QPushButton* now = box.addButton(QStringLiteral("Restart Now"), QMessageBox::AcceptRole);
+    QPushButton* notes = offer_.open_url.isEmpty()
+                             ? nullptr
+                             : box.addButton(QStringLiteral("View Release Notes"), QMessageBox::HelpRole);
+    box.addButton(QStringLiteral("When I Quit"), QMessageBox::RejectRole);
+    box.setDefaultButton(now);
+    prompt_open_ = true;
+    box.exec();
+    prompt_open_ = false;
+    if (std::exchange(prompt_pending_, false))
+        QTimer::singleShot(0, this, &UpdateService::prompt_install);
+    if (box.clickedButton() == now)
+        restart_now();
+    else if (notes && box.clickedButton() == notes)
+        QDesktopServices::openUrl(QUrl(offer_.open_url));
+}
+
+bool UpdateService::blocked_by_other_instance() const {
+    // An AppImage replaced by a rename keeps running for every instance that
+    // has it open (the old inode) — only a bundle swap / an IFW reinstall
+    // would pull files from under another running finterm.
+    return in_place_ && in_place_->kind != QLatin1String("appimage") && update_install::other_instance_running();
+}
+
+void UpdateService::restart_now() {
+    if (!in_place_ || stage() != Stage::Ready || applied_)
+        return;
+    if (blocked_by_other_instance()) {
+        show_error(QStringLiteral("Another finterm (another profile) is running from this installation. "
+                                  "Close it first — the update would replace files under it."));
+        return;
+    }
+    if (!update_install::launch_helper(*in_place_, pending_local_path_, QApplication::applicationVersion(),
+                                       ready_version_, /*relaunch=*/true)) {
+        show_error(QStringLiteral("The update could not be started. It will be tried again when you quit finterm."));
+        return;
+    }
+    applied_ = true;
+    LOG_INFO("UpdateService", "Restarting into " + ready_version_);
+    // Every window saves its workspace as it closes; the app quits after the
+    // last one and the helper takes over.
+    QTimer::singleShot(0, qApp, []() {
+        QApplication::closeAllWindows();
+        QCoreApplication::quit();
+    });
+}
+
+void UpdateService::apply_on_quit() {
+    if (!in_place_ || stage() != Stage::Ready || applied_)
+        return;
+    // Another profile still runs from this install: the last one to quit
+    // applies it (it stages the same version).
+    if (blocked_by_other_instance()) {
+        LOG_INFO("UpdateService", "Update not applied at quit — another finterm is still running");
+        return;
+    }
+    applied_ = update_install::launch_helper(*in_place_, pending_local_path_, QApplication::applicationVersion(),
+                                             ready_version_, /*relaunch=*/false);
+}
+
+void UpdateService::report_last_update() {
+    if (!updates_supported())
+        return; // a dev build leaves the note to the release it belongs to
+    const auto status = update_install::take_status();
+    if (!status)
+        return;
+    const bool ok = status->value(QStringLiteral("ok")).toBool();
+    const QString to = status->value(QStringLiteral("to")).toString();
+    const QString kind = status->value(QStringLiteral("kind")).toString();
+    const QString msg = status->value(QStringLiteral("message")).toString();
+    if (kind.endsWith(QLatin1String("-rollback")) && ok) // don't stage the failed version again
+        QSettings().setValue(kBadVersionKey, status->value(QStringLiteral("from")).toString());
+    if (!kind.endsWith(QLatin1String("-rollback"))) {
+        QSettings s;
+        if (ok) {
+            s.remove(kFailedVersionKey);
+            s.remove(kFailedCountKey);
+        } else {
+            const int n = s.value(kFailedVersionKey).toString() == to ? s.value(kFailedCountKey).toInt() + 1 : 1;
+            s.setValue(kFailedVersionKey, to);
+            s.setValue(kFailedCountKey, n);
+        }
+    }
+    if (kind.endsWith(QLatin1String("-rollback")))
+        last_result_ = ok ? QStringLiteral("finterm %1 failed to start twice — the previous version was restored.")
+                                .arg(status->value(QStringLiteral("from")).toString())
+                          : QStringLiteral("Restoring the previous version failed: %1").arg(msg);
+    else
+        last_result_ = ok ? QStringLiteral("Updated to finterm %1.").arg(to)
+                          : QStringLiteral("The update to %1 failed: %2").arg(to, msg);
+    last_result_ok_ = ok && !kind.endsWith(QLatin1String("-rollback"));
+    LOG_INFO("UpdateService", "Last update: " + last_result_);
+    emit stage_changed();
+}
+
+void UpdateService::clear_last_result() {
+    if (last_result_.isEmpty())
+        return;
+    last_result_.clear();
+    emit stage_changed();
+}
+
+// ── Download + verify ───────────────────────────────────────────────────────
+// Streamed to <path>.part and hashed as it arrives (an installer is 100+ MB);
+// verified, it is renamed into place — a partial or tampered file never
+// carries the final name.
+
+void UpdateService::start_download(const update_policy::Offer& offer, bool quiet) {
+    if (downloading_)
+        return;
+    // A staged version this replaces (a newer release came out) goes.
+    if (in_place_ && !ready_version_.isEmpty() && ready_version_ != offer.version) {
+        QFile::remove(pending_local_path_);
+        ready_version_.clear();
+    }
+    download_version_ = offer.version;
+    download_quiet_ = quiet;
+    pending_expected_sha256_ = offer.sha256;
+    if (in_place_) {
+        pending_local_path_ = update_install::staged_path(*in_place_, offer.version, offer.download_url);
+    } else {
+        const QString file_name = QFileInfo(QUrl(offer.download_url).path()).fileName();
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        pending_local_path_ =
+            QDir(dir).filePath(file_name.isEmpty() ? QStringLiteral("finterm-update.tmp") : file_name);
+    }
+    // An in-place update must be verified: without a sha256 it isn't staged.
+    if (in_place_ && offer.sha256.isEmpty()) {
+        download_failed(QStringLiteral("the release has no checksum to verify it against"));
+        return;
+    }
+
+    // This process's own part file: two profiles may download the same
+    // version at once into the same staging folder.
+    part_ = std::make_unique<QFile>(pending_local_path_ +
+                                    QStringLiteral(".%1.part").arg(QCoreApplication::applicationPid()));
+    if (!part_->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        const QString why = part_->errorString();
+        part_.reset();
+        download_failed(QStringLiteral("cannot write %1: %2").arg(pending_local_path_, why));
+        return;
+    }
+    hasher_ = std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
     downloading_ = true;
     last_logged_ = 0;
-    pending_expected_sha256_ = expected_sha256;
     emit stage_changed();
 
-    // Build a stable local path in the system temp dir, preserving the
-    // installer's basename so the user recognises it.
-    const QString file_name = QFileInfo(QUrl(url).path()).fileName();
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    pending_local_path_ = QDir(dir).filePath(file_name.isEmpty() ? QStringLiteral("finterm-update.tmp") : file_name);
+    LOG_INFO("UpdateService", QString("Downloading %1 → %2 (expected sha256=%3)%4")
+                                  .arg(offer.download_url, pending_local_path_,
+                                       offer.sha256.isEmpty() ? QStringLiteral("<none>") : offer.sha256,
+                                       quiet ? QStringLiteral(", in the background") : QString()));
 
-    // Drop any leftover from a previous run — otherwise a partial file could
-    // survive and poison sha256 verification.
-    QFile::remove(pending_local_path_);
-
-    LOG_INFO("UpdateService", QString("Downloading installer: %1 → %2 (expected sha256=%3)")
-                                  .arg(url, pending_local_path_,
-                                       expected_sha256.isEmpty() ? QStringLiteral("<none>") : expected_sha256));
-
-    QNetworkRequest req{QUrl(url)};
+    QNetworkRequest req{QUrl(offer.download_url)};
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     req.setHeader(QNetworkRequest::UserAgentHeader, QString("finterm/%1").arg(QApplication::applicationVersion()));
     // Qt's transfer timeout counts time WITHOUT data, so a slow download is
@@ -453,17 +648,45 @@ void UpdateService::start_download(const QString& url, const QString& expected_s
     // for the rest of the session.
     req.setTransferTimeout(60 * 1000);
     QNetworkReply* reply = net_.get(req);
+    connect(reply, &QNetworkReply::readyRead, this, &UpdateService::on_download_ready_read);
     connect(reply, &QNetworkReply::finished, this, &UpdateService::on_download_reply_finished);
     connect(reply, &QNetworkReply::downloadProgress, this, &UpdateService::on_download_progress);
 }
 
+void UpdateService::on_download_ready_read() {
+    auto* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply || !part_)
+        return;
+    const QByteArray chunk = reply->readAll();
+    if (part_->write(chunk) != chunk.size()) {
+        // Say why (a full disk), not the abort's "Operation canceled":
+        // download_failed clears part_, so finished() then does nothing.
+        download_failed(QStringLiteral("cannot save the download: %1").arg(part_->errorString()));
+        reply->abort();
+        return;
+    }
+    hasher_->addData(chunk);
+}
+
 void UpdateService::on_download_progress(qint64 received, qint64 total) {
-    // Log every ~5 MiB to avoid spamming. No GUI progress for v1 — keep the
-    // surface area small. A proper progress dialog can be layered on later.
+    // Log every ~5 MiB; the badge says the download is running.
     if (received - last_logged_ >= 5 * 1024 * 1024 || received == total) {
         last_logged_ = received;
         LOG_DEBUG("UpdateService", QString("Download progress: %1 / %2 bytes").arg(received).arg(total));
     }
+}
+
+void UpdateService::download_failed(const QString& why) {
+    LOG_ERROR("UpdateService", "Update download failed: " + why);
+    if (part_) {
+        part_->close();
+        part_->remove();
+        part_.reset();
+    }
+    hasher_.reset();
+    if (!download_quiet_)
+        show_error(QStringLiteral("The update could not be downloaded.\n\n%1").arg(why));
+    finish_download();
 }
 
 void UpdateService::on_download_reply_finished() {
@@ -471,56 +694,40 @@ void UpdateService::on_download_reply_finished() {
     if (!reply)
         return;
     reply->deleteLater();
-
+    if (!part_) // already failed (download_failed ran)
+        return;
     if (reply->error() != QNetworkReply::NoError) {
-        LOG_ERROR("UpdateService", QString("Installer download failed: %1").arg(reply->errorString()));
-        show_error(QStringLiteral("The installer could not be downloaded.\n\n%1").arg(reply->errorString()));
-        QFile::remove(pending_local_path_);
-        finish_download();
+        download_failed(reply->errorString());
+        return;
+    }
+    const QByteArray rest = reply->readAll();
+    if (!rest.isEmpty()) {
+        part_->write(rest);
+        hasher_->addData(rest);
+    }
+    const bool flushed = part_->flush();
+    part_->close();
+    if (!flushed || part_->error() != QFileDevice::NoError) {
+        download_failed(QStringLiteral("cannot save the download: %1").arg(part_->errorString()));
         return;
     }
 
-    // Write body to disk.
-    QFile f(pending_local_path_);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        LOG_ERROR("UpdateService", QString("Cannot open %1 for writing: %2").arg(pending_local_path_, f.errorString()));
-        show_error(QStringLiteral("Cannot save the installer to disk:\n%1").arg(f.errorString()));
-        finish_download();
-        return;
-    }
-    const QByteArray body = reply->readAll();
-    f.write(body);
-    f.close();
-
-    // Verify sha256 if the manifest provided one. Missing sha256 logs a
-    // warning but does not abort — the server may be a pre-sha256 deployment.
     if (!pending_expected_sha256_.isEmpty()) {
-        QFile vf(pending_local_path_);
-        if (!vf.open(QIODevice::ReadOnly)) {
-            LOG_ERROR("UpdateService", QString("Cannot reopen %1 for hashing").arg(pending_local_path_));
-            show_error(QStringLiteral("Could not verify the downloaded installer."));
-            QFile::remove(pending_local_path_);
-            finish_download();
-            return;
+        // The bytes on disk are what gets installed: hash the file itself
+        // (the stream's hash is checked too — they must agree).
+        QString on_disk;
+        {
+            QFile f(part_->fileName());
+            QCryptographicHash h(QCryptographicHash::Sha256);
+            if (f.open(QIODevice::ReadOnly) && h.addData(&f))
+                on_disk = QString::fromLatin1(h.result().toHex()).toLower();
         }
-        QCryptographicHash hasher(QCryptographicHash::Sha256);
-        if (!hasher.addData(&vf)) {
-            vf.close();
-            LOG_ERROR("UpdateService", "Sha256 hashing failed");
-            show_error(QStringLiteral("Could not verify the downloaded installer."));
-            QFile::remove(pending_local_path_);
-            finish_download();
-            return;
-        }
-        vf.close();
-        const QString actual = QString::fromLatin1(hasher.result().toHex()).toLower();
+        const QString streamed = QString::fromLatin1(hasher_->result().toHex()).toLower();
+        const QString actual = on_disk == streamed ? on_disk : QString();
         if (actual != pending_expected_sha256_) {
             LOG_ERROR("UpdateService",
                       QString("Sha256 mismatch — expected=%1, actual=%2").arg(pending_expected_sha256_, actual));
-            show_error(QStringLiteral("The downloaded installer failed integrity verification. "
-                                      "It may be corrupt or tampered with."));
-            QFile::remove(pending_local_path_);
-            finish_download();
+            download_failed(QStringLiteral("it failed integrity verification (it may be corrupt or tampered with)"));
             return;
         }
         LOG_INFO("UpdateService", QString("Sha256 verified: %1").arg(actual));
@@ -528,16 +735,33 @@ void UpdateService::on_download_reply_finished() {
         LOG_WARN("UpdateService", "No sha256 in manifest — skipping integrity verification");
     }
 
+    // Verified: it takes its final name.
+    QFile::remove(pending_local_path_);
+    if (!part_->rename(pending_local_path_)) {
+        download_failed(QStringLiteral("cannot rename the download: %1").arg(part_->errorString()));
+        return;
+    }
+    part_.reset();
+    hasher_.reset();
     emit download_finished(pending_local_path_);
 
-    // Hand off: on platforms where we can launch the installer (and the user
-    // will be prompted by the OS anyway), do so. Otherwise reveal the file.
+    if (in_place_) {
+        // Staged: it goes in when the app quits, or now on Restart Now.
+        ready_version_ = download_version_;
+        finish_download();
+        LOG_INFO("UpdateService", QString("finterm %1 staged at %2").arg(ready_version_, pending_local_path_));
+        if (!download_quiet_)
+            prompt_restart();
+        return;
+    }
+
+    // Not in place: on platforms where we can launch the installer (and the
+    // user will be prompted by the OS anyway), do so. Otherwise reveal the file.
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
     launch_installer(pending_local_path_);
 #else
     reveal_in_file_manager(pending_local_path_);
 #endif
-
     finish_download(/*handed=*/true);
 }
 

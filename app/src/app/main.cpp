@@ -24,6 +24,7 @@
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "app/SelfTest.h"
+#include "services/updater/UpdateInstaller.h"
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
 #include "services/ownership/OwnershipService.h"
@@ -266,6 +267,15 @@ int main(int argc, char* argv[]) {
                 .arg(finterm::AppPaths::current_root_path(), finterm::AppPaths::legacy_root_path()));
         return 1;
     }
+
+    // ── A just-applied update that can't start: roll it back ────────────────
+    // Each start of a freshly updated version counts until its window has been
+    // up a few seconds (confirm_boot below); the third unconfirmed start hands
+    // over to the helper, which restores the previous version and runs it.
+    if (finterm::services::update_install::boot_check())
+        return 0;
+    // A clean quit is a good run too (closed within the confirm delay).
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { finterm::services::update_install::confirm_boot(); });
 
     // ── Versioned layout migrations (primary only) ───────────────────────────
     // Self-healing for on-disk layout moves between releases (settings-store
@@ -707,6 +717,8 @@ int main(int argc, char* argv[]) {
             auto* window = new finterm::MainWindow(0); // primary window
             window->setAttribute(Qt::WA_DeleteOnClose);
             window->show();
+            // Up: a just-applied update is good (see boot_check above).
+            QTimer::singleShot(5000, []() { finterm::services::update_install::confirm_boot(); });
 
             // Restore any secondary windows that were open at last shutdown so
             // multi-monitor layouts survive across relaunches. Each window
@@ -772,6 +784,8 @@ int main(int argc, char* argv[]) {
     // Python already set up — launch main window directly
     finterm::MainWindow window;
     window.show();
+    // Up: a just-applied update is good (see boot_check above).
+    QTimer::singleShot(5000, []() { finterm::services::update_install::confirm_boot(); });
 
     // Restore any secondary windows that were open at last shutdown. The
     // primary window on the stack owns its own lifetime; restored secondaries

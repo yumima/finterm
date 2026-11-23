@@ -200,6 +200,15 @@ target_link_libraries(test_update_policy PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_update_policy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME update_policy COMMAND test_update_policy)
 
+# ── In-place update helper ───────────────────────────────────────────────────
+# apply-update.sh swaps an AppImage / a macOS bundle for the staged update,
+# keeps the previous version, rolls back, waits for the app, reports a status.
+if(UNIX) # a POSIX sh script (the Windows helper is exercised in release.yml)
+    add_test(NAME apply_update_sh
+             COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/updater/test_apply_update.sh
+                     ${CMAKE_CURRENT_SOURCE_DIR}/../src/services/updater/scripts/apply-update.sh)
+endif()
+
 # ── Earnings refresh policy ──────────────────────────────────────────────────
 # When the ER Earnings data is refreshed: once a day between prints, each
 # minute in a release window, at the reaction close. Pure policy, real ET times.

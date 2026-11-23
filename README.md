@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`c7d457325`](https://github.com/yumima/finterm/commit/c7d457325) agents: the local engine runs without an OpenAI key; disabled agents aren't offered
 - [`03912c4e3`](https://github.com/yumima/finterm/commit/03912c4e3) portfolio: a detail view after FFN shows the detail view
 - [`b8fe92ab5`](https://github.com/yumima/finterm/commit/b8fe92ab5) banner: the market tape is on every screen, under the menu; the dashboard's header joins its tab row
 - [`29a107165`](https://github.com/yumima/finterm/commit/29a107165) theme: the window title bar is the terminal's colour, not Qt's light default

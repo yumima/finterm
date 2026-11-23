@@ -1,6 +1,10 @@
 # In-place update
 
-Status: design, 2026-11-23. (The earlier copy of this plan was never committed, so this one starts over from the current code.)
+Status: BUILT 2026-11-23 — phases 1–5. Phase 1 @ 70d29f8eb/5908b91cd/7bb2b4daa (opt-in check, badge, dev builds never
+check); phases 2–5 in the commit that adds UpdateInstaller (in-place apply on all three platforms + rollback).
+Linux checked end to end on Xvfb (stand-in AppImage: download → READY → Restart Now → swap → relaunch → status;
+two failed starts → rollback); the Windows and macOS helpers are exercised against the real installers in
+release.yml (a ci/** branch runs them without publishing).
 
 ## Where we are
 
@@ -51,7 +55,10 @@ new versions. [Turn on] [Not now]"). Until they turn it on, behaviour is exactly
 | Platform | Staged as | Swap | Relaunch |
 |---|---|---|---|
 | Linux AppImage | `<appimage>.new` in the same directory (same filesystem) | `rename()` over `$APPIMAGE`. Atomic, and safe while running (the old inode stays mapped) | `execv` the new path |
-| Windows (IFW) | The new IFW payload | **Preferred:** host an IFW *online repository* on GitHub Pages and run `FintermMaintenanceTool update --confirm-command` after the app exits. That is IFW's own in-place updater. **Fallback:** run the offline setup silently (`install --root <same dir> --accept-licenses --confirm-command`) | Helper starts `finterm.exe` |
+| Windows (IFW) | The verified setup.exe in the app data | After exit the helper copies the install to `<dir>.previous`, removes it with `FintermMaintenanceTool purge`, and runs the setup unattended into the same folder (`install --root … --accept-licenses --default-answer --confirm-command`, the command CI already proves); a failed install is copied back | Helper starts `finterm.exe` |
+
+(Chosen over an IFW online repository: no second hosted artifact to keep in step with the release, and the
+offline installer + its unattended mode are what CI already installs and self-tests.)
 | macOS (DMG) | `.app` copied out of the mounted DMG with `ditto` into `~/Library/Caches/finterm/update/` | After exit, a helper renames the old bundle to `.old`, moves the new one into place, clears quarantine (`xattr -dr com.apple.quarantine`), then deletes `.old` | `open -n <bundle>` |
 
 Windows and macOS can't replace a running binary, so the swap runs in a **tiny detached helper** (a script written by the app) that
