@@ -16,6 +16,10 @@ class DashboardToolBar : public QWidget {
 
     void set_widget_count(int count);
 
+    /// Shown in the dock's tab row ("Dashboard [x]  FINTERM | clock | …"):
+    /// transparent and borderless at the row's height; off = its own 26 px bar.
+    void set_in_tab_row(bool on);
+
   signals:
     void add_widget_clicked();
     void save_layout_clicked();
@@ -38,6 +42,8 @@ class DashboardToolBar : public QWidget {
     QPushButton* pulse_btn_ = nullptr;
     QPushButton* compact_btn_ = nullptr;
     QTimer clock_timer_;
+    bool in_tab_row_ = false;
+    QString applied_theme_key_; ///< what refresh_theme() last applied (skip if unchanged)
 };
 
 } // namespace finterm::screens

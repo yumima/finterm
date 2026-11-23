@@ -996,7 +996,6 @@ set(UI_SOURCES
     src/ui/theme/StyleSheets.cpp
     src/ui/theme/Tooltips.cpp
     src/ui/widgets/GroupBadge.cpp
-    src/ui/pushpins/SymbolChip.cpp
     src/ui/pushpins/PushpinBar.cpp
     src/ui/components/ComponentCard.cpp
     src/ui/components/ComponentBrowserDialog.cpp
@@ -1096,7 +1095,7 @@ set(SCREEN_SOURCES
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
-    src/screens/dashboard/TickerBar.cpp
+    src/ui/widgets/TickerBar.cpp
     src/screens/dashboard/canvas/DashboardCanvas.cpp
     src/screens/dashboard/canvas/WidgetTile.cpp
     src/screens/dashboard/canvas/PlaceholderOverlay.cpp
@@ -1507,7 +1506,7 @@ set_source_files_properties(
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
-    src/screens/dashboard/TickerBar.cpp
+    src/ui/widgets/TickerBar.cpp
     src/screens/dashboard/canvas/AddWidgetDialog.cpp
     src/screens/dashboard/canvas/DashboardCanvas.cpp
     src/screens/dashboard/canvas/DashboardTemplates.cpp

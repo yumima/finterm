@@ -321,7 +321,7 @@ QWidget* SettingsScreen::build_appearance() {
     ticker_bar_toggle_ = new QCheckBox("Show Ticker Bar");
     ticker_bar_toggle_->setChecked(true);
     ticker_bar_toggle_->setStyleSheet(settings_style::check_ss());
-    vl->addWidget(make_row("Ticker Bar", ticker_bar_toggle_, "Live price ticker at the bottom of the screen."));
+    vl->addWidget(make_row("Ticker Bar", ticker_bar_toggle_, "The market tape (with your pinned symbols) at the top of every screen."));
 
     animations_toggle_ = new QCheckBox("Enable Animations");
     animations_toggle_->setChecked(true);
@@ -343,6 +343,8 @@ QWidget* SettingsScreen::build_appearance() {
         repo.set("appearance.show_chat_bubble", chat_bubble_toggle_->isChecked() ? "true" : "false", "appearance");
         repo.set("appearance.show_ticker_bar", ticker_bar_toggle_->isChecked() ? "true" : "false", "appearance");
         repo.set("appearance.animations", animations_toggle_->isChecked() ? "true" : "false", "appearance");
+        // Every window re-reads the banner (ticker bar) setting now, not on its next navigation.
+        EventBus::instance().publish(QStringLiteral("appearance.changed"));
 
         // Flush any pending debounce immediately on save
         if (appearance_debounce_->isActive()) {

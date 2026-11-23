@@ -126,15 +126,50 @@ DashboardToolBar::DashboardToolBar(QWidget* parent) : QWidget(parent) {
     refresh_theme();
 }
 
+void DashboardToolBar::set_in_tab_row(bool on) {
+    if (in_tab_row_ == on)
+        return;
+    in_tab_row_ = on;
+    if (on) {
+        // The tab row's height, and room after the tab label.
+        setMinimumHeight(0);
+        setMaximumHeight(QWIDGETSIZE_MAX);
+        layout()->setContentsMargins(16, 0, 8, 0);
+    } else {
+        setFixedHeight(26);
+        layout()->setContentsMargins(12, 0, 12, 0);
+    }
+    // One stylesheet covers both modes (the [inTabRow] selector): switching
+    // re-polishes this widget alone, not a setStyleSheet over every child —
+    // it happens on every show and hide of the dashboard.
+    setAutoFillBackground(!on);
+    setProperty("inTabRow", on);
+    style()->unpolish(this);
+    style()->polish(this);
+    update();
+}
+
 void DashboardToolBar::refresh_theme() {
+    // A restyle re-polishes every child — only when the theme changed (it ran
+    // on every show; see the per-show restyle cost on the dashboard).
+    const QString key = QString::fromLatin1(ui::colors::BG_SURFACE()) + ui::colors::AMBER() + ui::colors::TEXT_PRIMARY();
+    if (key == applied_theme_key_)
+        return;
+    applied_theme_key_ = key;
+
+    // The bar paints its own background (none in the tab row); the
+    // containers are transparent over it.
     const QColor surface(ui::colors::BG_SURFACE());
     apply_solid_background(this, surface);
-    apply_solid_background(left_container_, surface);
-    apply_solid_background(right_container_, surface);
-
-    setStyleSheet(
-        QString("#dashToolBar { background:%1; border-bottom:1px solid %2; }"
-                "#dtLeftContainer, #dtRightContainer { background:%1; }"
+    setAutoFillBackground(!in_tab_row_);
+    for (QWidget* w : {left_container_, right_container_}) {
+        w->setAutoFillBackground(false);
+        w->setAttribute(Qt::WA_StyledBackground, true);
+    }
+    const QString tmpl = QStringLiteral(
+                "#dashToolBar { background:%1; border-bottom:1px solid %2; }"
+                "#dashToolBar[inTabRow=\"true\"] { background:transparent; border:none; }"
+                "#dtLeftContainer, #dtRightContainer { background:transparent; }"
                 "#dtSep { color:%3; background:transparent; }"
                 "#dtBrand { color:%4; font-weight:bold; letter-spacing:1px; background:transparent; }"
                 "QPushButton#dtClock { color:%5; background:transparent; border:none; padding:0; "
@@ -146,8 +181,9 @@ void DashboardToolBar::refresh_theme() {
                 "#dtAddBtn { background:%7; border:1px solid %11; color:%4; padding:0 10px; font-weight:bold; }"
                 "#dtAddBtn:hover { background:%8; color:%9; border-color:%10; }"
                 "#dtResetBtn { background:%7; border:1px solid %12; color:%12; padding:0 10px; font-weight:bold; }"
-                "#dtResetBtn:hover { background:%8; color:%9; border-color:%10; }")
-            .arg(ui::colors::BG_SURFACE())     // %1
+                "#dtResetBtn:hover { background:%8; color:%9; border-color:%10; }");
+    setStyleSheet(
+        tmpl.arg(ui::colors::BG_SURFACE())     // %1
             .arg(ui::colors::BORDER_DIM())     // %2
             .arg(ui::colors::BORDER_MED())     // %3
             .arg(ui::colors::AMBER())          // %4

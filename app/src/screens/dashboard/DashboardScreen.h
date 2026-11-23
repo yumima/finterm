@@ -1,15 +1,12 @@
 #pragma once
-#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/DashboardToolBar.h"
 #include "screens/dashboard/MarketPulsePanel.h"
-#include "screens/dashboard/TickerBar.h"
 #include "screens/dashboard/canvas/DashboardCanvas.h"
 #include "services/markets/MarketDataService.h"
 
-namespace finterm::ui {
-} // namespace finterm::ui
-
 #include <QHash>
+#include <QPointer>
+#include <QVBoxLayout>
 #include <QHideEvent>
 #include <QScrollArea>
 #include <QShowEvent>
@@ -19,14 +16,9 @@ namespace finterm::ui {
 
 namespace finterm::screens {
 
-/// Main dashboard screen — toolbar, ticker, draggable widget grid, market pulse.
-/// (No status bar of its own: the main window's StatusBar is on every screen.)
-///
-/// The ticker driver subscribes to `market:quote:<sym>` on the DataHub for
-/// every user-configured ticker symbol. A cached per-symbol QuoteData is
-/// pushed to the TickerBar on each delivery via `rebuild_ticker_from_cache()`.
-/// `symbols_changed` wipes old subscriptions and re-subscribes to the new
-/// set. Cadence is owned by the hub scheduler, not a local refresh timer.
+/// Main dashboard screen — toolbar, draggable widget grid, market pulse.
+/// (No status bar or market tape of its own: the main window's StatusBar and
+/// banner (PushpinBar) are on every screen.)
 class DashboardScreen : public QWidget {
     Q_OBJECT
   public:
@@ -39,17 +31,15 @@ class DashboardScreen : public QWidget {
 
   private:
     void refresh_theme();
+    /// The toolbar in the dock's tab row while shown; back in the screen when not.
+    void attach_toolbar();
+    void detach_toolbar();
     void build_default_layout();
     void save_layout();
     void restore_layout();
-    void refresh_ticker();
 
-    void hub_resubscribe_ticker();
-    void hub_unsubscribe_ticker();
-    void rebuild_ticker_from_cache();
-
-    DashboardToolBar* toolbar_ = nullptr;
-    TickerBar* ticker_bar_ = nullptr;
+    QPointer<DashboardToolBar> toolbar_; ///< may sit in a dock title bar (QPointer: ADS can delete it)
+    QVBoxLayout* root_layout_ = nullptr;
     QScrollArea* scroll_area_ = nullptr;
     DashboardCanvas* canvas_ = nullptr;
     QSplitter* content_split_ = nullptr;
@@ -60,13 +50,6 @@ class DashboardScreen : public QWidget {
     bool split_sized_ = false;
     QString applied_theme_key_; // the theme refresh_theme() last applied (skip if unchanged)
 
-    QHash<QString, services::QuoteData> ticker_cache_;
-    QStringList ticker_subscribed_;
-    bool hub_active_ = false;
-
-  private:
-    /// Coalesces the per-quote re-render: one rebuild_ticker_from_cache() per tick batch.
-    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_ticker_from_cache(); }};
 };
 
 } // namespace finterm::screens

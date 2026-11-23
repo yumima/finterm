@@ -1,12 +1,19 @@
-#include "screens/dashboard/TickerBar.h"
+#include "ui/widgets/TickerBar.h"
+
+#include "core/symbol/SymbolContext.h"
+#include "core/symbol/SymbolDragSource.h"
+#include "core/symbol/SymbolGroupRegistry.h"
 
 #include "screens/markets/MarketChartDialog.h"
 #include "services/markets/MarketDataService.h"
+#include "services/pushpins/PushpinService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QContextMenuEvent>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -17,14 +24,30 @@
 #include <QResizeEvent>
 
 #include <cmath>
+#include <utility>
 
-namespace finterm::screens {
+namespace finterm::ui {
 
 static constexpr int kItemSpacing = 40;
 static constexpr int kSegmentGap = 8;
 static constexpr int kEditBarHeight = 24;
 static const char* kSettingsKey = "ticker_bar_symbols";
 static const char* kSettingsCategory = "dashboard";
+
+static QString price_text(double price) {
+    return std::isfinite(price) ? QString::number(price, 'f', 2) : QStringLiteral("\u2014");
+}
+
+// Every live tape (one per main window's banner), to share a default-list edit.
+static QList<QPointer<TickerBar>>& all_tickers() {
+    static QList<QPointer<TickerBar>> k;
+    k.removeAll(nullptr);
+    return k;
+}
+
+TickerBar::~TickerBar() {
+    all_tickers().removeAll(this);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constructor
@@ -33,6 +56,9 @@ static const char* kSettingsCategory = "dashboard";
 TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(kEditBarHeight);
     setContextMenuPolicy(Qt::DefaultContextMenu);
+    all_tickers().append(this);
+    setToolTip(QStringLiteral("Click: chart · drag: send to a panel · right-click: pin, broadcast, edit\n"
+                              "Drag any symbol here to pin it"));
 
     auto apply_bg = [this]() { setStyleSheet(QString("background-color: %1;").arg(ui::colors::BG_BASE())); };
     apply_bg();
@@ -135,7 +161,7 @@ void TickerBar::save_symbols() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// set_data — called by DashboardScreen after fetch_quotes returns
+// set_data — called by the banner (PushpinBar) as quotes arrive
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TickerBar::set_data(const QVector<Entry>& entries) {
@@ -148,7 +174,7 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
     entry_widths_.clear();
     for (const auto& e : entries_) {
         const int symbol_w = fm.horizontalAdvance(e.symbol);
-        const int price_w = fm.horizontalAdvance(QString::number(e.price, 'f', 2));
+        const int price_w = fm.horizontalAdvance(price_text(e.price));
         const QString change_str = ui::formatting::format_percent(e.change, 2, true);
         const int change_w = fm.horizontalAdvance(change_str);
         const int w = symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
@@ -206,7 +232,7 @@ void TickerBar::resizeEvent(QResizeEvent* event) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context menu — right-click to edit symbols
+// Context menu — the entry under the cursor, and the default list
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TickerBar::contextMenuEvent(QContextMenuEvent* event) {
@@ -216,9 +242,43 @@ void TickerBar::contextMenuEvent(QContextMenuEvent* event) {
                            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                                 ui::colors::AMBER(), ui::colors::BG_BASE()));
 
-    auto* edit_action = menu.addAction("Edit Symbols...");
-    connect(edit_action, &QAction::triggered, this, &TickerBar::show_edit_bar);
-
+    // The entry under the cursor: what a pin chip's menu used to offer.
+    const int i = entry_at(event->pos().x());
+    if (i >= 0) {
+        const QString sym = entries_[i].symbol;
+        const bool pinned = entries_[i].pinned;
+        menu.addAction(QStringLiteral("Chart %1").arg(sym), this,
+                       [this, sym]() { screens::MarketChartDialog::show_for(sym, QString(), this); });
+        menu.addAction(pinned ? QStringLiteral("Unpin %1").arg(sym) : QStringLiteral("Pin %1").arg(sym), this,
+                       [sym, pinned]() {
+                           auto& pins = PushpinService::instance();
+                           if (pinned) {
+                               for (const SymbolRef& r : pins.pins())
+                                   if (r.symbol.compare(sym, Qt::CaseInsensitive) == 0)
+                                       pins.unpin(r);
+                           } else {
+                               SymbolRef r;
+                               r.symbol = sym;
+                               pins.pin(r); // offered only when no pin has this symbol
+                           }
+                       });
+        menu.addAction(QStringLiteral("Copy Ticker"), this, [sym]() { QApplication::clipboard()->setText(sym); });
+        auto& registry = SymbolGroupRegistry::instance();
+        const auto groups = registry.enabled_groups();
+        if (!groups.isEmpty()) {
+            menu.addSeparator();
+            for (SymbolGroup g : groups)
+                menu.addAction(
+                    QStringLiteral("Broadcast to %1  (%2)").arg(registry.name(g)).arg(symbol_group_letter(g)), this,
+                    [this, sym, g]() {
+                        SymbolRef r;
+                        r.symbol = sym;
+                        SymbolContext::instance().set_group_symbol(g, r, this);
+                    });
+        }
+        menu.addSeparator();
+    }
+    menu.addAction(QStringLiteral("Edit Default Symbols..."), this, &TickerBar::show_edit_bar);
     menu.exec(event->globalPos());
 }
 
@@ -260,6 +320,10 @@ void TickerBar::commit_edit() {
     symbols_ = updated;
     save_symbols();
     emit symbols_changed(symbols_);
+    // Every other window's banner shows the same default list.
+    for (TickerBar* other : std::as_const(all_tickers()))
+        if (other && other != this)
+            other->load_symbols();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -283,13 +347,13 @@ void TickerBar::paintEvent(QPaintEvent*) {
 
     for (int pass = 0; pass < passes; ++pass) {
         for (const auto& e : entries_) {
-            // Symbol — primary text
-            p.setPen(QColor(ui::colors::WHITE()));
+            // Symbol — primary text; a pinned symbol in the accent colour
+            p.setPen(QColor(e.pinned ? ui::colors::AMBER() : ui::colors::WHITE()));
             p.drawText(QPointF(x, text_y), e.symbol);
             x += fm.horizontalAdvance(e.symbol) + kSegmentGap;
 
             // Price — muted
-            const QString price_str = QString::number(e.price, 'f', 2);
+            const QString price_str = price_text(e.price);
             p.setPen(QColor(ui::colors::GRAY()));
             p.drawText(QPointF(x, text_y), price_str);
             x += fm.horizontalAdvance(price_str) + kSegmentGap;
@@ -304,26 +368,52 @@ void TickerBar::paintEvent(QPaintEvent*) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Click → chart
+// Click → chart, drag → symbol
 // ─────────────────────────────────────────────────────────────────────────────
 
-void TickerBar::mousePressEvent(QMouseEvent* event) {
-    if (event->button() != Qt::LeftButton || total_width_ <= 0 || entry_widths_.size() != entries_.size()) {
-        QWidget::mousePressEvent(event);
-        return;
-    }
+int TickerBar::entry_at(double x) const {
+    if (total_width_ <= 0 || entry_widths_.size() != entries_.size())
+        return -1;
     // paintEvent lays entries out from x = -offset_, repeating every
-    // total_width_ pixels; fold the click back into one pass and walk it.
-    double pos = std::fmod(offset_ + event->position().x(), static_cast<double>(total_width_));
+    // total_width_ pixels; fold the point back into one pass and walk it.
+    double pos = std::fmod(offset_ + x, static_cast<double>(total_width_));
     if (pos < 0)
         pos += total_width_;
     for (int i = 0; i < entries_.size(); ++i) {
-        if (pos < entry_widths_[i]) {
-            MarketChartDialog::show_for(entries_[i].symbol, QString(), this);
-            return;
-        }
+        if (pos < entry_widths_[i])
+            return i;
         pos -= entry_widths_[i];
     }
+    return -1;
 }
 
-} // namespace finterm::screens
+void TickerBar::mousePressEvent(QMouseEvent* event) {
+    const int i = event->button() == Qt::LeftButton ? entry_at(event->position().x()) : -1;
+    pressed_symbol_ = i >= 0 ? entries_[i].symbol : QString();
+    press_pos_ = event->position().toPoint();
+    if (pressed_symbol_.isEmpty())
+        QWidget::mousePressEvent(event);
+}
+
+void TickerBar::mouseMoveEvent(QMouseEvent* event) {
+    if (pressed_symbol_.isEmpty() || !(event->buttons() & Qt::LeftButton) ||
+        (event->position().toPoint() - press_pos_).manhattanLength() < QApplication::startDragDistance())
+        return;
+    // A drag: send the symbol to any panel (or onto this banner to pin it).
+    SymbolRef ref;
+    ref.symbol = std::exchange(pressed_symbol_, QString());
+    dragging_ = true; // QDrag::exec runs the drag to its end
+    symbol_dnd::startSymbolDrag(this, ref);
+    dragging_ = false;
+}
+
+void TickerBar::mouseReleaseEvent(QMouseEvent* event) {
+    const QString sym = std::exchange(pressed_symbol_, QString());
+    // The tape moved under the press: open what was pressed, not what is
+    // under the cursor now.
+    if (event->button() == Qt::LeftButton && !sym.isEmpty())
+        screens::MarketChartDialog::show_for(sym, QString(), this);
+    QWidget::mouseReleaseEvent(event);
+}
+
+} // namespace finterm::ui

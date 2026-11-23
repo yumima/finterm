@@ -1,7 +1,5 @@
 #include "screens/dashboard/DashboardScreen.h"
 
-#include "datahub/DataHub.h"
-#include "datahub/DataHubMetaTypes.h"
 #include "screens/dashboard/canvas/AddWidgetDialog.h"
 #include "screens/dashboard/canvas/LayoutCodec.h"
 #include "screens/dashboard/canvas/DashboardTemplates.h"
@@ -13,6 +11,12 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <DockAreaTabBar.h>
+#include <DockAreaTitleBar.h>
+#include <DockAreaWidget.h>
+#include <DockWidget.h>
+
+#include <QBoxLayout>
 #include <QDataStream>
 #include <QEvent>
 #include <QHideEvent>
@@ -48,16 +52,16 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     auto* vl = new QVBoxLayout(this);
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
+    root_layout_ = vl;
 
     // ── Top Toolbar ──
+    // Shown in the dock's tab row beside "Dashboard [x]" (attach_toolbar), so
+    // the canvas gets the row it used to take; here only when not docked.
     toolbar_ = new DashboardToolBar;
     vl->addWidget(toolbar_);
 
-    // ── Scrolling Ticker Bar ──
-    ticker_bar_ = new TickerBar;
-    vl->addWidget(ticker_bar_);
-    // When user saves a new symbol list, re-fetch quotes immediately.
-    connect(ticker_bar_, &TickerBar::symbols_changed, this, &DashboardScreen::refresh_ticker);
+    // (The scrolling market tape is the banner at the top of every screen —
+    // PushpinBar — not the dashboard's own.)
 
     // ── Main Content: Canvas (in scroll) + Market Pulse ──
     content_split_ = new QSplitter(Qt::Horizontal);
@@ -205,15 +209,53 @@ void DashboardScreen::refresh_theme() {
 
 // ── Show/Hide ─────────────────────────────────────────────────────────────────
 
+// ── Toolbar in the tab row ────────────────────────────────────────────────────
+
+void DashboardScreen::attach_toolbar() {
+    if (!toolbar_)
+        return;
+    ads::CDockWidget* dock = nullptr;
+    for (QWidget* w = parentWidget(); w && !dock; w = w->parentWidget())
+        dock = qobject_cast<ads::CDockWidget*>(w);
+    ads::CDockAreaTitleBar* bar =
+        dock && dock->dockAreaWidget() ? dock->dockAreaWidget()->titleBar() : nullptr;
+    if (!bar || !bar->tabBar()) {
+        // Not docked: its own bar at the top of the screen.
+        detach_toolbar();
+        toolbar_->show();
+        return;
+    }
+    if (toolbar_->parentWidget() != bar) {
+        root_layout_->removeWidget(toolbar_);
+        toolbar_->set_in_tab_row(true);
+        // Right after the tab label, taking the row's free width.
+        bar->insertWidget(bar->indexOf(bar->tabBar()) + 1, toolbar_);
+        if (auto* box = qobject_cast<QBoxLayout*>(bar->layout()))
+            box->setStretchFactor(toolbar_, 1);
+    }
+    toolbar_->show();
+}
+
+void DashboardScreen::detach_toolbar() {
+    // Back into the screen whenever it isn't showing: the tab row belongs to
+    // the dock area, which another screen may take over or ADS may delete
+    // (a dock area deletes its children with it).
+    if (!toolbar_ || toolbar_->parentWidget() == this)
+        return;
+    toolbar_->hide();
+    toolbar_->set_in_tab_row(false);
+    root_layout_->insertWidget(0, toolbar_);
+}
+
+void DashboardScreen::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    detach_toolbar();
+}
+
 void DashboardScreen::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     refresh_theme();
-
-    if (ticker_bar_)
-        ticker_bar_->resume();
-
-    // Subscribe to current ticker symbols — hub schedules refreshes per TopicPolicy.
-    hub_resubscribe_ticker();
+    attach_toolbar();
 
     // Set splitter sizes on first show using actual pixel width.
     // Must be done here (not in constructor) because the widget has no size yet
@@ -234,100 +276,7 @@ void DashboardScreen::showEvent(QShowEvent* event) {
     }
 }
 
-void DashboardScreen::hideEvent(QHideEvent* event) {
-    QWidget::hideEvent(event);
-    if (ticker_bar_)
-        ticker_bar_->pause();
-    hub_unsubscribe_ticker();
-}
 
-// ── Ticker refresh ────────────────────────────────────────────────────────────
-
-void DashboardScreen::refresh_ticker() {
-    if (!ticker_bar_)
-        return;
-
-    const QStringList symbols = ticker_bar_->symbols();
-    if (symbols.isEmpty())
-        return;
-
-    // Hub path: user edited symbols → drop old subs, attach to new set,
-    // kick the hub so consumers see data immediately.
-    hub_resubscribe_ticker();
-}
-
-void DashboardScreen::rebuild_ticker_from_cache() {
-    if (!ticker_bar_)
-        return;
-    QVector<TickerBar::Entry> entries;
-    entries.reserve(ticker_subscribed_.size());
-    for (const auto& sym : ticker_subscribed_) {
-        if (!ticker_cache_.contains(sym))
-            continue;
-        const auto& q = ticker_cache_.value(sym);
-        // TickerBar renders `change` with a "%" suffix — pass the percent
-        // change, not the absolute price change.
-        entries.append({q.symbol, q.price, q.change_pct});
-    }
-    if (!entries.isEmpty())
-        ticker_bar_->set_data(entries);
-}
-
-void DashboardScreen::hub_resubscribe_ticker() {
-    if (!ticker_bar_)
-        return;
-
-    auto& hub = datahub::DataHub::instance();
-    // Drop any prior subscriptions owned by this screen, since the symbol
-    // set may have changed (user edited ticker symbols).
-    hub.unsubscribe(this);
-    hub_active_ = false;
-
-    ticker_subscribed_ = ticker_bar_->symbols();
-    // Keep what is still subscribed and seed the rest from the hub's last-known
-    // value. Clearing the cache here left only the topics still inside their TTL
-    // (the hub re-delivers just those on subscribe): on a tab switch that was
-    // often ONE index, and the wrapping tape painted "^GSPC … ^GSPC … ^GSPC"
-    // across the whole strip until the forced poll answered.
-    for (auto it = ticker_cache_.begin(); it != ticker_cache_.end();)
-        it = ticker_subscribed_.contains(it.key()) ? std::next(it) : ticker_cache_.erase(it);
-    for (const QString& sym : ticker_subscribed_) {
-        if (ticker_cache_.contains(sym))
-            continue;
-        const QVariant last = hub.peek_raw(QStringLiteral("market:quote:") + sym);
-        if (last.canConvert<services::QuoteData>())
-            ticker_cache_.insert(sym, last.value<services::QuoteData>());
-    }
-    if (ticker_subscribed_.isEmpty())
-        return;
-    rebuild_ticker_from_cache();
-
-    QStringList topics;
-    topics.reserve(ticker_subscribed_.size());
-    for (const QString& sym : ticker_subscribed_) {
-        const QString topic = QStringLiteral("market:quote:") + sym;
-        topics.append(topic);
-        hub.subscribe(this, topic, [this, sym](const QVariant& v) {
-            if (!v.canConvert<services::QuoteData>())
-                return;
-            ticker_cache_.insert(sym, v.value<services::QuoteData>());
-            quote_render_.request(); // one render per tick batch
-        });
-    }
-    // force=true: ticker bar re-subscribe happens on user edits and tab shows —
-    // bypass min_interval so the ticker doesn't sit blank. Subscribe's built-in
-    // cold-start fetch (task 4) already handles the cold case; force is for
-    // the "symbols changed, existing cache is for old symbols" case.
-    hub.request(topics, /*force=*/true);
-    hub_active_ = true;
-}
-
-void DashboardScreen::hub_unsubscribe_ticker() {
-    if (!hub_active_)
-        return;
-    datahub::DataHub::instance().unsubscribe(this);
-    hub_active_ = false;
-}
 
 // ── Event filter: sync canvas width to scroll viewport ────────────────────────
 

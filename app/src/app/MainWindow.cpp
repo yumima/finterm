@@ -281,9 +281,9 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     dock_toolbar_ = new ui::DockToolBar(this);
     addToolBar(Qt::TopToolBarArea, dock_toolbar_);
 
-    // Pushpin bar lives on its own toolbar row below the main toolbar so the
-    // chips are always visible and drop targets across all panels. Start a
-    // new toolbar line via addToolBarBreak().
+    // The banner — the market tape with the pinned symbols, and the drop
+    // target that pins one — on its own toolbar row below the main toolbar, on
+    // every screen. Start a new toolbar line via addToolBarBreak().
     addToolBarBreak(Qt::TopToolBarArea);
     pushpin_bar_ = new ui::PushpinBar;
     pushpin_toolbar_ = new QToolBar(this);
@@ -360,6 +360,14 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // Re-raise and reposition the bubble after each navigation — dock geometry
     // shifts when panels open/close, so the bubble needs to re-anchor itself.
+    // The banner follows Settings › Appearance › Ticker Bar at once — while the
+    // shell is up (the main toolbar shows exactly then). The bus's Qt signal,
+    // not subscribe(): the connection goes with this window.
+    connect(&EventBus::instance(), &EventBus::eventPublished, this, [this](const QString& event, const QVariantMap&) {
+        if (event == QLatin1String("appearance.changed") && pushpin_toolbar_ && dock_toolbar_ &&
+            !dock_toolbar_->isHidden())
+            pushpin_toolbar_->setVisible(banner_enabled());
+    });
     connect(dock_router_, &DockScreenRouter::screen_changed, this, [this](const QString&) {
         if (!chat_bubble_)
             return;
@@ -478,7 +486,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         if (dock_status_bar_)
             dock_status_bar_->setVisible(!focus_mode_);
         if (pushpin_toolbar_)
-            pushpin_toolbar_->setVisible(!focus_mode_);
+            pushpin_toolbar_->setVisible(!focus_mode_ && banner_enabled());
     });
 
     auto* act_refresh = km.action(KeyAction::Refresh);
@@ -945,7 +953,7 @@ void MainWindow::toggle_workbench() {
         if (dock_status_bar_)
             dock_status_bar_->setVisible(true);
         if (pushpin_toolbar_)
-            pushpin_toolbar_->setVisible(true);
+            pushpin_toolbar_->setVisible(banner_enabled());
         if (chat_bubble_) {
             auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
             const bool show = !r.is_ok() || r.value() != "false";
@@ -1529,13 +1537,18 @@ void MainWindow::show_default_screen_if_empty() {
         dock_router_->open_tab(QStringLiteral("dashboard"));
 }
 
+bool MainWindow::banner_enabled() {
+    const auto r = SettingsRepository::instance().get("appearance.show_ticker_bar");
+    return !r.is_ok() || r.value() != "false";
+}
+
 void MainWindow::set_shell_visible(bool visible) {
     if (dock_toolbar_)
         dock_toolbar_->setVisible(visible && !focus_mode_);
     if (dock_status_bar_)
         dock_status_bar_->setVisible(visible && !focus_mode_);
     if (pushpin_toolbar_)
-        pushpin_toolbar_->setVisible(visible && !focus_mode_);
+        pushpin_toolbar_->setVisible(visible && !focus_mode_ && banner_enabled());
     if (!visible) {
         // Reset title to plain app base — no screen suffix while on auth screens
         setWindowTitle(app_title_base());
