@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`61ad68b96`](https://github.com/yumima/finterm/commit/61ad68b96) markets: MY VIEW first, WORLD with the market pages; pages keep their rows; the charted row is marked
 - [`b0470e92c`](https://github.com/yumima/finterm/commit/b0470e92c) dock: a split is forgotten once one of its panes goes full screen
 - [`1c4b935f9`](https://github.com/yumima/finterm/commit/1c4b935f9) **chore(release):** update README download links and updates.json for v4.0.10
 - [`265976316`](https://github.com/yumima/finterm/commit/265976316) **build:** Windows' near/far macros, an unused lambda capture (clang -Werror)

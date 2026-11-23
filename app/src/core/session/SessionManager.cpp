@@ -134,6 +134,23 @@ QString SessionManager::last_screen() const {
     return settings_.value("session/last_screen", "dashboard").toString();
 }
 
+void SessionManager::save_tab_layout(int window_id, const QString& tab, const QByteArray& state) {
+    const QString key = QString("window_%1/tab_layouts/%2").arg(window_id).arg(tab);
+    if (state.isEmpty())
+        settings_.remove(key);
+    else
+        settings_.setValue(key, state);
+}
+
+QHash<QString, QByteArray> SessionManager::tab_layouts(int window_id) const {
+    QHash<QString, QByteArray> out;
+    settings_.beginGroup(QString("window_%1/tab_layouts").arg(window_id));
+    for (const auto& tab : settings_.childKeys())
+        out.insert(tab, settings_.value(tab).toByteArray());
+    settings_.endGroup();
+    return out;
+}
+
 void SessionManager::set_last_primary_screen(const QString& screen_id) {
     settings_.setValue("session/last_primary_screen", screen_id);
 }

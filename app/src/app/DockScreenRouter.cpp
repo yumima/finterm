@@ -134,7 +134,10 @@ void DockScreenRouter::sync_current_from_view() {
     if (!dw || dw->isClosed())
         return;
     const QString id = dw->objectName();
-    if (id.isEmpty() || id == current_id_ || find_dock_widget(id) != dw)
+    if (id.isEmpty() || find_dock_widget(id) != dw)
+        return;
+    reassign_primary_if_closed();
+    if (id == current_id_)
         return;
     current_id_ = id;
     SessionManager::instance().set_last_screen(id);
@@ -255,7 +258,44 @@ void DockScreenRouter::register_factory(const QString& id, ScreenFactory factory
     factories_[id] = std::move(factory);
 }
 
-void DockScreenRouter::navigate(const QString& id, bool exclusive) {
+void DockScreenRouter::open_tab(const QString& id) {
+    if (auth::InactivityGuard::instance().is_terminal_locked())
+        return;
+    // The tab the user is already on: its view stays as it is — panes beside
+    // it (ER beside Portfolio) are part of it, and a click on its own tab is
+    // "take me back to it", never "close what is beside it". Any other tab:
+    // its own view, as it was left (navigate's snapshots).
+    if (id == current_primary_id_ && is_open(id)) {
+        PopularityTracker::instance().increment(id);
+        raise(id);
+        emit primary_changed(id);
+        return;
+    }
+    navigate(id, true, /*with_view=*/true);
+}
+
+void DockScreenRouter::reassign_primary_if_closed() {
+    if (!manager_ || (!current_primary_id_.isEmpty() && is_open(current_primary_id_)))
+        return;
+    // The tab's own screen is gone (its ✕, a remove): the screen in front of
+    // what is left is the tab now.
+    ads::CDockWidget* front = nullptr;
+    if (auto* f = manager_->focusedDockWidget(); f && !f->isClosed() && f->dockAreaWidget())
+        front = f->dockAreaWidget()->currentDockWidget();
+    if (!front)
+        if (const auto areas = manager_->openedDockAreas(); !areas.isEmpty())
+            front = areas.first()->currentDockWidget();
+    if (front && !front->isClosed() && !front->objectName().isEmpty()) {
+        // The old tab's view is what the user just took apart: not brought back.
+        if (!current_primary_id_.isEmpty()) {
+            layout_snapshots_.remove(current_primary_id_);
+            store_tab_layout(current_primary_id_, {});
+        }
+        set_primary(front->objectName());
+    }
+}
+
+void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_view) {
     // Hard refuse while the lock screen is showing — signals/timers/keyboard
     // shortcuts that would otherwise mutate panel state behind the PIN gate
     // must be no-ops. MainWindow also disables the dock_manager_ widget tree
@@ -283,6 +323,7 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
 
     LOG_INFO("DockRouter",
              QString(">>> navigate('%1', exclusive=%2) panel_count=%3").arg(id).arg(exclusive).arg(panel_count_));
+
     // Bump popularity so the Component Browser surfaces frequently-used
     // panels at the top. Safe for unknown ids — PopularityTracker no-ops
     // on failure and we still fall into the unknown-screen branch below.
@@ -301,13 +342,7 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // the cost, and only when coming back to that split.
     if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
         const auto opened = manager_->openedDockAreas();
-        // Taking a pane of this split full screen forgets the split (see
-        // the loop after materialize_screen) — don't serialize it first.
-        auto* const target = find_dock_widget(id);
-        const bool target_in_split = target && std::any_of(opened.cbegin(), opened.cend(), [target](auto* area) {
-                                         return area->openedDockWidgets().contains(target);
-                                     });
-        if (opened.size() > 1 && !target_in_split) {
+        if (opened.size() > 1) {
             PrimaryLayout snap;
             snap.state = manager_->saveState();
             for (auto* area : opened) {
@@ -315,12 +350,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
                     snap.panes.append({w, area});
                 snap.current_tabs.append(area->currentDockWidget());
             }
+            snap.beside = beside_of(current_primary_id_);
+            store_tab_layout(current_primary_id_, snap.beside);
             layout_snapshots_[current_primary_id_] = snap;
         } else {
             // Outgoing primary now solo — invalidate any stale multi-pane
-            // snapshot the user has since dismissed (or, above, the split
-            // whose pane is being taken full screen).
+            // snapshot the user has since dismissed.
             layout_snapshots_.remove(current_primary_id_);
+            store_tab_layout(current_primary_id_, {});
         }
     }
 
@@ -353,28 +390,9 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
 
     materialize_screen(id);
 
-    // A split is remembered until one of its other panes is taken full
-    // screen, from anywhere. MARKETS + DASHBOARD, then PORTFOLIO, DASHBOARD,
-    // MARKETS: the user asked for MARKETS, but re-opening the split put
-    // DASHBOARD — the screen they had just left — back beside it, so the
-    // MARKETS click looked dead. Once a pane has been a screen of its own,
-    // the split it came from is history.
-    if (exclusive) {
-        for (auto it = layout_snapshots_.begin(); it != layout_snapshots_.end();) {
-            const bool holds_dw = std::any_of(it->panes.cbegin(), it->panes.cend(),
-                                              [dw](const auto& p) { return p.first == dw; });
-            if (it.key() != id && holds_dw) {
-                LOG_INFO("DockRouter", QString("split of '%1' forgotten: '%2' taken full screen").arg(it.key(), id));
-                it = layout_snapshots_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
     // Coming back to a split this primary was left in: re-open its panes in
     // place (see PrimaryLayout). Decided before anything is moved.
-    const PrimaryLayout* reopen = exclusive && !needs_add ? reopenable_layout(id, dw) : nullptr;
+    const PrimaryLayout* reopen = exclusive && with_view && !needs_add ? reopenable_layout(id, dw) : nullptr;
 
     if (exclusive) {
         for (auto* area : manager_->openedDockAreas()) {
@@ -552,10 +570,23 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
                     front->setAsCurrentTab();
             }
             sync_grid_from_reality();
-        } else if (auto it = layout_snapshots_.constFind(id); it != layout_snapshots_.constEnd()) {
-            manager_->restoreState(it->state);
-            sync_grid_from_reality();
-            apply_ads_theme();
+        } else if (auto it = layout_snapshots_.constFind(id); with_view && it != layout_snapshots_.constEnd()) {
+            if (it->panes.isEmpty()) {
+                // From the last session: re-open the screens that were beside
+                // it, where they were — split_alongside, not restoreState().
+                const auto beside = it->beside;
+                layout_snapshots_.remove(id); // leaving the tab saves it afresh
+                ads::CDockAreaWidget* anchor = dw->dockAreaWidget();
+                for (const auto& [pane, side] : beside)
+                    if (pane != id && (factories_.contains(pane) || screens_.contains(pane)))
+                        split_alongside(pane, static_cast<ads::DockWidgetArea>(side), anchor);
+                dw->setAsCurrentTab();
+                sync_grid_from_reality();
+            } else {
+                manager_->restoreState(it->state);
+                sync_grid_from_reality();
+                apply_ads_theme();
+            }
         }
         // current_primary_id_ tracks the most-recently-exclusive-navigated
         // screen — that's the key under which we'll save the layout next time
@@ -563,14 +594,76 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
         // from last_screen so startup can re-seed current_primary_id_ even
         // when split_alongside has since overwritten last_screen with a
         // secondary's id (e.g. "equity_research").
-        current_primary_id_ = id;
-        SessionManager::instance().set_last_primary_screen(id);
+        set_primary(id);
+    } else if (current_primary_id_.isEmpty()) {
+        set_primary(id); // the first screen opened is the tab
     }
 
     current_id_ = id;
     SessionManager::instance().set_last_screen(id);
     LOG_INFO("DockRouter", "Navigated to: " + id);
     emit screen_changed(id);
+}
+
+void DockScreenRouter::load_tab_layouts(int window_id, bool use_saved) {
+    tab_store_window_ = window_id;
+    const auto saved = SessionManager::instance().tab_layouts(window_id);
+    for (auto it = saved.cbegin(); it != saved.cend(); ++it) {
+        // A screen on screen now: the restored window layout is its view —
+        // an older saved one would bring back panes closed since.
+        if (!use_saved || is_open(it.key())) {
+            SessionManager::instance().save_tab_layout(window_id, it.key(), {});
+            continue;
+        }
+        QVector<QPair<QString, int>> beside;
+        for (const auto& part : QString::fromUtf8(it.value()).split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+            const QString pane = part.section(QLatin1Char(':'), 0, 0);
+            bool ok = false;
+            const int side = part.section(QLatin1Char(':'), 1, 1).toInt(&ok);
+            if (!pane.isEmpty() && ok)
+                beside.append({pane, side});
+        }
+        if (!beside.isEmpty() && !layout_snapshots_.contains(it.key()))
+            layout_snapshots_[it.key()].beside = beside;
+    }
+}
+
+void DockScreenRouter::store_tab_layout(const QString& tab, const QVector<QPair<QString, int>>& beside) {
+    if (tab_store_window_ < 0 || tab.isEmpty())
+        return;
+    QStringList parts;
+    for (const auto& [pane, side] : beside)
+        parts << pane + QLatin1Char(':') + QString::number(side);
+    SessionManager::instance().save_tab_layout(tab_store_window_, tab, parts.join(QLatin1Char(';')).toUtf8());
+}
+
+QVector<QPair<QString, int>> DockScreenRouter::beside_of(const QString& primary) const {
+    QVector<QPair<QString, int>> out;
+    auto* pdw = find_dock_widget(primary);
+    auto* parea = pdw ? pdw->dockAreaWidget() : nullptr;
+    if (!parea || !manager_)
+        return out;
+    const QRect p(parea->mapToGlobal(QPoint(0, 0)), parea->size());
+    for (auto* area : manager_->openedDockAreas()) {
+        if (area == parea)
+            continue;
+        const QRect a(area->mapToGlobal(QPoint(0, 0)), area->size());
+        const int side = a.left() >= p.right() - 12   ? ads::RightDockWidgetArea
+                         : a.right() <= p.left() + 12 ? ads::LeftDockWidgetArea
+                         : a.top() >= p.bottom() - 12 ? ads::BottomDockWidgetArea
+                                                      : ads::TopDockWidgetArea;
+        for (auto* w : area->openedDockWidgets())
+            if (!w->objectName().isEmpty())
+                out.append({w->objectName(), side});
+    }
+    return out;
+}
+
+void DockScreenRouter::set_primary(const QString& id) {
+    current_primary_id_ = id;
+    if (!id.isEmpty())
+        SessionManager::instance().set_last_primary_screen(id);
+    emit primary_changed(id);
 }
 
 const DockScreenRouter::PrimaryLayout* DockScreenRouter::reopenable_layout(const QString& id,
@@ -825,6 +918,7 @@ void DockScreenRouter::remove_screen(const QString& primary) {
         keep->setAsCurrentTab();
         current_id_ = primary;
         emit screen_changed(primary);
+        set_primary(primary); // the one screen left is the tab
     }
 }
 
@@ -1220,6 +1314,13 @@ ads::CDockWidget* DockScreenRouter::create_dock_widget(const QString& id) {
         return dock_widgets_[id];
 
     auto* dw = new ads::CDockWidget(manager_, title_for_id(id));
+    // Closing the tab's own screen (its ✕, any route) hands the tab to what
+    // is left; deferred — an exclusive navigate closes the old tab first and
+    // names the new one after.
+    connect(dw, &ads::CDockWidget::viewToggled, this, [this](bool open) {
+        if (!open)
+            QTimer::singleShot(0, this, [this]() { reassign_primary_if_closed(); });
+    });
     dw->setObjectName(id);
 
     // Pinnable is intentionally excluded: the auto-hide pin button converts panels

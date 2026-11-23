@@ -36,7 +36,7 @@ namespace {
 constexpr const char* kScreensKey = "markets_screens";        ///< the user's screens: [{id, title, template}]
 constexpr const char* kCurrentKey = "markets_screen_current"; ///< the page last shown (id)
 constexpr const char* kPagesVersionKey = "markets_pages_version";
-constexpr int kPagesVersion = 2; ///< 2: MY VIEW … | MARKETS EQUITY RATES WORLD | FUTURES
+constexpr int kPagesVersion = 3; ///< 2: MY VIEW … | MARKETS EQUITY RATES WORLD | FUTURES; 3: MY VIEW the default page
 
 QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
     const int sz = (px > 0) ? px : ui::fonts::font_px(-2);
@@ -150,8 +150,27 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
 void MarketsScreen::migrate_pages() {
     auto& settings = SettingsRepository::instance();
     const auto v = settings.get(kPagesVersionKey);
-    if (v.is_ok() && v.value().toInt() >= kPagesVersion)
+    const int have = v.is_ok() ? v.value().toInt() : 0;
+    if (have >= kPagesVersion)
         return;
+    if (have < 2)
+        fold_into_three_groups();
+    // 3: MARKETS opens on the user's own screen, MY VIEW (the first of
+    // theirs) — once; after that it reopens where it was left.
+    for (const auto& e : read_mine()) { // the first screen load_pages will show
+        const QJsonObject o = e.toObject();
+        const QString id = o.value("id").toString();
+        if (!id.isEmpty() && !o.value("title").toString().isEmpty() && !is_market_page(id) &&
+            !id.startsWith(QLatin1String("futures:"))) {
+            settings.set(kCurrentKey, id, "markets");
+            break;
+        }
+    }
+    settings.set(kPagesVersionKey, QString::number(kPagesVersion), "markets");
+}
+
+void MarketsScreen::fold_into_three_groups() {
+    auto& settings = SettingsRepository::instance();
 
     // The user's screens are what the old OVERVIEW list held besides the
     // market pages (now fixed) and PANELS (folded into the market pages'
@@ -286,7 +305,6 @@ void MarketsScreen::migrate_pages() {
     settings.remove(QStringLiteral("markets_panel_configs"));
     settings.remove(QStringLiteral("markets_splitter_state"));
     settings.remove(QStringLiteral("markets_overview_layout"));
-    settings.set(kPagesVersionKey, QString::number(kPagesVersion), "markets");
 }
 
 void MarketsScreen::load_pages() {

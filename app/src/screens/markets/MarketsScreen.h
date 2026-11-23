@@ -56,7 +56,7 @@ class MarketsScreen : public QWidget, public IStatefulScreen {
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("markets"); }
-    int state_version() const override { return 4; } // 4: one-row pages (page ids unchanged since)
+    int state_version() const override { return 5; } // 5: MY VIEW the default page (a saved page from 4 is dropped)
 
   protected:
     void showEvent(QShowEvent* event) override;
@@ -71,7 +71,8 @@ class MarketsScreen : public QWidget, public IStatefulScreen {
     };
     QWidget* build_header_bar();
     void load_pages();
-    static void migrate_pages(); ///< the one-time move to the three groups
+    static void migrate_pages();          ///< one-time moves, by markets_pages_version
+    static void fold_into_three_groups(); ///< 2: the three header groups; PANELS folded in
     void save_mine();
     int mine_count() const;
     MarketScreenPage* ensure_page(int index);

@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QList>
 #include <QObject>
+#include <QHash>
 #include <QSettings>
 #include <QString>
 #include <QVariantMap>
@@ -64,6 +65,11 @@ class SessionManager : public QObject {
     // save — without this, restart-restored multi-pane arrangements
     // (Portfolio + ER alongside) collapse on the first nav-away because
     // the snapshot block guards on a non-empty current_primary_id_.
+    /// A tab's own arrangement (its screen and the panes beside it), saved when
+    /// the user leaves it so it comes back after a restart too. Empty removes.
+    void save_tab_layout(int window_id, const QString& tab, const QByteArray& state);
+    QHash<QString, QByteArray> tab_layouts(int window_id) const;
+
     void set_last_primary_screen(const QString& screen_id);
     QString last_primary_screen() const;
 

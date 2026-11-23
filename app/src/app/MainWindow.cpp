@@ -324,14 +324,16 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // stays snappy and the caches warm before the user reaches those screens.
     QTimer::singleShot(0, this, &MainWindow::try_boot_prefetch);
 
-    // Tab bar navigation: open the selected screen exclusively — closes all other
-    // panels and fills the full area. Each tab is a fresh independent screen,
-    // not nested into whatever was previously open.
+    // Tab bar navigation: each tab is a view of its own — its screen and the
+    // panes the user opened beside it (ER beside Portfolio), as left. A click
+    // on the tab already on keeps its view (DockScreenRouter::open_tab).
     connect(tab_bar_, &ui::TabBar::tab_changed, this, [this](const QString& id) {
         if (!locked_)
-            dock_router_->navigate(id, true);
+            dock_router_->open_tab(id);
     });
-    connect(dock_router_, &DockScreenRouter::screen_changed, tab_bar_, &ui::TabBar::set_active);
+    // The tab bar shows the TAB the user is on — not the pane in front: ER
+    // opened beside Portfolio leaves PORTFOLIO lit (see primary_changed).
+    connect(dock_router_, &DockScreenRouter::primary_changed, tab_bar_, &ui::TabBar::set_active);
 
     // Update the main window title bar to reflect the current screen name.
     connect(dock_router_, &DockScreenRouter::screen_changed, this, [this](const QString&) { update_window_title(); });
@@ -380,12 +382,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         // should update the existing ER pane in place, NOT clobber the
         // layout with an exclusive single-pane ER.
         //
-        // Tab-bar (FKeyBar) clicks intentionally use exclusive navigate
-        // elsewhere — they really do mean "switch the whole view".
+        // Tab-bar clicks go through open_tab — they switch the whole view
+        // (to that tab's own, as left).
         if (dock_router_->is_open(id))
             dock_router_->raise(id);
         else
-            dock_router_->navigate(id, true);
+            dock_router_->open_tab(id); // that screen's own view, as left
     });
 
     // Debounced dock-layout save: ADS emits a burst of signals during
@@ -835,6 +837,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dw->toggleView(false);
         }
 
+        // Each tab's own arrangement (Portfolio + ER …) from the last session —
+        // only with the dock layout it was saved beside (restoreState needs
+        // the dock widgets ensure_all_registered made above).
+        if (dock_router_)
+            dock_router_->load_tab_layouts(window_id_, dock_restored);
+
         // Seed DockScreenRouter's current_primary_id_ so the FIRST nav-away
         // after restart fires the layout-snapshot save block. Without this,
         // a restart that successfully brought back Portfolio+ER alongside
@@ -845,8 +853,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         // with the secondary's id like "equity_research").
         if (dock_restored && dock_router_) {
             const QString lp = SessionManager::instance().last_primary_screen();
-            if (!lp.isEmpty())
+            // Only a tab that came back; else the screen in front is the tab.
+            if (!lp.isEmpty() && dock_router_->is_open(lp))
                 dock_router_->set_current_primary_id(lp);
+            else
+                dock_router_->reassign_primary_if_closed();
         }
 
         // Save the current version so next startup knows the format.
@@ -890,7 +901,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                     // highlight on a tab that no longer exists, and
                     // set_active early-returns on an unchanged id, so nothing
                     // looks selected until the user navigates away.
-                    tab_bar_->set_active(last);
+                    // The tab is the primary (restored above) when it came
+                    // back — last_screen may be a pane beside it (ER).
+                    const QString tab = dock_router_->primary_id();
+                    tab_bar_->set_active(!tab.isEmpty() && dock_router_->is_open(tab) ? tab : last);
                 }
             }
         }
