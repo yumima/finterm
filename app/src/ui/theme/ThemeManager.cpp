@@ -4,7 +4,9 @@
 #include "ui/theme/QssSlots.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QPalette>
+#include <QStyleHints>
 #include <QToolTip>
 #include <QWidget>
 
@@ -144,6 +146,51 @@ void ThemeManager::rebuild_and_apply() {
     tip_pal.setColor(QPalette::ToolTipBase, QColor(current_.bg_surface));
     tip_pal.setColor(QPalette::ToolTipText, QColor(current_.text_primary));
     QToolTip::setPalette(tip_pal);
+
+    // The application palette, complete and from the theme. Most widgets are
+    // coloured by the QSS above; the palette is what paints everything the QSS
+    // doesn't reach — and the window title bar. On Wayland (GNOME has no
+    // server-side decorations) Qt draws the bar itself: its "bradient"
+    // decoration fills it with the palette's Window and writes the title in
+    // WindowText, so Qt's light default put "finterm @ …" grey-on-white above
+    // a black terminal. Every role is set, in every group, so no widget mixes a
+    // themed background with a light-default text.
+    {
+        const QColor bg(current_.bg_base), surface(current_.bg_surface), raised(current_.bg_raised);
+        const QColor text(current_.text_primary), muted(current_.text_tertiary), dim(current_.text_dim);
+        const QColor accent(current_.accent), on_accent(current_.text_on_accent);
+        QPalette pal;
+        for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+            const bool off = group == QPalette::Disabled;
+            pal.setColor(group, QPalette::Window, bg);
+            pal.setColor(group, QPalette::WindowText, off ? dim : text);
+            pal.setColor(group, QPalette::Base, surface);
+            pal.setColor(group, QPalette::AlternateBase, QColor(current_.row_alt));
+            pal.setColor(group, QPalette::Text, off ? dim : text);
+            pal.setColor(group, QPalette::PlaceholderText, muted);
+            pal.setColor(group, QPalette::Button, raised);
+            pal.setColor(group, QPalette::ButtonText, off ? dim : text);
+            pal.setColor(group, QPalette::BrightText, on_accent);
+            pal.setColor(group, QPalette::Highlight, off ? raised : accent);
+            pal.setColor(group, QPalette::HighlightedText, off ? dim : on_accent);
+            pal.setColor(group, QPalette::Link, QColor(current_.cyan));
+            pal.setColor(group, QPalette::LinkVisited, QColor(current_.cyan));
+            pal.setColor(group, QPalette::ToolTipBase, surface);
+            pal.setColor(group, QPalette::ToolTipText, text);
+            pal.setColor(group, QPalette::Light, QColor(current_.border_bright));
+            pal.setColor(group, QPalette::Midlight, QColor(current_.border_med));
+            pal.setColor(group, QPalette::Mid, QColor(current_.border_med));
+            pal.setColor(group, QPalette::Dark, QColor(current_.border_dim));
+            pal.setColor(group, QPalette::Shadow, bg);
+        }
+        if (pal != QGuiApplication::palette())
+            QGuiApplication::setPalette(pal);
+        // The "adwaita" decoration (Qt 6.8+, in the release kit; the system Qt
+        // may have only bradient) ignores the palette and follows the colour
+        // scheme: ask for the one the theme is.
+        QGuiApplication::styleHints()->setColorScheme(bg.lightness() < 128 ? Qt::ColorScheme::Dark
+                                                                           : Qt::ColorScheme::Light);
+    }
     emit theme_changed(current_);
     LOG_INFO("ThemeManager", "theme_changed emitted");
 }

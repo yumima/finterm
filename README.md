@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`7e646095c`](https://github.com/yumima/finterm/commit/7e646095c) markets: a correlation pair is marked in both triangles
 - [`7bb2b4daa`](https://github.com/yumima/finterm/commit/7bb2b4daa) updater: only a release build checks — every other build is "<version>-dev"
 - [`c0912fdbe`](https://github.com/yumima/finterm/commit/c0912fdbe) futures: each group's default is the desk's own arrangement — all ten re-taken
 - [`fc62eb065`](https://github.com/yumima/finterm/commit/fc62eb065) markets: the correlation cell the chart draws is marked like a charted row
