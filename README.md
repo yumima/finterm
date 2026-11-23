@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`ec9aba233`](https://github.com/yumima/finterm/commit/ec9aba233) window title: "finterm@<host> ver: <version>" — no screen names, no duplicated brand
 - [`64ab10847`](https://github.com/yumima/finterm/commit/64ab10847) toolbar: the market's clock beside LIVE — New York time, the session, the countdown to the bell; the local clock labelled
 - [`c395d6a42`](https://github.com/yumima/finterm/commit/c395d6a42) updater: in-place updates — download in the background, apply on quit or Restart Now, roll back a version that won't start
 - [`c7d457325`](https://github.com/yumima/finterm/commit/c7d457325) agents: the local engine runs without an OpenAI key; disabled agents aren't offered

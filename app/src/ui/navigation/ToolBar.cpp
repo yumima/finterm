@@ -96,14 +96,10 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
         return l;
     };
 
-    sep();
-    fin_label_ = mk("FIN");
-    hl->addWidget(fin_label_);
-    branding_label_ = mk("TERM");
-    hl->addWidget(branding_label_);
-    subtitle_label_ = mk("  |  PROFESSIONAL RESEARCH DESK");
-    hl->addWidget(subtitle_label_);
-    hl->addWidget(mk("  "));
+    // (No "FIN TERM | PROFESSIONAL RESEARCH DESK" here: the window title
+    // names the app — this row is for what changes.)
+    live_sep_ = mk("  |  ");
+    hl->addWidget(live_sep_);
     live_dot_ = mk("\xe2\x97\x8f");
     hl->addWidget(live_dot_);
     live_label_ = mk(" LIVE");
@@ -195,20 +191,18 @@ void ToolBar::refresh_theme() {
     // Separators
     for (auto* s : separators_)
         s->setStyleSheet(QString("color:%1;background:transparent;padding:0 3px;").arg(colors::TEXT_SECONDARY()));
-    // Branding labels
+    // Labels
     auto lbl = [](QLabel* l, const QString& c, bool b = false) {
         if (l)
             l->setStyleSheet(QString("color:%1;%2background:transparent;").arg(c, b ? "font-weight:700;" : ""));
     };
-    lbl(fin_label_, colors::AMBER(), true);
-    lbl(branding_label_, colors::TEXT_PRIMARY(), true);
-    lbl(subtitle_label_, colors::TEXT_SECONDARY());
     lbl(live_dot_, colors::POSITIVE());
     lbl(live_label_, colors::POSITIVE(), true);
     lbl(clock_label_, colors::TEXT_PRIMARY());
     lbl(market_label_, colors::TEXT_PRIMARY());
     lbl(market_sep_, colors::BORDER_MED());
     lbl(clock_sep_, colors::BORDER_MED());
+    lbl(live_sep_, colors::BORDER_MED());
     size_clocks();
     update_clock(); // the rich-text colours come from the theme
     lbl(user_label_, colors::AMBER());
@@ -228,19 +222,15 @@ void ToolBar::resizeEvent(QResizeEvent* e) {
 
 void ToolBar::apply_responsive_layout(int w) {
     // Progressive disclosure: hide less-critical elements as width shrinks
-    // >= 2200: everything visible (the subtitle too)
-    // >= 1000: no subtitle — the market clock has its room
-    //  >= 800: also no market clock
-    //  <  800: minimal — menus + branding + user + settings + logout
+    // >= 1000: everything visible
+    //  >= 800: no market clock
+    //  <  800: minimal — menus + user + settings + logout
     //          (no LOCAL clock, no LIVE label)
 
-    bool show_subtitle = (w >= 2200); // the market clock takes its room first
     bool show_market = (w >= 1000);
     bool show_clock = (w >= 800);
     bool show_live = (w >= 800);
 
-    if (subtitle_label_)
-        subtitle_label_->setVisible(show_subtitle);
     if (market_label_)
         market_label_->setVisible(show_market);
     if (market_sep_)
@@ -253,6 +243,8 @@ void ToolBar::apply_responsive_layout(int w) {
         live_dot_->setVisible(show_live);
     if (live_label_)
         live_label_->setVisible(show_live);
+    if (live_sep_)
+        live_sep_->setVisible(show_live); // nothing to separate without LIVE and the clocks
 }
 
 void ToolBar::size_clocks() {

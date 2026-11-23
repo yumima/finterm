@@ -10,7 +10,8 @@
 
 namespace finterm::ui {
 
-/// Combined toolbar: File/Navigate/View/Help menus + branding + clock + user info + logout.
+/// Combined toolbar: File/Navigate/View/Help menus + command bar + LIVE + the
+/// market and local clocks + user info + settings + logout.
 /// A single row.
 class ToolBar : public QWidget {
     Q_OBJECT
@@ -40,9 +41,8 @@ class ToolBar : public QWidget {
     QLabel* market_label_ = nullptr; ///< NYSE·NASDAQ time, session, countdown to the bell
     QLabel* market_sep_ = nullptr;
     QLabel* clock_sep_ = nullptr;
+    QLabel* live_sep_ = nullptr;
     QLabel* user_label_ = nullptr;
-    QLabel* subtitle_label_ = nullptr;
-    QLabel* branding_label_ = nullptr;
     QLabel* live_dot_ = nullptr;
     QLabel* live_label_ = nullptr;
     QPushButton* settings_btn_ = nullptr;
@@ -50,7 +50,6 @@ class ToolBar : public QWidget {
     QPushButton* logout_btn_ = nullptr;
     QTimer* clock_timer_ = nullptr;
     QVector<QLabel*> separators_;
-    QLabel* fin_label_ = nullptr;
 
     CommandBar* command_bar_ = nullptr;
 
