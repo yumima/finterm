@@ -612,9 +612,22 @@ void PortfolioInsightsPanel::reload_agents() {
     const auto cached = services::AgentService::instance().cached_agents();
     if (!cached.isEmpty()) {
         for (const auto& a : cached) {
+            // A disabled card can only fail ("Agent … is disabled: its tools
+            // are not registered") — it was even the first, default pick.
+            if (a.disabled())
+                continue;
             const QString label = a.category.isEmpty() ? a.name : QString("[%1] %2").arg(a.category, a.name);
             agent_cb_->addItem(label, a.id);
             agent_cb_->setItemData(agent_cb_->count() - 1, a.description, Qt::UserRole + 1);
+        }
+        if (agent_cb_->count() == 0) {
+            // Agents exist, none can run in this build — say so (RUN would
+            // otherwise suggest creating one).
+            agent_cb_->addItem("No runnable agents", "");
+            agent_cb_->setItemData(0,
+                                   "Every agent card is disabled in this build (its tools aren't registered). "
+                                   "See Agent Config for each card's reason.",
+                                   Qt::UserRole + 1);
         }
     } else {
         // Cache cold — show a disabled "discovering" placeholder and kick
@@ -739,7 +752,12 @@ void PortfolioInsightsPanel::run_agent(bool force) {
         return;
     const QString agent_id = agent_cb_->currentData().toString();
     if (agent_id.isEmpty()) {
-        render_error(agent_content_, "No agent selected.\n\nCreate one in the Agent Config screen, then return here.");
+        // The placeholder says why there is none (discovering / none runnable).
+        const QString why = agent_cb_->currentData(Qt::UserRole + 1).toString();
+        render_error(agent_content_, why.isEmpty()
+                                         ? QStringLiteral("No agent selected.\n\nCreate one in the Agent Config screen, "
+                                                          "then return here.")
+                                         : why);
         return;
     }
     if (!force && agent_cache_.contains(agent_id)) {

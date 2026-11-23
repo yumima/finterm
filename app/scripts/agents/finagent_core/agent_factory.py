@@ -112,18 +112,18 @@ class AgentFactory:
             "tool": "tool", "model": "assistant",
         }
 
-        # ── Local engine (ollama → hearth) ────────────────────────────────────
-        # Route "ollama" through OpenAIChat against the hearth gateway
-        # (OpenAI-compatible, default 127.0.0.1:11435) — NOT agno's native Ollama
-        # class, which needs the `ollama` pip package. /v1 is ensured; role
-        # aliases (primary_chat/...) resolve at the gateway.
-        if provider == "ollama":
+        # ── Local engine (hearth / ollama / anything on this machine) ─────────
+        # Through OpenAIChat against the engine's OpenAI root — NOT agno's
+        # native Ollama class, which needs the `ollama` pip package. The key is
+        # a placeholder (the engine ignores it; the client refuses to start
+        # without one — "OPENAI_API_KEY not set"); role aliases
+        # (primary_chat/...) resolve at the gateway. See local_engines.
+        from finagent_core.registries.local_engines import (
+            PLACEHOLDER_KEY, is_local_engine, local_base_url)
+        if is_local_engine(provider, base_url):
             from agno.models.openai import OpenAIChat
-            b = (base_url or "http://127.0.0.1:11435").rstrip("/")
-            if b.endswith("/v1"):
-                b = b[:-3]
-            b = b + "/v1"
-            kwargs = dict(id=model_id, api_key=api_key or "sk-no-key",
+            b = local_base_url(provider, base_url)
+            kwargs = dict(id=model_id, api_key=api_key or PLACEHOLDER_KEY,
                           temperature=temperature, max_tokens=max_tokens,
                           base_url=b, role_map=_STANDARD_ROLE_MAP)
             return OpenAIChat(**{k: v for k, v in kwargs.items() if v is not None})

@@ -36,10 +36,16 @@ inline QJsonObject agent_to_json(const services::AgentInfo& a) {
     QJsonArray caps;
     for (const auto& c : a.capabilities)
         caps.append(c);
-    return QJsonObject{
+    QJsonObject o{
         {"id", a.id},           {"name", a.name},         {"description", a.description}, {"category", a.category},
         {"capabilities", caps}, {"provider", a.provider}, {"version", a.version},
     };
+    // A model listing agents must know which it can't run (finagent refuses).
+    if (a.disabled()) {
+        o["disabled"] = true;
+        o["disabled_reason"] = a.config.value(QStringLiteral("disabled_reason")).toString();
+    }
+    return o;
 }
 
 inline QJsonObject result_to_json(const services::AgentExecutionResult& r) {

@@ -345,8 +345,12 @@ class ModelsRegistry:
         if not final_api_key and config.get("api_key_env"):
             final_api_key = os.environ.get(config["api_key_env"])
 
-        # Check if API key is required
-        if config.get("api_key_env") and not final_api_key:
+        # Check if API key is required (a local engine needs none) — judged on
+        # the base_url the model will actually use, whichever source gives it.
+        from finagent_core.registries.local_engines import is_local_engine as _is_local
+        _probe_base_url = (kwargs.get("base_url") or (api_keys or {}).get(f"{provider.upper()}_BASE_URL")
+                           or config.get("base_url") or "")
+        if config.get("api_key_env") and not final_api_key and not _is_local(provider_lower, _probe_base_url):
             logger.warning(f"No API key found for {provider}. Expected: {config['api_key_env']}")
 
         try:
@@ -397,23 +401,31 @@ class ModelsRegistry:
             # so we don't need extra pip packages (e.g. `ollama`) and so hearth
             # role aliases resolve. base_url defaults to hearth (:11435); /v1 is
             # ensured (OpenAI SDK appends /chat/completions itself).
-            LOCAL_OPENAI_COMPAT = {"ollama"}
-            if provider_lower in LOCAL_OPENAI_COMPAT:
+            # "hearth" (finterm's engine, as Settings saves it) and any
+            # provider pointed at this machine count too — see local_engines.
+            from finagent_core.registries.local_engines import (
+                PLACEHOLDER_KEY, is_local_engine, local_base_url)
+            # (A provider whose SDK takes no base_url — anthropic & co — keeps
+            # its own redirect below, which cleans "/anthropic"-style paths.)
+            _is_local_engine = is_local_engine(provider_lower, effective_base_url or "")
+            if _is_local_engine and provider_lower not in NO_BASE_URL_PROVIDERS:
                 from agno.models.openai import OpenAIChat as _OAI
-                base = (effective_base_url or "http://127.0.0.1:11435").rstrip("/")
-                if base.endswith("/v1"):
-                    base = base[:-3]
-                base = base + "/v1"
+                base = local_base_url(provider_lower, effective_base_url or "")
                 oai_kwargs = {
                     "id": final_model_id,
                     "base_url": base,
-                    "api_key": final_api_key or "sk-no-key",
+                    "api_key": final_api_key or PLACEHOLDER_KEY,
                     "role_map": _STANDARD_ROLE_MAP,
                 }
                 if "temperature" in kwargs:
                     oai_kwargs["temperature"] = kwargs.pop("temperature")
                 if "max_tokens" in kwargs:
                     oai_kwargs["max_tokens"] = kwargs.pop("max_tokens")
+                # Anything else the caller set (top_p, max_completion_tokens, …)
+                # goes through as on the generic path.
+                for _k, _v in kwargs.items():
+                    if _v is not None and _k not in oai_kwargs:
+                        oai_kwargs[_k] = _v
                 logger.info(
                     f"Local engine '{provider}' → OpenAIChat(base_url={base}, id={final_model_id})"
                 )
@@ -444,6 +456,8 @@ class ModelsRegistry:
                               "role_map": _STANDARD_ROLE_MAP}
                 if final_api_key:
                     oai_kwargs["api_key"] = final_api_key
+                elif _is_local_engine:
+                    oai_kwargs["api_key"] = PLACEHOLDER_KEY  # a proxy on this machine
                 if "temperature" in kwargs:
                     oai_kwargs["temperature"] = kwargs.pop("temperature")
                 if "max_tokens" in kwargs:

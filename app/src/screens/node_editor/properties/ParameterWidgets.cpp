@@ -268,6 +268,8 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
 
             const auto agents = finterm::services::AgentService::instance().cached_agents();
             for (const auto& a : agents) {
+                if (a.disabled()) // can't run in this build — it would only fail
+                    continue;
                 QString label = a.name;
                 if (!a.category.isEmpty())
                     label += "  [" + a.category + "]";

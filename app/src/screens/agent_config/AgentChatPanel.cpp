@@ -89,7 +89,8 @@ AgentChatPanel::AgentChatPanel(QWidget* parent) : QWidget(parent) {
         agent_selector_->clear();
         agent_selector_->addItem("Default (global LLM)", QString{});
         for (const auto& a : cached)
-            agent_selector_->addItem(QString("[%1] %2").arg(a.category, a.name), a.id);
+            if (!a.disabled()) // can't run in this build — it would only fail
+                agent_selector_->addItem(QString("[%1] %2").arg(a.category, a.name), a.id);
         agent_selector_->blockSignals(false);
     }
 
@@ -450,7 +451,8 @@ void AgentChatPanel::setup_connections() {
                 agent_selector_->clear();
                 agent_selector_->addItem("Default (global LLM)", QString{});
                 for (const auto& a : agents)
-                    agent_selector_->addItem(QString("[%1] %2").arg(a.category, a.name), a.id);
+                    if (!a.disabled()) // can't run in this build — it would only fail
+                        agent_selector_->addItem(QString("[%1] %2").arg(a.category, a.name), a.id);
                 // Restore previous selection
                 int restore = 0;
                 if (!prev_id.isEmpty()) {

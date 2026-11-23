@@ -22,6 +22,10 @@ struct AgentInfo {
     QString provider;
     QString version;
     QJsonObject config; // full config payload
+
+    /// The card says it can't run in this build (config.disabled, with a
+    /// disabled_reason) — finagent_core refuses to run it.
+    bool disabled() const { return config.value(QStringLiteral("disabled")).toBool(); }
 };
 
 struct AgentCategory {
