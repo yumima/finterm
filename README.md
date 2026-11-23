@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`7bb2b4daa`](https://github.com/yumima/finterm/commit/7bb2b4daa) updater: only a release build checks — every other build is "<version>-dev"
 - [`c0912fdbe`](https://github.com/yumima/finterm/commit/c0912fdbe) futures: each group's default is the desk's own arrangement — all ten re-taken
 - [`fc62eb065`](https://github.com/yumima/finterm/commit/fc62eb065) markets: the correlation cell the chart draws is marked like a charted row
 - [`5908b91cd`](https://github.com/yumima/finterm/commit/5908b91cd) updater: a found version survives a restart; review fixes

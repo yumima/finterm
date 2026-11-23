@@ -45,10 +45,12 @@ class CorrelationMatrix : public QWidget {
         return QStringLiteral("CORR:%1|%2|%3").arg(syms[i], syms[j]).arg(window);
     }
 
-    /// Whether the selection is cell (i, j)'s pair — at any window: changing
-    /// the window doesn't move the chart, which still draws that pair.
+    /// Whether the selection is cell (i, j)'s pair — at any window (changing
+    /// the window doesn't move the chart, which still draws that pair) and in
+    /// either triangle (the mirror cell is the same correlation).
     bool is_marked(int i, int j) const {
-        return !marked_pair_.isEmpty() && marked_pair_ == QStringLiteral("%1|%2").arg(syms[i], syms[j]);
+        return !marked_pair_.isEmpty() && (marked_pair_ == QStringLiteral("%1|%2").arg(syms[i], syms[j]) ||
+                                           marked_pair_ == QStringLiteral("%1|%2").arg(syms[j], syms[i]));
     }
 
   protected:
