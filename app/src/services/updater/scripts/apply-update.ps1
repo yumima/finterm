@@ -88,7 +88,10 @@ try {
     # The installer refuses a folder that already holds an installation:
     # remove it with its own tool, then install the new version there.
     $touched = $true
-    $purge = Start-Process -FilePath $Tool -ArgumentList @("purge", "--confirm-command") -Wait -PassThru -WindowStyle Hidden
+    # --default-answer: the uninstaller asks whether to remove the user's data
+    # (default No) — unanswered in a hidden window it would wait forever; the
+    # default keeps the data.
+    $purge = Start-Process -FilePath $Tool -ArgumentList @("purge", "--default-answer", "--confirm-command") -Wait -PassThru -WindowStyle Hidden
     if ($purge.ExitCode -ne 0) { throw "removing the old version failed ($($purge.ExitCode))" }
     # What the tool leaves (files the app wrote beside itself, e.g. Python
     # caches) would make the installer refuse a non-empty folder. The whole

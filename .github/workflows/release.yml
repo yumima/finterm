@@ -284,10 +284,13 @@ jobs:
           $setup = Join-Path $env:RUNNER_TEMP "update-test-setup.exe"
           Copy-Item -Force $built $setup
           $helper = "app/src/services/updater/scripts/apply-update.ps1"
+          # By full path, as the app starts it (an earlier step rewrites PATH
+          # in bash form, where "powershell" isn't found).
+          $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
           $status = Join-Path $env:RUNNER_TEMP "update-status.json"
           $prev = "$dir.previous"
           Set-Content -Path (Join-Path $dir "marker-old.txt") -Value "old"
-          & powershell -NoProfile -ExecutionPolicy Bypass -File $helper -AppPid 0 -Installer $setup -InstallDir $dir -Previous $prev `
+          & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -AppPid 0 -Installer $setup -InstallDir $dir -Previous $prev `
               -Status $status -From 0.0.1 -To 0.0.2
           Get-Content $status
           $s = Get-Content $status | ConvertFrom-Json
@@ -296,13 +299,37 @@ jobs:
           if (-not (Test-Path (Join-Path $dir "scripts/yfinance_data.py"))) { throw "scripts missing after the update" }
           if (Test-Path (Join-Path $dir "marker-old.txt")) { throw "the old install was not replaced" }
           if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
-          & powershell -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
+          & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
           Get-Content $status
           $s = Get-Content $status | ConvertFrom-Json
           if (-not $s.ok) { throw "rollback failed: $($s.message)" }
           if (-not (Test-Path (Join-Path $dir "marker-old.txt"))) { throw "the rollback did not restore the previous version" }
           if (-not (Test-Path $built)) { throw "the release installer is gone" }
           Write-Host "in-place update + rollback OK"
+
+      # ── Default install folder: per user, writable, no admin ─────────────
+      # What a user gets by just running the installer: %LOCALAPPDATA%\Programs
+      # \finterm — where the in-place updater can replace the app.
+      - name: Default install folder is per user
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+              "install", "--accept-licenses", "--default-answer", "--confirm-command")
+          if ($p.ExitCode -ne 0) { throw "default install failed ($($p.ExitCode))" }
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
+          if (-not (Test-Path (Join-Path $dir "finterm.exe"))) {
+              Get-ChildItem -Recurse -Depth 1 (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -First 40
+              throw "the default install is not in $dir"
+          }
+          if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "no maintenance tool beside finterm.exe" }
+          Write-Host "default install: $dir"
+          $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
+              "purge", "--default-answer", "--confirm-command")
+          if ($t.ExitCode -ne 0) { throw "removing the default install failed ($($t.ExitCode))" }
+          if (Test-Path (Join-Path $dir "finterm.exe")) { throw "the default install is still there after purge" }
+          Write-Host "removed"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
@@ -739,7 +766,11 @@ jobs:
             mkdir -p "${APP_BUNDLE}/Contents/MacOS"
             cp "${BUILD_DIR}/${{ env.APP_NAME }}" "${APP_BUNDLE}/Contents/MacOS/${{ env.APP_NAME }}"
             chmod +x "${APP_BUNDLE}/Contents/MacOS/${{ env.APP_NAME }}"
-            cat > "${APP_BUNDLE}/Contents/Info.plist" <<'PLIST'
+            # The version is the project's, as CMake configured it (never a
+            # literal that a bump misses).
+            FT_VERSION=$(grep -h '^CMAKE_PROJECT_VERSION:' $(find "${GITHUB_WORKSPACE}/app" -maxdepth 3 -name CMakeCache.txt) | head -1 | cut -d= -f2)
+            [ -n "${FT_VERSION}" ] || { echo "::error::no CMAKE_PROJECT_VERSION in the CMake cache"; exit 1; }
+            cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
@@ -747,8 +778,8 @@ jobs:
             <key>CFBundleIdentifier</key><string>io.github.yumima.finterm</string>
             <key>CFBundleName</key><string>finterm</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>4.0.10</string>
-            <key>CFBundleVersion</key><string>4.0.10</string>
+            <key>CFBundleShortVersionString</key><string>${FT_VERSION}</string>
+            <key>CFBundleVersion</key><string>${FT_VERSION}</string>
             <key>LSMinimumSystemVersion</key><string>13.0</string>
             <key>NSHighResolutionCapable</key><true/>
           </dict></plist>

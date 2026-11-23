@@ -23,7 +23,7 @@ if(WIN32 AND CMAKE_HOST_WIN32)
     endif()
 endif()
 
-project(finterm VERSION 4.0.10 LANGUAGES C CXX)
+project(finterm VERSION 4.1.0 LANGUAGES C CXX)
 
 # Strip C/C++ flags out of RC invocations — rc.exe only understands /D, /I, /fo.
 if(WIN32)
@@ -2671,7 +2671,15 @@ if(FINTERM_BUILD_INSTALLER)
 
     # Target directory defaults per platform
     if(WIN32)
-        set(CPACK_IFW_TARGET_DIRECTORY "@ApplicationsDirX64@/finterm")
+        # Per user (%LOCALAPPDATA%\Programs\finterm, like VS Code's / Chrome's
+        # user installers): no administrator rights to install, and the
+        # in-place updater can replace it (Program Files would need UAC for
+        # every update — see services/updater/UpdateInstaller). An earlier
+        # Program Files install must be uninstalled first (installscript.qs
+        # says so) — two installs would share one data folder.
+        # Spelled out: IFW's @ApplicationsDirUser@ differs from Program Files
+        # only on macOS.
+        set(CPACK_IFW_TARGET_DIRECTORY "@HomeDir@/AppData/Local/Programs/finterm")
     elseif(APPLE)
         set(CPACK_IFW_TARGET_DIRECTORY "/Applications/finterm")
     else()

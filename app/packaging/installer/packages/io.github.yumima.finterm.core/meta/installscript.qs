@@ -41,6 +41,7 @@ function Component()
     // scripts — connections silently no-op on some versions.
     if (installer.isInstaller()) {
         installer.installationFinished.connect(onInstallationFinished);
+        refuseBesideProgramFilesInstall();
     }
 
     if (installer.isUninstaller()) {
@@ -100,6 +101,50 @@ Component.prototype.createOperations = function()
     // macOS: .app bundle is self-contained, no shortcuts needed
 };
 
+// ---------------------------------------------------------------------------
+// Windows: one install per machine. finterm installs per user since 4.1.0
+// (%LOCALAPPDATA%\Programs\finterm); an earlier one in Program Files would
+// stay beside it, both sharing one data folder — and the old one's uninstall
+// could remove that data. Ask for the old one to go first.
+// ---------------------------------------------------------------------------
+
+function otherWindowsInstall(ownDir)
+{
+    if (systemInfo.kernelType !== "winnt")
+        return "";
+    var own = (ownDir || "").replace(/\\/g, "/").toLowerCase();
+    var candidates = [
+        installer.environmentVariable("ProgramFiles") + "/finterm",
+        installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm"
+    ];
+    for (var i = 0; i < candidates.length; ++i) {
+        var dir = candidates[i].replace(/\\/g, "/");
+        if (dir.toLowerCase() !== own && installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
+            return dir;
+    }
+    return "";
+}
+
+function refuseBesideProgramFilesInstall()
+{
+    var other = otherWindowsInstall(installer.value("TargetDir"));
+    if (!other)
+        return;
+    console.log("[finterm] another installation found: " + other);
+    QMessageBox.critical(
+        "finterm.install.other",
+        "finterm is already installed",
+        "An earlier finterm is installed in:\n" + toWin(other) + "\n\n" +
+        "Uninstall it first (Settings > Apps > finterm) and answer No when it asks " +
+        "to remove your data — this version keeps it — then run this installer again.",
+        QMessageBox.Ok);
+    // The wizard closes; a command-line install (CI, the updater) stops.
+    if (typeof gui !== "undefined" && gui)
+        gui.rejectWithoutPrompt();
+    else
+        installer.interrupt();
+}
+
 function onInstallationFinished()
 {
     console.log("[finterm] Installation finished.");
@@ -111,6 +156,14 @@ function onInstallationFinished()
 
 function onUninstallationStarted()
 {
+    // Another finterm install on this machine shares the data: never offer
+    // to remove it (an old Program Files copy being uninstalled after the
+    // per-user one went in, or the reverse).
+    var other = otherWindowsInstall(installer.value("TargetDir"));
+    if (other) {
+        console.log("[finterm] another installation (" + other + ") uses the same data — keeping it.");
+        return;
+    }
     console.log("[finterm] uninstallationStarted — prompting for user-data removal.");
 
     var answer = QMessageBox.question(

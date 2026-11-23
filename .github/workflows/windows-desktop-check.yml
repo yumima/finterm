@@ -50,9 +50,10 @@ jobs:
         shell: pwsh
         run: |
           $fail = @()
-          $dir = Join-Path $env:ProgramFiles "finterm"
+          # Per user since 4.1.0 (%LOCALAPPDATA%\Programs\finterm).
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
           $exe = Join-Path $dir "finterm.exe"
-          if (Test-Path $exe) { "OK   app            $exe" } else { $fail += "no finterm.exe in $dir"; Get-ChildItem $env:ProgramFiles | Select-Object -Expand Name }
+          if (Test-Path $exe) { "OK   app            $exe" } else { $fail += "no finterm.exe in $dir"; Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -Expand Name }
           if (Test-Path (Join-Path $dir "scripts\yfinance_data.py")) { "OK   data scripts   $dir\scripts" } else { $fail += "no scripts\yfinance_data.py" }
           $tool = Get-ChildItem $dir -Filter "FintermMaintenanceTool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($tool) { "OK   uninstaller    $($tool.FullName)" } else { $fail += "no FintermMaintenanceTool.exe" }

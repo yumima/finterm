@@ -167,7 +167,11 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
     QString program;
     QStringList args;
     if (t.kind == QLatin1String("ifw")) {
-        program = QStringLiteral("powershell.exe");
+        // Windows PowerShell by full path — not whatever "powershell" the
+        // user's PATH finds first (or doesn't).
+        program = QDir(qEnvironmentVariable("SystemRoot", QStringLiteral("C:\\Windows")))
+                      .filePath(QStringLiteral("System32/WindowsPowerShell/v1.0/powershell.exe"));
+        program = QDir::toNativeSeparators(program);
         args = {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                 QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"),       QStringLiteral("-File"),
                 QDir::toNativeSeparators(script), QStringLiteral("-AppPid"),     pid,

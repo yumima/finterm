@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`5f240470b`](https://github.com/yumima/finterm/commit/5f240470b) toolbar: no "FIN TERM | PROFESSIONAL RESEARCH DESK" — the row is for what changes
 - [`ec9aba233`](https://github.com/yumima/finterm/commit/ec9aba233) window title: "finterm@<host> ver: <version>" — no screen names, no duplicated brand
 - [`64ab10847`](https://github.com/yumima/finterm/commit/64ab10847) toolbar: the market's clock beside LIVE — New York time, the session, the countdown to the bell; the local clock labelled
 - [`c395d6a42`](https://github.com/yumima/finterm/commit/c395d6a42) updater: in-place updates — download in the background, apply on quit or Restart Now, roll back a version that won't start
@@ -49,7 +50,7 @@ Current release: [v4.0.10](https://github.com/yumima/finterm/releases/tag/v4.0.1
 
 **Windows 10/11 (x64)**
 
-1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, accept the Windows prompt, and click through the installer. It installs to `C:\Program Files\finterm` and adds Start Menu and Desktop shortcuts.
+1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts. (Have an older finterm in `C:\Program Files\finterm`? Uninstall it first and answer **No** to removing your data — the new one keeps it.)
 2. Start **finterm** from the Start Menu.
 
 **macOS 13+ (Apple Silicon)**
@@ -80,7 +81,7 @@ Uninstalling leaves your data folder in place; delete it too for a clean removal
 **If no data appears,** run the built-in check. Close finterm first. It runs the same setup, starts the data process and fetches one quote, then writes what it found:
 
 ```
-Windows   "C:\Program Files\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
+Windows   "%LOCALAPPDATA%\Programs\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
 macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finterm-selftest.json
 Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 ```
