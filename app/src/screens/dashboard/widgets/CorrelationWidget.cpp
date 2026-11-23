@@ -1,10 +1,12 @@
 #include "screens/dashboard/widgets/CorrelationWidget.h"
 
 #include "datahub/DataHub.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 #include "screens/dashboard/widgets/ConditionAddDialog.h"
 #include "screens/markets/MarketChartDialog.h"
 #include "services/markets/ConditionService.h"
 #include "services/markets/MarketConditions.h"
+#include "ui/tables/RowMarkDelegate.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
@@ -15,6 +17,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QToolTip>
 
 #include <algorithm>
@@ -37,7 +40,35 @@ class CorrelationMatrix : public QWidget {
     int window = 60;
     QString message;
 
+    /// The chart symbol a click on cell (i, j) selects.
+    QString pair_symbol(int i, int j) const {
+        return QStringLiteral("CORR:%1|%2|%3").arg(syms[i], syms[j]).arg(window);
+    }
+
+    /// Whether the selection is cell (i, j)'s pair — at any window: changing
+    /// the window doesn't move the chart, which still draws that pair.
+    bool is_marked(int i, int j) const {
+        return !marked_pair_.isEmpty() && marked_pair_ == QStringLiteral("%1|%2").arg(syms[i], syms[j]);
+    }
+
   protected:
+    /// The selected cell is the one the canvas's chart draws — marked like a
+    /// list's charted row (RowMarkDelegate), and unmarked when a row of
+    /// another list on the page is picked. The link is found on first show.
+    void showEvent(QShowEvent* e) override {
+        QWidget::showEvent(e);
+        if (!link_) {
+            link_ = SelectionLink::of(this);
+            if (link_) {
+                connect(link_, &SelectionLink::marked, this, [this](const QString& sym) {
+                    set_marked(sym);
+                    update();
+                });
+                set_marked(link_->symbol());
+            }
+        }
+    }
+
     QRectF cell(int i, int j) const {
         const int n = syms.size();
         const qreal left = label_w(), top = 18;
@@ -88,6 +119,13 @@ class CorrelationMatrix : public QWidget {
                 p.fillRect(c, i == j ? QColor(ui::colors::BG_SURFACE()) : heat(v));
                 if (i == j)
                     continue;
+                if (is_marked(i, j)) {
+                    const QRect m = c.toAlignedRect();
+                    ui::RowMarkDelegate::paint_mark(&p, m, /*first_column=*/true);
+                    QColor rule(ui::colors::AMBER());
+                    rule.setAlpha(200);
+                    p.fillRect(QRect(m.right(), m.top(), 1, m.height()), rule); // a box: close the right side
+                }
                 if (!numbers)
                     continue;
                 p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
@@ -127,10 +165,24 @@ class CorrelationMatrix : public QWidget {
         const auto [i, j] = hit(e->position().toPoint());
         if (e->button() != Qt::LeftButton || i < 0 || i == j)
             return;
-        MarketChartDialog::show_for(QStringLiteral("CORR:%1|%2|%3").arg(syms[i], syms[j]).arg(window),
+        MarketChartDialog::show_for(pair_symbol(i, j),
                                     QStringLiteral("%1 vs %2 · %3-day correlation").arg(labels[i], labels[j]).arg(window),
                                     this);
     }
+
+  private:
+    /// "CORR:a|b|window" → "a|b"; anything else (a plain symbol) → none.
+    void set_marked(const QString& sym) {
+        marked_pair_.clear();
+        if (!sym.startsWith(QLatin1String("CORR:")))
+            return;
+        const QStringList parts = sym.mid(5).split(QLatin1Char('|'));
+        if (parts.size() >= 2)
+            marked_pair_ = parts[0] + QLatin1Char('|') + parts[1];
+    }
+
+    QPointer<SelectionLink> link_; ///< off a canvas: none, and nothing is marked (as for lists)
+    QString marked_pair_;          ///< the selected pair, "a|b"
 };
 
 CorrelationWidget::CorrelationWidget(const QString& title, QVector<ConditionRowDef> defaults, const QJsonObject& cfg,
