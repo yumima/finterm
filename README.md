@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`d2d0d4147`](https://github.com/yumima/finterm/commit/d2d0d4147) release 4.1.0: Windows installs per user; the silent Windows update can't hang
 - [`5f240470b`](https://github.com/yumima/finterm/commit/5f240470b) toolbar: no "FIN TERM | PROFESSIONAL RESEARCH DESK" — the row is for what changes
 - [`ec9aba233`](https://github.com/yumima/finterm/commit/ec9aba233) window title: "finterm@<host> ver: <version>" — no screen names, no duplicated brand
 - [`64ab10847`](https://github.com/yumima/finterm/commit/64ab10847) toolbar: the market's clock beside LIVE — New York time, the session, the countdown to the bell; the local clock labelled
@@ -89,7 +90,7 @@ Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 The report says `"ok": true`, or names the stage that failed (setup or data) and why. Every release is installed and put through this check on all three systems before it is published.
 
 - **Unsigned** — the installers are free, so they carry no paid certificate; that is the one extra click on Windows and macOS. They are built from this source by the public CI.
-- **Updates** — **Help › Check for Updates**. finterm never checks on its own.
+- **Updates** — off until you turn them on: finterm asks once whether to check daily (or Help › Check for Updates, any time). A new version downloads in the background and installs when you restart or quit finterm, keeping your workspace and data; a version that fails to start is rolled back.
 
 ## What's inside
 

@@ -20,7 +20,7 @@ Version {{ r.version }} · [release notes]({{ r.page }}) · [all releases]({{ si
 
 **Windows 10/11 (x64)**
 
-1. Run the installer. At the SmartScreen warning choose **More info → Run anyway**, accept the Windows prompt, and click through. It installs to `C:\Program Files\finterm` with Start Menu and Desktop shortcuts.
+1. Run the installer. At the SmartScreen warning choose **More info → Run anyway**, and click through — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` with Start Menu and Desktop shortcuts. (Have an older finterm in `C:\Program Files\finterm`? Uninstall it first and answer **No** to removing your data — the new one keeps it.)
 2. Start **finterm** from the Start Menu.
 
 **macOS 13+ (Apple Silicon)**
@@ -46,7 +46,7 @@ Later starts go straight to the PIN.
 Run the built-in check. Close finterm first. It repeats the setup, starts the data process, fetches one quote and writes a report that says `"ok": true` or names what failed:
 
 ```
-Windows   "C:\Program Files\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
+Windows   "%LOCALAPPDATA%\Programs\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
 macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finterm-selftest.json
 Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 ```
@@ -54,5 +54,8 @@ Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 Every release is installed and put through this check on all three systems before it is published.
 
 The installers are free, so they carry no paid signing certificate; that is the one extra click on Windows and
-macOS. They are built from the [public source]({{ site.repo_url }}) by its public CI. Updates:
-**Help › Check for Updates**.
+macOS. They are built from the [public source]({{ site.repo_url }}) by its public CI.
+
+**Updates** — off until you turn them on: finterm asks once whether to check daily (or Help › Check for Updates, any
+time). A new version downloads in the background and installs when you restart or quit finterm, keeping your
+workspace and data; a version that fails to start is rolled back.
