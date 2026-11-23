@@ -108,21 +108,19 @@ GridLayout arranged_world() {
 
 GridLayout arranged_myview() {
     Packer p;
-    p.at("quote_list", 0, 0, 3, 4, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"^GSPC"},{"label":"","symbol":"^IXIC"},{"label":"","symbol":"^DJI"},{"label":"","symbol":"^RUT"},{"label":"","symbol":"^VIX"},{"label":"","symbol":"^FTSE"},{"label":"","symbol":"^GDAXI"},{"label":"","symbol":"^N225"},{"label":"","symbol":"^FCHI"},{"label":"","symbol":"^HSI"},{"label":"","symbol":"^AXJO"},{"label":"","symbol":"000300.SS"},{"label":"","symbol":"000001.SS"},{"label":"","symbol":"^STOXX50E"},{"label":"","symbol":"^NYA"},{"label":"","symbol":"^SOX"},{"label":"","symbol":"^IBEX"},{"label":"","symbol":"^AEX"}],"title":"Stock Indices"})j"));
+    p.at("quote_list", 0, 0, 3, 5, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"^GSPC"},{"label":"","symbol":"^IXIC"},{"label":"","symbol":"^DJI"},{"label":"","symbol":"^RUT"},{"label":"","symbol":"^VIX"},{"label":"","symbol":"^FTSE"},{"label":"","symbol":"^GDAXI"},{"label":"","symbol":"^N225"},{"label":"","symbol":"^FCHI"},{"label":"","symbol":"^HSI"},{"label":"","symbol":"^AXJO"},{"label":"","symbol":"000300.SS"},{"label":"","symbol":"000001.SS"},{"label":"","symbol":"^STOXX50E"},{"label":"","symbol":"^NYA"},{"label":"","symbol":"^SOX"},{"label":"","symbol":"^IBEX"},{"label":"","symbol":"^AEX"}],"title":"Stock Indices"})j"));
     p.at("market_chart", 3, 0, 6, 8, cfg(R"j({"label":"^GSPC","symbol":"^GSPC"})j"));
     p.at("cond_macro", 9, 0, 3, 5);
-    p.at("cond_vol", 0, 4, 3, 3);
+    p.at("cond_vol", 0, 5, 3, 4);
     p.at("cond_odds", 9, 5, 3, 4);
-    p.at("cond_futures", 0, 7, 3, 5);
     p.at("cond_corr", 3, 8, 3, 5);
     p.at("cond_curve", 6, 8, 3, 5);
+    p.at("cond_futures", 0, 9, 3, 10);
     p.at("quote_list", 9, 9, 3, 4, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"^TNX"},{"label":"","symbol":"^TYX"},{"label":"","symbol":"^IRX"},{"label":"","symbol":"^FVX"},{"label":"","symbol":"TLT"},{"label":"","symbol":"IEF"},{"label":"","symbol":"SHY"},{"label":"","symbol":"BND"},{"label":"","symbol":"AGG"},{"label":"","symbol":"LQD"},{"label":"","symbol":"HYG"},{"label":"","symbol":"JNK"}],"title":"Bonds"})j"));
-    p.at("quote_list", 0, 12, 3, 4, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"GC=F"},{"label":"","symbol":"SI=F"},{"label":"","symbol":"PL=F"},{"label":"","symbol":"PA=F"},{"label":"","symbol":"HG=F"},{"label":"","symbol":"CL=F"},{"label":"","symbol":"BZ=F"},{"label":"","symbol":"NG=F"},{"label":"","symbol":"RB=F"},{"label":"","symbol":"HO=F"},{"label":"","symbol":"ZC=F"},{"label":"","symbol":"ZW=F"},{"label":"","symbol":"ZS=F"},{"label":"","symbol":"KC=F"},{"label":"","symbol":"CT=F"},{"label":"","symbol":"SB=F"},{"label":"","symbol":"CC=F"},{"label":"","symbol":"LBR=F"}],"title":"Commodities"})j"));
-    p.at("cond_commod", 3, 13, 3, 4);
-    p.at("quote_list", 6, 13, 3, 4, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"EURUSD=X"},{"label":"","symbol":"GBPUSD=X"},{"label":"","symbol":"USDJPY=X"},{"label":"","symbol":"USDCHF=X"},{"label":"","symbol":"USDCAD=X"},{"label":"","symbol":"AUDUSD=X"},{"label":"","symbol":"NZDUSD=X"},{"label":"","symbol":"EURGBP=X"},{"label":"","symbol":"EURJPY=X"},{"label":"","symbol":"GBPJPY=X"},{"label":"","symbol":"USDCNY=X"},{"label":"","symbol":"USDKRW=X"},{"label":"","symbol":"USDHKD=X"},{"label":"","symbol":"USDTWD=X"},{"label":"","symbol":"USDSGD=X"},{"label":"","symbol":"JPY=X"},{"label":"","symbol":"EUR=X"}],"title":"Forex"})j"));
-    p.at("cond_credit", 9, 13, 3, 4);
-    p.at("quote_list", 0, 16, 3, 4, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"SPY"},{"label":"","symbol":"QQQ"},{"label":"","symbol":"DIA"},{"label":"","symbol":"EEM"},{"label":"","symbol":"GLD"},{"label":"","symbol":"XLK"},{"label":"","symbol":"XLE"},{"label":"","symbol":"XLF"},{"label":"","symbol":"XLV"},{"label":"","symbol":"VNQ"},{"label":"","symbol":"IWM"},{"label":"","symbol":"VTI"},{"label":"","symbol":"VOO"},{"label":"","symbol":"FXI"}],"title":"ETFs"})j"));
-    p.at("cond_fx", 9, 17, 3, 4);
+    p.at("cond_commod", 3, 13, 3, 8);
+    p.at("quote_list", 6, 13, 3, 8, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"EURUSD=X"},{"label":"","symbol":"GBPUSD=X"},{"label":"","symbol":"USDJPY=X"},{"label":"","symbol":"USDCHF=X"},{"label":"","symbol":"USDCAD=X"},{"label":"","symbol":"AUDUSD=X"},{"label":"","symbol":"NZDUSD=X"},{"label":"","symbol":"EURGBP=X"},{"label":"","symbol":"EURJPY=X"},{"label":"","symbol":"GBPJPY=X"},{"label":"","symbol":"USDCNY=X"},{"label":"","symbol":"USDKRW=X"},{"label":"","symbol":"USDHKD=X"},{"label":"","symbol":"USDTWD=X"},{"label":"","symbol":"USDSGD=X"},{"label":"","symbol":"JPY=X"},{"label":"","symbol":"EUR=X"}],"title":"Forex"})j"));
+    p.at("cond_credit", 9, 13, 3, 8);
+    p.at("quote_list", 0, 19, 3, 2, cfg(R"j({"columns":["last","chg","pct","high","low"],"rows":[{"label":"","symbol":"GC=F"},{"label":"","symbol":"SI=F"},{"label":"","symbol":"PL=F"},{"label":"","symbol":"PA=F"},{"label":"","symbol":"HG=F"},{"label":"","symbol":"CL=F"},{"label":"","symbol":"BZ=F"},{"label":"","symbol":"NG=F"},{"label":"","symbol":"RB=F"},{"label":"","symbol":"HO=F"},{"label":"","symbol":"ZC=F"},{"label":"","symbol":"ZW=F"},{"label":"","symbol":"ZS=F"},{"label":"","symbol":"KC=F"},{"label":"","symbol":"CT=F"},{"label":"","symbol":"SB=F"},{"label":"","symbol":"CC=F"},{"label":"","symbol":"LBR=F"}],"title":"Commodities"})j"));
     return p.layout();
 }
 

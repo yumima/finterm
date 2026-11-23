@@ -5,10 +5,10 @@
 // in the "Dashboard" design doc; every list is user-editable in place.
 //
 // What the doc asked for that has no free, real source is NOT shown (and the
-// widget's note says so): DX / UC futures (not on Yahoo, no SGX feed),
-// sovereign CDS spreads, the Baltic Dry Index itself (BDRY, the dry-bulk
-// freight-futures ETF, is listed and labelled as what it is), CAPE / forward
-// P/E (no free official series).
+// widget's note says so): DX / UC futures (not on Yahoo, no SGX feed; DXY and
+// USD/CNH spot are), sovereign CDS spreads (sovereign 10Y spreads vs the US
+// are, any country), the Baltic Dry Index itself (BDRY, the dry-bulk
+// freight-futures ETF, is listed and labelled as what it is).
 
 #include "screens/dashboard/widgets/ConditionTableWidget.h"
 #include "screens/dashboard/widgets/CorrelationWidget.h"
