@@ -706,6 +706,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dock_toolbar_->setVisible(!focus_mode_);
             if (dock_status_bar_)
                 dock_status_bar_->setVisible(!focus_mode_);
+            if (pushpin_toolbar_)
+                pushpin_toolbar_->setVisible(!focus_mode_ && banner_enabled());
         } else if (action == "always_on_top") {
             set_always_on_top(!always_on_top_);
         } else if (action == "refresh") {

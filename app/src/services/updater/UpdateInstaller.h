@@ -39,6 +39,25 @@ std::optional<Target> in_place_target();
 /// The staged download's path for a version (in the target's staging dir).
 QString staged_path(const Target& t, const QString& version, const QString& download_url);
 
+/// What is installed at the target now (size + time of its main file): it
+/// changes when another instance has applied an update there.
+QString target_stamp(const Target& t);
+
+/// target_stamp as it was when this process started (boot_check); empty when a
+/// helper was at work then.
+QString startup_stamp();
+
+/// The helper (an update or a rollback) is at work.
+bool helper_in_flight();
+
+/// Remove downloads left staged by a session that was killed, or replaced by
+/// a newer one (100+ MB each) — not while another instance or the helper may
+/// be using one, and never the running or the kept previous version. (One
+/// previous version is kept after it is replaced: releases are purged online,
+/// so it is the only way back.) `keep`: the stored offer's staged file, which
+/// a session that ended without quitting left to be used.
+void sweep_stale(const Target& t, const QString& keep);
+
 /// Start the helper detached. `relaunch`: start the new version once applied.
 /// Records the pending boot (for the rollback) when it applies an update.
 bool launch_helper(const Target& t, const QString& staged, const QString& from, const QString& to, bool relaunch,

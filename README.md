@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`66a994d3f`](https://github.com/yumima/finterm/commit/66a994d3f) **docs:** 4.1.0 install and update facts — Windows per user, the self-test path, opt-in in-place updates
 - [`d2d0d4147`](https://github.com/yumima/finterm/commit/d2d0d4147) release 4.1.0: Windows installs per user; the silent Windows update can't hang
 - [`5f240470b`](https://github.com/yumima/finterm/commit/5f240470b) toolbar: no "FIN TERM | PROFESSIONAL RESEARCH DESK" — the row is for what changes
 - [`ec9aba233`](https://github.com/yumima/finterm/commit/ec9aba233) window title: "finterm@<host> ver: <version>" — no screen names, no duplicated brand

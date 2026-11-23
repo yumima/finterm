@@ -48,6 +48,21 @@ sh "$HELPER" --kind appimage --staged "$T/apps/.nope" --target "$T/apps/finterm.
 check "appimage, no staged file: target untouched" [ "$(cat "$T/apps/finterm.AppImage")" = old ]
 check "appimage, no staged file: status not ok" status_ok false
 
+# The kept previous version, run by hand, is never its own target.
+printf 'kept' > "$T/apps/.finterm-previous.AppImage"
+printf 'newest' > "$T/apps/.finterm-update.AppImage"
+sh "$HELPER" --kind appimage --staged "$T/apps/.finterm-update.AppImage" --target "$T/apps/.finterm-previous.AppImage" \
+    --previous "$T/apps/.finterm-previous.AppImage" --status "$T/status.json"
+check "appimage, target is the previous: kept" [ "$(cat "$T/apps/.finterm-previous.AppImage")" = kept ]
+check "appimage, target is the previous: status not ok" status_ok false
+
+# A second update replaces the kept previous version.
+printf 'mid' > "$T/apps/.finterm-update.AppImage"
+sh "$HELPER" --kind appimage --staged "$T/apps/.finterm-update.AppImage" --target "$T/apps/finterm.AppImage" \
+    --previous "$T/apps/.finterm-previous.AppImage" --status "$T/status.json"
+check "appimage again: previous is the version replaced" [ "$(cat "$T/apps/.finterm-previous.AppImage")" = old ]
+check "appimage again: nothing left over" [ ! -e "$T/apps/.finterm-previous.AppImage.tmp" ]
+
 # ── Waits for the app to exit ───────────────────────────────────────────────
 printf 'newer' > "$T/apps/.finterm-update.AppImage"
 sleep 1 &

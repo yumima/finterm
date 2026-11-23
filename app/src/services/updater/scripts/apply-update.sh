@@ -6,6 +6,8 @@
 #   apply-update.sh --pid PID --kind appimage|macapp --staged PATH --target PATH
 #                   --previous PATH --status FILE --from VER --to VER [--relaunch]
 #                   [--profile NAME]   (relaunched as finterm --profile NAME)
+#                   [--lock FILE]      (the app's record of this helper; removed
+#                                       when done, before any relaunch)
 #
 #   appimage  STAGED is the verified new AppImage, in TARGET's directory (same
 #             filesystem): TARGET is hard-linked to PREVIOUS, then STAGED is
@@ -21,7 +23,7 @@
 # TARGET again. Nothing here touches the user's data, which lives elsewhere.
 
 set -u
-PID="" KIND="" STAGED="" TARGET="" PREVIOUS="" STATUS="" FROM="" TO="" RELAUNCH=0 PROFILE=""
+PID="" KIND="" STAGED="" TARGET="" PREVIOUS="" STATUS="" FROM="" TO="" RELAUNCH=0 PROFILE="" LOCK=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --pid) PID="$2"; shift 2 ;;
@@ -34,6 +36,7 @@ while [ $# -gt 0 ]; do
         --to) TO="$2"; shift 2 ;;
         --relaunch) RELAUNCH=1; shift ;;
         --profile) PROFILE="$2"; shift 2 ;;
+        --lock) LOCK="$2"; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -41,6 +44,7 @@ done
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 status() { # ok(true|false) message
+    [ -n "$LOCK" ] && rm -f "$LOCK"
     [ -n "$STATUS" ] || return 0
     mkdir -p "$(dirname "$STATUS")" 2>/dev/null
     printf '{"ok":%s,"kind":"%s","from":"%s","to":"%s","profile":"%s","message":"%s","at":"%s"}\n' \
@@ -83,11 +87,17 @@ case "$KIND" in
 appimage)
     [ -f "$STAGED" ] || fail "the staged update is missing: $STAGED"
     [ -f "$TARGET" ] || fail "the AppImage to replace is missing: $TARGET"
+    [ "$TARGET" != "$PREVIOUS" ] || fail "the kept previous version cannot replace itself"
     chmod 0755 "$STAGED" || fail "cannot make the update executable"
-    rm -f "$PREVIOUS"
     # Keep the running version for a rollback: a second name for the same
-    # file (no copy), else a copy.
-    ln "$TARGET" "$PREVIOUS" 2>/dev/null || cp -p "$TARGET" "$PREVIOUS" || fail "cannot keep the previous version"
+    # file (no copy), else a copy — complete before the older one goes.
+    rm -f "$PREVIOUS.tmp"
+    ln "$TARGET" "$PREVIOUS.tmp" 2>/dev/null || cp -p "$TARGET" "$PREVIOUS.tmp" || {
+        rm -f "$PREVIOUS.tmp"
+        fail "cannot keep the previous version"
+    }
+    rm -f "$PREVIOUS"
+    mv -f "$PREVIOUS.tmp" "$PREVIOUS" || fail "cannot keep the previous version"
     mv -f "$STAGED" "$TARGET" || fail "cannot replace $TARGET"
     ;;
 appimage-rollback)

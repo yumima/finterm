@@ -14,6 +14,7 @@
 #include "core/config/AppPaths.h"
 #include "core/config/ProfileManager.h"
 #include "core/events/EventBus.h"
+#include "services/updater/UpdateService.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
 #include "screens/devtools/DataHubInspector.h"
@@ -2789,6 +2790,7 @@ QWidget* SettingsScreen::build_profiles() {
             switch_btn->setStyleSheet(settings_style::btn_secondary_ss());
             connect(switch_btn, &QPushButton::clicked, this, [name]() {
                 const QString exe = QCoreApplication::applicationFilePath();
+                services::UpdateService::instance().hold_apply(); // not under the finterm started here
                 QProcess::startDetached(exe, {"--profile", name});
                 QCoreApplication::quit();
             });
@@ -2822,6 +2824,7 @@ QWidget* SettingsScreen::build_profiles() {
             return;
         ProfileManager::instance().create_profile(name);
         const QString exe = QCoreApplication::applicationFilePath();
+        services::UpdateService::instance().hold_apply(); // not under the finterm started here
         QProcess::startDetached(exe, {"--profile", name});
         QCoreApplication::quit();
     });

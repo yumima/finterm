@@ -4,6 +4,7 @@
 #include "services/updater/UpdatePolicy.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QFile>
 #include <memory>
 #include <optional>
@@ -86,6 +87,11 @@ class UpdateService : public QObject {
     /// its workspace) and the app quits.
     void restart_now();
 
+    /// Quit without applying the staged update: the session is ending, or
+    /// another finterm was just started from this install (a profile switch).
+    /// It stays staged for the next one.
+    void hold_apply() { hold_apply_ = true; }
+
     /// What the last update did, reported once by the launch after it
     /// ("Updated to 4.0.11" / why it failed); empty when there is nothing.
     QString last_result() const { return last_result_; }
@@ -139,6 +145,14 @@ class UpdateService : public QObject {
     /// the badge goes back to the offer, no dialog.
     void start_download(const update_policy::Offer& offer, bool quiet);
     void download_failed(const QString& why);
+    /// The automatic schedule may start (or retry) the offer's download.
+    bool may_stage_quietly() const;
+    /// Another instance already applied an update to this install.
+    bool replaced_by_another_instance() const;
+    /// The verified download is in place: Ready.
+    void staged();
+    /// The staged file vanished: back to the offer. True when it did.
+    bool staged_file_gone();
     /// Another finterm runs from the install and the swap would pull files
     /// from under it (macOS bundle, Windows install — not an AppImage).
     bool blocked_by_other_instance() const;
@@ -164,7 +178,12 @@ class UpdateService : public QObject {
     QString handed_version_;     ///< the version whose installer was handed over this session
     QString pending_expected_sha256_;
     QString ready_version_; ///< staged, verified, waiting to be applied in place
+    QString ready_sha256_;  ///< of the staged bytes
+    QString failed_sha256_; ///< a background download that failed, and its back-off
+    QDateTime retry_at_;
+    int failed_tries_ = 0;
     bool download_quiet_ = false;
+    bool hold_apply_ = false; ///< this quit must not start the helper
     bool applied_ = false; ///< the helper has been started (no second one at quit)
     std::optional<update_install::Target> in_place_;
     std::unique_ptr<QFile> part_; ///< the download being written (<path>.part)

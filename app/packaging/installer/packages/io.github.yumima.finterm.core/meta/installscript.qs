@@ -56,6 +56,10 @@ function Component()
 
 Component.prototype.createOperations = function()
 {
+    var other = installer.isInstaller() ? installToRefuseBeside() : "";
+    if (other)
+        throw new Error("finterm is already installed in " + other + " - uninstall it first");
+
     // Always call base first so file extraction happens.
     component.createOperations();
 
@@ -125,9 +129,18 @@ function otherWindowsInstall(ownDir)
     return "";
 }
 
+// The install to refuse beside, or "". Not for the in-app updater, which puts
+// its own install back (apply-update.ps1 sets FINTERM_INSTALL_UPDATE).
+function installToRefuseBeside()
+{
+    if (installer.environmentVariable("FINTERM_INSTALL_UPDATE") === "1")
+        return "";
+    return otherWindowsInstall(installer.value("TargetDir"));
+}
+
 function refuseBesideProgramFilesInstall()
 {
-    var other = otherWindowsInstall(installer.value("TargetDir"));
+    var other = installToRefuseBeside();
     if (!other)
         return;
     console.log("[finterm] another installation found: " + other);
@@ -138,11 +151,12 @@ function refuseBesideProgramFilesInstall()
         "Uninstall it first (Settings > Apps > finterm) and answer No when it asks " +
         "to remove your data — this version keeps it — then run this installer again.",
         QMessageBox.Ok);
-    // The wizard closes; a command-line install (CI, the updater) stops.
-    if (typeof gui !== "undefined" && gui)
-        gui.rejectWithoutPrompt();
-    else
+    // The wizard closes; a command-line install stops (and, should it go on,
+    // createOperations refuses). `gui` exists in both.
+    if (installer.isCommandLineInstance())
         installer.interrupt();
+    else
+        gui.rejectWithoutPrompt();
 }
 
 function onInstallationFinished()

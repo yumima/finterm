@@ -218,6 +218,16 @@ target_link_libraries(test_market_clock PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_market_clock PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME market_clock COMMAND test_market_clock)
 
+# ── Windows installer rules ──────────────────────────────────────────────────
+# installscript.qs with IFW's objects stubbed: refuse beside another install,
+# keep data another install shares.
+find_program(FINTERM_NODE node)
+if(FINTERM_NODE)
+    add_test(NAME installscript
+             COMMAND ${FINTERM_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_installscript.js
+                     ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs)
+endif()
+
 # ── Earnings refresh policy ──────────────────────────────────────────────────
 # When the ER Earnings data is refreshed: once a day between prints, each
 # minute in a release window, at the reaction close. Pure policy, real ET times.

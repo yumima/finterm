@@ -25,6 +25,14 @@ static const QString kIn =
 
 namespace finterm::screens {
 
+namespace {
+/// Cards that can run in this build — a disabled one only fails the team.
+QVector<services::AgentInfo> runnable(QVector<services::AgentInfo> agents) {
+    agents.removeIf([](const services::AgentInfo& a) { return a.disabled(); });
+    return agents;
+}
+} // namespace
+
 static const QMap<QString, QString> kModeDescriptions = {
     {"coordinate", "Agents coordinate through a leader who delegates and synthesizes results."},
     {"route", "Queries are routed to the most appropriate agent based on intent."},
@@ -42,7 +50,7 @@ TeamsViewPanel::TeamsViewPanel(QWidget* parent) : QWidget(parent) {
     // already emitted before this panel was lazily constructed (same as AgentsViewPanel).
     auto cached = services::AgentService::instance().cached_agents();
     if (!cached.isEmpty()) {
-        all_agents_ = cached;
+        all_agents_ = runnable(cached);
         populate_available_agents(all_agents_);
     }
 }
@@ -282,8 +290,8 @@ void TeamsViewPanel::setup_connections() {
     auto& svc = services::AgentService::instance();
     connect(&svc, &services::AgentService::agents_discovered, this,
             [this](QVector<services::AgentInfo> agents, QVector<services::AgentCategory>) {
-                all_agents_ = agents;
-                populate_available_agents(agents);
+                all_agents_ = runnable(agents);
+                populate_available_agents(all_agents_); // a row is an index into it
             });
     connect(&svc, &services::AgentService::agent_result, this, [this](services::AgentExecutionResult r) {
         if (r.request_id != pending_request_id_)
@@ -387,6 +395,10 @@ void TeamsViewPanel::add_agent_from_panel(const services::AgentInfo& agent) {
 }
 
 void TeamsViewPanel::add_to_team(const services::AgentInfo& agent) {
+    if (agent.disabled()) { // offered by the Agents view too
+        log_display_->append(QString("[!] %1 can't run in this build").arg(agent.name));
+        return;
+    }
     for (const auto& m : team_members_)
         if (m.id == agent.id)
             return;

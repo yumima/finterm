@@ -273,6 +273,7 @@ jobs:
       # the same installer stands in for the next version. Then a rollback.
       # Run with Windows PowerShell (5.1) — what the app starts.
       - name: In-place update and rollback (apply-update.ps1)
+        timeout-minutes: 20
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -290,6 +291,10 @@ jobs:
           $status = Join-Path $env:RUNNER_TEMP "update-status.json"
           $prev = "$dir.previous"
           Set-Content -Path (Join-Path $dir "marker-old.txt") -Value "old"
+          # The user's data folder: no update may touch it.
+          $data = Join-Path $env:LOCALAPPDATA "finterm"
+          New-Item -ItemType Directory -Force -Path $data | Out-Null
+          Set-Content -Path (Join-Path $data "ci-user-data.txt") -Value "mine"
           & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -AppPid 0 -Installer $setup -InstallDir $dir -Previous $prev `
               -Status $status -From 0.0.1 -To 0.0.2
           Get-Content $status
@@ -299,6 +304,7 @@ jobs:
           if (-not (Test-Path (Join-Path $dir "scripts/yfinance_data.py"))) { throw "scripts missing after the update" }
           if (Test-Path (Join-Path $dir "marker-old.txt")) { throw "the old install was not replaced" }
           if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
+          if (-not (Test-Path (Join-Path $data "ci-user-data.txt"))) { throw "the update removed the user's data" }
           & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
           Get-Content $status
           $s = Get-Content $status | ConvertFrom-Json
@@ -311,6 +317,7 @@ jobs:
       # What a user gets by just running the installer: %LOCALAPPDATA%\Programs
       # \finterm — where the in-place updater can replace the app.
       - name: Default install folder is per user
+        timeout-minutes: 20
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -330,6 +337,64 @@ jobs:
           if ($t.ExitCode -ne 0) { throw "removing the default install failed ($($t.ExitCode))" }
           if (Test-Path (Join-Path $dir "finterm.exe")) { throw "the default install is still there after purge" }
           Write-Host "removed"
+
+      # ── Upgrade from the last Program Files release (4.0.10) ──────────────
+      # 4.1.0 installs per user. What an existing user meets: the new
+      # installer refuses beside the old install; the old one is uninstalled;
+      # then the new one goes in; the data folder is there throughout. 4.0.10
+      # comes from its release; skipped only once that is confirmed purged.
+      - name: Upgrade from 4.0.10 (Program Files)
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          # An earlier step left PATH in bash form; a user's is this.
+          $sys = Join-Path $env:SystemRoot "System32"
+          $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0;$env:ProgramFiles\GitHub CLI"
+          $work = Join-Path $env:RUNNER_TEMP "upgrade"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $seen = (& gh release view v4.0.10 --repo $env:GITHUB_REPOSITORY --json tagName 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) {
+              if ($seen -match "release not found") { Write-Host "::warning::v4.0.10 is purged - upgrade test skipped"; exit 0 }
+              throw "cannot look up v4.0.10: $seen"
+          }
+          & gh release download v4.0.10 --repo $env:GITHUB_REPOSITORY --pattern "finterm-4.0.10-windows-x64-setup.exe" --dir $work
+          if ($LASTEXITCODE -ne 0) { throw "cannot download 4.0.10" }
+          $old = Join-Path $work "finterm-4.0.10-windows-x64-setup.exe"
+          $new = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          function Run([string]$file, [string[]]$arguments) {
+              # -Wait: the maintenance tool's own clean-up script too.
+              $p = Start-Process -FilePath $file -ArgumentList $arguments -PassThru -Wait
+              Write-Host "$(Split-Path -Leaf $file) $arguments -> $($p.ExitCode)"
+              return $p.ExitCode
+          }
+          $install = @("install", "--accept-licenses", "--default-answer", "--confirm-command")
+          $pf = Join-Path $env:ProgramFiles "finterm"
+          $pu = Join-Path $env:LOCALAPPDATA "Programs\finterm"
+          $tool = "FintermMaintenanceTool.exe"
+          $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-user-data.txt"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
+          Set-Content -Path $mark -Value "mine"
+
+          if ((Run $old $install) -ne 0) { throw "4.0.10 did not install" }
+          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "4.0.10 is not in $pf" }
+
+          $code = Run $new $install
+          if (Test-Path (Join-Path $pu "finterm.exe")) { throw "4.1.0 installed beside 4.0.10 (exit $code)" }
+          if ($code -eq 0) { throw "a refused install reported success" }
+          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "the refused install removed 4.0.10" }
+          Write-Host "refused beside 4.0.10: OK"
+
+          if ((Run (Join-Path $pf $tool) @("purge", "--default-answer", "--confirm-command")) -ne 0) { throw "4.0.10 did not uninstall" }
+          for ($i = 0; (Test-Path (Join-Path $pf $tool)) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path (Join-Path $pf $tool)) { throw "4.0.10 is still there" }
+          if (-not (Test-Path $mark)) { throw "uninstalling 4.0.10 removed the user's data" }
+          if ((Run $new $install) -ne 0) { throw "4.1.0 did not install after 4.0.10 was removed" }
+          if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "4.1.0 is not in $pu" }
+          if (-not (Test-Path $mark)) { throw "installing 4.1.0 removed the user's data" }
+          Write-Host "4.0.10 -> 4.1.0: OK"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
@@ -632,6 +697,30 @@ jobs:
             echo "::error::the AppImage could not fetch market data (see the report and log above)"
             exit 1
           fi
+
+      # ── In-place update: the helper the app runs, on the real AppImage ────
+      - name: In-place update and rollback (apply-update.sh, AppImage)
+        timeout-minutes: 10
+        working-directory: app
+        run: |
+          set -euo pipefail
+          sh tests/updater/test_apply_update.sh src/services/updater/scripts/apply-update.sh
+          node tests/installer/test_installscript.js packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs
+          BUILT="$(ls build/finterm-*-linux-x64-setup.run | head -1)"
+          D="${RUNNER_TEMP}/appimage-update"; STATUS="${RUNNER_TEMP}/update-status.json"
+          rm -rf "${D}"; mkdir -p "${D}"
+          printf '#!/bin/sh\necho old\n' > "${D}/finterm.AppImage"; chmod +x "${D}/finterm.AppImage"
+          cp "${BUILT}" "${D}/.finterm-9.9.9.AppImage"; chmod 0644 "${D}/.finterm-9.9.9.AppImage"
+          run() { sh src/services/updater/scripts/apply-update.sh --target "${D}/finterm.AppImage" \
+                     --previous "${D}/.finterm-previous.AppImage" --status "${STATUS}" "$@"; cat "${STATUS}"; grep -q '"ok":true' "${STATUS}"; }
+          run --kind appimage --staged "${D}/.finterm-9.9.9.AppImage" --from 0.0.1 --to 0.0.2
+          cmp "${BUILT}" "${D}/finterm.AppImage"
+          WANT="finterm $(grep -h '^CMAKE_PROJECT_VERSION:' build/CMakeCache.txt | cut -d= -f2)"
+          GOT="$("${D}/finterm.AppImage" --appimage-extract-and-run --version)"
+          [ "${GOT}" = "${WANT}" ] || { echo "::error::the updated AppImage says '${GOT}', not '${WANT}'"; exit 1; }
+          run --kind appimage-rollback --from 0.0.2 --to 0.0.1
+          [ "$("${D}/finterm.AppImage")" = old ] || { echo "::error::rollback did not restore"; exit 1; }
+          echo "in-place update + rollback OK"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Version-stamped filename so update-manifest regex picks it up.
@@ -1181,6 +1270,7 @@ jobs:
       # beside the installed one, swaps them and keeps the previous; then a
       # rollback. The same DMG stands in for the next version.
       - name: In-place update and rollback (apply-update.sh, macapp)
+        timeout-minutes: 15
         working-directory: app
         run: |
           set -euo pipefail

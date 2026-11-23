@@ -5,14 +5,29 @@
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QLockFile>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QUrl>
+
+#include <cstdlib>
+
+#if defined(Q_OS_WIN)
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <windows.h>
+#else
+#    include <signal.h>
+#    include <sys/types.h>
+#endif
 
 namespace finterm::services::update_install {
 
@@ -28,6 +43,69 @@ QString status_path() {
 }
 QString pending_path() {
     return QDir(updates_dir()).filePath(QStringLiteral("pending.json"));
+}
+
+QString helper_path() {
+    return QDir(updates_dir()).filePath(QStringLiteral("helper.json"));
+}
+QString g_startup_stamp;
+
+/// The helper recorded as `pid` at `at` is still running — that process, not
+/// another that got its number since (a restart of the machine).
+bool helper_alive(qint64 pid, const QDateTime& at) {
+    if (pid <= 0 || !at.isValid())
+        return false;
+#if defined(Q_OS_WIN)
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
+    if (!h)
+        return false;
+    DWORD code = 0;
+    FILETIME created{}, exited{}, kernel{}, user{};
+    bool alive = GetExitCodeProcess(h, &code) && code == STILL_ACTIVE;
+    if (alive && GetProcessTimes(h, &created, &exited, &kernel, &user)) {
+        // 100 ns units since 1601.
+        const qint64 ticks = (qint64(created.dwHighDateTime) << 32) | qint64(created.dwLowDateTime);
+        const qint64 ms = ticks / 10000 - 11644473600000LL;
+        alive = std::abs(ms - at.toMSecsSinceEpoch()) < 60 * 1000;
+    }
+    CloseHandle(h);
+    return alive;
+#else
+    if (::kill(pid_t(pid), 0) != 0)
+        return false;
+    QProcess ps;
+    ps.start(QStringLiteral("ps"), {QStringLiteral("-o"), QStringLiteral("command="), QStringLiteral("-p"),
+                                    QString::number(pid)});
+    if (!ps.waitForFinished(2000))
+        return true; // can't tell: assume it is
+    return ps.readAllStandardOutput().contains("apply-update");
+#endif
+}
+
+#if defined(Q_OS_WIN)
+QString windows_powershell() {
+    // By full path — not whatever "powershell" the user's PATH finds (or not).
+    return QDir::toNativeSeparators(QDir(qEnvironmentVariable("SystemRoot", QStringLiteral("C:\\Windows")))
+                                        .filePath(QStringLiteral("System32/WindowsPowerShell/v1.0/powershell.exe")));
+}
+#endif
+
+/// "finterm is being updated", said by a program outside the install.
+void say_updating() {
+#if defined(Q_OS_WIN)
+    QProcess::startDetached(windows_powershell(),
+                            {QStringLiteral("-NoProfile"), QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"),
+                             QStringLiteral("-Command"),
+                             QStringLiteral("(New-Object -ComObject WScript.Shell).Popup('finterm is being updated. "
+                                            "Start it again in a moment.', 15, 'finterm', 64) | Out-Null")},
+                            QDir::homePath()); // not the install folder finterm was started in
+#elif defined(Q_OS_MACOS)
+    QProcess::startDetached(QStringLiteral("/usr/bin/osascript"),
+                            {QStringLiteral("-e"), QStringLiteral("display dialog \"finterm is being updated. Start it "
+                                                                  "again in a moment.\" with title \"finterm\" buttons "
+                                                                  "{\"OK\"} default button 1 giving up after 15")},
+                            QDir::homePath());
+#endif
 }
 
 bool dir_writable(const QString& dir) {
@@ -118,11 +196,21 @@ std::optional<Target> in_place_target() {
     const QString appimage = qEnvironmentVariable("APPIMAGE");
     if (appimage.isEmpty() || !QFileInfo(appimage).isFile())
         return std::nullopt; // a dev tree or a distro package: not ours to replace
+    // APPIMAGE is inherited: from a terminal inside another AppImage it names
+    // that application. Ours only when this binary runs from its mount.
+    const QString appdir = QFileInfo(qEnvironmentVariable("APPDIR")).canonicalFilePath();
+    const QString exe_dir = QFileInfo(QCoreApplication::applicationDirPath()).canonicalFilePath();
+    if (appdir.isEmpty() || (exe_dir != appdir && !exe_dir.startsWith(appdir + QLatin1Char('/'))))
+        return std::nullopt;
     const QString dir = QFileInfo(appimage).absolutePath();
     if (!dir_writable(dir))
         return std::nullopt;
-    return Target{QStringLiteral("appimage"), QFileInfo(appimage).absoluteFilePath(),
-                  QDir(dir).filePath(QStringLiteral(".finterm-previous.AppImage")), dir};
+    const Target t{QStringLiteral("appimage"), QFileInfo(appimage).absoluteFilePath(),
+                   QDir(dir).filePath(QStringLiteral(".finterm-previous.AppImage")), dir};
+    // Run by hand, the kept previous version would be its own rollback copy.
+    if (QFileInfo(t.previous) == QFileInfo(t.target))
+        return std::nullopt;
+    return t;
 #elif defined(Q_OS_MACOS)
     // …/finterm.app/Contents/MacOS/finterm
     QDir d(QCoreApplication::applicationDirPath());
@@ -151,14 +239,60 @@ std::optional<Target> in_place_target() {
 QString staged_path(const Target& t, const QString& version, const QString& download_url) {
     if (t.kind == QLatin1String("appimage"))
         return QDir(t.staging_dir).filePath(QStringLiteral(".finterm-%1.AppImage").arg(version));
-    QString name = QFileInfo(QUrl(download_url).path()).fileName();
-    if (name.isEmpty())
-        name = QStringLiteral("finterm-%1-update").arg(version);
-    return QDir(t.staging_dir).filePath(name);
+    // The updater's own name (sweep_stale matches it), whatever the asset is
+    // called; the suffix is what Windows / hdiutil go by.
+    const QString suffix = QFileInfo(QUrl(download_url).path()).suffix();
+    return QDir(t.staging_dir)
+        .filePath(QStringLiteral("finterm-%1-setup%2")
+                      .arg(version, suffix.isEmpty() ? QString() : QLatin1Char('.') + suffix));
+}
+
+QString target_stamp(const Target& t) {
+    QString file = t.target;
+    if (t.kind == QLatin1String("macapp"))
+        file = QDir(t.target).filePath(QStringLiteral("Contents/Info.plist"));
+    else if (t.kind == QLatin1String("ifw"))
+        file = QDir(t.target).filePath(QStringLiteral("finterm.exe"));
+    const QFileInfo f(file);
+    return f.exists() ? QStringLiteral("%1:%2").arg(f.size()).arg(f.lastModified().toMSecsSinceEpoch()) : QString();
+}
+
+bool helper_in_flight() {
+    const auto h = read_json(helper_path());
+    if (!h)
+        return false;
+    // Its process, not a timer: a killed helper (logoff, power) is over at
+    // once and a slow one is not.
+    const auto at = QDateTime::fromString(h->value(QStringLiteral("at")).toString(), Qt::ISODate);
+    return helper_alive(qint64(h->value(QStringLiteral("pid")).toDouble()), at);
+}
+
+void sweep_stale(const Target& t, const QString& keep) {
+    if (other_instance_running() || helper_in_flight())
+        return; // someone may be using one
+    // Only names staged_path gives (and their .part), never the version that
+    // runs or the one a rollback puts back.
+    static const QRegularExpression staged(
+        QStringLiteral("^\\.finterm-\\d+\\.\\d+\\.\\d+\\.AppImage(\\.\\d+\\.part)?$"
+                       "|^finterm-\\d+\\.\\d+\\.\\d+-setup(\\.[A-Za-z0-9]+)?(\\.\\d+\\.part)?$"));
+    const QDir dir(t.staging_dir);
+    for (const QFileInfo& f : dir.entryInfoList(QDir::Files | QDir::Hidden)) {
+        if (staged.match(f.fileName()).hasMatch() && f != QFileInfo(t.target) && f != QFileInfo(t.previous) &&
+            (keep.isEmpty() || f != QFileInfo(keep)))
+            QFile::remove(f.absoluteFilePath());
+    }
 }
 
 bool launch_helper(const Target& t, const QString& staged, const QString& from, const QString& to, bool relaunch,
                    bool rollback) {
+    // One helper at a time. The lock is this process's until it exits — from
+    // then the helper's own record says it is at work.
+    static QLockFile lock(QDir(updates_dir()).filePath(QStringLiteral("apply.lock")));
+    lock.setStaleLockTime(0);
+    if (helper_in_flight() || (!lock.isLocked() && !lock.tryLock(0))) {
+        LOG_INFO("UpdateInstaller", "Another finterm is already putting an update in");
+        return false;
+    }
     const QString script = write_helper(t.kind);
     if (script.isEmpty())
         return false;
@@ -167,11 +301,9 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
     QString program;
     QStringList args;
     if (t.kind == QLatin1String("ifw")) {
-        // Windows PowerShell by full path — not whatever "powershell" the
-        // user's PATH finds first (or doesn't).
-        program = QDir(qEnvironmentVariable("SystemRoot", QStringLiteral("C:\\Windows")))
-                      .filePath(QStringLiteral("System32/WindowsPowerShell/v1.0/powershell.exe"));
-        program = QDir::toNativeSeparators(program);
+#if defined(Q_OS_WIN)
+        program = windows_powershell();
+#endif
         args = {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                 QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"),       QStringLiteral("-File"),
                 QDir::toNativeSeparators(script), QStringLiteral("-AppPid"),     pid,
@@ -187,6 +319,7 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
             args << QStringLiteral("-Rollback");
         if (!profile.isEmpty())
             args << QStringLiteral("-AppProfile") << profile;
+        args << QStringLiteral("-Lock") << QDir::toNativeSeparators(helper_path());
     } else {
         program = QStringLiteral("/bin/sh");
         args = {script,
@@ -210,6 +343,19 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
             args << QStringLiteral("--relaunch");
         if (!profile.isEmpty())
             args << QStringLiteral("--profile") << profile;
+        args << QStringLiteral("--lock") << helper_path();
+    }
+
+    if (!rollback) {
+        // For the rollback: the version it puts in must confirm itself.
+        QFile::remove(status_path());
+        write_json(pending_path(), QJsonObject{{"kind", t.kind},
+                                               {"target", t.target},
+                                               {"previous", t.previous},
+                                               {"from", from},
+                                               {"to", to},
+                                               {"profile", profile},
+                                               {"starts", 0}});
     }
 
     QProcess p;
@@ -220,22 +366,20 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
     qint64 helper_pid = 0;
     if (!p.startDetached(&helper_pid)) {
         LOG_ERROR("UpdateInstaller", QString("Could not start the update helper (%1)").arg(program));
+        if (!rollback)
+            QFile::remove(pending_path());
         return false;
     }
+    // What a finterm started meanwhile goes by (the helper waits for this
+    // process first, and removes the record when it is done).
+    write_json(helper_path(), QJsonObject{{"pid", double(helper_pid)},
+                                          {"kind", t.kind},
+                                          {"target", t.target},
+                                          {"at", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}});
     LOG_INFO("UpdateInstaller", QString("Update helper started (pid %1): %2 %3 → %4%5")
                                     .arg(helper_pid)
                                     .arg(rollback ? QStringLiteral("rollback") : t.kind, from, to,
                                          relaunch ? QStringLiteral(", relaunch") : QString()));
-    if (!rollback) {
-        // For the rollback: the version about to start must confirm itself.
-        write_json(pending_path(), QJsonObject{{"kind", t.kind},
-                                               {"target", t.target},
-                                               {"previous", t.previous},
-                                               {"from", from},
-                                               {"to", to},
-                                               {"profile", profile},
-                                               {"starts", 0}});
-    }
     return true;
 }
 
@@ -243,6 +387,11 @@ std::optional<QJsonObject> take_status() {
     auto s = read_json(status_path());
     // The profile that applied it reports it (all profiles share this folder).
     if (!s || s->value(QStringLiteral("profile")).toString() != running_profile())
+        return std::nullopt;
+    // …from the version it left in place: an AppImage reopened while the
+    // helper worked still runs the one before.
+    const bool ok = s->value(QStringLiteral("ok")).toBool();
+    if (s->value(ok ? QStringLiteral("to") : QStringLiteral("from")).toString() != QCoreApplication::applicationVersion())
         return std::nullopt;
     QFile::remove(status_path());
     return s;
@@ -264,10 +413,33 @@ bool other_instance_running() {
     return false;
 }
 
+QString startup_stamp() {
+    return g_startup_stamp;
+}
+
 bool boot_check() {
     // A self-test run is no start of the user's app (it never shows a window).
     if (QCoreApplication::arguments().contains(QStringLiteral("--selftest")))
         return false;
+    const auto mine = in_place_target();
+    if (helper_in_flight()) {
+        // An update or a rollback is being put in — here? (Another finterm, a
+        // dev tree or a copy elsewhere, is not touched by it.) An AppImage is
+        // replaced in one rename, so running on is safe, and this start isn't
+        // counted. A bundle or an install folder is being taken apart: leave
+        // at once — staying would hold its files — and let another program
+        // say why.
+        const auto h = read_json(helper_path());
+        const bool here = h && mine && h->value(QStringLiteral("target")).toString() == mine->target;
+        if (!here || mine->kind == QLatin1String("appimage"))
+            return false;
+        say_updating();
+        return true;
+    }
+    // The install as this process found it, before anything else can change
+    // it (empty while a helper is at work: whatever that leaves is not ours).
+    if (mine)
+        g_startup_stamp = target_stamp(*mine);
     auto pending = read_json(pending_path());
     if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile())
         return false;
@@ -291,7 +463,16 @@ bool boot_check() {
                                      .arg(to, pending->value(QStringLiteral("from")).toString()));
     const Target t{pending->value(QStringLiteral("kind")).toString(), pending->value(QStringLiteral("target")).toString(),
                    pending->value(QStringLiteral("previous")).toString(), QString()};
-    QFile::remove(pending_path());
+    // The record stays until the restored version starts (running == from,
+    // above): a rollback that could not be done is tried once more, then this
+    // version runs as it is rather than going round for ever.
+    const int rollbacks = pending->value(QStringLiteral("rollbacks")).toInt();
+    if (rollbacks >= 2) {
+        QFile::remove(pending_path());
+        return false;
+    }
+    (*pending)[QStringLiteral("rollbacks")] = rollbacks + 1;
+    write_json(pending_path(), *pending);
     return launch_helper(t, QString(), to, pending->value(QStringLiteral("from")).toString(), /*relaunch=*/true,
                          /*rollback=*/true);
 }
