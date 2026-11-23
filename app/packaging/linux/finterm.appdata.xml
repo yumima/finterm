@@ -28,6 +28,11 @@
     <binary>finterm</binary>
   </provides>
   <releases>
+    <release version="4.0.10" date="2026-11-23">
+      <description>
+        <p>Version 4.0.10 — Markets and Futures become one tab: a single row of pages, each a canvas of widgets with a chart beside it. New market-condition widgets — conditions per asset class, the Treasury curve and 10Y–2Y, credit stress, fed funds, CPI, debt-to-GDP and Shiller's CAPE with their percentiles, cross-asset correlation, sovereign spreads and Strategy's premium to its bitcoin — for Markets and the dashboard. The weekly brief moves into News: choose its topics, detail and platforms, and post to X, Bluesky and Mastodon. Charts no longer fail when Yahoo rate-limits.</p>
+      </description>
+    </release>
     <release version="4.0.9" date="2026-11-18">
       <description>
         <p>Version 4.0.9 — IPO Watch becomes Private Market: marketplace prices, funding rounds and the road to IPO on a dashboard of movable widgets. Earnings links each print's call webcast and release, and plays the call in finterm. Screens reopen as you left them. Extended hours are one number everywhere: the portfolio's EXT% and Equity Research's Extended Hours panel show the same pre-market, after-hours and overnight prices, each labelled with its session, and load in a fraction of a second. Every dataset — quotes, price history, company info, calendars, IPO deals, SEC filings — now has one source the whole app reads, so two screens can no longer disagree; a rate-limited answer is retried instead of shown as blank. Dead code and stale caches removed.</p>

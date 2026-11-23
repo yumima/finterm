@@ -23,7 +23,7 @@ if(WIN32 AND CMAKE_HOST_WIN32)
     endif()
 endif()
 
-project(finterm VERSION 4.0.9 LANGUAGES C CXX)
+project(finterm VERSION 4.0.10 LANGUAGES C CXX)
 
 # Strip C/C++ flags out of RC invocations — rc.exe only understands /D, /I, /fo.
 if(WIN32)

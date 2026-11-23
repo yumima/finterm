@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`1fec7304f`](https://github.com/yumima/finterm/commit/1fec7304f) news: WEEKLY BRIEF joins What's On — topics, detail, platforms, post now; the SOCIAL tab goes
 - [`92f2afc62`](https://github.com/yumima/finterm/commit/92f2afc62) markets: one header row of widget pages — OVERVIEW screens, FUTURES groups, WORLD; futures as widgets
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
@@ -69,9 +70,9 @@ The report says `"ok": true`, or names the stage that failed (setup or data) and
 
 ## What's inside
 
-- **Markets, Watchlist, Dashboard** — live global quotes, charts, sector heatmap, extended-hours and futures moves.
-- **News** — a deduplicated feed with region and portfolio filters, reader-mode articles, an AI TL;DR, and read-aloud.
-- **Futures** — index, rates, energy, metals, grains, softs, livestock, FX and crypto futures: the forward curve of every listed month against a week and a month ago, calendar-spread history and roll yield, CFTC positioning, contract terms, and a paper ticket sized in dollars ([guide](docs/how-to/futures.md)).
+- **Markets** — one header row of pages, each a canvas of widgets with a chart that follows that page's clicks: your OVERVIEW screens (market conditions per asset class, volatility, the Treasury curve and 10Y–2Y, credit stress, fed funds / CPI / debt-to-GDP / CAPE, cross-asset correlation, sovereign spreads, SPDR sectors, Strategy's premium to its bitcoin), a FUTURES page per group (index, rates, energy, metals, grains, softs, livestock, FX, crypto — the forward curve of every listed month against a week and a month ago, calendar spreads and roll yield, CFTC positioning, contract terms, a paper ticket sized in dollars; [guide](docs/how-to/futures.md)), and WORLD.
+- **Watchlist, Dashboard** — live global quotes, charts, sector heatmap, extended-hours moves; every Markets widget can sit on the dashboard too.
+- **News** — a deduplicated feed with region and portfolio filters, reader-mode articles, an AI TL;DR, read-aloud, and the **weekly brief**: the week just ended and the one ahead, reviewed and published to the site, posted to X, Bluesky and Mastodon.
 - **Equity Research** — financials, earnings (each print's release and call, playable in the app), analyst targets, technicals, peers, ownership and sentiment per ticker, and a **Report** tab that assembles them into a quarterly investor report (charts, segment and geography revenue and the company's own words from its SEC filings, an AI-written summary) exportable as PDF or HTML ([guide](docs/how-to/company-report.md)).
 - **Portfolio** — multi-account holdings, performance, heatmap, blotter, CSV/JSON import and export.
 - **Screener, Ownership** — screens, and insider (Form 4), institutional (13F) and 5% (13D/13G) views built on public SEC EDGAR filings.

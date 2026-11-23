@@ -30,7 +30,7 @@ permalink: /
 
 - **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history, extended-hours moves (pre-market, after-hours, overnight) and each earnings call playable in the app.
 - **Company report** — one investor report per company from filings, estimates, prices and news: what changed, segments, valuation against its own past, risks; export to PDF.
-- **Futures** — the forward curve for 57 contracts, calendar spreads, trader positioning, and a paper account with working stops and targets.
+- **Markets** — market conditions for every asset class on pages of widgets you arrange: the Treasury curve, credit stress, valuation and correlation; futures curves for 57 contracts with spreads, trader positioning and a paper account with working stops and targets.
 - **Fund moves** — the largest stake changes by every 13F filer, corrected for splits and CUSIP changes and linked to the filing; 5% stakes (13D / 13G) as they are filed.
 - **Insider buying** — every SEC Form 4 scanned as it lands; clusters of insiders buying their own stock surface on their own.
 - **Private market** — marketplace prices and funding rounds for private companies, and IPO deals from filing to pricing with the SEC filing stage each projected date rests on.
