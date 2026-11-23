@@ -5,6 +5,7 @@
 #include "core/util/BarTime.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "datahub/DataHub.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/markets/MarketsScreen.h"
 #include "services/futures/FuturesCatalog.h"
@@ -192,49 +193,16 @@ void MarketChartDialog::set_target(QWidget* w, const QString& symbol, const QStr
     w->setProperty(kLabelProp, label);
 }
 
-namespace {
-/// Linked charts by the canvas (or page) they sit on — security linking.
-QHash<QWidget*, QPointer<MarketChartView>>& linked() {
-    static QHash<QWidget*, QPointer<MarketChartView>> h;
-    return h;
-}
-} // namespace
-
-void MarketChartDialog::link_chart(QWidget* scope, MarketChartView* view) {
-    if (scope && view)
-        linked().insert(scope, view);
-}
-
-void MarketChartDialog::unlink_chart(QWidget* scope, MarketChartView* view) {
-    // Only this view's link: a second chart on the same canvas keeps its own.
-    const auto it = linked().find(scope);
-    if (it != linked().end() && (it.value() == view || !it.value()))
-        linked().erase(it);
-}
-
-bool MarketChartDialog::route_to_linked(const QString& symbol, const QString& label, QWidget* from) {
-    // The nearest ancestor of the clicked widget that has a linked chart
-    // takes the symbol when that chart is on screen — the click stays on the
-    // canvas (security linking). Otherwise the dialog opens.
-    for (QWidget* w = from; w; w = w->parentWidget()) {
-        const auto it = linked().constFind(w);
-        if (it == linked().constEnd())
-            continue;
-        MarketChartView* v = it.value();
-        if (v && v->isVisible()) {
-            v->set_symbol(symbol, label);
-            return true;
-        }
-        return false;
-    }
-    return false;
-}
-
 void MarketChartDialog::show_for(const QString& symbol, const QString& label, QWidget* from) {
     if (symbol.trimmed().isEmpty())
         return;
-    if (route_to_linked(symbol.trimmed(), label, from))
-        return;
+    // Security linking: the canvas the click came from selects the symbol;
+    // its linked chart (if it shows one) draws it instead of this window.
+    if (auto* link = SelectionLink::of(from)) {
+        link->select(symbol.trimmed(), label);
+        if (link->has_chart())
+            return;
+    }
     QWidget* host = from ? from->window() : nullptr;
     if (!instance_) {
         instance_ = new MarketChartDialog(host);
@@ -339,7 +307,12 @@ MarketChartView::MarketChartView(QWidget* parent) : QWidget(parent) {
         style_btns_.insert(s, b);
         ctl->addWidget(b);
     }
-    ctl->addSpacing(16);
+    // Overlays on a second row: one row of ~20 buttons crushed them to
+    // unreadable stubs when the chart is a tile on a canvas.
+    ctl->addStretch(1);
+    root->addLayout(ctl);
+    ctl = new QHBoxLayout;
+    ctl->setSpacing(4);
     struct Toggle {
         const char* key;
         const char* text;
@@ -681,7 +654,9 @@ void MarketChartView::paint_conditions() {
     cond_->show();
 }
 
-void MarketChartView::load() {
+void MarketChartView::load(bool retry) {
+    if (!retry)
+        load_attempt_ = 0; // a new ask by the reader gets fresh retries
     const auto& def = period_def(prefs().period);
     canvas_->set_intraday(def.intraday);
     const int seq = ++request_seq_;
@@ -745,10 +720,35 @@ void MarketChartView::load() {
             if (!r.ok) {
                 self->canvas_->clear();
                 self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+                self->retry_after_failure(r.error);
                 return;
             }
+            self->load_attempt_ = 0;
             self->apply(r.bars);
         });
+}
+
+void MarketChartView::retry_after_failure(const QString& error) {
+    // Say why, and try again on a back-off — a refusal (Yahoo's 429 rate
+    // limit) passes; a dead end "Failed to load chart" was all it said.
+    static constexpr int kDelaysSec[] = {5, 15, 45};
+    const bool limited = error.contains(QLatin1String("429")) ||
+                         error.contains(QLatin1String("Rate limited"), Qt::CaseInsensitive);
+    const QString why = limited ? QStringLiteral("Yahoo is rate-limiting requests")
+                                : (error.isEmpty() ? QStringLiteral("the price history did not load") : error.left(120));
+    if (load_attempt_ >= static_cast<int>(std::size(kDelaysSec))) {
+        readout_->setText(QStringLiteral("%1 — pick a period to try again.").arg(why));
+        return;
+    }
+    const int delay = kDelaysSec[load_attempt_++];
+    readout_->setText(QStringLiteral("%1 — retrying in %2 s…").arg(why).arg(delay));
+    const int seq = request_seq_;
+    QPointer<MarketChartView> self = this;
+    QTimer::singleShot(delay * 1000, this, [self, seq]() {
+        // Only if nothing newer was asked for meanwhile.
+        if (self && seq == self->request_seq_ && self->isVisible())
+            self->load(/*retry=*/true);
+    });
 }
 
 void MarketChartView::apply(const QVector<services::equity::Candle>& candles) {

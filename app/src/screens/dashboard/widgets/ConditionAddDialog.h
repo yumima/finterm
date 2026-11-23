@@ -8,6 +8,9 @@
 //   FRED    a FRED series id (fred.stlouisfed.org), as published or as a
 //           year-on-year percent change.
 //   Kalshi  a Kalshi series ticker (KXFEDDECISION, KXCPIYOY …).
+//   Sovereign  a country's 10-year government bond yield minus a benchmark's
+//           (Germany or the US) — OECD monthly series via FRED. A bond
+//           spread, the free stand-in for sovereign CDS (which has no free feed).
 //
 // The result is a row {symbol, label}; the list validates nothing here — a
 // symbol with no data shows a dashed row saying why, like every quote list.
@@ -16,6 +19,7 @@
 #include <QString>
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -26,7 +30,7 @@ namespace finterm::screens::widgets {
 class ConditionAddDialog : public QDialog {
     Q_OBJECT
   public:
-    enum class Kind { Symbol, Fred, Kalshi };
+    enum class Kind { Symbol, Fred, Kalshi, Sovereign };
     ConditionAddDialog(Kind kind, QWidget* parent = nullptr);
 
     QString symbol() const { return symbol_; }
@@ -42,6 +46,8 @@ class ConditionAddDialog : public QDialog {
     QLineEdit* input_ = nullptr;
     QLineEdit* label_edit_ = nullptr;
     QCheckBox* yoy_ = nullptr;
+    QComboBox* country_ = nullptr;
+    QComboBox* bench_ = nullptr;
     QListWidget* results_ = nullptr;
     QLabel* hint_ = nullptr;
     QTimer* debounce_ = nullptr;

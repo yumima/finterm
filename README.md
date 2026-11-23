@@ -2,7 +2,7 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-22)
+## Today's commits (2026-11-23)
 
 Latest first.
 

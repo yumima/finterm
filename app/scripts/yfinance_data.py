@@ -1155,6 +1155,9 @@ def get_info(symbol):
             "enterprise_to_revenue": info.get('enterpriseToRevenue'),
             "enterprise_to_ebitda": info.get('enterpriseToEbitda'),
             "shares_outstanding": info.get('sharesOutstanding'),
+            # Every share class (Strategy has A and B): the count a market cap
+            # of the whole company needs. None when Yahoo has none.
+            "implied_shares_outstanding": info.get('impliedSharesOutstanding'),
             "float_shares": info.get('floatShares'),
             "held_percent_insiders": info.get('heldPercentInsiders'),
             "held_percent_institutions": info.get('heldPercentInstitutions'),

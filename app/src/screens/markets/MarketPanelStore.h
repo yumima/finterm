@@ -5,20 +5,16 @@
 
 namespace finterm::screens {
 
-/// Persists user-configured market panels via SettingsRepository.
-/// Falls back to the 9 built-in defaults on first run.
+/// The market panels users configured on the old Markets PANELS page — read
+/// once, to carry them onto a "MY PANELS" screen (MarketTemplates "panels").
 class MarketPanelStore {
   public:
     static MarketPanelStore& instance();
 
-    /// Load all panels (from DB or defaults).
+    /// The user's panels (or the old built-in defaults when none were saved).
     QVector<MarketPanelConfig> load();
-
-    /// Persist the full panel list.
-    void save(const QVector<MarketPanelConfig>& panels);
-
-    /// Reset to factory defaults and persist.
-    void reset_to_defaults();
+    /// Did the user ever save panels of their own?
+    bool has_saved() const;
 
   private:
     MarketPanelStore() = default;

@@ -205,8 +205,9 @@ ConditionTableWidget::ConditionTableWidget(const QString& title, Mode mode, QVec
     connect(this, &BaseWidget::refresh_requested, this, [this]() {
         QStringList topics(topics_.cbegin(), topics_.cend());
         for (const auto& r : rows_)
-            if (!cnd::is_fred_key(r.symbol))
+            if (!cnd::is_series_key(r.symbol))
                 topics << QStringLiteral("market:quote:") + r.symbol;
+        ConditionService::instance().mark_forced(topics); // a REFRESH downloads, current or not
         datahub::DataHub::instance().request(topics, /*force=*/true);
     });
     apply_config(cfg);
@@ -270,6 +271,8 @@ void ConditionTableWidget::rebuild_headers() {
 QString ConditionTableWidget::topic_for(const QString& sym) const {
     if (cnd::is_fred_key(sym))
         return ConditionService::fred_topic(sym.mid(5).trimmed().toUpper());
+    if (cnd::is_shiller_key(sym))
+        return ConditionService::shiller_topic(sym.mid(8).trimmed().toUpper());
     return ConditionService::stats_topic(sym);
 }
 
@@ -372,7 +375,7 @@ void ConditionTableWidget::subscribe_all() {
     auto& svc = ConditionService::instance();
     QStringList quote_syms;
     for (const auto& r : rows_)
-        if (!cnd::is_fred_key(r.symbol) && !quote_syms.contains(r.symbol))
+        if (!cnd::is_series_key(r.symbol) && !quote_syms.contains(r.symbol))
             quote_syms << r.symbol;
     for (const auto& s : footer_syms_)
         if (!quote_syms.contains(s))
@@ -382,7 +385,7 @@ void ConditionTableWidget::subscribe_all() {
     const bool readings = wants_conditions();
     topics_.clear();
     for (const auto& r : rows_)
-        if (readings || cnd::is_fred_key(r.symbol))
+        if (readings || cnd::is_series_key(r.symbol))
             topics_.insert(topic_for(r.symbol));
 
     // Cache first: whatever is known paints now; the hub's answers follow.
@@ -456,7 +459,7 @@ void ConditionTableWidget::render() {
         QStringList tip{QStringLiteral("<b>%1</b> <span style='color:%2'>%3</span>")
                             .arg(row_label(r).toHtmlEscaped(), ui::colors::TEXT_TERTIARY(), r.symbol.toHtmlEscaped())};
 
-        if (cnd::is_fred_key(r.symbol)) {
+        if (cnd::is_series_key(r.symbol)) {
             const auto pts = points_of(c);
             const auto ls = cnd::level_stats(pts);
             if (mode_ == Mode::Market) {
@@ -487,7 +490,9 @@ void ConditionTableWidget::render() {
                     << QStringLiteral("10-year percentile %1")
                            .arg(std::isfinite(ls.pctile_10y) ? QString::number(std::lround(ls.pctile_10y))
                                                              : QStringLiteral("— (under ten years of data)"))
-                    << QStringLiteral("Source: FRED, St. Louis Fed (public download)");
+                    << (cnd::is_shiller_key(r.symbol)
+                            ? QStringLiteral("Source: Robert Shiller, shillerdata.com (monthly)")
+                            : QStringLiteral("Source: FRED, St. Louis Fed (public download)"));
         } else {
             const auto qit = quotes_.constFind(r.symbol);
             const bool has_q = qit != quotes_.constEnd() && std::isfinite(qit->price) && qit->price > 0;
@@ -708,7 +713,9 @@ void ConditionTableWidget::rename() {
 }
 
 void ConditionTableWidget::add_row() {
-    ConditionAddDialog dlg(mode_ == Mode::Macro ? ConditionAddDialog::Kind::Fred : ConditionAddDialog::Kind::Symbol,
+    ConditionAddDialog dlg(mode_ == Mode::Market ? ConditionAddDialog::Kind::Symbol
+                           : add_sovereign_      ? ConditionAddDialog::Kind::Sovereign
+                                                 : ConditionAddDialog::Kind::Fred,
                            this);
     if (dlg.exec() != QDialog::Accepted || dlg.symbol().isEmpty())
         return;

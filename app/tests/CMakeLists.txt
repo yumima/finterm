@@ -1328,6 +1328,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_treasury_par_curve.py
     )
     set_tests_properties(treasury_par_curve PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # CAPE sheet (Shiller's year.month dates) and Strategy's 8-K BTC Update.
+    add_test(
+        NAME market_valuation_data
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_market_valuation_data.py
+    )
+    set_tests_properties(market_valuation_data PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
     # Economics analytics engine: each analyzer dispatches its own analyses
     # (the file was spliced out of order once; time_series_analysis crashed).
     add_test(

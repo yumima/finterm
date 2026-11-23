@@ -878,6 +878,7 @@ set(SERVICE_SOURCES
     src/services/markets/IndexFutures.cpp
     src/services/markets/ConditionService.cpp
     src/services/futures/FuturesService.cpp
+    src/services/futures/FuturesHub.cpp
     src/services/data_normalization/DataNormalizationService.cpp
     src/services/news/NewsService.cpp
     src/services/news/NewsClusterService.cpp
@@ -1087,7 +1088,11 @@ set(SCREEN_SOURCES
     src/screens/dashboard/widgets/CorrelationWidget.cpp
     src/screens/dashboard/widgets/MacroOddsWidget.cpp
     src/screens/dashboard/widgets/MarketChartWidget.cpp
-    src/screens/markets/overview/MarketsOverview.cpp
+    src/screens/dashboard/widgets/MarketsWidgets.cpp
+    src/screens/markets/overview/MarketScreenPage.cpp
+    src/screens/markets/overview/MarketTemplates.cpp
+    src/screens/futures/FuturesWidgets.cpp
+    src/screens/dashboard/canvas/SelectionLink.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/MarketPulsePanel.cpp
@@ -1306,9 +1311,7 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/PrivateMarketWidgets.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
-    src/screens/futures/FuturesScreen.cpp
     src/screens/futures/FuturesCharts.cpp
-    src/screens/futures/FuturesPanels.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp
@@ -1449,9 +1452,7 @@ set_source_files_properties(
     src/screens/pre_ipo/PrivateMarketWidgets.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/screener/ScreenerScreen.cpp
-    src/screens/futures/FuturesScreen.cpp
     src/screens/futures/FuturesCharts.cpp
-    src/screens/futures/FuturesPanels.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/OwnershipHeader.cpp
     src/screens/ownership/HoldersTable.cpp
@@ -1625,7 +1626,11 @@ set_source_files_properties(
     src/screens/dashboard/widgets/CorrelationWidget.cpp
     src/screens/dashboard/widgets/MacroOddsWidget.cpp
     src/screens/dashboard/widgets/MarketChartWidget.cpp
-    src/screens/markets/overview/MarketsOverview.cpp
+    src/screens/dashboard/widgets/MarketsWidgets.cpp
+    src/screens/markets/overview/MarketScreenPage.cpp
+    src/screens/markets/overview/MarketTemplates.cpp
+    src/screens/futures/FuturesWidgets.cpp
+    src/screens/dashboard/canvas/SelectionLink.cpp
     src/screens/mcp_servers/McpServersScreen.cpp
     src/screens/news/NewsCommandBar.cpp
     src/screens/news/NewsDetailPanel.cpp

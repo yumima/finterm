@@ -17,6 +17,10 @@
 //                      ~2 years of business days, newest first — the same
 //                      script and cache entry as Markets ▸ WORLD's 2Y / 2s10s:
 //                      {rows:[{date, m1…y30}], t}
+//   cond:shiller:CAPE  Shiller's CAPE, monthly (market_valuation_data.py cape):
+//                      {points:[[date, value]…], t}
+//   cond:mstr          Strategy's bitcoin holdings from its latest 8-K BTC
+//                      Update (market_valuation_data.py mstr_btc, SEC EDGAR)
 //   cond:kalshi:<SER>  Kalshi's open events for a series ticker (public API,
 //                      the Kalshi client the prediction screen uses):
 //                      {events:[{ticker, title, close, outcomes:[{label, p}]}], t}
@@ -54,6 +58,9 @@ class ConditionService : public QObject, public datahub::Producer {
     static QString stats_topic(const QString& sym) { return QStringLiteral("cond:stats:") + sym; }
     static QString fred_topic(const QString& key) { return QStringLiteral("cond:fred:") + key; }
     static QString kalshi_topic(const QString& series) { return QStringLiteral("cond:kalshi:") + series; }
+    static QString shiller_topic(const QString& name) { return QStringLiteral("cond:shiller:") + name; }
+    /// Strategy's bitcoin holdings (its weekly 8-K): {btc, as_of, filed, url, t}.
+    static inline const QString kMstrTopic = QStringLiteral("cond:mstr");
     static inline const QString kUstTopic = QStringLiteral("cond:ust");
 
     /// The newest answer known for `topic`: the hub's value, else the one
@@ -67,6 +74,9 @@ class ConditionService : public QObject, public datahub::Producer {
     /// known copy at once and, when the hub's is not fresh, the fresh one
     /// after it (the caller redraws). FRED / UST only; CORR answers once.
     static bool is_derived(const QString& key);
+    /// The next refresh of these topics downloads, even when the persisted
+    /// readings are current (a REFRESH the reader pressed).
+    void mark_forced(const QStringList& topics);
     using SeriesCallback = std::function<void(bool, QVector<QPair<QDate, double>>, QString)>;
     void fetch_series(const QString& key, SeriesCallback cb);
     /// Display name for a derived key ("2s10s", "HY OAS"…); empty = none known.
@@ -86,6 +96,10 @@ class ConditionService : public QObject, public datahub::Producer {
     void refresh_stats(const QString& sym);
     void refresh_fred(const QString& key);
     void refresh_ust();
+    void refresh_shiller(const QString& name);
+    void refresh_mstr();
+    bool mstr_running_ = false;
+    QSet<QString> shiller_running_;
     void pump_kalshi();
     void answer_once(const QString& topic, std::function<QVector<QPair<QDate, double>>(const QJsonObject&)> build,
                      SeriesCallback cb);
@@ -99,7 +113,13 @@ class ConditionService : public QObject, public datahub::Producer {
     int kalshi_seq_ = 0; ///< bumped per request; a timeout for an older one is a no-op
     prediction::kalshi_ns::KalshiRestClient* kalshi_ = nullptr;
     bool registered_ = false;
-    static constexpr int kStatsConcurrency = 2;
+    void pump_stats_later(int ms);
+    static bool stats_current(const QJsonObject& held);
+    bool stats_paused_ = false;
+    QSet<QString> forced_; ///< symbols whose next read must download
+    static constexpr int kStatsFreshSec = 6 * 3600;
+    static constexpr int kStatsGapMs = 1'500;
+    static constexpr int kRateLimitPauseMs = 5 * 60'000;
 };
 
 } // namespace finterm::services

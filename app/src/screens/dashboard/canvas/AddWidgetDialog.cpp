@@ -28,6 +28,8 @@ QString AddWidgetDialog::accent_for_category(const QString& category) {
         return ui::colors::CYAN();
     if (category == "Market Conditions")
         return ui::colors::WARNING();
+    if (category == "Futures")
+        return ui::colors::AMBER();
     if (category == "Tools")
         return ui::colors::AMBER();
     return ui::colors::TEXT_SECONDARY();

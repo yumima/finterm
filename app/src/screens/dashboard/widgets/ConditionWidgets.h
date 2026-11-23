@@ -37,18 +37,18 @@ struct ConditionWidgetDef {
 inline const QVector<ConditionWidgetDef>& condition_widget_defs() {
     static const QVector<ConditionWidgetDef> k = {
         {"cond_futures", "Futures Majors", "Front-month futures — live price, trend, 200-day and 1-year position", 4, 6},
-        {"cond_equity", "Equity ETFs", "Index & sector ETFs with trend, 200-day and percentile readings", 4, 6},
+        {"cond_equity", "ETFs & SPDR Sectors", "SPY, QQQ, DIA and the 11 SPDR sectors with trend, 200-day, percentile", 4, 6},
         {"cond_vol", "Volatility", "VIX, VVIX, VXN and MOVE with their 1-year percentile and VIX term structure", 4, 4},
         {"cond_curve", "US Yield Curve", "Treasury par curve vs 1M / 1Y ago, and spreads (2s10s, 3M10Y…)", 4, 6},
-        {"cond_credit", "Bonds & Credit", "BND / HYG / LQD with high-yield and investment-grade spreads (FRED)", 4, 4},
-        {"cond_macro", "Macro Indicators", "Fed funds, real yield, inflation, debt/GDP, Buffett indicator (FRED)", 4, 6},
-        {"cond_commod", "Commodities+", "Gold & miners, silver, gold futures, crude, gas, copper, GSCI, dry bulk", 4, 6},
-        {"cond_fx", "Currencies", "Dollar index and major pairs incl. USD/CNH, with trend and percentile", 4, 4},
-        {"cond_crypto", "Crypto", "Bitcoin, Ether and MSTR with trend and percentile", 4, 3},
-        {"cond_corr", "Cross-Asset Correlation", "Rolling correlation of daily changes — S&P, 10Y, BTC, gold, GSCI, dollar",
+        {"cond_credit", "Credit Stress", "High-yield and investment-grade OAS (FRED), MOVE, HYG / LQD / BND", 4, 5},
+        {"cond_macro", "Macro Indicators", "Fed funds, CPI YoY, US debt/GDP, CAPE — level and 10-year percentile", 4, 5},
+        {"cond_commod", "Commodity Conditions", "Gold & miners, silver, gold futures, crude, gas, copper, GSCI, dry bulk", 4, 6},
+        {"cond_fx", "FX Spot", "Dollar index and major pairs incl. USD/CNH, with trend and percentile", 4, 4},
+        {"cond_crypto", "Crypto Spot", "Bitcoin, Ether and MSTR with trend and percentile", 4, 3},
+        {"cond_corr", "Cross-Asset Correlation", "63-day correlation of daily changes — S&P, 10Y, BTC, gold, oil, copper",
          6, 5},
-        {"cond_sector_corr", "Sector Correlation", "Rolling correlation of the S&P 500 and its 11 sector ETFs", 6, 6},
-        {"cond_odds", "Macro Odds (Kalshi)", "Prediction-market odds: Fed decisions, recession, CPI", 4, 6},
+        {"cond_sector_corr", "Sector Correlation", "63-day correlation of the S&P 500 and its 11 sector ETFs", 6, 6},
+        {"cond_odds", "Prediction Odds (Kalshi)", "Kalshi odds on Fed decisions, recession, CPI — a reference", 4, 6},
     };
     return k;
 }
@@ -92,28 +92,31 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
     if (type_id == QLatin1String("cond_futures")) {
         auto* w = new ConditionTableWidget(QStringLiteral("FUTURES MAJORS"), M::Market, condition_detail::futures_majors(),
                                            cfg, ui::colors::AMBER(), parent);
-        w->set_note(QStringLiteral("Continuous front month (Yahoo, ~10 min delayed) — the FUTURES screen's board. "
-                                   "Click a row for its chart; the FUTURES screen has the curve and contract months."));
+        w->set_note(QStringLiteral("Continuous front month (Yahoo, ~10 min delayed). Click a row: its chart, and its "
+                                   "curve and months on the screen's futures widgets."));
         return w;
     }
     if (type_id == QLatin1String("cond_equity"))
-        return new ConditionTableWidget(QStringLiteral("EQUITY ETFs"), M::Market,
+        return new ConditionTableWidget(QStringLiteral("ETFs & SPDR SECTORS"), M::Market,
                                         {{"SPY", "S&P 500 (SPY)"},
                                          {"QQQ", "Nasdaq 100 (QQQ)"},
                                          {"DIA", "Dow (DIA)"},
-                                         {"IWM", "Russell 2000 (IWM)"},
-                                         {"RSP", "S&P equal weight (RSP)"},
                                          {"XLK", "Tech (XLK)"},
                                          {"XLF", "Financials (XLF)"},
-                                         {"XLE", "Energy (XLE)"},
                                          {"XLV", "Health (XLV)"},
+                                         {"XLE", "Energy (XLE)"},
                                          {"XLI", "Industrials (XLI)"},
-                                         {"SOXX", "Semis (SOXX)"}},
+                                         {"XLY", "Discretionary (XLY)"},
+                                         {"XLP", "Staples (XLP)"},
+                                         {"XLU", "Utilities (XLU)"},
+                                         {"XLB", "Materials (XLB)"},
+                                         {"XLRE", "Real Estate (XLRE)"},
+                                         {"XLC", "Comm Svcs (XLC)"}},
                                         cfg, ui::colors::POSITIVE(), parent);
     if (type_id == QLatin1String("cond_vol")) {
         auto* w = new ConditionTableWidget(
             QStringLiteral("VOLATILITY"), M::Market,
-            {{"^VIX", "VIX"}, {"^VVIX", "VVIX (vol of VIX)"}, {"^VXN", "VXN (Nasdaq vol)"}, {"^MOVE", "MOVE (rates vol)"}},
+            {{"^VIX", "VIX"}, {"^VVIX", "VVIX (vol of VIX)"}, {"^VXN", "VXN (Nasdaq vol)"}, {"^MOVE", "MOVE (Treasury vol)"}},
             cfg, ui::colors::NEGATIVE(), parent);
         // The WORLD board's term-structure reading, from the same live quotes.
         w->set_footer({"^VIX", "^VIX3M"}, [](const QHash<QString, services::QuoteData>& q) {
@@ -130,34 +133,30 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
         return new YieldCurveWidget(cfg, parent);
     if (type_id == QLatin1String("cond_credit")) {
         auto* w = new ConditionTableWidget(QStringLiteral("BONDS & CREDIT"), M::Market,
-                                           {{"BND", "Total bond (BND)"},
-                                            {"LQD", "IG corporate (LQD)"},
+                                           {{"FRED:BAMLH0A0HYM2", "High-yield OAS, %"},
+                                            {"FRED:BAMLC0A0CM", "Investment-grade OAS, %"},
+                                            {"^MOVE", "MOVE (Treasury vol)"},
                                             {"HYG", "High yield (HYG)"},
-                                            {"FRED:BAMLH0A0HYM2", "HY OAS, %"},
-                                            {"FRED:BAMLC0A0CM", "IG OAS, %"}},
+                                            {"LQD", "IG corporate (LQD)"},
+                                            {"BND", "Total bond (BND)"}},
                                            cfg, ui::colors::CYAN(), parent);
-        w->set_note(QStringLiteral("OAS: ICE BofA option-adjusted spreads via FRED (daily, a day behind). Sovereign "
-                                   "CDS is not shown — there is no free source."));
+        w->set_note(QStringLiteral("OAS: ICE BofA option-adjusted spreads via FRED (daily, a day behind) — the "
+                                   "credit-stress gauges; a high percentile is stress."));
         return w;
     }
     if (type_id == QLatin1String("cond_macro")) {
-        auto* w = new ConditionTableWidget(QStringLiteral("MACRO"), M::Macro,
+        auto* w = new ConditionTableWidget(QStringLiteral("MACRO INDICATORS"), M::Macro,
                                            {{"FRED:DFF", "Fed funds (effective), %"},
-                                            {"FRED:DFII10", "10Y real yield (TIPS), %"},
-                                            {"FRED:T10YIE", "10Y breakeven inflation, %"},
                                             {"FRED:CPIAUCSL@YOY", "CPI YoY"},
-                                            {"FRED:CPILFESL@YOY", "Core CPI YoY"},
-                                            {"FRED:PCEPILFE@YOY", "Core PCE YoY"},
                                             {"FRED:GFDEGDQ188S", "Federal debt / GDP, %"},
-                                            {"FRED:NCBEILQ027S/GDP*0.1", "Buffett indicator, %"}},
+                                            {"SHILLER:CAPE", "CAPE (Shiller P/E)"}},
                                            cfg, ui::colors::AMBER(), parent);
-        w->set_note(QStringLiteral("FRED, St. Louis Fed. Buffett indicator = US corporate equities at market value "
-                                   "(Fed Z.1, NCBEILQ027S) / nominal GDP. CAPE and forward P/E have no free official "
-                                   "series and are not shown."));
+        w->set_note(QStringLiteral("FRED, St. Louis Fed; CAPE: Robert Shiller's data (shillerdata.com, monthly — "
+                                   "S&P 500 price / 10-year average real earnings). Add any FRED series with + ADD."));
         return w;
     }
     if (type_id == QLatin1String("cond_commod")) {
-        auto* w = new ConditionTableWidget(QStringLiteral("COMMODITIES+"), M::Market,
+        auto* w = new ConditionTableWidget(QStringLiteral("COMMODITY CONDITIONS"), M::Market,
                                            {{"GLD", "Gold ETF (GLD)"},
                                             {"GDX", "Gold miners (GDX)"},
                                             {"SLV", "Silver ETF (SLV)"},
@@ -174,7 +173,7 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
         return w;
     }
     if (type_id == QLatin1String("cond_fx")) {
-        auto* w = new ConditionTableWidget(QStringLiteral("CURRENCIES"), M::Market,
+        auto* w = new ConditionTableWidget(QStringLiteral("FX SPOT"), M::Market,
                                            {{"DX-Y.NYB", "Dollar index (DXY)"},
                                             {"EURUSD=X", "EUR/USD"},
                                             {"USDJPY=X", "USD/JPY"},
@@ -186,7 +185,7 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
         return w;
     }
     if (type_id == QLatin1String("cond_crypto"))
-        return new ConditionTableWidget(QStringLiteral("CRYPTO"), M::Market,
+        return new ConditionTableWidget(QStringLiteral("CRYPTO SPOT"), M::Market,
                                         {{"BTC-USD", "Bitcoin"}, {"ETH-USD", "Ether"}, {"MSTR", "Strategy (MSTR)"}}, cfg,
                                         ui::colors::AMBER(), parent);
     if (type_id == QLatin1String("cond_corr"))
@@ -195,12 +194,26 @@ inline BaseWidget* create_condition_widget(const QString& type_id, const QJsonOb
                                       {"^TNX", "US 10Y"},
                                       {"BTC-USD", "Bitcoin"},
                                       {"GC=F", "Gold"},
-                                      {"^SPGSCI", "GSCI"},
-                                      {"DX-Y.NYB", "Dollar"}},
+                                      {"CL=F", "Oil"},
+                                      {"HG=F", "Copper"}},
                                      cfg, parent);
     if (type_id == QLatin1String("cond_sector_corr"))
         return new CorrelationWidget(QStringLiteral("SECTOR CORRELATION"), condition_detail::sectors_with_spx(), cfg,
                                      parent);
+    if (type_id == QLatin1String("sov_spreads")) {
+        auto* w = new ConditionTableWidget(
+            QStringLiteral("SOVEREIGN 10Y SPREADS"), M::Macro,
+            {{"FRED:IRLTLT01ITM156N-IRLTLT01DEM156N", "Italy – Germany 10Y, pp"},
+             {"FRED:IRLTLT01FRM156N-IRLTLT01DEM156N", "France – Germany 10Y, pp"},
+             {"FRED:IRLTLT01ESM156N-IRLTLT01DEM156N", "Spain – Germany 10Y, pp"},
+             {"FRED:IRLTLT01GBM156N-IRLTLT01USM156N", "UK – US 10Y, pp"},
+             {"FRED:IRLTLT01JPM156N-IRLTLT01USM156N", "Japan – US 10Y, pp"}},
+            cfg, ui::colors::NEGATIVE(), parent);
+        w->set_add_sovereign(true);
+        w->set_note(QStringLiteral("Government bond yield spreads (OECD, monthly, via FRED) — the free stand-in for "
+                                   "sovereign CDS, which has no free feed. + ADD: any country."));
+        return w;
+    }
     if (type_id == QLatin1String("cond_odds"))
         return new MacroOddsWidget(cfg, parent);
     return nullptr;

@@ -1,6 +1,7 @@
 #include "services/markets/ConditionService.h"
 
 #include "core/logging/Logger.h"
+#include "core/util/BarTime.h"
 #include "datahub/DataHub.h"
 #include "datahub/TopicPolicy.h"
 #include "services/economics/EconomicsService.h"
@@ -109,10 +110,13 @@ void ConditionService::ensure_registered_with_hub() {
     auto& hub = datahub::DataHub::instance();
     hub.register_producer(this);
 
-    // Daily-bar readings move with today's bar; the bars cache is 10 minutes.
+    // Readings of DAILY bars: the history changes once a session (the live
+    // part is the quote — live_reading). Asked again hourly; a persisted
+    // answer still current is republished without a download (stats_current).
+    // Every 15 minutes for ~50 symbols drew Yahoo 429s that failed the charts.
     datahub::TopicPolicy stats;
-    stats.ttl_ms = 15 * 60'000;
-    stats.min_interval_ms = 5 * 60'000;
+    stats.ttl_ms = 60 * 60'000;
+    stats.min_interval_ms = 15 * 60'000;
     stats.refresh_timeout_ms = 10 * 60'000; // queued behind other symbols
     hub.set_policy_pattern(QStringLiteral("cond:stats:*"), stats);
 
@@ -129,6 +133,14 @@ void ConditionService::ensure_registered_with_hub() {
     ust.min_interval_ms = 10 * 60'000;
     ust.refresh_timeout_ms = 2 * 60'000;
     hub.set_policy(kUstTopic, ust);
+
+    // Shiller posts CAPE monthly; Strategy files its holdings weekly.
+    datahub::TopicPolicy slow;
+    slow.ttl_ms = 6 * 3600'000;
+    slow.min_interval_ms = 30 * 60'000;
+    slow.refresh_timeout_ms = 3 * 60'000;
+    hub.set_policy_pattern(QStringLiteral("cond:shiller:*"), slow);
+    hub.set_policy(kMstrTopic, slow);
 
     // Prediction-market odds move through the day.
     datahub::TopicPolicy odds;
@@ -197,7 +209,8 @@ void ConditionService::ensure_registered_with_hub() {
 }
 
 QStringList ConditionService::topic_patterns() const {
-    return {QStringLiteral("cond:stats:*"), QStringLiteral("cond:fred:*"), kUstTopic, QStringLiteral("cond:kalshi:*")};
+    return {QStringLiteral("cond:stats:*"), QStringLiteral("cond:fred:*"), kUstTopic,
+            QStringLiteral("cond:kalshi:*"), QStringLiteral("cond:shiller:*"), kMstrTopic};
 }
 
 void ConditionService::refresh(const QStringList& topics) {
@@ -210,6 +223,10 @@ void ConditionService::refresh(const QStringList& topics) {
             refresh_fred(t.mid(10));
         } else if (t == kUstTopic) {
             refresh_ust();
+        } else if (t.startsWith(QLatin1String("cond:shiller:"))) {
+            refresh_shiller(t.mid(13));
+        } else if (t == kMstrTopic) {
+            refresh_mstr();
         } else if (t.startsWith(QLatin1String("cond:kalshi:"))) {
             const QString ser = t.mid(12);
             if (!kalshi_queue_.contains(ser) && kalshi_current_ != ser)
@@ -242,11 +259,56 @@ QJsonObject ConditionService::last_known(const QString& topic) const {
 
 // ── Daily-bar readings ──────────────────────────────────────────────────────
 
+void ConditionService::mark_forced(const QStringList& topics) {
+    for (const auto& t : topics)
+        if (t.startsWith(QLatin1String("cond:stats:")))
+            forced_.insert(t.mid(11));
+}
+
+bool ConditionService::stats_current(const QJsonObject& held) {
+    // Fetched within kStatsFreshSec and its last bar is the newest completed
+    // session it can have: nothing new to download.
+    const double t = held.value(QStringLiteral("t")).toDouble(0);
+    if (t <= 0 || QDateTime::currentMSecsSinceEpoch() - static_cast<qint64>(t) > qint64(kStatsFreshSec) * 1000)
+        return false;
+    const QDate as_of = QDate::fromString(held.value(QStringLiteral("as_of")).toString(), Qt::ISODate);
+    const QDate today = core::bartime::market_today_et();
+    // A bar dated today is the session in progress: it moves, so an answer
+    // holding it is current for an hour, not six.
+    if (as_of.isValid() && as_of >= today)
+        return QDateTime::currentMSecsSinceEpoch() - static_cast<qint64>(t) < 3600'000;
+    QDate last_done = today.addDays(-1);
+    while (last_done.dayOfWeek() > 5) // the last weekday before today
+        last_done = last_done.addDays(-1);
+    return as_of.isValid() && as_of >= last_done;
+}
+
 void ConditionService::pump_stats() {
-    // A few at a time, not all at once: each is a daemon call, and a burst of
-    // forty would queue every other screen's request behind it.
-    while (stats_running_.size() < kStatsConcurrency && !stats_queue_.isEmpty())
-        refresh_stats(stats_queue_.takeFirst());
+    // One at a time, spaced (kStatsGapMs): each is a Yahoo download, and a
+    // burst draws 429s that fail every chart in the app. After a 429 the
+    // queue waits kRateLimitPauseMs before the next one.
+    if (stats_paused_ || !stats_running_.isEmpty())
+        return;
+    while (!stats_queue_.isEmpty()) {
+        const QString sym = stats_queue_.takeFirst();
+        const QJsonObject held = last_known(stats_topic(sym));
+        const bool forced = forced_.remove(sym);
+        if (!forced && !held.isEmpty() && stats_current(held)) {
+            // Republished as is ("t" kept: its age stays honest).
+            datahub::DataHub::instance().publish(stats_topic(sym), QVariant::fromValue(held));
+            continue;
+        }
+        refresh_stats(sym);
+        return;
+    }
+}
+
+void ConditionService::pump_stats_later(int ms) {
+    stats_paused_ = true;
+    QTimer::singleShot(ms, this, [this]() {
+        stats_paused_ = false;
+        pump_stats();
+    });
 }
 
 void ConditionService::refresh_stats(const QString& sym) {
@@ -259,6 +321,16 @@ void ConditionService::refresh_stats(const QString& sym) {
                                                      return;
                                                  self->stats_running_.remove(sym);
                                                  const QString topic = stats_topic(sym);
+                                                 const bool limited =
+                                                     !r.ok && (r.error.contains(QLatin1String("429")) ||
+                                                               r.error.contains(QLatin1String("Rate limited"),
+                                                                                Qt::CaseInsensitive));
+                                                 if (limited) {
+                                                     // Back off; this symbol goes to the back of the queue.
+                                                     self->stats_queue_.append(sym);
+                                                     self->pump_stats_later(kRateLimitPauseMs);
+                                                     return;
+                                                 }
                                                  if (!r.ok || r.bars.isEmpty()) {
                                                      datahub::DataHub::instance().publish_error(
                                                          topic, r.ok ? QStringLiteral("no price history")
@@ -293,7 +365,7 @@ void ConditionService::refresh_stats(const QString& sym) {
                                                          datahub::DataHub::instance().publish_error(
                                                          topic, QStringLiteral("no usable daily bars"));
                                                  }
-                                                 self->pump_stats();
+                                                 self->pump_stats_later(kStatsGapMs);
                                              });
 }
 
@@ -368,6 +440,57 @@ void ConditionService::refresh_ust() {
     });
 }
 
+// ── Shiller / Strategy ──────────────────────────────────────────────────────
+
+void ConditionService::refresh_shiller(const QString& name) {
+    const QString topic = shiller_topic(name);
+    if (name != QLatin1String("CAPE")) {
+        datahub::DataHub::instance().publish_error(topic, QStringLiteral("unknown Shiller series %1").arg(name));
+        return;
+    }
+    if (shiller_running_.contains(name))
+        return;
+    shiller_running_.insert(name);
+    QPointer<ConditionService> self = this;
+    EconomicsService::instance().fetch(
+        QStringLiteral("market_valuation_data.py"), QStringLiteral("cape"), {},
+        [self, name, topic](const EconomicsResult& r) {
+            if (!self)
+                return;
+            self->shiller_running_.remove(name);
+            const QJsonArray pts = r.data.value("points").toArray();
+            if (!r.success || pts.isEmpty()) {
+                datahub::DataHub::instance().publish_error(topic, r.success ? QStringLiteral("no CAPE values") : r.error);
+                return;
+            }
+            self->publish(topic, QJsonObject{{"points", pts}});
+        },
+        90'000);
+}
+
+void ConditionService::refresh_mstr() {
+    if (mstr_running_)
+        return;
+    mstr_running_ = true;
+    QPointer<ConditionService> self = this;
+    EconomicsService::instance().fetch(
+        QStringLiteral("market_valuation_data.py"), QStringLiteral("mstr_btc"), {},
+        [self](const EconomicsResult& r) {
+            if (!self)
+                return;
+            self->mstr_running_ = false;
+            if (!r.success || !r.data.value("btc").isDouble()) {
+                datahub::DataHub::instance().publish_error(kMstrTopic,
+                                                           r.success ? QStringLiteral("no holding read") : r.error);
+                return;
+            }
+            QJsonObject o = r.data;
+            o.remove("t");
+            self->publish(kMstrTopic, o);
+        },
+        90'000);
+}
+
 // ── Kalshi ──────────────────────────────────────────────────────────────────
 
 void ConditionService::pump_kalshi() {
@@ -394,7 +517,7 @@ void ConditionService::pump_kalshi() {
 // ── Chartable derived series ────────────────────────────────────────────────
 
 bool ConditionService::is_derived(const QString& key) {
-    return cnd::is_fred_key(key) || key.startsWith(QLatin1String("UST:")) || key.startsWith(QLatin1String("CORR:"));
+    return cnd::is_series_key(key) || key.startsWith(QLatin1String("UST:")) || key.startsWith(QLatin1String("CORR:"));
 }
 
 QString ConditionService::derived_label(const QString& key) {
@@ -407,6 +530,9 @@ QString ConditionService::derived_label(const QString& key) {
         {"FRED:PCEPILFE@YOY", "Core PCE YoY"},
         {"FRED:GFDEGDQ188S", "Federal debt / GDP"},
         {"FRED:NCBEILQ027S/GDP*0.1", "Buffett indicator"},
+        {"FRED:T10Y2Y", "10Y–2Y Treasury spread"},
+        {"FRED:T10Y3M", "10Y–3M Treasury spread"},
+        {"SHILLER:CAPE", "CAPE (Shiller P/E)"},
         {"FRED:BAMLH0A0HYM2", "High-yield OAS"},
         {"FRED:BAMLC0A0CM", "Investment-grade OAS"},
     };
@@ -465,9 +591,9 @@ void ConditionService::fetch_series(const QString& key, SeriesCallback cb) {
         QTimer::singleShot(0, self ? static_cast<QObject*>(self.data()) : qApp,
                            [cb, ok, pts = std::move(pts), err] { cb(ok, pts, err); });
     };
-    if (cnd::is_fred_key(key)) {
-        const QString body = key.mid(5).toUpper();
-        const QString topic = fred_topic(body);
+    if (cnd::is_series_key(key)) {
+        const QString topic = cnd::is_fred_key(key) ? fred_topic(key.mid(5).toUpper())
+                                                    : shiller_topic(key.mid(8).toUpper());
         // The widget's own answer when it is held: the chart and the row
         // then read the same observations.
         const QJsonObject held = last_known(topic);

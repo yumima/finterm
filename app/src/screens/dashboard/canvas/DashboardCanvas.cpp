@@ -251,7 +251,9 @@ void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
     // Only expand — never shrink below the current row_h (user may have manually
     // made tiles taller) and never below 36px (tiles become unreadable).
     // Cap at 240px to avoid absurdly tall tiles on very large monitors.
-    const int new_rh = qBound(qMax(36, layout_.row_h), ideal, 240);
+    // A Markets screen is read at a glance: it fits the view exactly, shrinking
+    // too (down to 30px rows, the title bar plus a line).
+    const int new_rh = fit_exact_ ? qBound(30, ideal, 240) : qBound(qMax(36, layout_.row_h), ideal, 240);
     if (new_rh == layout_.row_h)
         return;
 

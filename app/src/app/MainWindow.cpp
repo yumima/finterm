@@ -66,7 +66,6 @@
 #include "screens/quantlib/QuantLibScreen.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "screens/report_builder/ReportBuilderScreen.h"
-#include "screens/futures/FuturesScreen.h"
 #include "screens/screener/ScreenerScreen.h"
 #include "screens/settings/SettingsScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"

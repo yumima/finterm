@@ -4,7 +4,7 @@
 //
 // Set FINTERM_RENDER_DIR to a directory to keep the pictures.
 #include "screens/futures/FuturesCharts.h"
-#include "screens/futures/FuturesPanels.h"
+#include "screens/futures/FuturesUi.h"
 
 #include <QDir>
 #include <QtTest>
@@ -35,15 +35,12 @@ int inked(const QImage& img) {
 class TestFuturesCharts : public QObject {
     Q_OBJECT
   private slots:
-    void a_saved_arrangement_is_used_only_when_whole() {
-        using finterm::screens::futures::valid_order;
-        const QStringList def = {"board", "chart", "curve", "months", "detail"};
-        const QStringList moved = {"board", "curve", "chart", "detail", "months"};
-        QCOMPARE(valid_order(moved, def), moved);
-        QCOMPARE(valid_order({}, def), def);                                              // nothing saved
-        QCOMPARE(valid_order({"board", "chart", "curve", "months"}, def), def);            // a pane missing
-        QCOMPARE(valid_order({"board", "chart", "chart", "months", "detail"}, def), def);  // one twice
-        QCOMPARE(valid_order({"board", "chart", "curve", "months", "ladder"}, def), def);  // one this build lacks
+    void a_contract_maps_to_its_root() {
+        using finterm::screens::futures_ui::root_of_contract;
+        QCOMPARE(root_of_contract("CLZ26.NYM"), QString("CL"));
+        QCOMPARE(root_of_contract("SR3H27.CME"), QString("SR3"));
+        QVERIFY(root_of_contract("CL=F").isEmpty()); // continuous, not a month
+        QVERIFY(root_of_contract("SPY").isEmpty());
     }
 
     void charts_render() {

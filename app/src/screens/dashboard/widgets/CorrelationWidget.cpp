@@ -138,7 +138,7 @@ CorrelationWidget::CorrelationWidget(const QString& title, QVector<ConditionRowD
     : BaseWidget(title, parent, ui::colors::CYAN()), defaults_(std::move(defaults)) {
     ConditionService::instance().ensure_registered_with_hub();
     window_box_ = new QComboBox;
-    for (int w : {30, 60, 90, 120})
+    for (int w : {30, 63, 90, 126, 252})
         window_box_->addItem(QStringLiteral("%1D").arg(w), w);
     window_box_->setToolTip(QStringLiteral("Rolling window, in trading days common to both series"));
     add_title_bar_control(window_box_);
@@ -172,6 +172,7 @@ CorrelationWidget::CorrelationWidget(const QString& title, QVector<ConditionRowD
         QStringList topics;
         for (const auto& r : rows_)
             topics << ConditionService::stats_topic(r.symbol);
+        ConditionService::instance().mark_forced(topics);
         datahub::DataHub::instance().request(topics, true);
     });
     apply_config(cfg);
@@ -201,8 +202,12 @@ void CorrelationWidget::apply_config(const QJsonObject& cfg) {
     } else {
         rows = defaults_;
     }
-    const int w = cfg.value(QLatin1String("window")).toInt(60);
-    window_ = (w == 30 || w == 60 || w == 90 || w == 120) ? w : 60;
+    int w = cfg.value(QLatin1String("window")).toInt(63);
+    if (w == 60) // the windows before 63 / 126 (three / six months of sessions)
+        w = 63;
+    else if (w == 120)
+        w = 126;
+    window_ = (w == 30 || w == 63 || w == 90 || w == 126 || w == 252) ? w : 63; // 63 = 3 months of sessions
     {
         const QSignalBlocker b(window_box_);
         window_box_->setCurrentIndex(window_box_->findData(window_));

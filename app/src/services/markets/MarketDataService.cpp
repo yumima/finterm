@@ -1160,7 +1160,8 @@ void MarketDataService::fetch_info_raw(const QString& symbol_in, InfoReplyCallba
     // Two caches stand between a reader and Yahoo: this one and the daemon's
     // (_CACHE_TTL). A reader sees their SUM, so the daemon's is kept well
     // inside this one. Info carries analyst targets, which move on report days.
-    const QString key = QStringLiteral("info:v1:") + symbol;
+    // v2: the answer carries implied_shares_outstanding (every share class).
+    const QString key = QStringLiteral("info:v2:") + symbol;
     if (const auto hit = finterm::CacheManager::instance().try_get_aged(key)) {
         InfoReply r;
         r.ok = true;
@@ -1210,7 +1211,7 @@ void MarketDataService::request_info(const QString& symbol, int tries_left) {
                 r.info = obj;
                 r.as_of = QDateTime::currentDateTime();
                 finterm::CacheManager::instance().put(
-                    QStringLiteral("info:v1:") + symbol,
+                    QStringLiteral("info:v2:") + symbol,
                     QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)), kInfoTtlSec, "market_data");
             }
             const auto waiters = self->info_waiters_.take(symbol);

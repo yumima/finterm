@@ -13,6 +13,8 @@
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 #include "screens/dashboard/widgets/MarginUsageWidget.h"
 #include "screens/dashboard/widgets/MarketChartWidget.h"
+#include "screens/dashboard/widgets/MarketsWidgets.h"
+#include "screens/futures/FuturesWidgets.h"
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
 #include "screens/dashboard/widgets/MarketSentimentWidget.h"
 #include "screens/dashboard/widgets/NewsCategoryWidget.h"
@@ -36,6 +38,8 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 #include "screens/dashboard/widgets/WebScraperWidget.h"
+#include "screens/markets/world/WorldMarketsModel.h"
+#include "screens/markets/world/WorldMarketsView.h"
 #include "screens/pre_ipo/PrivateMarketWidgets.h"
 
 namespace finterm::screens {
@@ -85,7 +89,46 @@ WidgetRegistry::WidgetRegistry() {
                      "A price chart that follows the rows you click on the same canvas — periods, MAs, condition strip",
                      6, 8, 3, 2, [](const QJsonObject& cfg) { return new widgets::MarketChartWidget(cfg); }});
 
-    // ── Market Conditions (also on Markets ▸ OVERVIEW) ──────────────────────
+    register_widget({"market_regime", "Asset-Class Conditions", "Market Conditions",
+                     "One read per asset class — risk-on/off, stress/calm, trend — from each benchmark's readings", 4,
+                     6, 3, 1, [](const QJsonObject&) { return new widgets::MarketRegimeWidget; }});
+    register_widget({"sov_spreads", "Sovereign Spreads", "Market Conditions",
+                     "10-year government bond spreads vs Germany / the US, any OECD country (FRED, monthly)", 3, 6, 2,
+                     1, [](const QJsonObject& cfg) { return widgets::create_condition_widget("sov_spreads", cfg); }});
+    register_widget({"mstr_mnav", "MSTR Premium (mNAV)", "Market Conditions",
+                     "Strategy's market cap against the bitcoin it holds (8-K holdings, live prices)", 3, 6, 2, 1,
+                     [](const QJsonObject&) { return new widgets::MstrPremiumWidget; }});
+    register_widget({"world_board", "World Markets", "Markets",
+                     "Global markets on one board — sessions, regions, US futures, rates, FX, commodities, crypto, vol",
+                     12, 12, 6, 4, [](const QJsonObject&) { return new widgets::WorldBoardWidget; }});
+    // The board's parts, each a tile (the WORLD screen is built of them).
+    register_widget({"world_sessions", "World Sessions", "Markets",
+                     "Exchange clocks (open / closed, time to the next bell) and the overnight line", 12, 2, 4, 1,
+                     [](const QJsonObject&) { return new widgets::WorldBoardWidget(world::WorldMarketsView::kSessionsPart); }});
+    for (const auto& sec : world::world_sections()) {
+        const QString title = sec.title;
+        QString id = QStringLiteral("world_") + title.toLower();
+        id.replace(QLatin1Char(' '), QLatin1Char('_')).replace(QLatin1Char('-'), QLatin1Char('_'));
+        register_widget({id, QStringLiteral("World · ") + title, "Markets",
+                         sec.note.isEmpty() ? QStringLiteral("The WORLD board's %1 section").arg(title) : sec.note, 4, 4,
+                         2, 1, [title](const QJsonObject&) { return new widgets::WorldBoardWidget(title); }});
+    }
+
+    // ── Futures (the MARKETS FUTURES pages) ─────────────────────────────────
+    register_widget({"fut_board", "Futures Board", "Futures",
+                     "Every root of a futures group, live front month — click one: the page follows", 3, 12, 2, 2,
+                     [](const QJsonObject& cfg) { return new widgets::FuturesBoardWidget(cfg); }});
+    register_widget({"fut_curve", "Forward Curve", "Futures",
+                     "A futures market's strip and its curve now vs 1W / 1M ago (follows the page's clicks)", 4, 6, 3, 2,
+                     [](const QJsonObject& cfg) { return new widgets::FuturesCurveWidget(cfg); }});
+    register_widget({"fut_months", "Contract Months", "Futures",
+                     "Every listed month: last, change, spread to the front, carry, volume, OI, last day", 5, 6, 3, 2,
+                     [](const QJsonObject& cfg) { return new widgets::FuturesMonthsWidget(cfg); }});
+    register_widget({"fut_detail", "Futures Detail", "Futures",
+                     "Calendar spread · CFTC positioning · paper ticket · contract terms", 4, 6, 3, 2,
+                     [](const QJsonObject& cfg) { return new widgets::FuturesDetailWidget(cfg); }});
+
+    // ── Market Conditions (also on the MARKETS screens) ─────────────────────
     // Indicators beyond the price: trend, 200-day, percentile, curve,
     // correlation, macro and prediction-market odds. Every list is editable
     // in place (+ ADD / −).

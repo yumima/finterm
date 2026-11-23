@@ -65,31 +65,9 @@ QVector<MarketPanelConfig> MarketPanelStore::load() {
     return panels;
 }
 
-void MarketPanelStore::save(const QVector<MarketPanelConfig>& panels) {
-    QJsonArray arr;
-    for (const auto& cfg : panels) {
-        QJsonObject obj;
-        obj["id"] = cfg.id;
-        obj["title"] = cfg.title;
-        obj["show_name"] = cfg.show_name;
-        QJsonArray syms;
-        for (const auto& s : cfg.symbols)
-            syms.append(s);
-        obj["symbols"] = syms;
-        QJsonArray cols;
-        for (const auto& c : cfg.column_order)
-            cols.append(c);
-        obj["column_order"] = cols;
-        obj["column_index"] = cfg.column_index;
-        obj["splitter_index"] = cfg.splitter_index;
-        arr.append(obj);
-    }
-    SettingsRepository::instance().set(kSettingsKey,
-                                       QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)), kCategory);
-}
-
-void MarketPanelStore::reset_to_defaults() {
-    save(build_defaults());
+bool MarketPanelStore::has_saved() const {
+    const auto r = SettingsRepository::instance().get(kSettingsKey);
+    return r.is_ok() && !r.value().isEmpty();
 }
 
 QVector<MarketPanelConfig> MarketPanelStore::build_defaults() {

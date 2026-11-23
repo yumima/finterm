@@ -15,6 +15,7 @@
 
 namespace finterm::screens {
 class MarketChartView;
+class SelectionLink;
 }
 
 namespace finterm::screens::widgets {
@@ -36,7 +37,8 @@ class MarketChartWidget : public BaseWidget {
     MarketChartView* view_ = nullptr;
     QString symbol_ = QStringLiteral("^GSPC");
     QString label_ = QStringLiteral("S&P 500");
-    QPointer<QWidget> scope_; ///< the canvas this chart is linked to
+    QPointer<SelectionLink> link_; ///< the selection of the canvas this chart is on
+    bool counted_ = false;
 };
 
 } // namespace finterm::screens::widgets

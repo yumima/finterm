@@ -6,6 +6,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -54,6 +55,49 @@ ConditionAddDialog::ConditionAddDialog(Kind kind, QWidget* parent) : QDialog(par
     hint_->setWordWrap(true);
     hint_->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_TERTIARY()));
 
+    if (kind_ == Kind::Sovereign) {
+        setWindowTitle(QStringLiteral("Add sovereign spread"));
+        cap->setText(QStringLiteral("COUNTRY  ·  10Y government bond yield"));
+        input_->hide();
+        // The OECD long-term (10Y) rate series FRED carries (IRLTLT01xxM156N).
+        static const QVector<QPair<QString, QString>> kCountries = {
+            {"IT", "Italy"},       {"FR", "France"},     {"ES", "Spain"},    {"PT", "Portugal"}, {"GR", "Greece"},
+            {"IE", "Ireland"},     {"BE", "Belgium"},    {"NL", "Netherlands"}, {"AT", "Austria"}, {"FI", "Finland"},
+            {"GB", "United Kingdom"}, {"JP", "Japan"},   {"CA", "Canada"},   {"AU", "Australia"}, {"NZ", "New Zealand"},
+            {"CH", "Switzerland"}, {"SE", "Sweden"},     {"NO", "Norway"},   {"DK", "Denmark"},  {"PL", "Poland"},
+            {"HU", "Hungary"},     {"CZ", "Czechia"},    {"MX", "Mexico"},   {"CL", "Chile"},    {"CO", "Colombia"},
+            {"ZA", "South Africa"}, {"IL", "Israel"},    {"KR", "South Korea"}, {"DE", "Germany"}, {"US", "United States"}};
+        country_ = new QComboBox;
+        for (const auto& [code, name] : kCountries)
+            country_->addItem(name, code);
+        root->addWidget(country_);
+        auto* bcap = new QLabel(QStringLiteral("MINUS THE BENCHMARK"));
+        bcap->setStyleSheet(caption_ss());
+        root->addWidget(bcap);
+        bench_ = new QComboBox;
+        bench_->addItem(QStringLiteral("Germany (Bund)"), QStringLiteral("DE"));
+        bench_->addItem(QStringLiteral("United States (Treasury)"), QStringLiteral("US"));
+        root->addWidget(bench_);
+        hint_->setText(QStringLiteral("OECD monthly 10-year yields via FRED — a bond spread in percentage points, "
+                                      "the free stand-in for sovereign CDS."));
+        root->addWidget(hint_);
+        auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        root->addWidget(bb);
+        connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
+        connect(bb, &QDialogButtonBox::accepted, this, [this]() {
+            const QString c = country_->currentData().toString(), b = bench_->currentData().toString();
+            if (c == b) {
+                hint_->setText(QStringLiteral("Pick a country other than the benchmark."));
+                return;
+            }
+            symbol_ = QStringLiteral("FRED:IRLTLT01%1M156N-IRLTLT01%2M156N").arg(c, b);
+            label_ = QStringLiteral("%1 – %2 10Y, pp").arg(country_->currentText(),
+                                                          b == QLatin1String("DE") ? QStringLiteral("Germany")
+                                                                                   : QStringLiteral("US"));
+            accept();
+        });
+        return;
+    }
     if (kind_ == Kind::Symbol) {
         setWindowTitle(QStringLiteral("Add symbol"));
         cap->setText(QStringLiteral("SYMBOL  ·  type to search, click a match or press Enter"));

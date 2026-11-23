@@ -286,11 +286,15 @@ bool WorldSectionWidget::contains_symbol(const QString& sym) const {
 
 QSize WorldSectionWidget::sizeHint() const {
     const int rows = section_.rows.size() + (has_term_row() ? 1 : 0);
-    return {460, kTitleH + kColH + rows * kRowH + 4};
+    return {460, title_h() + kColH + rows * kRowH + 4};
 }
 
 QSize WorldSectionWidget::minimumSizeHint() const {
-    return {300, sizeHint().height()};
+    return {show_title_ ? 300 : 200, sizeHint().height()};
+}
+
+int WorldSectionWidget::title_h() const {
+    return show_title_ ? kTitleH : 0;
 }
 
 WorldSectionWidget::Cols WorldSectionWidget::columns(int y) const {
@@ -316,7 +320,7 @@ WorldSectionWidget::Cols WorldSectionWidget::columns(int y) const {
 }
 
 int WorldSectionWidget::row_at(int y) const {
-    const int top = kTitleH + kColH;
+    const int top = title_h() + kColH;
     if (y < top)
         return -1;
     const int row = (y - top) / kRowH;
@@ -328,19 +332,21 @@ void WorldSectionWidget::paintEvent(QPaintEvent*) {
     const QColor surface(ui::colors::BG_SURFACE());
     p.fillRect(rect(), surface);
 
-    // Title bar.
-    const QRect title(0, 0, width(), kTitleH);
-    p.fillRect(title, QColor(ui::colors::BG_RAISED()));
-    p.setPen(QColor(ui::colors::AMBER()));
-    p.drawLine(0, kTitleH - 1, width(), kTitleH - 1);
-    p.setFont(data_font(-2, true));
-    p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
-    p.drawText(title.adjusted(kPad, 0, -kPad, 0), Qt::AlignLeft | Qt::AlignVCenter, section_.title);
+    // Title bar (not on a tile: the tile's own title names the section).
+    if (show_title_) {
+        const QRect title(0, 0, width(), kTitleH);
+        p.fillRect(title, QColor(ui::colors::BG_RAISED()));
+        p.setPen(QColor(ui::colors::AMBER()));
+        p.drawLine(0, kTitleH - 1, width(), kTitleH - 1);
+        p.setFont(data_font(-2, true));
+        p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
+        p.drawText(title.adjusted(kPad, 0, -kPad, 0), Qt::AlignLeft | Qt::AlignVCenter, section_.title);
+    }
 
     // Column headers.
     const bool rates = section_.title == QLatin1String("US RATES");
-    const Cols hc = columns(kTitleH);
-    const QRect hrow(0, kTitleH, width(), kColH);
+    const Cols hc = columns(title_h());
+    const QRect hrow(0, title_h(), width(), kColH);
     p.setFont(data_font(-4, true));
     p.setPen(QColor(ui::colors::TEXT_TERTIARY()));
     auto head = [&](const QRect& r, const QString& t) {
@@ -363,7 +369,7 @@ void WorldSectionWidget::paintEvent(QPaintEvent*) {
     const QColor primary(ui::colors::TEXT_PRIMARY()), secondary(ui::colors::TEXT_SECONDARY()),
         tertiary(ui::colors::TEXT_TERTIARY());
 
-    int y = kTitleH + kColH;
+    int y = title_h() + kColH;
     for (int i = 0; i < section_.rows.size(); ++i, y += kRowH) {
         const Instrument& in = section_.rows[i];
         const RowView rv = row_view(in, *view_);
@@ -486,7 +492,7 @@ void WorldSectionWidget::paintEvent(QPaintEvent*) {
 QString WorldSectionWidget::row_tooltip(int row, const QPoint& pos) const {
     const Instrument& in = section_.rows[row];
     const QDateTime now = view_->now_utc().isValid() ? view_->now_utc() : QDateTime::currentDateTimeUtc();
-    const Cols c = columns(kTitleH + kColH + row * kRowH);
+    const Cols c = columns(title_h() + kColH + row * kRowH);
     QStringList lines;
     if (in.kind == Kind::Treasury) {
         const TreasuryCurve& t = view_->treasury();
@@ -550,9 +556,9 @@ bool WorldSectionWidget::event(QEvent* e) {
         const int row = row_at(he->pos().y());
         if (row >= 0) {
             QToolTip::showText(he->globalPos(), row_tooltip(row, he->pos()), this,
-                               QRect(0, kTitleH + kColH + row * kRowH, width(), kRowH));
-        } else if (he->pos().y() < kTitleH + kColH && !section_.note.isEmpty()) {
-            QToolTip::showText(he->globalPos(), section_.note, this, QRect(0, 0, width(), kTitleH + kColH));
+                               QRect(0, title_h() + kColH + row * kRowH, width(), kRowH));
+        } else if (he->pos().y() < title_h() + kColH && !section_.note.isEmpty()) {
+            QToolTip::showText(he->globalPos(), section_.note, this, QRect(0, 0, width(), title_h() + kColH));
         } else {
             QToolTip::hideText();
             e->ignore();
@@ -586,6 +592,44 @@ void WorldSectionWidget::mousePressEvent(QMouseEvent* e) {
 // ════════════════════════════════════════════════════════════════════════════
 
 WorldMarketsView::WorldMarketsView(QWidget* parent) : QWidget(parent) {
+    init();
+}
+
+WorldMarketsView::WorldMarketsView(const QStringList& parts, QWidget* parent) : QWidget(parent), parts_(parts) {
+    init();
+}
+
+QStringList WorldMarketsView::my_symbols() const {
+    if (shows_header())
+        return world_quote_symbols();
+    QStringList out;
+    for (const auto& s : world_sections())
+        if (shows_section(s.title))
+            for (const auto& r : s.rows)
+                if (!is_treasury_key(r.symbol) && !out.contains(r.symbol))
+                    out << r.symbol;
+    return out;
+}
+
+bool WorldMarketsView::wants_futures() const {
+    if (shows_header())
+        return true; // the overnight line reads the S&P future
+    for (const auto& s : world_sections())
+        if (shows_section(s.title) && s.show_fut)
+            return true;
+    return false;
+}
+
+bool WorldMarketsView::wants_treasury() const {
+    for (const auto& s : world_sections())
+        if (shows_section(s.title))
+            for (const auto& r : s.rows)
+                if (r.kind == Kind::Treasury)
+                    return true;
+    return false;
+}
+
+void WorldMarketsView::init() {
     now_utc_ = QDateTime::currentDateTimeUtc();
     build_ui();
 
@@ -627,6 +671,7 @@ void WorldMarketsView::build_ui() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
+    if (shows_header()) {
     top_bar_ = new QWidget(this);
     top_bar_->setFixedHeight(28);
     auto* tl = new QHBoxLayout(top_bar_);
@@ -649,6 +694,11 @@ void WorldMarketsView::build_ui() {
 
     strip_ = new SessionsStrip(this);
     root->addWidget(strip_);
+    }
+    if (!parts_.isEmpty() && parts_ == QStringList{kSessionsPart}) {
+        root->addStretch(1);
+        return; // the sessions tile: no sections
+    }
 
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -659,14 +709,17 @@ void WorldMarketsView::build_ui() {
     auto* grid = new QHBoxLayout(body);
     grid->setContentsMargins(6, 6, 6, 6);
     grid->setSpacing(6);
-    for (int col = 0; col < 3; ++col) {
+    // The whole board in three columns; a part in one.
+    for (int col = 0; col < (parts_.isEmpty() ? 3 : 1); ++col) {
         auto* vl = new QVBoxLayout;
         vl->setSpacing(6);
-        for (const QString& title : column_order(col)) {
+        QStringList titles = parts_.isEmpty() ? column_order(col) : parts_;
+        for (const QString& title : titles) {
             for (const Section& s : world_sections()) {
                 if (s.title != title)
                     continue;
                 auto* w = new WorldSectionWidget(s, this, body);
+                w->set_show_title(parts_.isEmpty()); // a tile is titled by its frame
                 connect(w, &WorldSectionWidget::activated, this, &WorldMarketsView::symbol_activated);
                 sections_.append(w);
                 vl->addWidget(w);
@@ -737,12 +790,17 @@ void WorldMarketsView::showEvent(QShowEvent* e) {
     if (!subscribed_)
         subscribe_all();
     clock_timer_->start();
-    fut_timer_->start();
-    ust_timer_->start();
-    fetch_futures();
+    if (wants_futures()) {
+        fut_timer_->start();
+        fetch_futures();
+    }
     // The curve changes once a day: re-read on show only when it is old.
-    if (!ust_.valid() || !ust_fetched_at_.isValid() || ust_fetched_at_.secsTo(QDateTime::currentDateTimeUtc()) > 1800)
-        fetch_treasury();
+    if (wants_treasury()) {
+        ust_timer_->start();
+        if (!ust_.valid() || !ust_fetched_at_.isValid() ||
+            ust_fetched_at_.secsTo(QDateTime::currentDateTimeUtc()) > 1800)
+            fetch_treasury();
+    }
     sync_fut_stream();
     all_dirty_ = true;
     render_.request();
@@ -762,7 +820,7 @@ void WorldMarketsView::hideEvent(QHideEvent* e) {
 
 void WorldMarketsView::subscribe_all() {
     auto& hub = datahub::DataHub::instance();
-    for (const QString& sym : world_quote_symbols()) {
+    for (const QString& sym : my_symbols()) {
         const QString qt = QStringLiteral("market:quote:") + sym;
         hub.subscribe(this, qt, [this, sym](const QVariant& v) {
             if (!v.canConvert<services::QuoteData>())
@@ -788,7 +846,7 @@ void WorldMarketsView::subscribe_all() {
     // subscribe() replays only values younger than the TTL: shown minutes
     // after startup while refreshes are refused, every row would read "—"
     // though the hub holds its last quote. status_of() marks these STALE.
-    if (services::seed_last_known_quotes(world_quote_symbols(), quotes_) > 0) {
+    if (services::seed_last_known_quotes(my_symbols(), quotes_) > 0) {
         all_dirty_ = true;
         render_.request();
     }
@@ -799,7 +857,7 @@ void WorldMarketsView::unsubscribe_all() {
         return;
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    for (const QString& sym : world_quote_symbols())
+    for (const QString& sym : my_symbols())
         hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     subscribed_ = false;
     // Quotes stay cached so a quick hide/show doesn't flash dashes.
@@ -809,11 +867,12 @@ void WorldMarketsView::refresh(bool force) {
     if (!shown_)
         return;
     QStringList topics;
-    for (const QString& sym : world_quote_symbols())
+    for (const QString& sym : my_symbols())
         topics << QStringLiteral("market:quote:") + sym;
     datahub::DataHub::instance().request(topics, force);
-    fetch_futures();
-    if (force)
+    if (wants_futures())
+        fetch_futures();
+    if (force && wants_treasury())
         fetch_treasury();
 }
 
@@ -914,7 +973,8 @@ void WorldMarketsView::on_clock() {
     }
     // Clocks, countdowns and session columns move once a minute.
     last_minute_ = minute;
-    strip_->update();
+    if (strip_)
+        strip_->update();
     all_dirty_ = true;
     render_.request();
 }
@@ -937,11 +997,13 @@ void WorldMarketsView::render() {
     dirty_.clear();
     all_dirty_ = false;
     update_overnight();
-    if (last_quote_at_.isValid())
+    if (asof_label_ && last_quote_at_.isValid())
         asof_label_->setText(QStringLiteral("quotes %1").arg(last_quote_at_.toString(QStringLiteral("HH:mm:ss"))));
 }
 
 void WorldMarketsView::update_overnight() {
+    if (!overnight_label_)
+        return; // a section tile: the sessions tile carries the line
     auto live_pct = [this](const QString& sym) {
         if (status_of(sym) != RowStatus::Live)
             return kNaN;

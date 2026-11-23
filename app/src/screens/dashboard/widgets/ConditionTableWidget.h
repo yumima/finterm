@@ -70,6 +70,8 @@ class ConditionTableWidget : public BaseWidget {
     void set_footer(const QStringList& extra, FooterFn fn);
     /// A fixed note under the table (sources, what is not shown and why).
     void set_note(const QString& note);
+    /// What "+ ADD" asks for in MACRO mode (default: a FRED series).
+    void set_add_sovereign(bool on) { add_sovereign_ = on; }
 
   protected:
     void showEvent(QShowEvent* e) override;
@@ -96,6 +98,7 @@ class ConditionTableWidget : public BaseWidget {
     QStringList columns() const; ///< the shown columns, "−" excluded
 
     Mode mode_;
+    bool add_sovereign_ = false;
     QString default_title_;
     QString title_; ///< user's title; empty = the default
     QVector<ConditionRowDef> defaults_;

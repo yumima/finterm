@@ -52,6 +52,11 @@ class WorldSectionWidget : public QWidget {
     WorldSectionWidget(const Section& section, const WorldMarketsView* view, QWidget* parent = nullptr);
     const Section& section() const { return section_; }
     bool contains_symbol(const QString& sym) const;
+    void set_show_title(bool on) {
+        show_title_ = on;
+        updateGeometry();
+        update();
+    }
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -72,6 +77,8 @@ class WorldSectionWidget : public QWidget {
     int row_at(int y) const;
     QString row_tooltip(int row, const QPoint& pos) const;
     bool has_term_row() const;
+    int title_h() const;
+    bool show_title_ = true;
 
     Section section_;
     const WorldMarketsView* view_;
@@ -81,6 +88,12 @@ class WorldMarketsView : public QWidget {
     Q_OBJECT
   public:
     explicit WorldMarketsView(QWidget* parent = nullptr);
+    /// Only some of the board — for the MARKETS WORLD screen's tiles:
+    /// kSessionsPart (the overnight line and the exchange clocks) and/or
+    /// section titles ("AMERICAS", "FX" …). Empty = the whole board. A part
+    /// subscribes to, and fetches, only what it shows.
+    WorldMarketsView(const QStringList& parts, QWidget* parent);
+    static inline const QString kSessionsPart = QStringLiteral("SESSIONS");
 
     /// User refresh (F5): re-ask every quote, futures and the curve.
     void refresh(bool force);
@@ -104,6 +117,13 @@ class WorldMarketsView : public QWidget {
     void hideEvent(QHideEvent* e) override;
 
   private:
+    bool shows_header() const { return parts_.isEmpty() || parts_.contains(kSessionsPart); }
+    bool shows_section(const QString& title) const { return parts_.isEmpty() || parts_.contains(title); }
+    /// The symbols this view needs (the overnight line reads every region's).
+    QStringList my_symbols() const;
+    bool wants_futures() const;
+    bool wants_treasury() const;
+    void init();
     void build_ui();
     void refresh_theme();
     void subscribe_all();
@@ -116,6 +136,7 @@ class WorldMarketsView : public QWidget {
     void mark_dirty(const QString& sym);
     void update_overnight();
 
+    QStringList parts_;
     QLabel* overnight_label_ = nullptr;
     QLabel* asof_label_ = nullptr;
     QWidget* top_bar_ = nullptr;

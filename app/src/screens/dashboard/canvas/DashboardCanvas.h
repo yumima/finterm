@@ -29,6 +29,9 @@ class DashboardCanvas : public QWidget {
     /// below the current row_h or the minimum (36px). Called by DashboardScreen
     /// on every viewport resize so the dashboard always fills the window.
     void fit_rows_to_viewport(int vp_h);
+    /// fit_rows_to_viewport() also SHRINKS rows to fit (Markets screens: a
+    /// screen is meant to be read without scrolling).
+    void set_fit_exact(bool on) { fit_exact_ = on; }
 
   signals:
     void layout_changed(GridLayout layout);
@@ -93,6 +96,7 @@ class DashboardCanvas : public QWidget {
     // The column count the user last explicitly set (via load/apply/drag).
     // Responsive shrink is allowed, but we restore this when width permits.
     int canonical_cols_ = 12;
+    bool fit_exact_ = false;
 
     finterm::ui::ThemeTokens tokens_{};
     QString applied_bg_; // background apply_bg() last applied (skip if unchanged)

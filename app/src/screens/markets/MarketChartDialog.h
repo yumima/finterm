@@ -58,7 +58,9 @@ class MarketChartView : public QWidget {
     void hideEvent(QHideEvent* e) override;
 
   private:
-    void load();
+    void load(bool retry = false);
+    void retry_after_failure(const QString& error);
+    int load_attempt_ = 0;
     void apply(const QVector<services::equity::Candle>& candles);
     void update_header(int hover_idx);
     void sync_buttons();
@@ -108,14 +110,14 @@ class MarketChartView : public QWidget {
 /// quotes are listed (Markets, the dashboard, the ticker bar …). Centred over
 /// the main window and non-modal; a second click retargets it.
 ///
-/// Security linking: a canvas (or page) that holds a Chart widget registers it
-/// with link_chart(); a click inside that canvas then loads the symbol into
-/// the linked chart instead of opening this window.
+/// Security linking: a click on a canvas selects the symbol on that canvas's
+/// SelectionLink; when the canvas shows a linked Chart tile, that tile draws
+/// it and this window stays shut.
 class MarketChartDialog : public QDialog {
     Q_OBJECT
   public:
-    /// Open (or retarget) the chart for `symbol` — or the linked chart of the
-    /// canvas `from` sits on, when one is on screen.
+    /// Open (or retarget) the chart for `symbol` — or select it on the canvas
+    /// `from` sits on, whose linked chart then draws it.
     static void show_for(const QString& symbol, const QString& label, QWidget* from);
 
     /// Make a label-built row clickable: a left click on `w` (or on a child
@@ -125,13 +127,8 @@ class MarketChartDialog : public QDialog {
     static void make_clickable(QWidget* w);
     static void set_target(QWidget* w, const QString& symbol, const QString& label = {});
 
-    /// `view` follows clicks made inside `scope` (the newest link wins).
-    static void link_chart(QWidget* scope, MarketChartView* view);
-    static void unlink_chart(QWidget* scope, MarketChartView* view);
-
   private:
     explicit MarketChartDialog(QWidget* parent);
-    static bool route_to_linked(const QString& symbol, const QString& label, QWidget* from);
     MarketChartView* view_ = nullptr;
     static QPointer<MarketChartDialog> instance_;
 };

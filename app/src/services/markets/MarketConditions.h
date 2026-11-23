@@ -483,15 +483,26 @@ inline QVector<DatedValue> rolling_correlation(const QVector<DatedValue>& a, boo
 //                               times k (here $M / $B × 100 → percent)
 
 struct FredKey {
-    QString a, b;     ///< series ids; b empty = no ratio
-    double scale = 1; ///< multiplier applied to a (or a/b)
+    QString a, b;     ///< series ids; b empty = a alone
+    double scale = 1; ///< multiplier applied to a (or a/b, a−b)
     bool yoy = false;
+    bool diff = false; ///< a − b ("FRED:IRLTLT01ITM156N-IRLTLT01DEM156N": a spread)
     bool valid() const { return !a.isEmpty(); }
     QStringList series() const { return b.isEmpty() ? QStringList{a} : QStringList{a, b}; }
 };
 
 inline bool is_fred_key(const QString& s) {
     return s.startsWith(QLatin1String("FRED:"), Qt::CaseInsensitive);
+}
+
+/// Shiller's monthly series ("SHILLER:CAPE"), read like a FRED one.
+inline bool is_shiller_key(const QString& s) {
+    return s.startsWith(QLatin1String("SHILLER:"), Qt::CaseInsensitive);
+}
+
+/// A dated value series (not a quoted symbol): FRED or Shiller.
+inline bool is_series_key(const QString& s) {
+    return is_fred_key(s) || is_shiller_key(s);
 }
 
 inline bool valid_fred_id(const QString& id) {
@@ -522,6 +533,15 @@ inline FredKey parse_fred_key(const QString& key) {
         body = body.left(star);
     }
     const int slash = body.indexOf(QLatin1Char('/'));
+    const int dash = body.indexOf(QLatin1Char('-'));
+    if (slash < 0 && dash > 0) {
+        k.a = body.left(dash);
+        k.b = body.mid(dash + 1);
+        k.diff = true;
+        if (!valid_fred_id(k.a) || !valid_fred_id(k.b))
+            return {};
+        return k;
+    }
     if (slash >= 0) {
         k.a = body.left(slash);
         k.b = body.mid(slash + 1);
@@ -545,11 +565,11 @@ inline QVector<DatedValue> fred_values(const FredKey& k, const QVector<DatedValu
     } else {
         QHash<QDate, double> bv;
         for (const auto& x : b)
-            if (std::isfinite(x.value) && x.value != 0)
+            if (std::isfinite(x.value) && (k.diff || x.value != 0)) // a ratio cannot divide by 0
                 bv.insert(x.date, x.value);
         for (const auto& x : a)
             if (std::isfinite(x.value) && bv.contains(x.date))
-                base.append({x.date, x.value / bv.value(x.date) * k.scale});
+                base.append({x.date, (k.diff ? x.value - bv.value(x.date) : x.value / bv.value(x.date)) * k.scale});
     }
     if (!k.yoy)
         return base;

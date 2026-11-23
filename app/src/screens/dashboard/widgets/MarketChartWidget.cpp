@@ -1,6 +1,6 @@
 #include "screens/dashboard/widgets/MarketChartWidget.h"
 
-#include "screens/dashboard/canvas/DashboardCanvas.h"
+#include "screens/dashboard/canvas/SelectionLink.h"
 #include "screens/markets/MarketChartDialog.h"
 #include "ui/theme/Theme.h"
 
@@ -43,18 +43,26 @@ void MarketChartWidget::apply_config(const QJsonObject& cfg) {
 
 void MarketChartWidget::link(bool on) {
     if (!on) {
-        if (scope_)
-            MarketChartDialog::unlink_chart(scope_, view_);
-        scope_.clear();
+        if (link_ && counted_)
+            link_->remove_chart();
+        counted_ = false;
+        if (link_)
+            disconnect(link_, nullptr, this, nullptr);
+        link_.clear();
         return;
     }
-    // The canvas this tile is on (the widgets beside it share it).
-    for (QWidget* w = parentWidget(); w; w = w->parentWidget())
-        if (qobject_cast<DashboardCanvas*>(w)) {
-            scope_ = w;
-            MarketChartDialog::link_chart(w, view_);
-            return;
-        }
+    if (link_)
+        return;
+    link_ = SelectionLink::of(this);
+    if (!link_)
+        return; // not on a canvas: a plain chart
+    link_->add_chart();
+    counted_ = true;
+    connect(link_, &SelectionLink::selected, this,
+            [this](const QString& sym, const QString& label) { view_->set_symbol(sym, label); });
+    // Selected while this tile was off screen (another page, another tab).
+    if (!link_->symbol().isEmpty() && link_->symbol() != symbol_)
+        view_->set_symbol(link_->symbol(), link_->label());
 }
 
 void MarketChartWidget::showEvent(QShowEvent* e) {
