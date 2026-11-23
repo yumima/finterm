@@ -106,7 +106,7 @@ class UpdateService : public QObject {
     /// The automatic schedule's tick: checks only when on, supported, idle
     /// and due.
     void maybe_check_automatically();
-    /// Show the offer an earlier run / another profile stored (auto only).
+    /// Show the offer an earlier run / another profile stored (release builds).
     void restore_saved_offer();
     void set_offer(const update_policy::Offer& offer);
     void prompt_install();
@@ -135,6 +135,8 @@ class UpdateService : public QObject {
     bool checking_ = false;    ///< a manifest request is in flight
     bool downloading_ = false; ///< an installer download is in flight
     bool prompt_open_ = false;
+    bool prompt_pending_ = false; ///< prompt_install() asked while a dialog was open
+    qint64 last_logged_ = 0;      ///< download progress logged up to
     bool automatic_started_ = false;
 };
 

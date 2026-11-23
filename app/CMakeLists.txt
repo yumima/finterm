@@ -2313,8 +2313,22 @@ endif()
 # ── Application version (single source of truth) ─────────────────────────────
 # FINTERM_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()
 # always matches the project() VERSION declared at the top of this file.
+#
+# Only the release workflow builds a RELEASE: -DFINTERM_RELEASE_BUILD=ON. Every
+# other build (finterm.sh build, a dev tree, CI branch builds) is "<version>-dev",
+# which the updater refuses (strict x.y.z): a dev build never checks for, offers
+# or installs a release over itself, never touches the shared update note, and
+# says what it is in the status bar and About. Packaging reads the project
+# VERSION, not this string.
+option(FINTERM_RELEASE_BUILD "Build an official release (enables the updater)" OFF)
+if(FINTERM_RELEASE_BUILD)
+    set(FINTERM_APP_VERSION "${CMAKE_PROJECT_VERSION}")
+else()
+    set(FINTERM_APP_VERSION "${CMAKE_PROJECT_VERSION}-dev")
+endif()
+message(STATUS "finterm application version: ${FINTERM_APP_VERSION}")
 target_compile_definitions(finterm PRIVATE
-    FINTERM_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
+    FINTERM_VERSION_STRING="${FINTERM_APP_VERSION}")
 
 # ── Optional feature compile definitions (applied after add_executable) ──────
 if(FINTERM_HAS_PRIVATE_HEADERS)

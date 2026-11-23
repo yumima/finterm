@@ -20,6 +20,8 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <utility>
+
 namespace finterm::services {
 
 UpdateService& UpdateService::instance() {
@@ -115,18 +117,24 @@ void UpdateService::set_auto_check(bool on) {
 // ── Automatic schedule ──────────────────────────────────────────────────────
 
 void UpdateService::restore_saved_offer() {
-    if (auto_check() != AutoCheck::On || checking_ || downloading_)
+    // Shown whatever the automatic setting: it is local (a check on request
+    // stores it too), so the badge doesn't depend on how it was found. A dev
+    // build can't compare versions — it must not drop the shared note.
+    if (!updates_supported() || checking_ || downloading_ || prompt_open_)
         return;
-    QSettings settings;
-    const auto saved = update_policy::offer_from_json(settings.value(kOfferKey).toByteArray());
+    if (stage() == Stage::Handed)
+        return; // this process's installer is out: keep what the user is finishing
+    const auto saved = update_policy::offer_from_json(QSettings().value(kOfferKey).toByteArray());
     if (saved.version.isEmpty() ||
         !update_policy::is_newer(QApplication::applicationVersion(), saved.version)) {
-        // Installed since (or unusable): nothing to show.
-        settings.remove(kOfferKey);
+        // Installed since, pulled from the manifest by another profile's
+        // check, or unusable: nothing to show (set_offer drops the note too).
+        set_offer({});
         return;
     }
-    if (saved.version != offer_.version)
-        set_offer(saved);
+    // Always: a re-published release keeps its version but not its URL/sha256
+    // (set_offer signals only on a real change).
+    set_offer(saved);
 }
 
 void UpdateService::start_automatic() {
@@ -326,8 +334,12 @@ void UpdateService::show_offer() {
 }
 
 void UpdateService::prompt_install() {
-    if (!has_offer() || prompt_open_)
+    if (!has_offer())
         return;
+    if (prompt_open_) {
+        prompt_pending_ = true; // shown when the open updater dialog closes
+        return;
+    }
     // Already under way: say so rather than doing nothing, and never fetch
     // and run the same installer twice.
     if (downloading_) {
@@ -351,8 +363,13 @@ void UpdateService::prompt_install() {
         prompt_open_ = true;
         box.exec();
         prompt_open_ = false;
-        if (box.clickedButton() != again || downloading_ || !has_offer())
+        QTimer::singleShot(kFirstLookDelayMs, this, &UpdateService::maybe_check_automatically);
+        if (box.clickedButton() != again || downloading_ || !has_offer()) {
+            if (std::exchange(prompt_pending_, false))
+                QTimer::singleShot(0, this, &UpdateService::prompt_install);
             return;
+        }
+        prompt_pending_ = false; // the download it starts answers it
         handed_version_.clear();
         download_version_ = offer_.version;
         start_download(offer_.download_url, offer_.sha256);
@@ -389,6 +406,9 @@ void UpdateService::prompt_install() {
     prompt_open_ = true;
     box.exec();
     prompt_open_ = false;
+    // A check the user asked for while this dialog was open: answer it now.
+    if (std::exchange(prompt_pending_, false))
+        QTimer::singleShot(0, this, &UpdateService::prompt_install);
     // A scheduled look that fell while the dialog was open was skipped.
     QTimer::singleShot(kFirstLookDelayMs, this, &UpdateService::maybe_check_automatically);
 
@@ -407,6 +427,7 @@ void UpdateService::prompt_install() {
 
 void UpdateService::start_download(const QString& url, const QString& expected_sha256) {
     downloading_ = true;
+    last_logged_ = 0;
     pending_expected_sha256_ = expected_sha256;
     emit stage_changed();
 
@@ -439,11 +460,8 @@ void UpdateService::start_download(const QString& url, const QString& expected_s
 void UpdateService::on_download_progress(qint64 received, qint64 total) {
     // Log every ~5 MiB to avoid spamming. No GUI progress for v1 — keep the
     // surface area small. A proper progress dialog can be layered on later.
-    static qint64 last_logged = 0;
-    if (received < last_logged) // a new download
-        last_logged = 0;
-    if (received - last_logged >= 5 * 1024 * 1024 || received == total) {
-        last_logged = received;
+    if (received - last_logged_ >= 5 * 1024 * 1024 || received == total) {
+        last_logged_ = received;
         LOG_DEBUG("UpdateService", QString("Download progress: %1 / %2 bytes").arg(received).arg(total));
     }
 }

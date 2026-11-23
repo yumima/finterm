@@ -156,6 +156,13 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             auto& svc = services::UpdateService::instance();
             const QSignalBlocker block(auto_box);
             auto_box->setEnabled(svc.updates_supported());
+            int a = 0, b = 0, c = 0;
+            if (!services::update_policy::parse_version(QApplication::applicationVersion(), a, b, c))
+                auto_box->setToolTip(QStringLiteral("A development build (%1) is updated from git, not by the "
+                                                    "updater — only release builds check.")
+                                         .arg(QApplication::applicationVersion()));
+            else if (!svc.updates_supported())
+                auto_box->setToolTip(QStringLiteral("No updates are published for this platform."));
             auto_box->setChecked(svc.auto_check() == services::UpdateService::AutoCheck::On);
         };
         sync_auto_box();
