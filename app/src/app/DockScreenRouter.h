@@ -47,8 +47,11 @@ class DockScreenRouter : public QObject {
 
     /// Navigate to a screen: ensures the dock widget exists, shows it, and
     /// brings it to the front. Creates from factory on first access.
-    /// If exclusive is true, all other screens are closed first (single-screen mode).
-    void navigate(const QString& id, bool exclusive = false, bool with_view = false);
+    /// exclusive: all other screens are closed first ("this screen alone");
+    /// otherwise the screen is ADDED as a pane of the current view (grid fill:
+    /// perspectives, the panel menu). No default — "add a pane" must be asked
+    /// for; a caller that means "take me to X" wants go_to().
+    void navigate(const QString& id, bool exclusive, bool with_view = false);
 
     /// Open `primary` alone, then split `secondary` alongside it (side-by-side).
     void add_alongside(const QString& primary, const QString& secondary);
@@ -161,6 +164,14 @@ class DockScreenRouter : public QObject {
     /// navigate(id, true) itself is "this screen alone" (the command bar's
     /// replace, perspectives) — what the user then leaves is that tab's view.
     void open_tab(const QString& id);
+    /// "Take me to X" from anywhere but the tab bar (command bar, links, help,
+    /// MCP, a workspace): X already on screen — a pane beside the tab — is
+    /// raised where it is; otherwise X's tab opens, its view as it was left.
+    /// Never adds X as a pane of the view the user is on.
+    void go_to(const QString& id);
+    /// The screen whose tab holds `id`: FUTURES is a page of MARKETS, SOCIAL
+    /// (the weekly brief) of NEWS; any other screen is its own.
+    static QString host_of(const QString& id);
     /// When the tab's own screen is no longer open, the screen in front of
     /// what is left becomes the tab.
     void reassign_primary_if_closed();
@@ -260,6 +271,8 @@ class DockScreenRouter : public QObject {
         QString tree; // the persisted form (from a previous session: panes empty)
     };
     QString current_primary_id_;
+    /// After its host is shown: brings a moved page (host_of) to the front.
+    void show_page(const QString& id);
     void set_primary(const QString& id);
     int tab_store_window_ = -1; ///< -1: tab layouts not persisted (load_tab_layouts not called)
     void store_tab_layout(const QString& tab, const QString& tree);

@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`fda86588d`](https://github.com/yumima/finterm/commit/fda86588d) tabs: a view is the splitter tree it was left as; redirects keep the view
 - [`2f79f05f9`](https://github.com/yumima/finterm/commit/2f79f05f9) tabs: a tab is a view — ER beside Portfolio stays Portfolio's; MARKETS opens on MY VIEW
 - [`61ad68b96`](https://github.com/yumima/finterm/commit/61ad68b96) markets: MY VIEW first, WORLD with the market pages; pages keep their rows; the charted row is marked
 - [`b0470e92c`](https://github.com/yumima/finterm/commit/b0470e92c) dock: a split is forgotten once one of its panes goes full screen

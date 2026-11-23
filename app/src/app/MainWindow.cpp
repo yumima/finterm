@@ -376,18 +376,9 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
         if (locked_)
             return;
-        // Smart navigate — preserve any existing split when the target is
-        // already in the layout. Critical for the CommandBar /stock <sym>
-        // flow: typing "/stock AAPL" while Portfolio + ER are side-by-side
-        // should update the existing ER pane in place, NOT clobber the
-        // layout with an exclusive single-pane ER.
-        //
-        // Tab-bar clicks go through open_tab — they switch the whole view
-        // (to that tab's own, as left).
-        if (dock_router_->is_open(id))
-            dock_router_->raise(id);
-        else
-            dock_router_->open_tab(id); // that screen's own view, as left
+        // "/stock AAPL" while Portfolio + ER are side by side updates the ER
+        // pane in place; a screen not on screen opens as its own tab.
+        dock_router_->go_to(id);
     });
 
     // Debounced dock-layout save: ADS emits a burst of signals during
@@ -438,7 +429,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dock_router_,
                 [this, screen_id]() {
                     if (!locked_)
-                        dock_router_->navigate(screen_id);
+                        dock_router_->go_to(screen_id);
                 },
                 Qt::QueuedConnection);
     });
@@ -664,7 +655,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             if (panel_map.contains(action)) {
                 const auto [title, route] = panel_map[action];
                 if (dock_router_)
-                    dock_router_->navigate(route);
+                    dock_router_->navigate(route, false); // added to the view: a panel
             }
         } else if (action == "perspective_save") {
             if (dock_manager_) {
@@ -683,7 +674,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             if (!screens.isEmpty() && dock_router_) {
                 dock_router_->navigate(screens[0], true); // first exclusive
                 for (int i = 1; i < screens.size(); ++i)
-                    dock_router_->navigate(screens[i]); // fill grid
+                    dock_router_->navigate(screens[i], false); // fill grid
                 LOG_INFO("MainWindow", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
         } else if (action == "check_updates") {
@@ -870,8 +861,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     }
 
     // Show the app or auth stack based on authentication state.
-    // If dock layout was restored, the saved tabs are already visible.
-    // Otherwise, navigate to dashboard as default.
     auto& auth_mgr = auth::AuthManager::instance();
     if (auth_mgr.is_authenticated() || auth_mgr.is_loading()) {
         // If user is authenticated and has a PIN, show lock screen first.
@@ -891,7 +880,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             stack_->setCurrentIndex(1);
         }
         if (!dock_restored) {
-            dock_router_->navigate("dashboard");
+            dock_router_->open_tab(QStringLiteral("dashboard"));
             LOG_INFO("MainWindow", "Applied clean default dock layout");
         } else {
             // Restore last-active screen as the focused tab and sync tab bar
@@ -1128,7 +1117,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("file_manager", [this]() {
         auto* fm = new screens::FileManagerScreen;
         connect(fm, &screens::FileManagerScreen::open_file_in_screen, this,
-                [this](const QString& route_id, const QString& /*file_path*/) { dock_router_->navigate(route_id); });
+                [this](const QString& route_id, const QString& /*file_path*/) { dock_router_->go_to(route_id); });
         return fm;
     });
     dock_router_->register_factory("excel", []() { return new screens::ExcelScreen; });
@@ -1141,7 +1130,7 @@ void MainWindow::setup_dock_screens() {
                     if (!ticker.isEmpty()) {
                         SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     }
-                    dock_router_->navigate(id);
+                    dock_router_->go_to(id);
                 });
         return screen;
     });
@@ -1160,7 +1149,7 @@ void MainWindow::setup_dock_screens() {
                     if (id == QLatin1String("equity_research"))
                         dock_router_->split_alongside(id);
                     else
-                        dock_router_->navigate(id);
+                        dock_router_->go_to(id);
                     // Equity Research listens on the EventBus rather than for
                     // group-A broadcasts when its tab is unlinked, and only
                     // once materialised — so publish AFTER opening it.
@@ -1314,6 +1303,7 @@ void MainWindow::on_auth_state_changed() {
         set_shell_visible(true);
         stack_->setCurrentIndex(1);
         WorkspaceManager::instance().load_last_workspace();
+        show_default_screen_if_empty();
         // Trigger silent update check after login (delayed so UI settles first).
         // UpdateService de-dupes silent checks across the session, so the
         // post-PIN-unlock path below won't fire a second request.
@@ -1507,6 +1497,7 @@ void MainWindow::on_terminal_unlocked() {
         }
     }
     WorkspaceManager::instance().load_last_workspace();
+    show_default_screen_if_empty();
     // The dock may already be showing a screen no navigate() announced (a
     // layout restored before sign-in, when the tab-bar sync in the startup
     // path did not run): the top nav sat on its default DASHBOARD while
@@ -1532,6 +1523,14 @@ void MainWindow::on_terminal_unlocked() {
     });
 
     emit auth.terminal_unlocked();
+}
+
+void MainWindow::show_default_screen_if_empty() {
+    // Signed in (or unlocked) onto a window showing no screen — a first run
+    // that started signed out: the window starts on DASHBOARD. Sign-in never
+    // picks the screen of a window that has one.
+    if (dock_manager_ && dock_router_ && dock_manager_->openedDockAreas().isEmpty())
+        dock_router_->open_tab(QStringLiteral("dashboard"));
 }
 
 void MainWindow::set_shell_visible(bool visible) {

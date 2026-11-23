@@ -6,7 +6,7 @@
 namespace finterm {
 
 /// Built-in workspace templates. Stateless, returns pre-configured WorkspaceDef objects.
-/// Metadata id/name/timestamps are filled in by WorkspaceManager::new_workspace().
+/// Metadata id/name/timestamps are filled in by WorkspaceManager::create().
 class WorkspaceTemplates {
   public:
     /// Return a WorkspaceDef seeded from the named template.

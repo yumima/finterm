@@ -16,6 +16,27 @@
 
 namespace finterm {
 
+namespace {
+
+/// Writes `grid` into the key DashboardScreen loads its grid from (an empty
+/// grid — the blank template — leaves the user's as it is).
+void seed_dashboard_grid(const screens::GridLayout& grid) {
+    if (grid.items.isEmpty())
+        return;
+    QByteArray data;
+    QDataStream stream(&data, QIODevice::WriteOnly);
+    stream << grid.cols << grid.row_h << grid.margin;
+    stream << static_cast<int>(grid.items.size());
+    for (const auto& item : grid.items) {
+        stream << item.id << item.instance_id;
+        stream << item.cell.x << item.cell.y << item.cell.w << item.cell.h;
+        stream << item.cell.min_w << item.cell.min_h;
+    }
+    SettingsRepository::instance().set("dashboard_canvas_layout", QString::fromLatin1(data.toBase64()), "dashboard");
+}
+
+} // namespace
+
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
 WorkspaceManager& WorkspaceManager::instance() {
@@ -69,6 +90,15 @@ void WorkspaceManager::unregister_participant(const QString& screen_id) {
 // ── Workspace operations ──────────────────────────────────────────────────────
 
 void WorkspaceManager::new_workspace(const QString& name, const QString& description, const QString& template_id) {
+    create(name, description, template_id, ScreenSwitch::Show);
+}
+
+void WorkspaceManager::open_workspace(const QString& path) {
+    open_file(path, ScreenSwitch::Show);
+}
+
+void WorkspaceManager::create(const QString& name, const QString& description, const QString& template_id,
+                              ScreenSwitch sw) {
     ensure_workspaces_dir();
 
     WorkspaceDef ws = WorkspaceTemplates::make(template_id);
@@ -77,20 +107,29 @@ void WorkspaceManager::new_workspace(const QString& name, const QString& descrip
     ws.metadata.description = description;
     ws.metadata.created_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     ws.metadata.updated_at = ws.metadata.created_at;
+    // A template's dashboard grid is the dashboard's from now on — only when
+    // the user creates the workspace. A workspace never captures the grid, so
+    // writing its stored copy on an open or a resume put the template's grid
+    // back over the user's own.
+    if (sw == ScreenSwitch::Show)
+        seed_dashboard_grid(ws.dashboard_layout);
 
     current_workspace_ = std::move(ws);
     pending_states_.clear();
 
-    apply_to_ui();
+    apply_to_ui(sw);
 
     emit workspace_closed();
     emit workspace_loaded(*current_workspace_);
 
+    // On disk and the last-used at once: a resume before the first autosave
+    // finds it, rather than making yet another "Default".
+    save_workspace();
     autosave_timer_->start();
     LOG_INFO("WorkspaceManager", QString("New workspace: %1").arg(name));
 }
 
-void WorkspaceManager::open_workspace(const QString& path) {
+void WorkspaceManager::open_file(const QString& path, ScreenSwitch sw) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) {
         emit workspace_error(QString("Cannot open file: %1").arg(path));
@@ -112,7 +151,7 @@ void WorkspaceManager::open_workspace(const QString& path) {
     current_workspace_ = std::move(result.value());
     pending_states_.clear();
 
-    apply_to_ui();
+    apply_to_ui(sw);
 
     save_last_id(current_workspace_->metadata.id);
     update_mru(current_workspace_->metadata.id);
@@ -124,10 +163,12 @@ void WorkspaceManager::open_workspace(const QString& path) {
 }
 
 void WorkspaceManager::save_workspace() {
-    if (!current_workspace_.has_value()) {
-        new_workspace("Default");
+    // Before sign-in / unlock nothing is loaded yet. A save is never a load:
+    // making (and applying) a workspace here switched the window to the
+    // blank template's DASHBOARD behind the lock screen, beside the screen
+    // the dock had just restored — and wrote a new "Default" file per start.
+    if (!current_workspace_.has_value())
         return;
-    }
 
     ensure_workspaces_dir();
     capture_from_ui();
@@ -230,15 +271,20 @@ void WorkspaceManager::export_workspace(const QString& destination_path) {
 
 void WorkspaceManager::load_last_workspace() {
     auto id_result = SettingsRepository::instance().get("workspace.last_id");
+    // An unlock in the same session: that workspace is live — its screens
+    // and symbols are newer than its file (a ticker changed since the last
+    // save). Re-reading the file would put them back.
+    if (current_workspace_.has_value() && id_result.is_ok() && id_result.value() == current_workspace_->metadata.id)
+        return;
     if (id_result.is_ok() && !id_result.value().isEmpty()) {
         QString path = workspace_file_path(id_result.value());
         if (QFile::exists(path)) {
-            open_workspace(path);
+            open_file(path, ScreenSwitch::Keep);
             return;
         }
     }
     // No saved workspace — create default
-    new_workspace("Default");
+    create(QStringLiteral("Default"), {}, {}, ScreenSwitch::Keep);
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -271,9 +317,13 @@ void WorkspaceManager::capture_from_ui() {
     if (!windows_.isEmpty())
         current_workspace_->window_geometry_base64 = windows_.first()->saveGeometry().toBase64();
 
-    // Active screen — use primary router (first registered)
-    if (!routers_.isEmpty())
-        current_workspace_->active_screen = routers_.first()->current_screen_id();
+    // Active screen — the primary router's tab (not a pane beside it: ER
+    // beside Portfolio is Portfolio's view).
+    if (!routers_.isEmpty()) {
+        auto* router = routers_.first();
+        const QString tab = router->primary_id();
+        current_workspace_->active_screen = router->is_open(tab) ? tab : router->current_screen_id();
+    }
 
     // Per-screen states from participants
     current_workspace_->screen_states.clear();
@@ -289,28 +339,10 @@ void WorkspaceManager::capture_from_ui() {
     current_workspace_->symbol_context = SymbolContext::instance().to_json();
 }
 
-void WorkspaceManager::apply_to_ui() {
+void WorkspaceManager::apply_to_ui(ScreenSwitch sw) {
     if (!current_workspace_.has_value())
         return;
     const WorkspaceDef& ws = *current_workspace_;
-
-    // Store dashboard layout as base64 in the settings key DashboardScreen reads
-    // We serialize the layout and write it so restore_layout() loads the right grid
-    {
-        QByteArray data;
-        QDataStream stream(&data, QIODevice::WriteOnly);
-        stream << ws.dashboard_layout.cols << ws.dashboard_layout.row_h << ws.dashboard_layout.margin;
-        stream << static_cast<int>(ws.dashboard_layout.items.size());
-        for (const auto& item : ws.dashboard_layout.items) {
-            stream << item.id << item.instance_id;
-            stream << item.cell.x << item.cell.y << item.cell.w << item.cell.h;
-            stream << item.cell.min_w << item.cell.min_h;
-        }
-        if (!ws.dashboard_layout.items.isEmpty()) {
-            SettingsRepository::instance().set("dashboard_canvas_layout", QString::fromLatin1(data.toBase64()),
-                                               "dashboard");
-        }
-    }
 
     // Queue pending screen states for lazy-constructed screens
     for (const auto& ss : ws.screen_states) {
@@ -323,20 +355,13 @@ void WorkspaceManager::apply_to_ui() {
         }
     }
 
-    // Restore window geometry — with two guards:
-    //
-    // 1. Never clobber maximized/fullscreen state (existing guard).
-    //
-    // 2. Skip if the current geometry already matches the saved one.
-    //    apply_to_ui() is called on PIN unlock as well as on initial load.
-    //    On unlock the workspace saved the geometry moments before locking,
-    //    so the window is still at the exact saved position. Calling
-    //    restoreGeometry() anyway sends a configure request to the window
-    //    manager which briefly un-maps and re-maps the window — the ~1 s
-    //    flash/disappear the user sees after entering the passcode.
-    //    Comparing saveGeometry() to the stored bytes is O(1) and avoids
-    //    the superfluous WM round-trip when nothing has changed.
-    if (!windows_.isEmpty() && !ws.window_geometry_base64.isEmpty()) {
+    // The workspace the user opened: its window geometry and its screen (as
+    // that screen's tab). A resumed session (sign-in, unlock) keeps the
+    // window as the session restored it — geometry per window, the dock and
+    // each tab's view — which is what the user left.
+    if (sw == ScreenSwitch::Show && !windows_.isEmpty() && !ws.window_geometry_base64.isEmpty()) {
+        // Never clobber maximized/fullscreen; skip an unchanged geometry (a
+        // restoreGeometry is a WM configure round-trip — a visible flash).
         auto* win = windows_.first();
         const Qt::WindowStates st = win->windowState();
         const bool preserve_size = st.testFlag(Qt::WindowMaximized) || st.testFlag(Qt::WindowFullScreen);
@@ -347,13 +372,8 @@ void WorkspaceManager::apply_to_ui() {
         }
     }
 
-    // Navigate to active screen — apply to primary router.
-    // Skip when the router is already showing the target screen (e.g. on
-    // PIN-unlock where the user is returning to exactly where they left off).
-    // Calling navigate() unnecessarily triggers ADS layout reconfiguration
-    // which causes a Wayland configure round-trip visible as a brief window flash.
-    if (!routers_.isEmpty() && !ws.active_screen.isEmpty() && routers_.first()->current_screen_id() != ws.active_screen)
-        routers_.first()->navigate(ws.active_screen);
+    if (sw == ScreenSwitch::Show && !routers_.isEmpty() && !ws.active_screen.isEmpty())
+        routers_.first()->go_to(ws.active_screen);
 
     // Restore symbol group context last so every subscriber has been
     // constructed (or at least queued) before signals fan out.

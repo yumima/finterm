@@ -98,11 +98,12 @@ bool OwnershipCalendarWidget::eventFilter(QObject* watched, QEvent* event) {
         if (auto* w = qobject_cast<QWidget*>(watched)) {
             const QString sym = w->property("symbol").toString();
             if (!sym.isEmpty()) {
-                // The same two events the shell uses to open a stock: raise
-                // Equity Research, then hand it the symbol. Order matters —
-                // the screen listens only once it has been materialised.
+                // List → detail, as from Portfolio: Equity Research opens
+                // beside the dashboard (raised where it is if open), then gets
+                // the symbol. Order matters — ER listens only once it has been
+                // materialised, which nav.split_alongside does synchronously.
                 EventBus::instance().publish(
-                    QStringLiteral("nav.switch_screen"),
+                    QStringLiteral("nav.split_alongside"),
                     QVariantMap{{QStringLiteral("screen_id"), QStringLiteral("equity_research")}});
                 EventBus::instance().publish(QStringLiteral("equity_research.load_symbol"),
                                              QVariantMap{{QStringLiteral("symbol"), sym}});

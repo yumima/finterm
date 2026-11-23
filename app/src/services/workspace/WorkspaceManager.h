@@ -46,10 +46,12 @@ class WorkspaceManager : public QObject {
 
     // ── Workspace operations ──────────────────────────────────────────────────
 
+    /// The user's new / open: the workspace's screen is shown (as its tab).
     void new_workspace(const QString& name, const QString& description = {}, const QString& template_id = {});
 
     void open_workspace(const QString& path);
 
+    /// Saves the workspace that is loaded; nothing loaded, nothing saved.
     void save_workspace();
 
     void save_workspace_as(const QString& new_name, const QString& path);
@@ -58,7 +60,9 @@ class WorkspaceManager : public QObject {
 
     void export_workspace(const QString& destination_path);
 
-    /// Load the last-used workspace on startup.
+    /// Resume the last-used workspace (sign-in, unlock). The window is
+    /// already as it was left — its dock layout and tab views restored it —
+    /// so a resume restores the screens' states, never which screen shows.
     void load_last_workspace();
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -78,8 +82,14 @@ class WorkspaceManager : public QObject {
   private:
     WorkspaceManager();
 
+    /// Whether loading a workspace switches the window to its screen: yes when
+    /// the user opens one; no when a session resumes (the dock owns that).
+    enum class ScreenSwitch { Show, Keep };
+
+    void create(const QString& name, const QString& description, const QString& template_id, ScreenSwitch sw);
+    void open_file(const QString& path, ScreenSwitch sw);
     void capture_from_ui();
-    void apply_to_ui();
+    void apply_to_ui(ScreenSwitch sw);
     void ensure_workspaces_dir() const;
     QString workspace_file_path(const QString& id) const;
     void save_last_id(const QString& id);

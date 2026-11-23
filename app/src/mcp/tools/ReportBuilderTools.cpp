@@ -54,8 +54,9 @@ void run_on_service_thread(F&& fn) {
 
 // ── Auto-navigate ────────────────────────────────────────────────────────────
 //
-// On the first mutation in an LLM tool-call burst, publish nav.switch_screen
-// so the user can see the live updates. Stays silent for subsequent
+// On the first mutation in an LLM tool-call burst, show the Report Builder
+// BESIDE what the user is on (the chat that asked for it) so they can watch
+// the live updates — raised in place when it is already open. Stays silent for subsequent
 // mutations within ~5 seconds (tracked by service.note_llm_mutation timer).
 
 void maybe_request_navigation() {
@@ -66,9 +67,14 @@ void maybe_request_navigation() {
         return;
     if (!last_nav_ms.compare_exchange_strong(prev, now))
         return;
-    LOG_INFO(RB_TOOLS_TAG, "Auto-navigate: publishing nav.switch_screen → report_builder");
-    finterm::EventBus::instance().publish("nav.switch_screen",
-                                          QVariantMap{{"screen_id", "report_builder"}, {"tab_index", 8}});
+    LOG_INFO(RB_TOOLS_TAG, "Auto-navigate: report_builder beside the current view");
+    // Tool calls run on the MCP worker thread; the dock is the GUI thread's.
+    QMetaObject::invokeMethod(
+        qApp,
+        []() {
+            finterm::EventBus::instance().publish("nav.split_alongside", QVariantMap{{"screen_id", "report_builder"}});
+        },
+        Qt::QueuedConnection);
 }
 
 // Helper: called at the top of every mutating tool.

@@ -123,6 +123,8 @@ class MainWindow : public QMainWindow {
     void update_window_title();
     /// Show or hide the toolbar/status bar shell (hidden during auth screens).
     void set_shell_visible(bool visible);
+    /// After sign-in / unlock: a window with no screen open starts on DASHBOARD.
+    void show_default_screen_if_empty();
     /// Show the given auth_stack_ page and hide the privileged shell.
     /// All login/register/info transitions go through here.
     void enter_auth_stack(QWidget* page);

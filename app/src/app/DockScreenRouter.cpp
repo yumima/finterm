@@ -276,6 +276,33 @@ void DockScreenRouter::open_tab(const QString& id) {
     navigate(id, true, /*with_view=*/true);
 }
 
+QString DockScreenRouter::host_of(const QString& id) {
+    if (id == QLatin1String("futures"))
+        return QStringLiteral("markets");
+    if (id == QLatin1String("social"))
+        return QStringLiteral("news");
+    return id;
+}
+
+void DockScreenRouter::show_page(const QString& id) {
+    if (id == QLatin1String("futures"))
+        screens::MarketsScreen::prepare_futures(); // MARKETS ▸ FUTURES
+    else if (id == QLatin1String("social"))
+        if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
+            news->show_weekly_brief(); // NEWS ▸ What's On ▸ WEEKLY BRIEF
+}
+
+void DockScreenRouter::go_to(const QString& id) {
+    if (auth::InactivityGuard::instance().is_terminal_locked())
+        return;
+    const QString host = host_of(id);
+    if (is_open(host))
+        raise(host);
+    else
+        open_tab(host);
+    show_page(id);
+}
+
 void DockScreenRouter::reassign_primary_if_closed() {
     if (!manager_ || (!current_primary_id_.isEmpty() && is_open(current_primary_id_)))
         return;
@@ -307,25 +334,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
         return;
     }
 
-    // SOCIAL lives in NEWS now (What's On › WEEKLY BRIEF, its workspace
-    // beside): every route to the old tab opens it there.
-    if (id == QLatin1String("social")) {
+    // Pages that moved into another screen's tab (FUTURES → MARKETS, SOCIAL →
+    // NEWS): every route to the old tab opens the host, then the page.
+    if (const QString host = host_of(id); host != id) {
         if (with_view)
-            open_tab(QStringLiteral("news")); // NEWS' own view (kept as is when it is the tab)
+            open_tab(host); // the host's own view (kept as is when it is the tab)
         else
-            navigate(QStringLiteral("news"), exclusive);
-        if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
-            news->show_weekly_brief();
-        return;
-    }
-    // FUTURES is a page of MARKETS now: every route to the old tab (menu,
-    // command bar, F-keys, MCP, perspectives) lands on MARKETS ▸ FUTURES.
-    if (id == QLatin1String("futures")) {
-        screens::MarketsScreen::prepare_futures();
-        if (with_view)
-            open_tab(QStringLiteral("markets")); // MARKETS' own view (kept as is when it is the tab)
-        else
-            navigate(QStringLiteral("markets"), exclusive);
+            navigate(host, exclusive);
+        show_page(id);
         return;
     }
 
@@ -429,7 +445,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
     // hides them all — openedDockWidgets() would be empty and miss the poisoning.
     auto* existing_area = dw->dockAreaWidget();
     const bool area_is_poisoned = existing_area && existing_area->dockWidgets().size() > 1;
-    const bool must_place = needs_add || !existing_area || area_is_poisoned;
+    // An area outside the window — a floating window the pane was once
+    // dragged into, an auto-hide strip — is not where a screen opens: a
+    // closed MARKETS whose last area was floating came back as a second
+    // top-level window (a strip over an empty main window). Only a pane that
+    // is OPEN there stays there (go_to raises it in place).
+    const bool area_outside = existing_area && dw->isClosed() &&
+                              (existing_area->dockContainer() != manager_ || existing_area->isAutoHide());
+    const bool must_place = needs_add || !existing_area || area_is_poisoned || area_outside;
 
     // ── Helper: sync grid tracking from currently open areas ────────────────
     // After restoreState(), exclusive navigate, or user drag, the grid pointers
@@ -877,15 +900,9 @@ void DockScreenRouter::raise(const QString& id) {
 }
 
 void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side, ads::CDockAreaWidget* anchor) {
-    if (id == QLatin1String("social")) { // in NEWS now (see navigate)
-        split_alongside(QStringLiteral("news"), side, anchor);
-        if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
-            news->show_weekly_brief();
-        return;
-    }
-    if (id == QLatin1String("futures")) { // a page of MARKETS now (see navigate)
-        screens::MarketsScreen::prepare_futures();
-        split_alongside(QStringLiteral("markets"), side, anchor);
+    if (const QString host = host_of(id); host != id) { // a moved page: its host, then the page
+        split_alongside(host, side, anchor);
+        show_page(id);
         return;
     }
     if (!factories_.contains(id) && !screens_.contains(id)) {
@@ -1020,7 +1037,7 @@ void DockScreenRouter::open_beside_focused(const QString& id) {
     if (!anchor && !is_open(id)) {
         // Nothing (of ours) has focus — an empty workspace, or focus left in
         // a container that is gone. The grid placement is fine there.
-        navigate(id);
+        navigate(id, false);
         return;
     }
 
