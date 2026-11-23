@@ -13,8 +13,9 @@ namespace finterm {
 ///
 ///  2. The **display brand** (kDisplayName) — what the user actually sees in
 ///     window titles, the About box, etc. Rebranding the app means changing
-///     this (and the visible string literals), wired in via
-///     QGuiApplication::setApplicationDisplayName(). It is intentionally
+///     this (and the visible string literals); MainWindow puts it in the window
+///     title (it is not set as Qt's display name, which Linux appends to every
+///     title). It is intentionally
 ///     decoupled from the storage identity above, so the brand can change
 ///     without ever touching where bytes live on disk.
 struct AppIdentity {
@@ -44,8 +45,7 @@ struct AppIdentity {
     static constexpr const char* kAppSecureLegacy = "FinceptTerminal-Secure";
 
     // ── Display brand ────────────────────────────────────────────────────────
-    /// User-visible product name. Set via setApplicationDisplayName() and used
-    /// in window titles / About text.
+    /// User-visible product name: window titles (MainWindow) / About text.
     static constexpr const char* kDisplayName = "finterm";
 };
 

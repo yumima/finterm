@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "core/config/AppIdentity.h"
+
 #include "ui/navigation/Perspectives.h"
 
 #include "ai_chat/AiChatBubble.h"
@@ -113,13 +115,16 @@
 
 namespace finterm {
 
-// Window-title base — "finterm @ <hostname>" with optional [profile] suffix.
-// Hostname is computed once and cached: machineHostName() does a syscall
-// (uname / GetComputerName) and the value won't change during a session.
+// The window title — "finterm@<hostname> ver: <version>", plus [profile]
+// for a non-default profile: which box, which build, which profile. Nothing
+// about the screen (the tab bar says that). Hostname is computed once and
+// cached: machineHostName() does a syscall and won't change during a session.
 static QString app_title_base() {
     static const QString host = QSysInfo::machineHostName();
     const QString profile = ProfileManager::instance().active();
-    QString base = QString("finterm @ %1").arg(host.isEmpty() ? QStringLiteral("localhost") : host);
+    QString base = QString("%1@%2 ver: %3")
+                       .arg(QString::fromLatin1(AppIdentity::kDisplayName),
+                            host.isEmpty() ? QStringLiteral("localhost") : host, QApplication::applicationVersion());
     if (profile != "default")
         base += QString(" [%1]").arg(profile);
     return base;
@@ -144,10 +149,9 @@ int MainWindow::next_window_id() {
 }
 
 MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), window_id_(window_id) {
-    // Window title format: "finterm @ <hostname>" — makes it obvious which
-    // box you're on when running multiple instances over SSH/VNC and
-    // distinguishes this fork from upstream "finterm" branding.
-    setWindowTitle(app_title_base());
+    // Which box, which build, which profile, which window (app_title_base) —
+    // fixed for the window's life.
+    update_window_title();
     // Load icon from the embedded Windows resource (IDI_ICON1 in app.rc).
     // Falls back to the .ico beside the executable on other platforms.
     QIcon app_icon;
@@ -306,8 +310,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     WorkspaceManager::instance().set_main_window(this);
     WindowCycler::instance().register_window(this);
     connect(this, &QObject::destroyed, this, [this]() { WindowCycler::instance().unregister_window(this); });
-    connect(&WorkspaceManager::instance(), &WorkspaceManager::workspace_loaded, this,
-            [this](const WorkspaceDef&) { update_window_title(); });
     connect(&WorkspaceManager::instance(), &WorkspaceManager::workspace_error, this,
             [this](const QString& msg) { QMessageBox::warning(this, "Workspace Error", msg); });
 
@@ -335,8 +337,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // opened beside Portfolio leaves PORTFOLIO lit (see primary_changed).
     connect(dock_router_, &DockScreenRouter::primary_changed, tab_bar_, &ui::TabBar::set_active);
 
-    // Update the main window title bar to reflect the current screen name.
-    connect(dock_router_, &DockScreenRouter::screen_changed, this, [this](const QString&) { update_window_title(); });
 
     connect(this, &QObject::destroyed, this, [this]() { WorkspaceManager::instance().remove_window(this); });
 
@@ -1549,34 +1549,13 @@ void MainWindow::set_shell_visible(bool visible) {
         dock_status_bar_->setVisible(visible && !focus_mode_);
     if (pushpin_toolbar_)
         pushpin_toolbar_->setVisible(visible && !focus_mode_ && banner_enabled());
-    if (!visible) {
-        // Reset title to plain app base — no screen suffix while on auth screens
-        setWindowTitle(app_title_base());
-    }
 }
 
 void MainWindow::update_window_title() {
-    QString title = app_title_base();
-
-    // Workspace / screen name must never appear in the title while the user
-    // is on the auth or lock stack — that would leak the last-visited screen
-    // to an unauthenticated viewer.
-    const bool shell_visible = stack_ && stack_->currentIndex() == 1;
-    if (shell_visible) {
-        if (WorkspaceManager::instance().has_current_workspace()) {
-            const QString ws = WorkspaceManager::instance().current_workspace_name();
-            if (!ws.isEmpty())
-                title += QString(" — %1").arg(ws);
-        }
-
-        if (dock_router_) {
-            const QString id = dock_router_->current_screen_id();
-            if (!id.isEmpty())
-                title += QString(" — %1").arg(DockScreenRouter::title_for_id(id));
-        }
-    }
-
-    setWindowTitle(title);
+    // The same on every screen, signed in or locked: the workspace and screen
+    // names were redundant with the tab bar (and must never show while
+    // locked anyway). A second window says which it is, for Alt-Tab.
+    setWindowTitle(window_id_ > 0 ? app_title_base() + QStringLiteral(" #%1").arg(window_id_ + 1) : app_title_base());
 }
 
 void MainWindow::set_always_on_top(bool on) {

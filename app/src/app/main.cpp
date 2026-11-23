@@ -216,8 +216,10 @@ int main(int argc, char* argv[]) {
     app.setOrganizationName(finterm::AppIdentity::kOrg);
     // Visible brand — deliberately decoupled from the frozen storage identity
     // above, so the app can be rebranded without moving any on-disk data or
-    // settings (see core/config/AppIdentity.h).
-    app.setApplicationDisplayName(finterm::AppIdentity::kDisplayName);
+    // settings (see core/config/AppIdentity.h). The brand is put into the
+    // window title by MainWindow (app_title_base); it is NOT set as Qt's
+    // application display name, which Linux appends to every window title —
+    // "finterm@host ver: … — finterm".
     // Desktop-entry / WM_CLASS (X11) / app_id (Wayland) association — matches the
     // installed finterm.desktop so the taskbar groups windows under the brand.
     app.setDesktopFileName(finterm::AppIdentity::kDisplayName);
