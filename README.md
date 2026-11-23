@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`fc62eb065`](https://github.com/yumima/finterm/commit/fc62eb065) markets: the correlation cell the chart draws is marked like a charted row
 - [`5908b91cd`](https://github.com/yumima/finterm/commit/5908b91cd) updater: a found version survives a restart; review fixes
 - [`70d29f8eb`](https://github.com/yumima/finterm/commit/70d29f8eb) updater: opt-in daily check; a found version is a status-bar badge, not a dialog
 - [`5e134e35c`](https://github.com/yumima/finterm/commit/5e134e35c) markets: MY VIEW's default is the desk's new arrangement; condition widgets' note says what stands in for CDS / DX / UC

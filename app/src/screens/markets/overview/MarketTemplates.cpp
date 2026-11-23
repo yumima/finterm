@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
+#include <algorithm>
 #include <optional>
 
 namespace finterm::screens::markets {
@@ -28,11 +29,13 @@ struct Packer {
         it.config = cfg;
         items.append(it);
     }
-    GridLayout layout() const {
+    /// `rows`: the page's saved row count (it may leave empty rows below the
+    /// tiles); never fewer than the tiles reach.
+    GridLayout layout(int rows = 0) const {
         GridLayout l;
         l.cols = 12;
         l.items = items;
-        l.rows = max_row(items); // the page is divided into exactly these rows
+        l.rows = std::max(rows, max_row(items)); // the page is divided into exactly these rows
         return l;
     }
 };
@@ -57,7 +60,8 @@ QJsonObject with_index_rows(QJsonObject c) {
 
 // ── The desk's arrangement of each page ─────────────────────────────────────
 // BEGIN GENERATED
-// Generated from the desk's own arrangement of each page (2026-11-23).
+// Generated from the desk's own arrangement of each page (2026-11-23; FUTURES groups re-taken
+// that evening, all ten).
 GridLayout arranged_markets() {
     Packer p;
     p.at("market_regime", 0, 0, 3, 3);
@@ -135,14 +139,32 @@ std::optional<GridLayout> arranged_futures(const QString& group) {
         p.at("fut_detail", 3, 9, 5, 7, cfg(R"j({"root":"BTC"})j"));
         return p.layout();
     }
+    if (group == QLatin1String("ENERGY")) {
+        Packer p;
+        p.at("fut_board", 0, 0, 3, 3, cfg(R"j({"fixed":true,"group":"ENERGY"})j"));
+        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"CL · WTI Crude Oil","symbol":"CL=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"CL"})j"));
+        p.at("fut_months", 0, 3, 3, 6, cfg(R"j({"root":"CL"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"CL"})j"));
+        return p.layout(12);
+    }
     if (group == QLatin1String("FX")) {
         Packer p;
-        p.at("fut_board", 0, 0, 3, 7, cfg(R"j({"fixed":true,"group":"FX"})j"));
-        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"6E · Euro FX","symbol":"6E=F"})j"));
-        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"6E"})j"));
-        p.at("fut_months", 3, 6, 5, 6, cfg(R"j({"root":"6E"})j"));
-        p.at("fut_detail", 8, 6, 4, 6, cfg(R"j({"root":"6E"})j"));
-        return p.layout();
+        p.at("fut_board", 0, 0, 3, 4, cfg(R"j({"fixed":true,"group":"FX"})j"));
+        p.at("market_chart", 3, 0, 5, 7, cfg(R"j({"label":"6J · Japanese Yen","symbol":"6J=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"6J"})j"));
+        p.at("fut_months", 0, 4, 3, 4, cfg(R"j({"root":"6J"})j"));
+        p.at("fut_detail", 3, 7, 5, 5, cfg(R"j({"root":"6J"})j"));
+        return p.layout(12);
+    }
+    if (group == QLatin1String("GRAINS")) {
+        Packer p;
+        p.at("fut_board", 0, 0, 3, 3, cfg(R"j({"fixed":true,"group":"GRAINS"})j"));
+        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"ZC · Corn","symbol":"ZC=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"ZC"})j"));
+        p.at("fut_months", 0, 3, 3, 4, cfg(R"j({"root":"ZC"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"ZC"})j"));
+        return p.layout(12);
     }
     if (group == QLatin1String("INDEX")) {
         Packer p;
@@ -153,26 +175,54 @@ std::optional<GridLayout> arranged_futures(const QString& group) {
         p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"ES"})j"));
         return p.layout();
     }
+    if (group == QLatin1String("LIVESTOCK")) {
+        Packer p;
+        p.at("fut_board", 0, 0, 3, 2, cfg(R"j({"fixed":true,"group":"LIVESTOCK"})j"));
+        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"LE · Live Cattle","symbol":"LE=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"LE"})j"));
+        p.at("fut_months", 0, 2, 3, 4, cfg(R"j({"root":"LE"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"LE"})j"));
+        return p.layout(12);
+    }
     if (group == QLatin1String("MAJORS")) {
         Packer p;
         p.at("fut_board", 0, 0, 3, 6, cfg(R"j({"fixed":true,"group":"MAJORS"})j"));
-        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"ES · E-mini S&P 500","symbol":"ES=F"})j"));
-        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"ES"})j"));
-        p.at("fut_months", 0, 6, 3, 4, cfg(R"j({"root":"ES"})j"));
-        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"ES"})j"));
-        return p.layout();
+        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"SI · Silver","symbol":"SI=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"SI"})j"));
+        p.at("fut_months", 0, 6, 3, 4, cfg(R"j({"root":"SI"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"SI"})j"));
+        return p.layout(12);
+    }
+    if (group == QLatin1String("METALS")) {
+        Packer p;
+        p.at("fut_board", 0, 0, 3, 3, cfg(R"j({"fixed":true,"group":"METALS"})j"));
+        p.at("market_chart", 3, 0, 5, 4, cfg(R"j({"label":"GC · Gold","symbol":"GC=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"GC"})j"));
+        p.at("fut_months", 0, 3, 3, 7, cfg(R"j({"root":"GC"})j"));
+        p.at("fut_detail", 3, 4, 5, 7, cfg(R"j({"root":"GC"})j"));
+        return p.layout(12);
     }
     if (group == QLatin1String("RATES")) {
         Packer p;
         p.at("fut_board", 0, 0, 3, 4, cfg(R"j({"fixed":true,"group":"RATES"})j"));
         p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"ZB · U.S. Treasury Bond","symbol":"ZB=F"})j"));
         p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"ZB"})j"));
-        p.at("fut_months", 3, 6, 5, 6, cfg(R"j({"root":"ZB"})j"));
-        p.at("fut_detail", 8, 6, 4, 6, cfg(R"j({"root":"ZB"})j"));
-        return p.layout();
+        p.at("fut_months", 0, 4, 3, 3, cfg(R"j({"root":"ZB"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"ZB"})j"));
+        return p.layout(12);
+    }
+    if (group == QLatin1String("SOFTS")) {
+        Packer p;
+        p.at("fut_board", 0, 0, 3, 3, cfg(R"j({"fixed":true,"group":"SOFTS"})j"));
+        p.at("market_chart", 3, 0, 5, 6, cfg(R"j({"label":"KC · Coffee C","symbol":"KC=F"})j"));
+        p.at("fut_curve", 8, 0, 4, 6, cfg(R"j({"root":"KC"})j"));
+        p.at("fut_months", 0, 3, 3, 4, cfg(R"j({"root":"KC"})j"));
+        p.at("fut_detail", 3, 6, 5, 6, cfg(R"j({"root":"KC"})j"));
+        return p.layout(12);
     }
     return std::nullopt;
 }
+
 // END GENERATED
 
 /// A FUTURES page no one has arranged: one group's board (the header picks
