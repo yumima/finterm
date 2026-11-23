@@ -4,6 +4,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDesktopServices>
 #include <QFrame>
 #include <QGridLayout>
@@ -11,6 +12,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -139,9 +141,29 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
                     check_btn->setText(QStringLiteral("Check for Updates"));
                 },
                 Qt::SingleShotConnection);
-            svc.check_for_updates(/*silent=*/false);
+            svc.check_for_updates(/*interactive=*/true);
         });
         right->addWidget(check_btn);
+
+        // The automatic daily check — off until the user turns it on (here,
+        // or the status bar's one-time question). Dev builds never check.
+        auto* auto_box = new QCheckBox(QStringLiteral("Check for updates automatically (daily)"));
+        auto_box->setStyleSheet(MUTED());
+        auto_box->setToolTip(QStringLiteral("Once a day, fetch finterm's update list from github.com (only the "
+                                            "version and platform are sent). A new version shows as a note in "
+                                            "the status bar; nothing installs without asking."));
+        auto sync_auto_box = [auto_box]() {
+            auto& svc = services::UpdateService::instance();
+            const QSignalBlocker block(auto_box);
+            auto_box->setEnabled(svc.updates_supported());
+            auto_box->setChecked(svc.auto_check() == services::UpdateService::AutoCheck::On);
+        };
+        sync_auto_box();
+        connect(&services::UpdateService::instance(), &services::UpdateService::auto_check_changed, auto_box,
+                sync_auto_box);
+        connect(auto_box, &QCheckBox::toggled, this,
+                [](bool on) { services::UpdateService::instance().set_auto_check(on); });
+        right->addWidget(auto_box, 0, Qt::AlignRight);
         bhl->addLayout(right);
 
         pvl->addWidget(body);

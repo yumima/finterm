@@ -5,6 +5,7 @@
 #include "ui/widgets/NotifBell.h"
 #include "ui/widgets/NotifPanel.h"
 #include "ui/widgets/NotifToast.h"
+#include "ui/widgets/UpdateIndicator.h"
 #include "services/notifications/NotificationService.h"
 #include "ui/alerts/AlertsDialog.h"
 
@@ -40,6 +41,9 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
         hl->addWidget(mk(" ", "sbSpacer"));
     }
     hl->addStretch();
+    // A newer version, or the one-time "check daily?" question — hidden
+    // otherwise (UpdateIndicator).
+    hl->addWidget(new UpdateIndicator(this));
     ready_label_ = mk("READY", "sbReady");
     hl->addWidget(ready_label_);
     hl->addWidget(mk("  |  ", "sbSep"));

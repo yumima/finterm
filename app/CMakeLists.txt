@@ -1022,6 +1022,7 @@ set(UI_SOURCES
     # In-app notification widgets
     src/ui/widgets/NotifToast.cpp
     src/ui/widgets/NotifBell.cpp
+    src/ui/widgets/UpdateIndicator.cpp
     src/ui/widgets/NotifPanel.cpp
     src/ui/alerts/AlertsDialog.cpp
 )
@@ -1933,6 +1934,7 @@ add_executable(finterm ${_FINTERM_EXE_FLAGS}
     ${SCREEN_SOURCES}
     ${APP_SOURCES}
     src/services/updater/UpdateService.cpp
+    src/services/updater/UpdatePolicy.cpp
     ${_FINTERM_PLATFORM_SOURCES}
 )
 

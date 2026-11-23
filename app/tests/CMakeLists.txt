@@ -188,6 +188,18 @@ set_target_properties(test_extended_hours_math PROPERTIES
 
 add_test(NAME extended_hours_math COMMAND test_extended_hours_math)
 
+# ── Update policy ────────────────────────────────────────────────────────────
+# The updater's decisions: semver compare, the manifest entry for this
+# platform, and when the daily automatic check is due. No network, no dialogs.
+add_executable(test_update_policy
+    services/test_update_policy.cpp
+    ../src/services/updater/UpdatePolicy.cpp
+)
+target_include_directories(test_update_policy PRIVATE ../src)
+target_link_libraries(test_update_policy PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_update_policy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME update_policy COMMAND test_update_policy)
+
 # ── Earnings refresh policy ──────────────────────────────────────────────────
 # When the ER Earnings data is refreshed: once a day between prints, each
 # minute in a release window, at the reaction close. Pure policy, real ET times.

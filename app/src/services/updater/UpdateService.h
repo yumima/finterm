@@ -1,45 +1,76 @@
 #pragma once
 
+#include "services/updater/UpdatePolicy.h"
+
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QTimer>
 
 class QNetworkReply;
 class QWidget;
 
 namespace finterm::services {
 
-/// Cross-platform auto-update service.
+/// Cross-platform update service.
 ///
-/// Downloads a JSON manifest, compares the running app version with the
-/// manifest's per-platform/per-arch `latest-version`, and — if newer — fetches
-/// the installer, verifies its sha256, and launches it.
+/// Fetches this project's manifest (updates.json, written by release.yml on
+/// every tag), compares the running version with the manifest's entry for
+/// this platform, and — when the user chooses to install — downloads the
+/// installer, verifies its sha256 and launches it.
 ///
-/// Manifest schema (see updates.json):
-/// {
-///   "updates": {
-///     "windows-x64":  { "latest-version": "4.0.2", "download-url": "...", "sha256": "...", "open-url": "...",
-///     "changelog": "..." }, "windows-arm64":{ ... }, "linux-x64":    { ... }, "macos-arm64":  { ... }, "macos-x64": {
-///     ... }, "macos-universal": { ... }
-///   }
-/// }
+/// Two ways a check runs:
+///  - On request (Help › Check for Updates, About): always runs, and reports
+///    the result in a dialog — up to date, the error, or the offer.
+///  - Automatically, once a day, ONLY after the user turned it on (the
+///    "Check for updates automatically" setting; finterm makes no network
+///    request the user didn't agree to). It never opens a dialog: a newer
+///    version becomes an offer, which the status bar shows as a badge the
+///    user can open when they choose.
 ///
-/// Platforms where auto-install isn't possible (unsigned / no installer) fall
-/// back to revealing the downloaded file to the user.
+/// The setting and the time of the last check are install-wide (QSettings),
+/// not per profile: two profiles running at once share one daily check.
 class UpdateService : public QObject {
     Q_OBJECT
 
   public:
+    enum class AutoCheck {
+        Unasked, ///< never decided — the status bar offers the choice once
+        On,
+        Off,
+    };
+
     static UpdateService& instance();
 
-    /// Trigger an update check.
-    /// - silent=true  → no dialog when already up to date or manifest unreachable.
-    /// - silent=false → show result either way (used by "Check for Updates" menu).
-    void check_for_updates(bool silent = true);
+    /// Run a check. interactive=true reports the result either way;
+    /// interactive=false is the automatic check (no dialog, offer only).
+    void check_for_updates(bool interactive);
 
-    /// Changelog text from the manifest.
-    QString changelog() const { return changelog_; }
+    /// Start the automatic schedule: a first look shortly after the main
+    /// window is up, then hourly looks that check only when a day has passed
+    /// since the last successful check. Idempotent — the sign-in and unlock
+    /// paths both call it. Does nothing until the user turned checks on.
+    void start_automatic();
+
+    /// Whether this build can be updated at all: a release version on a
+    /// platform the manifest covers. Dev builds never check.
+    bool updates_supported() const;
+
+    AutoCheck auto_check() const;
+    void set_auto_check(bool on);
+
+    /// The newer version found by the last check, if any.
+    bool has_offer() const { return !offer_.version.isEmpty(); }
+    QString offered_version() const { return offer_.version; }
+
+    /// Where the offer stands: its installer downloading, or already handed
+    /// to the user (launched or revealed) this session.
+    enum class Stage { Offered, Downloading, Handed };
+    Stage stage() const;
+
+    /// Open the install prompt for the current offer (the status-bar badge).
+    void show_offer();
 
     /// Parent widget for dialogs (defaults to QApplication::activeWindow()).
     void set_dialog_parent(QWidget* parent) { dialog_parent_ = parent; }
@@ -47,6 +78,15 @@ class UpdateService : public QObject {
   signals:
     /// Emitted after every check, regardless of result.
     void check_finished(bool update_found);
+
+    /// The offer appeared, changed or went away.
+    void offer_changed();
+
+    /// The automatic-check setting changed.
+    void auto_check_changed();
+
+    /// stage() changed (a download started, failed, or was handed over).
+    void stage_changed();
 
     /// Emitted after a successful verified download, before launch.
     void download_finished(const QString& filepath);
@@ -63,18 +103,17 @@ class UpdateService : public QObject {
     /// Returns empty string if the platform/arch combination isn't supported.
     static QString current_platform_key();
 
-    /// Strict semver parse: "1.2.3" → {1,2,3}. Returns false for anything else
-    /// (dev builds, tags, suffixes). Used to both validate the running version
-    /// and the manifest version.
-    static bool parse_version(const QString& s, int& major, int& minor, int& patch);
-
-    /// Returns true iff `remote` is strictly newer than `local`.
-    static bool is_newer(const QString& local, const QString& remote);
-
+    /// The automatic schedule's tick: checks only when on, supported, idle
+    /// and due.
+    void maybe_check_automatically();
+    void set_offer(const update_policy::Offer& offer);
+    void prompt_install();
     void start_download(const QString& url, const QString& expected_sha256);
     void launch_installer(const QString& path);
     void reveal_in_file_manager(const QString& path);
     void finish_check(bool update_found);
+    /// `handed`: the verified installer was launched or revealed.
+    void finish_download(bool handed = false);
     void show_error(const QString& text);
     QWidget* dialog_parent();
 
@@ -83,17 +122,18 @@ class UpdateService : public QObject {
 
     QNetworkAccessManager net_;
     QString manifest_url_ = DEFAULT_MANIFEST_URL;
-    QString latest_version_;
-    QString changelog_;
-    QString pending_download_url_;
-    QString pending_expected_sha256_;
+    update_policy::Offer offer_;
     QString pending_local_path_;
+    QString download_version_; ///< the version being downloaded
+    QString handed_version_;   ///< the version whose installer was handed over this session
+    QString pending_expected_sha256_;
     QPointer<QWidget> dialog_parent_;
-    bool silent_ = true;
-    bool in_progress_ = false;
-    /// Silent auto-checks skip themselves after the first one per process run
-    /// so multiple login/unlock code paths don't fire repeated checks. A
-    /// user-initiated check (silent=false) always runs regardless.
+    QTimer schedule_;
+    bool interactive_ = false;
+    bool checking_ = false;    ///< a manifest request is in flight
+    bool downloading_ = false; ///< an installer download is in flight
+    bool prompt_open_ = false;
+    bool automatic_started_ = false;
 };
 
 } // namespace finterm::services

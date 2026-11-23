@@ -678,9 +678,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 LOG_INFO("MainWindow", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
         } else if (action == "check_updates") {
-            // Help › Check for Updates — the only way an update check runs.
+            // Help › Check for Updates — a check on request, reported either way
+            // (the other is the opt-in daily schedule, start_automatic).
             services::UpdateService::instance().set_dialog_parent(this);
-            services::UpdateService::instance().check_for_updates(/*silent=*/false);
+            services::UpdateService::instance().check_for_updates(/*interactive=*/true);
         } else if (action == "logout") {
             confirm_and_logout();
         } else if (action == "fullscreen") {
@@ -1304,13 +1305,10 @@ void MainWindow::on_auth_state_changed() {
         stack_->setCurrentIndex(1);
         WorkspaceManager::instance().load_last_workspace();
         show_default_screen_if_empty();
-        // Trigger silent update check after login (delayed so UI settles first).
-        // UpdateService de-dupes silent checks across the session, so the
-        // post-PIN-unlock path below won't fire a second request.
-        QTimer::singleShot(3000, this, [this]() {
-            services::UpdateService::instance().set_dialog_parent(this);
-            services::UpdateService::instance().check_for_updates(true);
-        });
+        // The automatic update schedule (does nothing unless the user turned
+        // automatic checks on; never opens a dialog — see UpdateService).
+        services::UpdateService::instance().set_dialog_parent(this);
+        services::UpdateService::instance().start_automatic();
     } else {
         // Disable inactivity guard when logged out and drop the locked flag
         // so a subsequent login is not immediately router-blocked.
@@ -1504,10 +1502,8 @@ void MainWindow::on_terminal_unlocked() {
     // another screen was in front. Re-derive it from the dock.
     if (dock_router_)
         dock_router_->sync_current_from_view();
-    QTimer::singleShot(3000, this, [this]() {
-        services::UpdateService::instance().set_dialog_parent(this);
-        services::UpdateService::instance().check_for_updates(true);
-    });
+    services::UpdateService::instance().set_dialog_parent(this);
+    services::UpdateService::instance().start_automatic();
 
     // Now that the user is in, kick the deferred cache warm (no-op if it already
     // ran on the no-PIN path). Async — returns immediately, won't block the UI.
