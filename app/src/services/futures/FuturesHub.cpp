@@ -249,20 +249,20 @@ void FuturesHub::refresh_cot(const QString& cftc) {
     });
 }
 
-void FuturesHub::refresh_spread(const QString& near, const QString& far) {
-    const QString key = QStringLiteral("spread:") + near + QLatin1Char('|') + far;
+void FuturesHub::refresh_spread(const QString& near_sym, const QString& far_sym) {
+    const QString key = QStringLiteral("spread:") + near_sym + QLatin1Char('|') + far_sym;
     if (running_.contains(key))
         return;
     running_.insert(key);
     QPointer<FuturesHub> self = this;
-    fetch_spread_history(near, far, this, [self, near, far, key](bool ok, SpreadHistory h, QString err) {
+    fetch_spread_history(near_sym, far_sym, this, [self, near_sym, far_sym, key](bool ok, SpreadHistory h, QString err) {
         if (!self)
             return;
         self->running_.remove(key);
         if (!ok)
-            datahub::DataHub::instance().publish_error(spread_topic(near, far), err);
+            datahub::DataHub::instance().publish_error(spread_topic(near_sym, far_sym), err);
         else
-            datahub::DataHub::instance().publish(spread_topic(near, far), QVariant::fromValue(h));
+            datahub::DataHub::instance().publish(spread_topic(near_sym, far_sym), QVariant::fromValue(h));
     });
 }
 

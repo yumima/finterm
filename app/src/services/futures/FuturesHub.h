@@ -8,7 +8,7 @@
 //                             between reads (a print newer than the read stands)
 //   fut:past:<ROOT>           where those months settled a week and a month ago
 //   fut:cot:<CFTC>            CFTC Commitments of Traders, three years, weekly
-//   fut:spread:<NEAR>|<FAR>   six months of a calendar spread (far − near)
+//   fut:spread:<NEAR>|<FAR>   six months of a calendar spread (far_sym − near_sym)
 //
 // A failed read is published as the topic's error; the last good value stays.
 
@@ -36,8 +36,8 @@ class FuturesHub : public QObject, public datahub::Producer {
     static QString curve_topic(const QString& root) { return QStringLiteral("fut:curve:") + root; }
     static QString past_topic(const QString& root) { return QStringLiteral("fut:past:") + root; }
     static QString cot_topic(const QString& cftc) { return QStringLiteral("fut:cot:") + cftc; }
-    static QString spread_topic(const QString& near, const QString& far) {
-        return QStringLiteral("fut:spread:") + near + QLatin1Char('|') + far;
+    static QString spread_topic(const QString& near_sym, const QString& far_sym) {
+        return QStringLiteral("fut:spread:") + near_sym + QLatin1Char('|') + far_sym;
     }
 
     QStringList topic_patterns() const override;
@@ -49,7 +49,7 @@ class FuturesHub : public QObject, public datahub::Producer {
     void refresh_curve(const QString& root);
     void refresh_past(const QString& root);
     void refresh_cot(const QString& cftc);
-    void refresh_spread(const QString& near, const QString& far);
+    void refresh_spread(const QString& near_sym, const QString& far_sym);
     void on_ticks(const QVector<StreamTick>& ticks);
     void sync_stream();
 

@@ -89,7 +89,7 @@ MarketRegimeWidget::MarketRegimeWidget(QWidget* parent)
                                         QString::fromUtf8(kRows[row].label), this);
     });
     content_layout()->addWidget(table_, 1);
-    connect(this, &BaseWidget::refresh_requested, this, [this]() {
+    connect(this, &BaseWidget::refresh_requested, this, []() {
         QStringList topics;
         for (const auto& r : kRows)
             topics << topic_of(QString::fromLatin1(r.symbol));
