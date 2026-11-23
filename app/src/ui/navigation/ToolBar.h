@@ -31,10 +31,15 @@ class ToolBar : public QWidget {
 
   private slots:
     void update_clock();
+    /// The clocks' widths: the longest text each can show.
+    void size_clocks();
 
   private:
     QMenuBar* menu_bar_ = nullptr;
-    QLabel* clock_label_ = nullptr;
+    QLabel* clock_label_ = nullptr;  ///< LOCAL date time zone
+    QLabel* market_label_ = nullptr; ///< NYSE·NASDAQ time, session, countdown to the bell
+    QLabel* market_sep_ = nullptr;
+    QLabel* clock_sep_ = nullptr;
     QLabel* user_label_ = nullptr;
     QLabel* subtitle_label_ = nullptr;
     QLabel* branding_label_ = nullptr;

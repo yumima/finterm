@@ -1,5 +1,11 @@
 #include "ui/navigation/ToolBar.h"
 
+#include "services/calendar/MarketClock.h"
+
+#include <QFontMetrics>
+#include <algorithm>
+#include <cstdlib>
+
 #include "ui/navigation/Perspectives.h"
 #include "auth/AuthManager.h"
 #include "ui/theme/Theme.h"
@@ -14,6 +20,19 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
+
+namespace {
+/// A clock label: it asks for the width of the longest text it can show (so
+/// its neighbours don't move as the text changes) and can shrink to nothing
+/// (so it never holds the window wider than the room there is).
+class ClockLabel : public QLabel {
+  public:
+    using QLabel::QLabel;
+    int widest = 0;
+    QSize sizeHint() const override { return {std::max(widest, 1), QLabel::sizeHint().height()}; }
+    QSize minimumSizeHint() const override { return {0, QLabel::minimumSizeHint().height()}; }
+};
+} // namespace
 
 namespace finterm::ui {
 
@@ -56,7 +75,7 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
 
     // Command bar — shrinks gracefully
     command_bar_ = new CommandBar(this);
-    command_bar_->setMinimumWidth(80);
+    command_bar_->setMinimumWidth(150); // the clocks shrink before it does
     command_bar_->setMaximumWidth(240);
     command_bar_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     connect(command_bar_, &CommandBar::navigate_to, this, &ToolBar::navigate_to);
@@ -90,9 +109,24 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     live_label_ = mk(" LIVE");
     hl->addWidget(live_label_);
 
-    hl->addStretch(1);
-
-    clock_label_ = mk("");
+    // The market's clock (NYSE / Nasdaq: New York time, the session, the
+    // countdown to the bell), then the local clock — each labelled.
+    market_sep_ = mk("  |  ");
+    hl->addWidget(market_sep_);
+    market_label_ = new ClockLabel;
+    market_label_->setTextFormat(Qt::RichText);
+    // Its width is the longest text it can show (size_clocks; ClockLabel),
+    // and it can shrink — it is hidden below 1000 px by apply_responsive_layout.
+    market_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    market_label_->setToolTip(QStringLiteral("NYSE and Nasdaq regular session, 09:30–16:00 New York time "
+                                             "(13:00 on early closes); counts to the close while open, "
+                                             "else to the next open. Holidays and early closes per the "
+                                             "NYSE calendar."));
+    hl->addWidget(market_label_);
+    clock_sep_ = mk("  |  ");
+    hl->addWidget(clock_sep_);
+    clock_label_ = new ClockLabel;
+    clock_label_->setTextFormat(Qt::RichText);
     clock_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     hl->addWidget(clock_label_);
 
@@ -172,6 +206,11 @@ void ToolBar::refresh_theme() {
     lbl(live_dot_, colors::POSITIVE());
     lbl(live_label_, colors::POSITIVE(), true);
     lbl(clock_label_, colors::TEXT_PRIMARY());
+    lbl(market_label_, colors::TEXT_PRIMARY());
+    lbl(market_sep_, colors::BORDER_MED());
+    lbl(clock_sep_, colors::BORDER_MED());
+    size_clocks();
+    update_clock(); // the rich-text colours come from the theme
     lbl(user_label_, colors::AMBER());
     // Buttons
     if (logout_btn_)
@@ -189,17 +228,25 @@ void ToolBar::resizeEvent(QResizeEvent* e) {
 
 void ToolBar::apply_responsive_layout(int w) {
     // Progressive disclosure: hide less-critical elements as width shrinks
-    // >= 1200: everything visible
-    // >= 1000: hide subtitle
-    //  >= 800: also hide clock, LIVE label
+    // >= 2200: everything visible (the subtitle too)
+    // >= 1000: no subtitle — the market clock has its room
+    //  >= 800: also no market clock
     //  <  800: minimal — menus + branding + user + settings + logout
+    //          (no LOCAL clock, no LIVE label)
 
-    bool show_subtitle = (w >= 1200);
+    bool show_subtitle = (w >= 2200); // the market clock takes its room first
+    bool show_market = (w >= 1000);
     bool show_clock = (w >= 800);
     bool show_live = (w >= 800);
 
     if (subtitle_label_)
         subtitle_label_->setVisible(show_subtitle);
+    if (market_label_)
+        market_label_->setVisible(show_market);
+    if (market_sep_)
+        market_sep_->setVisible(show_market);
+    if (clock_sep_)
+        clock_sep_->setVisible(show_clock);
     if (clock_label_)
         clock_label_->setVisible(show_clock);
     if (live_dot_)
@@ -208,9 +255,80 @@ void ToolBar::apply_responsive_layout(int w) {
         live_label_->setVisible(show_live);
 }
 
+void ToolBar::size_clocks() {
+    if (!market_label_ || !clock_label_)
+        return;
+    // The widest each can read (bold state word, a day count, an early close).
+    const QFontMetrics fm(market_label_->font());
+    QFont bold = market_label_->font();
+    bold.setBold(true);
+    const QFontMetrics fmb(bold);
+    // The forms it takes: an early close is never days away, a weekend wait is.
+    const int head = fm.horizontalAdvance(QStringLiteral("NYSE·NASDAQ 88:88:88 ET  "));
+    const int market = head + 4 +
+                       std::max({fmb.horizontalAdvance(QStringLiteral("OPEN")) +
+                                     fm.horizontalAdvance(QStringLiteral(" · EARLY CLOSE IN 88:88:88")),
+                                 fmb.horizontalAdvance(QStringLiteral("PRE-OPEN")) +
+                                     fm.horizontalAdvance(QStringLiteral(" · OPENS IN 88:88:88")),
+                                 fmb.horizontalAdvance(QStringLiteral("CLOSED")) +
+                                     fm.horizontalAdvance(QStringLiteral(" · OPENS IN 8d 88:88:88"))});
+    const int local = fm.horizontalAdvance(QStringLiteral("LOCAL 88 MMM 88 88:88:88 UTC+88:88")) + 4;
+    static_cast<ClockLabel*>(market_label_)->widest = market;
+    static_cast<ClockLabel*>(clock_label_)->widest = local;
+    market_label_->updateGeometry();
+    clock_label_->updateGeometry();
+}
+
 void ToolBar::update_clock() {
-    auto dt = QDateTime::currentDateTime();
-    clock_label_->setText(dt.toString("dd MMM yy").toUpper() + " " + dt.toString("HH:mm:ss"));
+    if (!clock_label_ || !market_label_)
+        return;
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto tag = [](const QString& text) {
+        return QStringLiteral("<span style='color:%1;'>%2</span>").arg(colors::TEXT_SECONDARY(), text);
+    };
+    const auto word = [](const QString& text, const QString& color) {
+        return QStringLiteral("<span style='color:%1;font-weight:700;'>%2</span>").arg(color, text);
+    };
+
+    // NYSE · NASDAQ 13:12:05 ET  OPEN · CLOSES IN 02:47:55
+    const auto m = market_clock::read(now);
+    if (!m.valid) {
+        // This system has no New York time zone: no clock rather than a wrong one.
+        market_label_->clear();
+        market_label_->setToolTip(QStringLiteral("The market clock needs the America/New_York time zone, "
+                                                 "which this system does not have."));
+    }
+    QString state;
+    switch (m.session) {
+    case market_clock::Session::Open:
+        state = word(QStringLiteral("OPEN"), colors::POSITIVE()) +
+                tag(m.early_close ? QStringLiteral(" · EARLY CLOSE IN ") : QStringLiteral(" · CLOSES IN "));
+        break;
+    case market_clock::Session::PreOpen:
+        state = word(QStringLiteral("PRE-OPEN"), colors::AMBER()) + tag(QStringLiteral(" · OPENS IN "));
+        break;
+    case market_clock::Session::Closed:
+        state = word(QStringLiteral("CLOSED"), colors::NEGATIVE()) + tag(QStringLiteral(" · OPENS IN "));
+        break;
+    }
+    if (m.valid)
+        market_label_->setText(tag(QStringLiteral("NYSE·NASDAQ ")) + m.et.toString(QStringLiteral("HH:mm:ss")) +
+                               tag(QStringLiteral(" ET  ")) + state + market_clock::countdown(m.secs_to_event));
+
+    // LOCAL 23 NOV 26 14:12:05 PST — the zone's abbreviation where the system
+    // has one ("PST"); Windows gives long names ("Pacific Standard Time"): an
+    // offset instead.
+    QString zone = now.timeZoneAbbreviation();
+    if (zone.size() > 5 || zone.contains(QLatin1Char(' '))) {
+        const int off = now.offsetFromUtc() / 60;
+        zone = QStringLiteral("UTC%1%2:%3")
+                   .arg(off < 0 ? QStringLiteral("−") : QStringLiteral("+"))
+                   .arg(std::abs(off) / 60, 2, 10, QLatin1Char('0'))
+                   .arg(std::abs(off) % 60, 2, 10, QLatin1Char('0'));
+    }
+    clock_label_->setText(tag(QStringLiteral("LOCAL ")) + now.toString(QStringLiteral("dd MMM yy")).toUpper() +
+                          QStringLiteral(" ") + now.toString(QStringLiteral("HH:mm:ss")) +
+                          tag(QStringLiteral(" ") + zone));
 }
 
 void ToolBar::refresh_user_display() {

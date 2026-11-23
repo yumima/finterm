@@ -209,6 +209,15 @@ if(UNIX) # a POSIX sh script (the Windows helper is exercised in release.yml)
                      ${CMAKE_CURRENT_SOURCE_DIR}/../src/services/updater/scripts/apply-update.sh)
 endif()
 
+# ── Market clock ─────────────────────────────────────────────────────────────
+# The toolbar's NYSE/Nasdaq clock: New York time, session state, countdown to
+# the bell — DST, weekend, holiday, early close.
+add_executable(test_market_clock services/test_market_clock.cpp)
+target_include_directories(test_market_clock PRIVATE ../src)
+target_link_libraries(test_market_clock PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_market_clock PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME market_clock COMMAND test_market_clock)
+
 # ── Earnings refresh policy ──────────────────────────────────────────────────
 # When the ER Earnings data is refreshed: once a day between prints, each
 # minute in a release window, at the reaction close. Pure policy, real ET times.
