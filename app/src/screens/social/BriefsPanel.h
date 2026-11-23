@@ -8,7 +8,10 @@
 //                 next week — or its Markdown (EDIT). Private sections (the
 //                 Nasdaq IPO calendar) show with a banner and are stripped
 //                 from anything published.
-//   the X text    what is posted once the page is live (when ticked)
+//   posting       the X text (edited here; Bluesky / Mastodon use the
+//                 issue's own text for their limits), the platforms ticked
+//                 for it, and — once published — Post now for any not yet
+//                 posted. Every disabled control says why.
 //   publishing    Schedule (the tick timer, or this screen while open) or
 //                 Publish now — both confirm, neither runs on unsaved edits
 //
@@ -17,6 +20,7 @@
 // overview (optional) and lays it out in the fixed structure.
 
 #include <QJsonObject>
+#include <QMap>
 #include <QString>
 #include <QWidget>
 
@@ -66,7 +70,10 @@ class BriefsPanel : public QWidget {
     void unschedule();
     void confirm_publish();
     void publish(bool accept_incomplete);
-    void set_post_x(bool on);
+    void set_post_to();
+    void post_now();
+    QStringList ticked_platforms() const;
+    static QStringList awaiting_posts(const QJsonObject& draft);
 
     QJsonObject list_;  ///< the "drafts" answer
     QJsonObject draft_; ///< the selected draft (the "draft" answer)
@@ -90,7 +97,9 @@ class BriefsPanel : public QWidget {
     QPlainTextEdit* source_ = nullptr;
     QPlainTextEdit* x_edit_ = nullptr;
     QLabel* x_count_ = nullptr;
-    QCheckBox* post_x_ = nullptr;
+    QMap<QString, QCheckBox*> post_to_; ///< x / bluesky / mastodon
+    QPushButton* post_now_btn_ = nullptr;
+    QLabel* post_why_ = nullptr;
     QDateTimeEdit* when_ = nullptr;
     QPushButton* schedule_btn_ = nullptr;
     QPushButton* unschedule_btn_ = nullptr;

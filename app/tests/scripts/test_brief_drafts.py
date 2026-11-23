@@ -187,6 +187,80 @@ def test_tick_publishes_what_is_due():
     assert bd.load("weekly-tick")["state"] == "published" and bd.load("weekly-later")["state"] == "ready"
 
 
+def test_settings_validate_and_drive_the_build():
+    st = bd.settings_get()
+    assert st["detail"] == "standard" and st["auto"] == "draft" and "insider" in st["topics"], st
+    assert "error" in bd.settings_set({"topics": ["nope"]})
+    assert "error" in bd.settings_set({"topics": ["ipo_private"]})  # nothing public: refused
+    assert "error" in bd.settings_set({"platforms": ["myspace"]})
+    assert "error" in bd.settings_set({"detail": "huge"})
+    out = bd.settings_set({"topics": ["macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
+                           "auto": "publish"})
+    assert out["topics"] == ["summary", "macro"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
+    assert bd.settings_get() == out
+    bd.settings_set(bd.DEFAULT_SETTINGS)
+
+
+def test_post_to_replaces_post_x_and_older_drafts_still_read():
+    m = make_weekly("weekly-platforms")
+    assert bd.post_to(m) == []
+    m["post_x"] = True  # a draft from before platforms
+    bd.store(m)
+    assert bd.post_to(bd.load("weekly-platforms")) == ["x"]
+    out = bd.save("weekly-platforms", post_to_list=["x", "bluesky"])
+    assert out.get("post_to") == ["x", "bluesky"], out
+    assert "error" in bd.save("weekly-platforms", post_to_list=["myspace"])
+    # The per-network texts: X's is the edited one, the others the issue's own.
+    texts = bd._texts(bd.load("weekly-platforms"))
+    assert texts["x"].endswith(URL), texts
+
+
+def test_summary_alone_is_not_a_brief():
+    assert "error" in bd.settings_set({"topics": ["summary"]})
+    assert "error" in bd.settings_set({"topics": ["summary", "ipo_private"]})
+    assert "error" not in bd.settings_set({"topics": ["summary", "screens"]})
+    bd.settings_set(bd.DEFAULT_SETTINGS)
+
+
+def test_platforms_chosen_on_a_draft_survive_a_rebuild_settings_drive_the_rest():
+    m = make_weekly("weekly-chosen")
+    assert not bd.post_to_chosen(m)
+    bd.save("weekly-chosen", post_to_list=["x"])
+    assert bd.post_to_chosen(bd.load("weekly-chosen"))
+    old = {"id": "o", "post_x": False}  # a draft from before platforms: its choice stands
+    assert bd.post_to_chosen(old) and bd.post_to(old) == []
+
+
+def test_a_corrected_text_goes_everywhere():
+    m = make_weekly("weekly-corrected")
+    t = bd._texts(m)
+    assert t["x"] == m["x_text"]
+    bd.save("weekly-corrected", x_text="Corrected figure. " + URL)
+    t = bd._texts(bd.load("weekly-corrected"))
+    assert t["x"] == t["bluesky"] == t["mastodon"] == "Corrected figure. " + URL, t
+
+
+def test_not_connected_is_skipped_and_old_x_error_kept():
+    import social_post as sp
+    m = make_weekly("weekly-skip")
+    m.update({"post_to": ["x", "bluesky"], "key": "2026-W99"})
+    saved = dict(sp._configured)
+    sp._configured.update({"x": True, "bluesky": False})
+    try:
+        assert bd.pending_posts(m) == ["x"], bd.pending_posts(m)
+        assert bd._not_connected(["x", "bluesky"]) == ["bluesky"]
+    finally:
+        sp._configured.clear()
+        sp._configured.update(saved)
+    assert bd.post_errors({"x_error": "failed: 403"}) == {"x": "failed: 403"}
+    assert bd.post_errors({"x_error": "old", "x_ref": "123"}) == {}
+
+
+def test_post_now_needs_a_published_brief():
+    make_weekly("weekly-not-yet")
+    assert "Publish the brief first" in bd.post_now("weekly-not-yet", ["x"]).get("error", "")
+
+
 # ── theme briefs ─────────────────────────────────────────────────────────────
 
 FACTS = {"days": 30, "unknown": ["ZZZZ"], "insider_note": "",

@@ -216,7 +216,11 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
 
     // ── the X text ──
     auto* xrow = new QHBoxLayout;
-    auto* xl = new QLabel(QStringLiteral("X POST"));
+    // X's text; Bluesky and Mastodon post their own generated texts (cut to
+    // their limits) — until this is corrected, then this text goes everywhere.
+    auto* xl = new QLabel(QStringLiteral("POST TEXT"));
+    xl->setToolTip(QStringLiteral("Posted to X. Bluesky and Mastodon post the same figures in their own "
+                                  "generated text — once you correct this text, it is posted everywhere instead."));
     xl->setObjectName("socialDim");
     xrow->addWidget(xl);
     xrow->addStretch(1);
@@ -231,13 +235,33 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
             render_controls();
     });
     v->addWidget(x_edit_);
-    post_x_ = new QCheckBox(QStringLiteral("Post this to X once the page is live"));
-    post_x_->setToolTip(QStringLiteral("Posts once the page shows this version"));
-    connect(post_x_, &QCheckBox::toggled, this, [this](bool on) {
-        if (!setting_)
-            set_post_x(on);
-    });
-    v->addWidget(post_x_);
+    // Where it goes once its page is live — each platform once, ever. Before
+    // publishing: saved on the draft. After: Post now sends the ticked ones
+    // it has not gone to yet. A platform already posted shows ✓.
+    auto* prow = new QHBoxLayout;
+    prow->setSpacing(10);
+    prow->addWidget(new QLabel(QStringLiteral("Post to:")));
+    for (const auto& [key, label] : {std::pair{"x", "X"}, std::pair{"bluesky", "Bluesky"},
+                                     std::pair{"mastodon", "Mastodon"}}) {
+        auto* c = new QCheckBox(QString::fromLatin1(label));
+        const QString k = QString::fromLatin1(key);
+        connect(c, &QCheckBox::toggled, this, [this]() {
+            if (!setting_)
+                set_post_to();
+        });
+        post_to_.insert(k, c);
+        prow->addWidget(c);
+    }
+    post_now_btn_ = new QPushButton(QStringLiteral("Post now"));
+    post_now_btn_->setObjectName(QStringLiteral("socialBtn"));
+    connect(post_now_btn_, &QPushButton::clicked, this, &BriefsPanel::post_now);
+    prow->addWidget(post_now_btn_);
+    prow->addStretch(1);
+    v->addLayout(prow);
+    post_why_ = new QLabel;
+    post_why_->setObjectName(QStringLiteral("socialDim"));
+    post_why_->setWordWrap(true);
+    v->addWidget(post_why_);
 
     // ── publishing ──
     auto* pub = new QHBoxLayout;
@@ -337,8 +361,7 @@ void BriefsPanel::load_list() {
                          // Overdue (a failing publish) is the 10-minute timer's to retry, not a 15 s loop.
                          const qint64 to_due = due.isValid() ? QDateTime::currentDateTimeUtc().secsTo(due) : -1;
                          waiting |= st == "building" || (to_due >= -60 && to_due < 20 * 60) ||
-                                    (st == "published" && x.value("post_x").toBool() &&
-                                     x.value("x_ref").toString().isEmpty() && x.value("x_error").toString().isEmpty());
+                                    (st == "published" && !awaiting_posts(x).isEmpty());
                      }
                      if (!found)
                          current_ = drafts.isEmpty() ? QString() : drafts.first().toObject().value("id").toString();
@@ -382,7 +405,16 @@ void BriefsPanel::load_draft(const QString& id) {
                          x_edit_->setPlainText(loaded_x_);
                          preview_->setMarkdown(preview_markdown(loaded_body_));
                      }
-                     post_x_->setChecked(o.value("post_x").toBool());
+                     {
+                         const QJsonArray to = o.value("post_to").toArray();
+                         const QJsonObject posted = o.value("posted").toObject();
+                         for (auto it = post_to_.begin(); it != post_to_.end(); ++it) {
+                             const bool done = posted.contains(it.key());
+                             it.value()->setChecked(done || to.contains(it.key()));
+                             it.value()->setText(it.value()->text().remove(QStringLiteral(" ✓")) +
+                                                 (done ? QStringLiteral(" ✓") : QString()));
+                         }
+                     }
                      // The time picker follows the STORED schedule only when that changes:
                      // a poll must not undo the time being picked.
                      const QString sched = o.value("schedule_at").toString();
@@ -452,17 +484,26 @@ void BriefsPanel::render_draft() {
         c << QStringLiteral("<a style='color:%1;' href=\"%2\">%3</a>")
                  .arg(ui::colors::CYAN(), url.toHtmlEscaped(), st == "published" ? QStringLiteral("open page")
                                                                                    : QStringLiteral("page address"));
-    const QString xref = draft_.value("x_ref").toString();
-    if (!xref.isEmpty()) {
-        const QString link = so::ref_link(QStringLiteral("x"), xref.section(' ', -1));
-        c << (link.isEmpty() ? QStringLiteral("posted to X")
-                             : QStringLiteral("<a style='color:%1;' href=\"%2\">posted to X</a>")
-                                   .arg(ui::colors::CYAN(), link.toHtmlEscaped()));
-    } else if (!draft_.value("x_error").toString().isEmpty()) {
-        c << QStringLiteral("<span style='color:%1;'>X: %2</span>")
-                 .arg(ui::colors::NEGATIVE(), draft_.value("x_error").toString().toHtmlEscaped());
-    } else if (st == "published" && draft_.value("post_x").toBool()) {
-        c << QStringLiteral("X: waiting for the page to go live");
+    // Each platform: posted (linked), failed (why), skipped, or waiting for the page.
+    const QJsonObject posted = draft_.value("posted").toObject();
+    const QJsonObject perrs = draft_.value("post_errors").toObject();
+    const QJsonArray skipped = draft_.value("skipped").toArray();
+    for (const auto& v : draft_.value("post_to").toArray()) {
+        const QString n = v.toString();
+        const QString name = n == "x" ? QStringLiteral("X") : n.left(1).toUpper() + n.mid(1);
+        if (posted.contains(n)) {
+            const QString link = so::ref_link(n, posted.value(n).toString().section(' ', -1));
+            c << (link.isEmpty() ? QStringLiteral("posted to %1").arg(name)
+                                 : QStringLiteral("<a style='color:%1;' href=\"%2\">posted to %3</a>")
+                                       .arg(ui::colors::CYAN(), link.toHtmlEscaped(), name));
+        } else if (perrs.contains(n)) {
+            c << QStringLiteral("<span style='color:%1;'>%2: %3</span>")
+                     .arg(ui::colors::NEGATIVE(), name, perrs.value(n).toString().toHtmlEscaped());
+        } else if (skipped.contains(n)) {
+            c << QStringLiteral("%1: skipped — not connected").arg(name);
+        } else if (st == "published") {
+            c << QStringLiteral("%1: waiting for the page to go live").arg(name);
+        }
     }
     chips_->setText(c.join(QStringLiteral(" · ")));
 
@@ -502,7 +543,42 @@ void BriefsPanel::render_controls() {
     rebuild_btn_->setVisible(weekly);
     rebuild_btn_->setEnabled(weekly && st != "building" && st != "published" && !busy_);
     delete_btn_->setEnabled(have && st != "published" && st != "building" && !busy_);
-    post_x_->setEnabled(ready && !busy_);
+    // Posting: chosen before publishing (saved on the draft), sent after it
+    // (Post now). Each control says why when it can't be used.
+    const bool published_now = have && st == "published";
+    const QJsonObject posted = draft_.value("posted").toObject();
+    QStringList pending;
+    for (auto it = post_to_.begin(); it != post_to_.end(); ++it) {
+        const bool done = posted.contains(it.key());
+        it.value()->setEnabled(!busy_ && !done && (ready || published_now));
+        it.value()->setToolTip(done ? QStringLiteral("Already posted — each platform is posted once")
+                               : st == "building" ? QStringLiteral("Wait for the build to finish")
+                               : st == "failed"   ? QStringLiteral("The build failed — rebuild it first")
+                                                  : QStringLiteral("Post here once the page is live"));
+        if (published_now && !done && it.value()->isChecked())
+            pending << it.value()->text();
+    }
+    post_now_btn_->setVisible(published_now);
+    post_now_btn_->setEnabled(!busy_ && !pending.isEmpty());
+    QString why;
+    if (!have)
+        why = QStringLiteral("Pick a brief.");
+    else if (st == "building")
+        why = QStringLiteral("Being built — posting options open when it is ready.");
+    else if (st == "failed")
+        why = QStringLiteral("The build failed — rebuild it before choosing where it goes.");
+    else if (published_now && pending.isEmpty())
+        why = posted.isEmpty() ? QStringLiteral("Published. Tick a platform, then Post now.")
+                               : QStringLiteral("Published and posted where ticked (✓).");
+    else if (published_now)
+        why = QStringLiteral("Published — Post now sends it to %1 (its page is live).").arg(pending.join(", "));
+    else if (ready)
+        why = QStringLiteral("Posted to the ticked platforms as soon as the page is live after publishing. A "
+                             "platform not connected (CHANNELS) is skipped.");
+    const QJsonObject errs = draft_.value("post_errors").toObject();
+    for (auto it = errs.begin(); it != errs.end(); ++it)
+        why += QStringLiteral("\n%1 not posted: %2").arg(it.key(), it.value().toString());
+    post_why_->setText(why);
     when_->setEnabled(ready && !busy_);
     schedule_btn_->setEnabled(ready && !d && !busy_);
     schedule_btn_->setToolTip(d ? QStringLiteral("Save the corrections first") : QString());
@@ -609,12 +685,67 @@ void BriefsPanel::discard() {
                  });
 }
 
-void BriefsPanel::set_post_x(bool on) {
-    call_backend(this, QStringLiteral("draft_save"), {{QStringLiteral("id"), current_}, {QStringLiteral("post_x"), on}},
+QStringList BriefsPanel::awaiting_posts(const QJsonObject& d) {
+    // Ticked, not posted, not failed, not skipped: the tick still owes these.
+    QStringList out;
+    const QJsonObject posted = d.value("posted").toObject(), errs = d.value("post_errors").toObject();
+    const QJsonArray skipped = d.value("skipped").toArray();
+    for (const auto& v : d.value("post_to").toArray())
+        if (!posted.contains(v.toString()) && !errs.contains(v.toString()) && !skipped.contains(v))
+            out << v.toString();
+    return out;
+}
+
+QStringList BriefsPanel::ticked_platforms() const {
+    QStringList out;
+    for (auto it = post_to_.begin(); it != post_to_.end(); ++it)
+        if (it.value()->isChecked())
+            out << it.key();
+    return out;
+}
+
+void BriefsPanel::set_post_to() {
+    if (draft_.value("state").toString() != QLatin1String("ready")) {
+        render_controls(); // after publishing the ticks only choose what Post now sends
+        return;
+    }
+    call_backend(this, QStringLiteral("draft_save"),
+                 {{QStringLiteral("id"), current_}, {QStringLiteral("post_to"), QJsonArray::fromStringList(ticked_platforms())}},
                  kQuickMs, [this](const QJsonObject&, const QString& err, Outcome) {
                      if (!err.isEmpty())
                          set_status(err.toHtmlEscaped(), true);
                      load_list();
+                 });
+}
+
+void BriefsPanel::post_now() {
+    const QJsonObject posted = draft_.value("posted").toObject();
+    QStringList nets;
+    for (const auto& n : ticked_platforms())
+        if (!posted.contains(n))
+            nets << n;
+    if (nets.isEmpty())
+        return;
+    if (!confirm(this, QStringLiteral("Post"),
+                 QStringLiteral("Post <b>%1</b> to %2 now? Each platform is posted once.")
+                     .arg(draft_.value("title").toString().toHtmlEscaped(), nets.join(QStringLiteral(", "))),
+                 QStringLiteral("Post")))
+        return;
+    busy_ = true;
+    render_controls();
+    set_status(QStringLiteral("Posting…"));
+    call_backend(this, QStringLiteral("draft_post_now"),
+                 {{QStringLiteral("id"), current_}, {QStringLiteral("networks"), QJsonArray::fromStringList(nets)}},
+                 kFactsMs, [this](const QJsonObject& o, const QString& err, Outcome) {
+                     busy_ = false;
+                     const QJsonObject errs = o.value("post_errors").toObject();
+                     set_status(!err.isEmpty() ? err.toHtmlEscaped()
+                                : errs.isEmpty() ? QStringLiteral("Posted.")
+                                                 : QStringLiteral("Some platforms were not posted — see below."),
+                                !err.isEmpty() || !errs.isEmpty());
+                     draft_ = {};
+                     load_list();
+                     emit published();
                  });
 }
 
@@ -639,8 +770,10 @@ void BriefsPanel::schedule(bool accept_incomplete) {
                      set_status(err.isEmpty()
                                     ? QStringLiteral("Scheduled for %1%2.")
                                           .arg(at.toString(QStringLiteral("ddd d MMM HH:mm")),
-                                               post_x_->isChecked() ? QStringLiteral(", then posted to X once live")
-                                                                    : QString())
+                                               ticked_platforms().isEmpty()
+                                                   ? QString()
+                                                   : QStringLiteral(", then posted to %1 once live")
+                                                         .arg(ticked_platforms().join(QStringLiteral(", "))))
                                     : err.toHtmlEscaped(),
                                 !err.isEmpty());
                      draft_ = {};
@@ -668,8 +801,10 @@ void BriefsPanel::confirm_publish() {
                            "unpublished from finterm.");
     if (has_private)
         html += QStringLiteral("<br>Private sections (🔒) are removed first.");
-    html += post_x_->isChecked() ? QStringLiteral("<br>Then the X text is posted as soon as the page is live.")
-                                 : QStringLiteral("<br>Nothing is posted to X (tick the box for that).");
+    html += ticked_platforms().isEmpty()
+                ? QStringLiteral("<br>Nothing is posted anywhere (tick a platform for that — or Post now later).")
+                : QStringLiteral("<br>Then it is posted to %1 as soon as the page is live.")
+                      .arg(ticked_platforms().join(QStringLiteral(", ")));
     if (incomplete)
         html += QStringLiteral("<br><br><span style='color:%1;'><b>Some days of filings could not be read — this "
                                "week is incomplete.</b></span>")
@@ -701,8 +836,9 @@ void BriefsPanel::publish(bool accept_incomplete) {
                                                            QStringLiteral("social"));
                      } else {
                          set_status(QStringLiteral("Published — the page goes live in a minute or two%1.")
-                                        .arg(post_x_->isChecked() ? QStringLiteral("; the X post follows it")
-                                                                  : QString()));
+                                        .arg(ticked_platforms().isEmpty()
+                                                 ? QString()
+                                                 : QStringLiteral("; the posts follow it")));
                          ui::ToastService::instance().post(Sev::Success, QStringLiteral("Brief published"),
                                                            QStringLiteral("social"));
                          emit published();

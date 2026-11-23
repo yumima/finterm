@@ -73,7 +73,10 @@ def no_secret_in(out, *secrets_):
 APP_PW = "abcd-efgh-ijkl-mnop"  # the shape of a Bluesky app password, not a real one
 
 # ── the enabled-networks switch ─────────────────────────────────────────────
-check(sp.ENABLED_NETWORKS == ("x",), f"only X ships enabled: {sp.ENABLED_NETWORKS}")
+check(sp.ENABLED_NETWORKS == ("x", "bluesky", "mastodon"),
+      f"X, Bluesky and Mastodon ship enabled (the weekly brief posts where the owner picks): {sp.ENABLED_NETWORKS}")
+# The gate itself: with a network switched off, every action for it is refused.
+sp.ENABLED_NETWORKS = ("x",)
 reset()
 for act, payload in [("bsky_connect", {"handle": "a.bsky.social", "app_password": APP_PW}),
                      ("mastodon_connect_start", {"instance": "mastodon.social"}),

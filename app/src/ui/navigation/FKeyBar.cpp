@@ -31,7 +31,6 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         // chat floats in the bubble.
         {"news", "NEWS"},
         // Publishing (the weekly brief to X & co.) — News is for reading.
-        {"social", "SOCIAL"},
         {"equity_research", "RESEARCH"},
         {"backtesting", "BACKTEST"},
         {"algo_trading", "ALGO"},

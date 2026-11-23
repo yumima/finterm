@@ -13,6 +13,7 @@
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsPeekPane.h"
 #include "screens/news/NewsSidePanel.h"
+#include "screens/news/WeeklyBriefPanel.h"
 #include "screens/news/WhatsOnPanel.h"
 #include "screens/news/NewsTickerStrip.h"
 #include "screens/pre_ipo/IpoWatchView.h"
@@ -27,6 +28,10 @@
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
 
+#include <QButtonGroup>
+#include <QStackedWidget>
+#include <QHBoxLayout>
+#include <QPushButton>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QPointer>
@@ -179,7 +184,8 @@ void NewsScreen::build_ui() {
     // Intel drawer (left, hidden by default; opens to ~280px, resizable).
     side_panel_ = new NewsSidePanel(content_widget);
     whats_on_ = new WhatsOnPanel;
-    side_panel_->set_whats_on(whats_on_);
+    weekly_brief_ = new WeeklyBriefPanel;
+    side_panel_->set_whats_on(build_whats_on_tabs());
     content_splitter_->addWidget(side_panel_);
 
     // Peek pane (hidden until a WHAT'S ON row opens something): right of the
@@ -319,6 +325,7 @@ void NewsScreen::connect_signals() {
     // Side panel (drawer)
     connect(whats_on_, &WhatsOnPanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
     connect(whats_on_, &WhatsOnPanel::open_beside, this, &NewsScreen::open_beside);
+    connect(weekly_brief_, &WeeklyBriefPanel::open_beside, this, &NewsScreen::open_beside);
     connect(peek_, &NewsPeekPane::close_requested, this, &NewsScreen::close_peek);
     connect(side_panel_, &NewsSidePanel::article_clicked, this, &NewsScreen::on_sidebar_article_clicked);
     connect(side_panel_, &NewsSidePanel::monitor_added, this, &NewsScreen::on_monitor_added);
@@ -848,6 +855,54 @@ void open_full(const QString& screen_id, const char* event, const QVariantMap& p
 }
 } // namespace
 
+QWidget* NewsScreen::build_whats_on_tabs() {
+    // WHAT'S ON | WEEKLY BRIEF — the week as it happens, and the brief that
+    // sums it up and shares it.
+    auto* box = new QWidget;
+    auto* v = new QVBoxLayout(box);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(0);
+    auto* bar = new QHBoxLayout;
+    bar->setContentsMargins(6, 4, 6, 2);
+    bar->setSpacing(2);
+    auto* stack = new QStackedWidget;
+    stack->addWidget(whats_on_);
+    stack->addWidget(weekly_brief_);
+    const QString ss = QStringLiteral("QPushButton{background:transparent;color:%1;border:none;border-bottom:2px solid "
+                                      "transparent;font-weight:700;padding:3px 8px;letter-spacing:1px;}"
+                                      "QPushButton:checked{color:%2;border-bottom:2px solid %2;}"
+                                      "QPushButton:hover{color:%3;}")
+                           .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY());
+    auto* group = new QButtonGroup(box);
+    int i = 0;
+    for (const char* t : {"WHAT'S ON", "WEEKLY BRIEF"}) {
+        auto* b = new QPushButton(QString::fromLatin1(t));
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet(ss);
+        group->addButton(b, i++);
+        bar->addWidget(b);
+    }
+    bar->addStretch(1);
+    group->button(0)->setChecked(true);
+    connect(group, &QButtonGroup::idClicked, stack, &QStackedWidget::setCurrentIndex);
+    weekly_tab_ = group->button(1);
+    v->addLayout(bar);
+    v->addWidget(stack, 1);
+    return box;
+}
+
+void NewsScreen::show_weekly_brief() {
+    // A turn later: on a first show NEWS opens its own drawer then (with its
+    // width laid out); this follows it rather than racing it.
+    QTimer::singleShot(0, this, [this]() {
+        if (!side_panel_->is_drawer_open())
+            on_drawer_toggle(); // the drawer's width and the INTEL toggle follow
+        if (weekly_tab_)
+            weekly_tab_->click();
+    });
+}
+
 void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) {
     const bool was_open = !peek_->isHidden();
     if (screen_id == QLatin1String("equity_research")) {
@@ -880,11 +935,10 @@ void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) 
             }));
         ipo->select_deal(deal, key);
     } else if (screen_id == QLatin1String("social")) {
-        peek_->show_view(QStringLiteral("social"), QStringLiteral("WEEKLY BRIEF — SOCIAL"),
-                         []() { return new SocialScreen; },
-                         []() {
-                             EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "social"}});
-                         });
+        // The weekly brief's workspace: accounts (CHANNELS), the briefs to
+        // review, correct, schedule and publish, what is live and posted.
+        peek_->show_view(QStringLiteral("social"), QStringLiteral("WEEKLY BRIEF"), []() { return new SocialScreen; },
+                         {});
     } else {
         return;
     }

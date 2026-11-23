@@ -23,12 +23,13 @@ import finterm_keyring
 
 UA = "finterm-weekly-brief/1.0 (+https://github.com/yumima/finterm)"
 
-# THE switch for which networks the app may publish to or connect: the Social
-# screen greys out every other one ("coming soon") from the channels answer,
-# and social_app.py refuses their publish/connect/mark actions. Enabling one
-# is adding it here. The weekly timer (tools/announce.py) is not gated: it
+# THE switch for which networks the app may publish to or connect: the weekly
+# brief's platform list (NEWS › What's On › WEEKLY BRIEF) offers these, greys
+# out any other ("coming soon"), and social_app.py refuses their publish /
+# connect / mark actions. Enabling one is adding it here. Each still posts
+# only once its account is connected (credentials in the keyring). The weekly timer (tools/announce.py) is not gated: it
 # posts wherever credentials were stored by hand.
-ENABLED_NETWORKS = ("x",)
+ENABLED_NETWORKS = ("x", "bluesky", "mastodon")
 MANUAL_NETWORKS = ("reddit", "hackernews")  # posted by hand; see launch_posts.py
 
 
@@ -178,6 +179,24 @@ def mastodon_post(text, env, issue, **_):
 
 
 
+_configured = {}  # network -> bool, for this process (a drafts listing asks per draft)
+
+
+def is_configured(network):
+    """True / False — or None when the keyring can't be read (locked): unknown
+    must not read as "not connected"."""
+    if network in _configured:
+        return _configured[network]
+    keys = next((k for n, k, _ in NETWORKS if n == network), None)
+    if keys is None:
+        return False
+    try:
+        _configured[network] = all(k in credentials(keys) for k in keys)
+    except finterm_keyring.KeyringUnavailable:
+        return None
+    return _configured[network]
+
+
 def keyring_get(name):
     """None if absent; raises finterm_keyring.KeyringUnavailable if it could
     not look — "locked keyring" must not read as "not configured"."""
@@ -185,10 +204,12 @@ def keyring_get(name):
 
 
 def keyring_set(name, value):
+    _configured.clear()
     finterm_keyring.set(name, value)
 
 
 def keyring_delete(name):
+    _configured.clear()
     finterm_keyring.delete(name)
 
 

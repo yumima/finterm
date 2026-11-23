@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`92f2afc62`](https://github.com/yumima/finterm/commit/92f2afc62) markets: one header row of widget pages — OVERVIEW screens, FUTURES groups, WORLD; futures as widgets
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

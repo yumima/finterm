@@ -14,6 +14,7 @@
 #include <functional>
 
 class QLabel;
+class QPushButton;
 class QStackedWidget;
 
 namespace finterm::screens {
@@ -30,7 +31,7 @@ class NewsPeekPane : public QWidget {
                        std::function<void()> pop_out);
 
     /// Replace what FULL SCREEN does (when it depends on the view's state).
-    void set_pop_out(std::function<void()> pop_out) { pop_out_ = std::move(pop_out); }
+    void set_pop_out(std::function<void()> pop_out);
 
   signals:
     void close_requested();
@@ -43,6 +44,7 @@ class NewsPeekPane : public QWidget {
     QHash<QString, QWidget*> views_;
     QHash<QString, QWidget*> holders_; ///< the scroll area around each view
     std::function<void()> pop_out_;
+    QPushButton* full_ = nullptr;
 };
 
 } // namespace finterm::screens

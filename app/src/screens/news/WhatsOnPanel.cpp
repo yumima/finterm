@@ -906,7 +906,8 @@ QWidget* WhatsOnPanel::make_brief_row() {
     auto* title = new QLabel(QStringLiteral("Weekly brief — insider buying →"));
     title->setWordWrap(true);
     h->addWidget(title, 1);
-    row->setToolTip(QStringLiteral("Opens SOCIAL with the latest published issue"));
+    row->setToolTip(QStringLiteral("Opens the weekly brief's workspace beside this list (the WEEKLY BRIEF tab "
+                                   "above holds its settings)"));
     row->setProperty("whatsOnSource", kBriefSource);
     row->installEventFilter(this);
     return row;

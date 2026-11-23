@@ -113,7 +113,12 @@ def clusters_data(scan):
     return res["rows"], notes, complete
 
 
-def clusters_section(rows, notes):
+# How many rows a section shows at each detail level (the owner's choice).
+DETAIL_ROWS = {"full": 25, "standard": 15, "short": 5}
+DETAIL_PICKS = {"full": None, "standard": None, "short": 5}  # None = every screen
+
+
+def clusters_section(rows, notes, max_rows=25):
     out = ["## Insider buying clusters", ""]
     out.append(
         "Companies where **two or more insiders** reported buying shares **on the open market** in SEC Form 4 "
@@ -129,15 +134,16 @@ def clusters_section(rows, notes):
     else:
         out.append("| Symbol | Company | Insiders | Reported | Avg price | Trade dates | Roles |")
         out.append("|---|---|---:|---:|---:|---|---|")
-        for r in rows[:25]:
+        for r in rows[:max_rows]:
             avg = f"${r['avg_price']:,.2f}" if r.get("avg_price") else "—"
             dates = r["first_trade"] if r["first_trade"] == r["last_trade"] else f"{r['first_trade']} – {r['last_trade']}"
             out.append(
                 f"| {md_escape(r['symbol']) or '—'} | {md_escape(r['issuer'])} | {r['insiders']} | "
                 f"{money(r['value'])} | {avg} | {dates} | {md_escape(', '.join(r['roles'][:3]))} |"
             )
-        if len(rows) > 25:
-            out += ["", f"_{len(rows) - 25} more companies met the conditions; the 25 largest by dollars are shown._"]
+        if len(rows) > max_rows:
+            out += ["", f"_{len(rows) - max_rows} more companies met the conditions; the {max_rows} largest by "
+                        "dollars are shown._"]
     for n in notes:
         out += ["", f"> {n}"]
     out.append("")
@@ -211,12 +217,29 @@ def _limit(network, url):
     return limit, len(url) if url_cost is None else url_cost
 
 
-def social_posts(rows, today, url):
+PUBLIC_TOPIC_WORDS = {"insider": "insider buying", "macro": "the week ahead",
+                      "screens": "the top name from each strategy screen"}
+
+
+def social_posts(rows, today, url, topics=("insider", "macro", "screens")):
     """This issue's announcement per network, built from its own names and
     figures (X treats repeated identical posts as spam), in the page's neutral
-    wording."""
+    wording. It announces only what the issue holds: without the insider
+    section, no insider figures and no "full list"."""
     span = f"7 days to {today:%b %-d}"
     n = len(rows)
+    if "insider" not in topics:
+        parts = [PUBLIC_TOPIC_WORDS[t] for t in ("macro", "screens") if t in topics]
+        what = " and ".join(parts) if parts else "the week"
+        head = f"Weekly brief, week of {today:%b %-d}: {what}."
+        tail = short = f"The brief: {url}"
+        return {
+            "url": url,
+            "x": fit_post(head, [], tail, short, url, *_limit("x", url), weigh=x_weight),
+            "bluesky": fit_post(head, [], tail, short, url, *_limit("bluesky", url)),
+            "mastodon": fit_post(head, [], f"{tail}\n\nNot investment advice. #investing #stocks #opensource",
+                                 short, url, *_limit("mastodon", url)),
+        }
     if n:
         head = (f"Insider buying, {span} (SEC Form 4): {n} {'company' if n == 1 else 'companies'} "
                 f"with 2+ insiders buying on the open market.")
@@ -550,13 +573,16 @@ def strip_private(text):
 
 # ── the week in brief ────────────────────────────────────────────────────────
 
-def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=None):
+def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=None,
+                 include=("insider", "macro", "screens")):
     """Three lines a reader can stop at: last week (insider clusters), next
     week (the releases), and the screens. Built from the sections below it,
     so it can never say something they don't."""
     out = ["## The week in brief", ""]
     n = len(rows or [])
-    if n:
+    if "insider" not in include:
+        pass  # a topic left out of the brief is left out of its summary too
+    elif n:
         top = []
         for r in rows[:3]:
             name = r.get("symbol") or (r.get("issuer") or "")[:30]
@@ -570,7 +596,9 @@ def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=Non
     else:
         out.append("- **Last week:** no company had two or more insiders buying $50K or more on the open market "
                    "(SEC Form 4).")
-    if macro_err:
+    if "macro" not in include:
+        pass
+    elif macro_err:
         out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** the release calendar was not available.")
     elif not events:
         out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** no top-tier US release is scheduled.")
@@ -588,7 +616,9 @@ def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=Non
             parts.append(f"{d:%a} {', '.join(md_escape(x) for x in names[:3])}"
                          + (f" +{len(names) - 3}" if len(names) > 3 else ""))
         out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** " + "; ".join(parts) + ".")
-    if picks:
+    if "screens" not in include:
+        pass
+    elif picks:
         names = [f"{md_escape(sym)} ({md_escape(st.get('name', '').split(' (')[0])})" for st, sym, _, _ in picks if sym]
         if names:
             out.append(f"- **Screens:** the top name on each — {', '.join(names)}. Screen output, not a recommendation.")

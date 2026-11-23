@@ -1,6 +1,7 @@
 #include "app/DockScreenRouter.h"
 
 #include "screens/markets/MarketsScreen.h"
+#include "screens/news/NewsScreen.h"
 
 #include "auth/InactivityGuard.h"
 #include "core/components/PopularityTracker.h"
@@ -46,7 +47,6 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"portfolio", "Portfolio"},
         {"watchlist", "Watchlist"},
         {"news", "News"},
-        {"social", "Social"},
         {"equity_research", "Equity Research"},
         // Legacy ids from saved layouts: the factories redirect them to live
         // screens (MainWindow), so the tab must carry the live screen's name —
@@ -264,6 +264,14 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
         return;
     }
 
+    // SOCIAL lives in NEWS now (What's On › WEEKLY BRIEF, its workspace
+    // beside): every route to the old tab opens it there.
+    if (id == QLatin1String("social")) {
+        navigate(QStringLiteral("news"), exclusive);
+        if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
+            news->show_weekly_brief();
+        return;
+    }
     // FUTURES is a page of MARKETS now: every route to the old tab (menu,
     // command bar, F-keys, MCP, perspectives) lands on MARKETS ▸ FUTURES.
     if (id == QLatin1String("futures")) {
@@ -588,6 +596,12 @@ void DockScreenRouter::raise(const QString& id) {
 }
 
 void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side, ads::CDockAreaWidget* anchor) {
+    if (id == QLatin1String("social")) { // in NEWS now (see navigate)
+        split_alongside(QStringLiteral("news"), side, anchor);
+        if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
+            news->show_weekly_brief();
+        return;
+    }
     if (id == QLatin1String("futures")) { // a page of MARKETS now (see navigate)
         screens::MarketsScreen::prepare_futures();
         split_alongside(QStringLiteral("markets"), side, anchor);

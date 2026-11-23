@@ -15,11 +15,14 @@
 
 #include <atomic>
 
+class QAbstractButton;
+
 namespace finterm::screens {
 
 class NewsCommandBar;
 class NewsSidePanel;
 class WhatsOnPanel;
+class WeeklyBriefPanel;
 class NewsFeedPanel;
 class NewsDetailPanel;
 class NewsTickerStrip;
@@ -37,6 +40,8 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
     Q_INTERFACES(finterm::IGroupLinked)
   public:
+    /// NEWS › What's On › WEEKLY BRIEF (the drawer opened on it).
+    void show_weekly_brief();
     explicit NewsScreen(QWidget* parent = nullptr);
 
     void restore_state(const QVariantMap& state) override;
@@ -111,6 +116,9 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     NewsCommandBar* command_bar_ = nullptr;
     NewsSidePanel* side_panel_ = nullptr;
     WhatsOnPanel* whats_on_ = nullptr; ///< top of the drawer; owned by side_panel_
+    WeeklyBriefPanel* weekly_brief_ = nullptr; ///< WHAT'S ON's second tab
+    QAbstractButton* weekly_tab_ = nullptr;
+    QWidget* build_whats_on_tabs();
     NewsPeekPane* peek_ = nullptr; ///< right of the drawer: what a WHAT'S ON row opens
     NewsFeedPanel* feed_panel_ = nullptr;
     NewsDetailPanel* detail_panel_ = nullptr;

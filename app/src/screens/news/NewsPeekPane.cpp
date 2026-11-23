@@ -28,7 +28,7 @@ NewsPeekPane::NewsPeekPane(QWidget* parent) : QWidget(parent) {
     title_ = new QLabel(head);
     title_->setObjectName("newsPeekTitle");
     h->addWidget(title_, 1);
-    auto* full = new QPushButton(QStringLiteral("FULL SCREEN ↗"), head);
+    auto* full = full_ = new QPushButton(QStringLiteral("FULL SCREEN ↗"), head);
     full->setObjectName("newsPeekButton");
     full->setCursor(Qt::PointingHandCursor);
     full->setToolTip(QStringLiteral("Open this as its own screen, beside News"));
@@ -82,9 +82,15 @@ QWidget* NewsPeekPane::show_view(const QString& key, const QString& title, const
     }
     title_->setText(title);
     pop_out_ = std::move(pop_out);
+    full_->setVisible(static_cast<bool>(pop_out_)); // a view with no screen of its own has no FULL SCREEN
     stack_->setCurrentWidget(holders_.value(key));
     show();
     return v;
+}
+
+void NewsPeekPane::set_pop_out(std::function<void()> pop_out) {
+    pop_out_ = std::move(pop_out);
+    full_->setVisible(static_cast<bool>(pop_out_));
 }
 
 } // namespace finterm::screens

@@ -69,6 +69,94 @@ THEME_DISCLAIMER = (
 )
 
 
+# ── the owner's brief settings ───────────────────────────────────────────────
+#
+# What the weekly brief covers, how much of it, where it is posted and whether
+# the Sunday run publishes on its own. Read by the build (→ weekly_brief.py
+# --topics/--detail), by tick() (where to post) and by tools/weekly_publish.sh
+# (auto-mode). Set from finterm › NEWS › What's On › WEEKLY BRIEF.
+
+TOPICS = ("summary", "insider", "macro", "screens", "ipo_private")
+DETAILS = ("full", "standard", "short")
+AUTO_MODES = ("draft", "publish")
+PUBLIC_SECTIONS = ("insider", "macro", "screens")  # what a published issue can hold
+DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft"}
+
+
+def settings_path():
+    return _root() / "social" / "brief_settings.json"
+
+
+def settings_get():
+    s = dict(DEFAULT_SETTINGS)
+    try:
+        s.update(json.loads(settings_path().read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
+    import social_post as sp
+    s["topics"] = [t for t in s.get("topics", []) if t in TOPICS]
+    if not [t for t in s["topics"] if t in PUBLIC_SECTIONS]:  # a hand-edited file: never an empty issue
+        s["topics"] = list(DEFAULT_SETTINGS["topics"])
+    s["detail"] = s.get("detail") if s.get("detail") in DETAILS else "standard"
+    s["platforms"] = [n for n in s.get("platforms", []) if n in sp.ENABLED_NETWORKS]
+    s["auto"] = s.get("auto") if s.get("auto") in AUTO_MODES else "draft"
+    return s
+
+
+def settings_set(new):
+    """Validate and store; returns the stored settings or {"error"}."""
+    import social_post as sp
+    cur = settings_get()
+    if "topics" in new:
+        bad = [t for t in new["topics"] if t not in TOPICS]
+        if bad:
+            return {"error": f"unknown topic(s): {', '.join(bad)}"}
+        if not [t for t in new["topics"] if t in PUBLIC_SECTIONS]:
+            return {"error": "Pick insider buying, the week ahead or the screen leaders — the summary only "
+                             "recaps those, and a brief with nothing in it is not published."}
+        cur["topics"] = [t for t in TOPICS if t in new["topics"]]
+    if "detail" in new:
+        if new["detail"] not in DETAILS:
+            return {"error": f"unknown detail level: {new['detail']}"}
+        cur["detail"] = new["detail"]
+    if "platforms" in new:
+        bad = [n for n in new["platforms"] if n not in sp.ENABLED_NETWORKS]
+        if bad:
+            return {"error": f"not a platform this build posts to: {', '.join(bad)}"}
+        cur["platforms"] = [n for n in sp.ENABLED_NETWORKS if n in new["platforms"]]
+    if "auto" in new:
+        if new["auto"] not in AUTO_MODES:
+            return {"error": f"unknown mode: {new['auto']}"}
+        cur["auto"] = new["auto"]
+    settings_path().parent.mkdir(parents=True, exist_ok=True)
+    tmp = settings_path().with_suffix(".tmp")
+    tmp.write_text(json.dumps(cur, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, settings_path())
+    return cur
+
+
+def post_to(m):
+    """The platforms a draft posts to once live (older drafts: post_x)."""
+    if isinstance(m.get("post_to"), list):
+        return list(m["post_to"])
+    return ["x"] if m.get("post_x") else []
+
+
+def post_errors(m):
+    """Each platform's last posting failure (older drafts kept X's in x_error)."""
+    errs = dict(m.get("post_errors") or {})
+    if m.get("x_error") and "x" not in errs and not m.get("x_ref"):
+        errs["x"] = m["x_error"]
+    return errs
+
+
+def post_to_chosen(m):
+    """The owner chose this draft's platforms (Review), so a rebuild keeps
+    them; otherwise every build takes the settings'. A draft from before
+    post_to carried the owner's post_x choice."""
+    return bool(m.get("post_to_chosen")) or ("post_to" not in m and "post_x" in m)
+
+
 # ── paths and locking ────────────────────────────────────────────────────────
 
 def _root():
@@ -196,13 +284,37 @@ def summary(m):
             "built_at": m.get("built_at", ""), "saved_at": m.get("saved_at", ""), "edited": bool(m.get("edited")),
             "complete": m.get("complete", True), "notes": m.get("notes", []),
             "schedule_at": m.get("schedule_at", ""), "accept_incomplete": bool(m.get("accept_incomplete")),
-            "post_x": bool(m.get("post_x")), "x_ref": m.get("x_ref", ""), "x_error": m.get("x_error", ""),
+            "post_x": "x" in post_to(m), "x_ref": m.get("x_ref", ""), "x_error": m.get("x_error", ""),
+            "post_to": post_to(m), "post_errors": post_errors(m),
+            # Ticked but not connected: skipped, never retried (connect it, then Post now).
+            "skipped": _not_connected(post_to(m)),
+            # What is posted where — the shared record (timer, app, by hand).
+            "posted": _posted_record(m),
+            "topics": m.get("topics", []), "detail": m.get("detail", ""),
             "published_at": m.get("published_at", ""), "commit": m.get("commit", ""),
             # A note stored on the draft (a failed rebuild, a scheduled publish
             # being retried) — never the top-level "error", which means THIS
             # call failed and would make a successful save read as refused.
             "note": m.get("error", "") or ("the build stopped without finishing — see the log"
                                            if st == "failed" and m.get("state") == "building" else "")}
+
+
+def _not_connected(networks):
+    try:
+        import social_post as sp
+        return [n for n in networks if sp.is_configured(n) is False]
+    except Exception:  # noqa: BLE001 — unknown is not "not connected"
+        return []
+
+
+def _posted_record(m):
+    if not m.get("key"):
+        return {}
+    try:
+        import social_post as sp
+        return sp.posted(m["key"])
+    except Exception:  # noqa: BLE001 — a record that can't be read shows as nothing posted
+        return {}
 
 
 def list_drafts():
@@ -412,8 +524,10 @@ def build_weekly(if_unedited=False):
             # the journal) — so the screen's "recent log" moves during a long
             # build and a killed build keeps what it said.
             sys.stdout.flush()
+            st = settings_get()
             r = subprocess.run([sys.executable, str(repo_root() / "tools/weekly_brief.py"), "--site",
-                                str(scratch / "site"), "--allow-incomplete", "--draft"],
+                                str(scratch / "site"), "--allow-incomplete", "--draft",
+                                "--topics", ",".join(st["topics"]), "--detail", st["detail"]],
                                stdin=subprocess.DEVNULL, timeout=BUILD_TIMEOUT_S)
             if r.returncode != 0:
                 raise RuntimeError(f"the brief failed (exit {r.returncode}) — see the log")
@@ -436,7 +550,12 @@ def build_weekly(if_unedited=False):
                           "files": [main, *WEEKLY_FILES], "built_at": _iso(_now()), "edited": False,
                           "complete": bool(issue.get("complete", True)), "notes": issue.get("notes", []),
                           "x_text": issue.get("x", ""), "x_generated": issue.get("x", ""), "pid": None,
-                          "schedule_at": "", "accept_incomplete": False, "error": ""})
+                          "schedule_at": "", "accept_incomplete": False, "error": "",
+                          # Where it posts once live: the settings' platforms,
+                          # unless the owner already chose for this draft.
+                          "post_to": post_to(m) if post_to_chosen(m) else st["platforms"],
+                          "post_to_chosen": post_to_chosen(m),
+                          "topics": st["topics"], "detail": st["detail"]})
                 store(m)
             print(f"{did} ready ({main})")
             return 0
@@ -639,7 +758,7 @@ def _editable(m):
     return None
 
 
-def save(did, body=None, x_text=None, post_x=None):
+def save(did, body=None, x_text=None, post_x=None, post_to_list=None):
     m = load(did)
     why = _editable(m)
     if why:
@@ -655,6 +774,11 @@ def save(did, body=None, x_text=None, post_x=None):
         x_text = x_text.strip()
         if m.get("url") and m["url"] not in x_text:
             return {"error": "The X text must keep the link to the page."}
+    if post_to_list is not None:
+        import social_post as sp
+        bad = [n for n in post_to_list if n not in sp.ENABLED_NETWORKS]
+        if bad:
+            return {"error": f"not a platform this build posts to: {', '.join(bad)}"}
     with Lock():
         m = load(did)
         why = _editable(m)
@@ -687,7 +811,11 @@ def save(did, body=None, x_text=None, post_x=None):
                     d["x"] = x_text
                     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if post_x is not None:
-            m["post_x"] = bool(post_x)
+            m["post_to"] = sorted(set(post_to(m)) | {"x"}) if post_x else [n for n in post_to(m) if n != "x"]
+            m["post_to_chosen"] = True
+        if post_to_list is not None:
+            m["post_to"] = list(dict.fromkeys(post_to_list))
+            m["post_to_chosen"] = True
         # Corrected = the page OR the X text differs from what was generated
         # (the timer's rebuild and Revert both key on this).
         gen = _file(m, m["main"], "generated")
@@ -817,6 +945,117 @@ def page_live(m):
         return False
 
 
+def _texts(m):
+    """The text each network posts. Generated: each network's own (built for
+    its limit, from the same figures). Corrected by the owner: the corrected
+    text, everywhere — a generated text beside it could carry the figure that
+    was corrected."""
+    texts = {"x": m.get("x_text", "")}
+    if m.get("x_text", "") != m.get("x_generated", ""):
+        return {n: m.get("x_text", "") for n in ("x", "bluesky", "mastodon")}
+    try:
+        issue = json.loads(_file(m, "site/issue.json").read_text(encoding="utf-8"))
+        for n in ("bluesky", "mastodon"):
+            if issue.get(n):
+                texts[n] = issue[n]
+    except (OSError, ValueError, KeyError):
+        pass
+    if m.get("kind") != "weekly":  # a theme brief: one text, everywhere
+        for n in ("bluesky", "mastodon"):
+            texts.setdefault(n, m.get("x_text", ""))
+    return texts
+
+
+def pending_posts(m):
+    """Platforms this published draft still has to be posted to."""
+    import social_post as sp
+    done = sp.posted(m["key"]) if m.get("key") else {}
+    # A platform not connected is skipped, not retried (the UI says so);
+    # connecting it and Post now sends it.
+    return [n for n in post_to(m) if n not in done and n in sp.ENABLED_NETWORKS and sp.is_configured(n) is not False]
+
+
+def post_live(m, log=print):
+    """Post a published draft to every platform still pending — once its page
+    shows this version. Records each platform's reference or error on the
+    draft. True when it tried."""
+    import social_post as sp
+    pending = pending_posts(m)
+    if not pending:
+        return False
+    pub = _parse(m.get("published_at"))
+    if pub and (_now() - pub).total_seconds() > X_POST_GIVE_UP_S and not m.get("posted_late_ok"):
+        quiet = [n for n in pending if n not in post_errors(m)]
+        if quiet:
+            with Lock(wait=True):
+                m = load(m["id"]) or m
+                errs = post_errors(m)
+                for n in quiet:
+                    errs.setdefault(n, "the page never showed this version; not posted")
+                m["post_errors"] = errs
+                store(m)
+        return False
+    if not page_live(m):
+        return False
+    texts = _texts(m)
+    # A corrected text is X's (a link costs 23 there); Bluesky counts the
+    # link in full — refused here, with the reason, rather than cut.
+    too_long = {}
+    if len(texts.get("bluesky", "")) > 300 and "bluesky" in pending:
+        too_long["bluesky"] = (f"the corrected text is {len(texts['bluesky'])} characters with its link; "
+                               "Bluesky takes 300 — shorten it")
+    send = [n for n in pending if n not in too_long]
+    try:
+        results, _failed = (sp.announce(m["key"], {n: texts.get(n, "") for n in send}, only=set(send),
+                                        log=log, generated=(m.get("x_text") == m.get("x_generated")))
+                            if send else ({}, False))
+    except Exception as e:  # noqa: BLE001
+        results = {n: f"failed: {type(e).__name__}: {e}" for n in send}
+    results.update(too_long)
+    with Lock(wait=True):
+        m = load(m["id"]) or m
+        refs, errs = dict(m.get("posted") or {}), post_errors(m)
+        record = sp.posted(m["key"])
+        for n in pending:
+            status = results.get(n, "")
+            if status.startswith(("posted", "already")):
+                refs[n] = record.get(n, "") or status
+                errs.pop(n, None)
+            else:
+                errs[n] = status or "not posted"
+        m["posted"], m["post_errors"] = refs, errs
+        if "x" in refs:  # older readers
+            m["x_ref"], m["x_error"] = refs["x"], ""
+        elif "x" in errs:
+            m["x_error"] = errs["x"]
+        store(m)
+    return True
+
+
+def post_now(did, networks):
+    """A published brief, posted to @networks now (its page must be live).
+    Adds them to the draft's platforms: tick() finishes any that fail."""
+    import social_post as sp
+    m = load(did)
+    if not m:
+        return {"error": "no such brief"}
+    if m.get("state") != "published":
+        return {"error": "Publish the brief first — a post links to its page."}
+    bad = [n for n in networks if n not in sp.ENABLED_NETWORKS]
+    if bad:
+        return {"error": f"not a platform this build posts to: {', '.join(bad)}"}
+    with Lock(wait=True):
+        m = load(did)
+        m["post_to"] = list(dict.fromkeys(post_to(m) + list(networks)))
+        m["posted_late_ok"] = True  # asked for now: the 6-hour give-up does not apply
+        store(m)
+    if not page_live(m):
+        return {"error": "The page does not show this version yet — it is posted as soon as it does.",
+                **get(did)}
+    post_live(m)
+    return get(did)
+
+
 def tick(log=print):
     """Publish every draft that is due; post to X every published draft that
     asked for it once its page is live. Safe to run from several places."""
@@ -840,33 +1079,9 @@ def tick(log=print):
             log(f"{m['id']}: {'published' if not r.get('error') else 'NOT published: ' + r['error']}")
             done.append(m["id"])
             m = load(m["id"]) or m
-        if m.get("state") == "published" and m.get("post_x") and not m.get("x_ref"):
-            pub = _parse(m.get("published_at"))
-            if pub and (_now() - pub).total_seconds() > X_POST_GIVE_UP_S:
-                if not m.get("x_error"):
-                    m["x_error"] = "the page never showed this version; not posted"
-                    store(m)
-                continue
-            import social_post as sp
-
-            if "x" not in sp.ENABLED_NETWORKS or not page_live(m):
-                continue
-            try:
-                results, failed = sp.announce(m["key"], {"x": m.get("x_text", "")}, only={"x"}, log=log,
-                                              generated=(m.get("x_text") == m.get("x_generated")))
-                status = results.get("x", "")
-            except Exception as e:  # noqa: BLE001
-                status = f"failed: {type(e).__name__}: {e}"
-            m = load(m["id"]) or m
-            with Lock(wait=True):
-                m = load(m["id"]) or m
-                if status.startswith(("posted", "already")):
-                    m["x_ref"] = sp.posted(m["key"]).get("x", "") or status
-                    m["x_error"] = ""
-                else:
-                    m["x_error"] = status or "not posted"
-                store(m)
-            done.append(m["id"])
+        if m.get("state") == "published" and pending_posts(m):
+            if post_live(m, log):
+                done.append(m["id"])
     return {"acted": done}
 
 
@@ -899,13 +1114,23 @@ def main(argv):
     if cmd == "x-ref" and len(argv) > 2:
         print((load(argv[2]) or {}).get("x_ref", ""))
         return 0
-    if cmd == "post-x" and len(argv) > 2:
+    if cmd == "post-x" and len(argv) > 2:  # older timer scripts
+        argv = [argv[0], "post-to", argv[2]]
+        cmd = "post-to"
+    if cmd == "post-to" and len(argv) > 2:
+        # The settings' platforms (the unattended run posts where the owner chose).
         with Lock(wait=True):
             m = load(argv[2])
             if not m:
                 return 1
-            m["post_x"] = True
+            m["post_to"] = list(dict.fromkeys(post_to(m) + settings_get()["platforms"]))
             store(m)
+        return 0
+    if cmd == "posted-all" and len(argv) > 2:  # exit 0 when nothing is left to post
+        m = load(argv[2]) or {}
+        return 0 if m and not pending_posts(m) else 1
+    if cmd == "auto-mode":
+        print(settings_get()["auto"])
         return 0
     if cmd == "list":
         print(json.dumps(list_drafts(), indent=2, ensure_ascii=False))

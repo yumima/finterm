@@ -164,6 +164,31 @@ def test_week_in_brief_summarises_last_and_next_week():
     assert "no company had" in text and "not available" in text and "not run" in text
 
 
+def test_a_topic_left_out_is_left_out_of_the_summary():
+    rows = [{"symbol": "AAA", "issuer": "Alpha", "value": 2.5e6}]
+    text = "\n".join(wb.week_summary(rows, [], date(2026, 11, 16), date(2026, 11, 20), None,
+                                     wb.screen_picks(_doc()), include=("macro",)))
+    assert "Last week" not in text and "Screens" not in text and "Next week" in text, text
+
+
+def test_detail_caps_the_clusters_table():
+    rows = [{"symbol": f"S{i}", "issuer": f"Co {i}", "value": 1e6 - i, "insiders": 2, "avg_price": 1.0,
+             "first_trade": "2026-11-16", "last_trade": "2026-11-16", "roles": ["CEO"]} for i in range(12)]
+    text = "\n".join(wb.clusters_section(rows, [], wb.DETAIL_ROWS["short"]))
+    assert "| S4 |" in text and "| S5 |" not in text and "7 more companies" in text, text
+
+
+def test_posts_announce_only_what_the_issue_holds():
+    rows = [{"symbol": "AAA", "issuer": "Aaa", "value": 5e6, "insiders": 3}]
+    url = "https://example.org/brief/2026-11-16/"
+    full = wb.social_posts(rows, date(2026, 11, 22), url)
+    assert "Insider buying" in full["x"] and "AAA" in full["bluesky"], full
+    bare = wb.social_posts(rows, date(2026, 11, 22), url, topics=("macro", "screens"))
+    for n in ("x", "bluesky", "mastodon"):
+        assert "nsider" not in bare[n] and "AAA" not in bare[n] and "Full list" not in bare[n], bare[n]
+        assert url in bare[n] and "the week ahead" in bare[n], bare[n]
+
+
 def test_screen_failure_is_said():
     text = "\n".join(wb.picks_section([], error="the scan timed out"))
     assert "could not be run" in text and "timed out" in text
