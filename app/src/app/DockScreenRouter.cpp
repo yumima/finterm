@@ -25,6 +25,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QTimer>
+#include <functional>
+#include <QSplitter>
 #include <QMenu>
 #include <QVBoxLayout>
 
@@ -308,7 +310,10 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
     // SOCIAL lives in NEWS now (What's On › WEEKLY BRIEF, its workspace
     // beside): every route to the old tab opens it there.
     if (id == QLatin1String("social")) {
-        navigate(QStringLiteral("news"), exclusive);
+        if (with_view)
+            open_tab(QStringLiteral("news")); // NEWS' own view (kept as is when it is the tab)
+        else
+            navigate(QStringLiteral("news"), exclusive);
         if (auto* news = qobject_cast<screens::NewsScreen*>(screens_.value(QStringLiteral("news"))))
             news->show_weekly_brief();
         return;
@@ -317,7 +322,10 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
     // command bar, F-keys, MCP, perspectives) lands on MARKETS ▸ FUTURES.
     if (id == QLatin1String("futures")) {
         screens::MarketsScreen::prepare_futures();
-        navigate(QStringLiteral("markets"), exclusive);
+        if (with_view)
+            open_tab(QStringLiteral("markets")); // MARKETS' own view (kept as is when it is the tab)
+        else
+            navigate(QStringLiteral("markets"), exclusive);
         return;
     }
 
@@ -340,6 +348,8 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
     //
     // With this gate, only navigations that left a real split behind pay
     // the cost, and only when coming back to that split.
+    // The tab being left is saved as it looks now — whatever route led to it:
+    // a tab's view is what it was when it was left.
     if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
         const auto opened = manager_->openedDockAreas();
         if (opened.size() > 1) {
@@ -350,8 +360,8 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
                     snap.panes.append({w, area});
                 snap.current_tabs.append(area->currentDockWidget());
             }
-            snap.beside = beside_of(current_primary_id_);
-            store_tab_layout(current_primary_id_, snap.beside);
+            snap.tree = open_tree();
+            store_tab_layout(current_primary_id_, snap.tree);
             layout_snapshots_[current_primary_id_] = snap;
         } else {
             // Outgoing primary now solo — invalidate any stale multi-pane
@@ -572,15 +582,11 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
             sync_grid_from_reality();
         } else if (auto it = layout_snapshots_.constFind(id); with_view && it != layout_snapshots_.constEnd()) {
             if (it->panes.isEmpty()) {
-                // From the last session: re-open the screens that were beside
-                // it, where they were — split_alongside, not restoreState().
-                const auto beside = it->beside;
+                // From the last session: re-open its areas where they were —
+                // split_alongside, not restoreState().
+                const QString tree = it->tree;
                 layout_snapshots_.remove(id); // leaving the tab saves it afresh
-                ads::CDockAreaWidget* anchor = dw->dockAreaWidget();
-                for (const auto& [pane, side] : beside)
-                    if (pane != id && (factories_.contains(pane) || screens_.contains(pane)))
-                        split_alongside(pane, static_cast<ads::DockWidgetArea>(side), anchor);
-                dw->setAsCurrentTab();
+                reopen_tree(id, tree);
                 sync_grid_from_reality();
             } else {
                 manager_->restoreState(it->state);
@@ -605,58 +611,213 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive, bool with_vie
     emit screen_changed(id);
 }
 
-void DockScreenRouter::load_tab_layouts(int window_id, bool use_saved) {
+void DockScreenRouter::load_tab_layouts(int window_id, bool use_saved, const QString& shown_tab) {
     tab_store_window_ = window_id;
     const auto saved = SessionManager::instance().tab_layouts(window_id);
     for (auto it = saved.cbegin(); it != saved.cend(); ++it) {
-        // A screen on screen now: the restored window layout is its view —
-        // an older saved one would bring back panes closed since.
-        if (!use_saved || is_open(it.key())) {
+        const QString tree = QString::fromUtf8(it.value());
+        // Stale (no restored window beside it), the tab the restored window
+        // already is, or not this build's form: dropped.
+        if (!use_saved || it.key() == shown_tab || !(tree.startsWith(QLatin1Char('H')) || tree.startsWith(QLatin1Char('V')))) {
             SessionManager::instance().save_tab_layout(window_id, it.key(), {});
             continue;
         }
-        QVector<QPair<QString, int>> beside;
-        for (const auto& part : QString::fromUtf8(it.value()).split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
-            const QString pane = part.section(QLatin1Char(':'), 0, 0);
-            bool ok = false;
-            const int side = part.section(QLatin1Char(':'), 1, 1).toInt(&ok);
-            if (!pane.isEmpty() && ok)
-                beside.append({pane, side});
+        if (!layout_snapshots_.contains(it.key()))
+            layout_snapshots_[it.key()].tree = tree;
+    }
+}
+
+void DockScreenRouter::store_tab_layout(const QString& tab, const QString& tree) {
+    if (tab_store_window_ >= 0 && !tab.isEmpty())
+        SessionManager::instance().save_tab_layout(tab_store_window_, tab, tree.toUtf8());
+}
+
+namespace {
+
+/// The open part of an ADS splitter tree (closed panes keep hidden areas).
+QString tree_of(QWidget* w) {
+    if (auto* area = qobject_cast<ads::CDockAreaWidget*>(w)) {
+        if (area->isHidden() || area->openDockWidgetsCount() == 0)
+            return {};
+        QStringList panes;
+        if (auto* cur = area->currentDockWidget(); cur && !cur->isClosed())
+            panes << cur->objectName(); // the front tab first
+        for (auto* dw : area->openedDockWidgets())
+            if (!panes.contains(dw->objectName()))
+                panes << dw->objectName();
+        panes.removeAll(QString());
+        return panes.isEmpty() ? QString() : QLatin1Char('{') + panes.join(QLatin1Char('|')) + QLatin1Char('}');
+    }
+    auto* sp = qobject_cast<QSplitter*>(w);
+    if (!sp || sp->isHidden())
+        return {};
+    QStringList kids;
+    for (int i = 0; i < sp->count(); ++i)
+        if (const QString k = tree_of(sp->widget(i)); !k.isEmpty())
+            kids << k;
+    if (kids.size() <= 1)
+        return kids.value(0); // a splitter of one is that one
+    return (sp->orientation() == Qt::Horizontal ? QStringLiteral("H(") : QStringLiteral("V(")) + kids.join(QLatin1Char(',')) +
+           QLatin1Char(')');
+}
+
+struct TreeNode {
+    bool leaf = true;
+    Qt::Orientation orientation = Qt::Horizontal;
+    QVector<TreeNode> kids;
+    QStringList panes;
+    bool holds(const QString& id) const {
+        if (leaf)
+            return panes.contains(id);
+        for (const auto& k : kids)
+            if (k.holds(id))
+                return true;
+        return false;
+    }
+    /// The first screen of the subtree `ok` accepts (a build may have dropped
+    /// one); empty when none.
+    QString first_pane(const std::function<bool(const QString&)>& ok) const {
+        if (leaf) {
+            for (const auto& p : panes)
+                if (ok(p))
+                    return p;
+            return {};
         }
-        if (!beside.isEmpty() && !layout_snapshots_.contains(it.key()))
-            layout_snapshots_[it.key()].beside = beside;
+        for (const auto& k : kids)
+            if (const QString p = k.first_pane(ok); !p.isEmpty())
+                return p;
+        return {};
     }
-}
+    const TreeNode* leaf_of(const QString& id) const {
+        if (leaf)
+            return panes.contains(id) ? this : nullptr;
+        for (const auto& k : kids)
+            if (const auto* l = k.leaf_of(id))
+                return l;
+        return nullptr;
+    }
+};
 
-void DockScreenRouter::store_tab_layout(const QString& tab, const QVector<QPair<QString, int>>& beside) {
-    if (tab_store_window_ < 0 || tab.isEmpty())
-        return;
-    QStringList parts;
-    for (const auto& [pane, side] : beside)
-        parts << pane + QLatin1Char(':') + QString::number(side);
-    SessionManager::instance().save_tab_layout(tab_store_window_, tab, parts.join(QLatin1Char(';')).toUtf8());
-}
-
-QVector<QPair<QString, int>> DockScreenRouter::beside_of(const QString& primary) const {
-    QVector<QPair<QString, int>> out;
-    auto* pdw = find_dock_widget(primary);
-    auto* parea = pdw ? pdw->dockAreaWidget() : nullptr;
-    if (!parea || !manager_)
-        return out;
-    const QRect p(parea->mapToGlobal(QPoint(0, 0)), parea->size());
-    for (auto* area : manager_->openedDockAreas()) {
-        if (area == parea)
+/// Parses what tree_of wrote; false on anything else.
+bool parse_tree(const QString& s, int& i, TreeNode& out, int depth = 0) {
+    if (i >= s.size() || depth > 16) // a window is never nested deeper; a corrupt value is
+        return false;
+    if (s[i] == QLatin1Char('{')) {
+        const int end = s.indexOf(QLatin1Char('}'), i);
+        if (end < 0)
+            return false;
+        out.leaf = true;
+        out.panes = s.mid(i + 1, end - i - 1).split(QLatin1Char('|'), Qt::SkipEmptyParts);
+        i = end + 1;
+        return !out.panes.isEmpty();
+    }
+    if ((s[i] != QLatin1Char('H') && s[i] != QLatin1Char('V')) || i + 1 >= s.size() || s[i + 1] != QLatin1Char('('))
+        return false;
+    out.leaf = false;
+    out.orientation = s[i] == QLatin1Char('H') ? Qt::Horizontal : Qt::Vertical;
+    i += 2;
+    while (true) {
+        TreeNode kid;
+        if (!parse_tree(s, i, kid, depth + 1))
+            return false;
+        out.kids.append(kid);
+        if (i < s.size() && s[i] == QLatin1Char(',')) {
+            ++i;
             continue;
-        const QRect a(area->mapToGlobal(QPoint(0, 0)), area->size());
-        const int side = a.left() >= p.right() - 12   ? ads::RightDockWidgetArea
-                         : a.right() <= p.left() + 12 ? ads::LeftDockWidgetArea
-                         : a.top() >= p.bottom() - 12 ? ads::BottomDockWidgetArea
-                                                      : ads::TopDockWidgetArea;
-        for (auto* w : area->openedDockWidgets())
-            if (!w->objectName().isEmpty())
-                out.append({w->objectName(), side});
+        }
+        if (i < s.size() && s[i] == QLatin1Char(')')) {
+            ++i;
+            return out.kids.size() >= 2;
+        }
+        return false;
     }
-    return out;
+}
+
+} // namespace
+
+QString DockScreenRouter::open_tree() const {
+    if (!manager_ || !manager_->layout())
+        return {};
+    // The root splitter is the one in the container's layout — ADS swaps
+    // roots (restoreState, a removed area) and an old one can linger as a
+    // child until it is deleted.
+    auto* layout = manager_->layout();
+    for (int i = 0; i < layout->count(); ++i)
+        if (auto* sp = qobject_cast<QSplitter*>(layout->itemAt(i)->widget())) {
+            const QString t = tree_of(sp);
+            return t.startsWith(QLatin1Char('H')) || t.startsWith(QLatin1Char('V')) ? t : QString();
+        }
+    return {};
+}
+
+void DockScreenRouter::reopen_tree(const QString& primary, const QString& tree) {
+    auto* pdw = find_dock_widget(primary);
+    if (!pdw || !pdw->dockAreaWidget())
+        return;
+    TreeNode root;
+    int i = 0;
+    if (!parse_tree(tree, i, root) || i != tree.size() || !root.holds(primary))
+        return;
+    auto known = [this](const QString& id) { return factories_.contains(id) || screens_.contains(id); };
+    auto tab_into = [this](const QString& id, ads::CDockAreaWidget* area) {
+        auto* dw = find_dock_widget(id);
+        if (!dw)
+            dw = create_dock_widget(id);
+        materialize_screen(id);
+        if (!dw)
+            return;
+        manager_->addDockWidget(ads::CenterDockWidgetArea, dw, area);
+        dw->toggleView(true);
+        if (auto* tab = dw->tabWidget(); tab && tab->isHidden())
+            tab->setVisible(true);
+    };
+    // A subtree's "pivot" leaf is the one already placed for it: the tab's own
+    // for the subtrees that hold it, else the first. Its siblings are placed
+    // around it in order (Left/Top before it, Right/Bottom after) while each
+    // is still one area; then each fills its own area — ADS nests a split of
+    // the other orientation in place, so the tree comes back as it was.
+    std::function<void(const TreeNode&, ads::CDockAreaWidget*, const QString&)> place;
+    place = [&](const TreeNode& n, ads::CDockAreaWidget* area, const QString& pivot) {
+        if (n.leaf) {
+            for (const auto& id : n.panes)
+                if (id != pivot && id != primary && known(id))
+                    tab_into(id, area);
+            for (const auto& id : n.panes) // the front tab as saved (the first that came back)
+                if (auto* front = find_dock_widget(id); front && !front->isClosed() && front->dockAreaWidget() == area) {
+                    front->setAsCurrentTab();
+                    break;
+                }
+            return;
+        }
+        int k = 0;
+        while (k < n.kids.size() && !(n.kids[k].holds(pivot)))
+            ++k;
+        if (k == n.kids.size())
+            k = 0;
+        const bool horizontal = n.orientation == Qt::Horizontal;
+        QVector<ads::CDockAreaWidget*> areas(n.kids.size(), nullptr);
+        QVector<QString> pivots(n.kids.size());
+        areas[k] = area;
+        pivots[k] = pivot;
+        auto place_first = [&](int j, ads::CDockAreaWidget* anchor, ads::DockWidgetArea side) {
+            const QString first = n.kids[j].first_pane(known);
+            if (!anchor || first.isEmpty())
+                return;
+            split_alongside(first, side, anchor);
+            if (auto* dw = find_dock_widget(first); dw && !dw->isClosed())
+                areas[j] = dw->dockAreaWidget(), pivots[j] = first;
+        };
+        for (int j = k - 1; j >= 0; --j)
+            place_first(j, areas[j + 1] ? areas[j + 1] : area,
+                        horizontal ? ads::LeftDockWidgetArea : ads::TopDockWidgetArea);
+        for (int j = k + 1; j < n.kids.size(); ++j)
+            place_first(j, areas[j - 1] ? areas[j - 1] : area,
+                        horizontal ? ads::RightDockWidgetArea : ads::BottomDockWidgetArea);
+        for (int j = 0; j < n.kids.size(); ++j)
+            if (areas[j])
+                place(n.kids[j], areas[j], pivots[j]);
+    };
+    place(root, pdw->dockAreaWidget(), primary); // the tab's own area keeps its saved front tab
 }
 
 void DockScreenRouter::set_primary(const QString& id) {
@@ -918,6 +1079,10 @@ void DockScreenRouter::remove_screen(const QString& primary) {
         keep->setAsCurrentTab();
         current_id_ = primary;
         emit screen_changed(primary);
+        if (!current_primary_id_.isEmpty() && current_primary_id_ != primary) {
+            layout_snapshots_.remove(current_primary_id_); // taken apart here: not brought back
+            store_tab_layout(current_primary_id_, {});
+        }
         set_primary(primary); // the one screen left is the tab
     }
 }

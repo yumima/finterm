@@ -840,8 +840,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         // Each tab's own arrangement (Portfolio + ER …) from the last session —
         // only with the dock layout it was saved beside (restoreState needs
         // the dock widgets ensure_all_registered made above).
-        if (dock_router_)
-            dock_router_->load_tab_layouts(window_id_, dock_restored);
+        // The tab the restored window shows is its own view (its saved one is
+        // dropped) — only when that screen did come back.
+        if (dock_router_) {
+            const QString lp = SessionManager::instance().last_primary_screen();
+            dock_router_->load_tab_layouts(window_id_, dock_restored,
+                                           dock_restored && dock_router_->is_open(lp) ? lp : QString());
+        }
 
         // Seed DockScreenRouter's current_primary_id_ so the FIRST nav-away
         // after restart fires the layout-snapshot save block. Without this,

@@ -156,10 +156,10 @@ class DockScreenRouter : public QObject {
     /// reading SessionManager::last_primary_screen() after restoreState.
     void set_current_primary_id(const QString& id) { set_primary(id); }
 
-    /// A tab-bar click. The tab already on: its view stays (the panes beside
-    /// it are part of it). Any other: navigate(id, true) — its view as left.
-    /// navigate(id, true) itself stays "this screen alone" for the command
-    /// bar's replace, perspectives and the like.
+    /// A tab-bar click / "go to". The tab already on: its view stays (the
+    /// panes beside it are part of it). Any other: its view as it was left.
+    /// navigate(id, true) itself is "this screen alone" (the command bar's
+    /// replace, perspectives) — what the user then leaves is that tab's view.
     void open_tab(const QString& id);
     /// When the tab's own screen is no longer open, the screen in front of
     /// what is left becomes the tab.
@@ -168,8 +168,9 @@ class DockScreenRouter : public QObject {
     /// (a tab left with panes beside it) — reopened by restoreState the first
     /// time the tab is visited — and save from now on.
     /// `use_saved` false (the window's dock layout did not restore — a
-    /// version change, a reset): what was saved is stale and dropped.
-    void load_tab_layouts(int window_id, bool use_saved);
+    /// version change, a reset): what was saved is stale and dropped. The
+    /// `shown_tab`'s saved view is dropped too: the restored window is it.
+    void load_tab_layouts(int window_id, bool use_saved, const QString& shown_tab);
 
     /// The tab the user is on (the screen last navigated to exclusively).
     /// Panes opened beside it — Equity Research beside Portfolio — belong to
@@ -247,20 +248,23 @@ class DockScreenRouter : public QObject {
     // from the command bar's replace, perspectives and the like is that
     // screen alone.
     //
-    // Across a restart a tab's view is kept as the screens beside it and on
-    // which side (`beside`, SessionManager tab_layouts) and re-opened with
-    // split_alongside — never restoreState(), the multi-second path.
+    // Across a restart a tab's view is kept as its splitter tree of open
+    // areas (SessionManager tab_layouts: "V(H({portfolio},{equity_research|news}),{dashboard})",
+    // each area's screens front tab first) and rebuilt around the tab's own
+    // area with split_alongside — never restoreState(), the multi-second
+    // path. Splitter sizes are not kept (even splits).
     struct PrimaryLayout {
         QByteArray state;
         QVector<QPair<QPointer<ads::CDockWidget>, QPointer<ads::CDockAreaWidget>>> panes;
         QVector<QPointer<ads::CDockWidget>> current_tabs; // each area's front tab
-        QVector<QPair<QString, int>> beside;              // (screen id, ads::DockWidgetArea) — persisted form
+        QString tree; // the persisted form (from a previous session: panes empty)
     };
     QString current_primary_id_;
     void set_primary(const QString& id);
     int tab_store_window_ = -1; ///< -1: tab layouts not persisted (load_tab_layouts not called)
-    void store_tab_layout(const QString& tab, const QVector<QPair<QString, int>>& beside);
-    QVector<QPair<QString, int>> beside_of(const QString& primary) const; ///< the open panes around it, by side
+    void store_tab_layout(const QString& tab, const QString& tree);
+    QString open_tree() const; ///< the window's open areas as a splitter tree ("" when one area)
+    void reopen_tree(const QString& primary, const QString& tree);
     QHash<QString, PrimaryLayout> layout_snapshots_;
 
     // The snapshot for `id` when its panes still sit, closed, in the areas

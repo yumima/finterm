@@ -84,6 +84,9 @@ logs/
 crashdumps/
 *.dmp
 session.txt
+# Weekly brief / social posting settings and drafts live in the app's data
+# folder (and credentials in the OS keyring) — never in the repo.
+brief_settings.json
 .claude/*.lock
 # Runtime socket/marker files (base64 names ending in "=") anywhere in the tree.
 *=
