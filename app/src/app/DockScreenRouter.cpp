@@ -32,6 +32,7 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <DockWidgetTab.h>
+#include <algorithm>
 #include <cstdlib>
 
 namespace finterm {
@@ -299,11 +300,17 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // With this gate, only navigations that left a real split behind pay
     // the cost, and only when coming back to that split.
     if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
-        const int opened_area_count = manager_->openedDockAreas().size();
-        if (opened_area_count > 1) {
+        const auto opened = manager_->openedDockAreas();
+        // Taking a pane of this split full screen forgets the split (see
+        // the loop after materialize_screen) — don't serialize it first.
+        auto* const target = find_dock_widget(id);
+        const bool target_in_split = target && std::any_of(opened.cbegin(), opened.cend(), [target](auto* area) {
+                                         return area->openedDockWidgets().contains(target);
+                                     });
+        if (opened.size() > 1 && !target_in_split) {
             PrimaryLayout snap;
             snap.state = manager_->saveState();
-            for (auto* area : manager_->openedDockAreas()) {
+            for (auto* area : opened) {
                 for (auto* w : area->openedDockWidgets())
                     snap.panes.append({w, area});
                 snap.current_tabs.append(area->currentDockWidget());
@@ -311,7 +318,8 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
             layout_snapshots_[current_primary_id_] = snap;
         } else {
             // Outgoing primary now solo — invalidate any stale multi-pane
-            // snapshot the user has since dismissed.
+            // snapshot the user has since dismissed (or, above, the split
+            // whose pane is being taken full screen).
             layout_snapshots_.remove(current_primary_id_);
         }
     }
@@ -344,6 +352,25 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     }
 
     materialize_screen(id);
+
+    // A split is remembered until one of its other panes is taken full
+    // screen, from anywhere. MARKETS + DASHBOARD, then PORTFOLIO, DASHBOARD,
+    // MARKETS: the user asked for MARKETS, but re-opening the split put
+    // DASHBOARD — the screen they had just left — back beside it, so the
+    // MARKETS click looked dead. Once a pane has been a screen of its own,
+    // the split it came from is history.
+    if (exclusive) {
+        for (auto it = layout_snapshots_.begin(); it != layout_snapshots_.end();) {
+            const bool holds_dw = std::any_of(it->panes.cbegin(), it->panes.cend(),
+                                              [dw](const auto& p) { return p.first == dw; });
+            if (it.key() != id && holds_dw) {
+                LOG_INFO("DockRouter", QString("split of '%1' forgotten: '%2' taken full screen").arg(it.key(), id));
+                it = layout_snapshots_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
 
     // Coming back to a split this primary was left in: re-open its panes in
     // place (see PrimaryLayout). Decided before anything is moved.

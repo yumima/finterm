@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`1c4b935f9`](https://github.com/yumima/finterm/commit/1c4b935f9) **chore(release):** update README download links and updates.json for v4.0.10
+- [`265976316`](https://github.com/yumima/finterm/commit/265976316) **build:** Windows' near/far macros, an unused lambda capture (clang -Werror)
 - [`9de1c9c23`](https://github.com/yumima/finterm/commit/9de1c9c23) release: 4.0.10
 - [`1fec7304f`](https://github.com/yumima/finterm/commit/1fec7304f) news: WEEKLY BRIEF joins What's On — topics, detail, platforms, post now; the SOCIAL tab goes
 - [`92f2afc62`](https://github.com/yumima/finterm/commit/92f2afc62) markets: one header row of widget pages — OVERVIEW screens, FUTURES groups, WORLD; futures as widgets

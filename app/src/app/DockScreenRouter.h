@@ -212,6 +212,11 @@ class DockScreenRouter : public QObject {
     // area hidden in place, so the arrangement is usually still there:
     // `panes` records which dock widget sat in which area, and coming back
     // just re-opens them. restoreState() runs only when that no longer holds.
+    //
+    // A split is forgotten once any of its other panes is navigated to
+    // exclusively (Portfolio + ER, then ER full screen → Portfolio returns
+    // alone): otherwise returning to A re-opens the screen the user just
+    // left beside it, and A's tab click looks like it did nothing.
     struct PrimaryLayout {
         QByteArray state;
         QVector<QPair<QPointer<ads::CDockWidget>, QPointer<ads::CDockAreaWidget>>> panes;
