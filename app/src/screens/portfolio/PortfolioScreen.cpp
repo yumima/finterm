@@ -706,6 +706,9 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     summary_loaded_ = false;
     active_detail_ = std::nullopt;
     command_bar_->set_detail_view(std::nullopt);
+    // Like the detail views: FFN holds the previous portfolio's analysis.
+    show_ffn_ = false;
+    command_bar_->set_ffn_active(false);
     if (txn_panel_)
         txn_panel_->clear();
     if (blotter_)
@@ -951,6 +954,13 @@ void PortfolioScreen::on_delete_requested(const QString& id) {
 }
 
 void PortfolioScreen::on_detail_view_selected(portfolio::DetailView view) {
+    // FFN and the detail views are one choice of page: a detail view leaves
+    // FFN. (update_content_state() puts FFN first, so a click on SECTORS
+    // after FFN changed the highlighted tab and kept showing FFN.)
+    if (show_ffn_) {
+        show_ffn_ = false;
+        command_bar_->set_ffn_active(false);
+    }
     if (active_detail_.has_value() && *active_detail_ == view) {
         // Toggle off — go back to main view
         active_detail_ = std::nullopt;
