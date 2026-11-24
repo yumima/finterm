@@ -681,6 +681,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
+    src/storage/repositories/EngineLinkRepository.cpp
     src/storage/repositories/LlmProfileRepository.cpp
     src/storage/repositories/DataSourceRepository.cpp
     src/storage/repositories/McpServerRepository.cpp
@@ -761,6 +762,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v056_ai_prediction_source.cpp
     src/storage/sqlite/migrations/v057_saved_strategies.cpp
     src/storage/sqlite/migrations/v058_drop_context_recordings.cpp
+    src/storage/sqlite/migrations/v059_engine_link.cpp
 )
 
 # Python runner
@@ -775,7 +777,6 @@ set(AI_CHAT_SOURCES
     src/ai_chat/LlmService.cpp
     src/ai_chat/EmbeddingsClient.cpp
     src/ai_chat/HearthService.cpp
-    src/ai_chat/HearthSupervisor.cpp
     src/ai_chat/ModelCatalog.cpp
     src/ai_chat/ChatPane.cpp
     src/ai_chat/ElicitPrompter.cpp
@@ -1024,6 +1025,7 @@ set(UI_SOURCES
     src/ui/widgets/NotifToast.cpp
     src/ui/widgets/NotifBell.cpp
     src/ui/widgets/UpdateIndicator.cpp
+    src/ui/widgets/EngineIndicator.cpp
     src/ui/widgets/NotifPanel.cpp
     src/ui/alerts/AlertsDialog.cpp
 )
@@ -1037,6 +1039,7 @@ set(SCREEN_SOURCES
     src/screens/profile/ProfileScreen.cpp
     src/screens/settings/SettingsScreen.cpp
     src/screens/settings/LlmConfigSection.cpp
+    src/screens/settings/EnginePanel.cpp
     src/screens/settings/AiRolesSection.cpp
     src/screens/settings/AiConfigSection.cpp
     src/screens/settings/McpServersSection.cpp

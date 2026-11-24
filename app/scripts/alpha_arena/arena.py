@@ -91,7 +91,7 @@ def _check_connection(model: dict, connections: list[dict]):
     except llm.NoAnswer as e:
         raise Refused(str(e)) from e
     if not c.get("api_key") and not llm.is_local(c):
-        raise Refused(f"{model['name']} has no API key: set one in Settings > LLM Config")
+        raise Refused(f"{model['name']} has no API key: set one in Settings > AI Config")
 
 
 # ── Run ──────────────────────────────────────────────────────────────────────

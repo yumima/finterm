@@ -40,7 +40,6 @@ class LlmConfigSection : public QWidget {
     void on_test_connection();
     void on_fetch_models();
     void on_models_fetched(const QString& provider, const QStringList& models, const QString& error);
-    void refresh_engine_status(); // updates the local-engine (hearth) status label
 
     // Profiles tab
     void on_profile_selected(int row);
@@ -65,11 +64,8 @@ class LlmConfigSection : public QWidget {
     QPushButton* save_btn_ = nullptr;
     QPushButton* test_btn_ = nullptr;
     QCheckBox* tools_check_ = nullptr;
-    QCheckBox* manage_engine_check_ = nullptr; // opt-in hearth supervision
     QCheckBox* web_search_check_ = nullptr;    // ai_chat::kWebSearchSetting
     QLabel* status_lbl_ = nullptr;
-    QLabel* engine_status_lbl_ = nullptr; // local-engine (hearth) discovery
-    QLabel* engine_row_lbl_ = nullptr;    // its form-row label, hidden for cloud providers
     QFormLayout* form_ = nullptr;         // provider detail form (rows toggled per provider)
     QLabel* default_badge_ = nullptr;     // "DEFAULT" marker for the selected provider
     QPushButton* set_default_btn_ = nullptr;
@@ -116,6 +112,7 @@ class LlmConfigSection : public QWidget {
     // ── Provider tab helpers ──────────────────────────────────────────────────
     void load_providers();
     void populate_form(const QString& provider);
+    QString make_default(const QString& provider); // "" on success, else why not
     void show_status(const QString& msg, bool error = false);
 
     // ── Profiles tab helpers ──────────────────────────────────────────────────

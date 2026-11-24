@@ -49,6 +49,13 @@ void EmbeddingsClient::embed(const QString& text, std::function<void(std::option
         done(std::nullopt);
         return;
     }
+    // Memory holds what the user told the assistant: it goes to an engine they
+    // connected, or one they named for it, and to no other. Search falls back
+    // to words.
+    if (qEnvironmentVariableIsEmpty("FINTERM_EMBEDDINGS_BASE_URL") && !HearthService::instance().linked()) {
+        done(std::nullopt);
+        return;
+    }
 
     QUrl url(base_url() + QStringLiteral("/v1/embeddings"));
     QNetworkRequest req(url);

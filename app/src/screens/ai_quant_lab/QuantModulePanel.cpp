@@ -247,7 +247,7 @@ QWidget* QuantModulePanel::build_llm_picker(QWidget* parent, QComboBox** out_com
         }
     }
     if (combo->count() == 0)
-        combo->addItem("No LLM profiles — configure in Settings → LLM Config", QVariant());
+        combo->addItem("No LLM profiles — configure in Settings → AI Config", QVariant());
 
     // Pre-select the global default if present
     auto resolved = LlmProfileRepository::instance().resolve_for_context("ai_quant_lab");

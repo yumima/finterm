@@ -24,7 +24,7 @@ release that touches `services/agents/`, `mcp/`, `ai_chat/`, or
 
 Sibling local-AI engine running; no Anthropic key.
 
-- [ ] **A1.** Settings → LLM Config → confirm/edit
+- [ ] **A1.** Settings → AI Config → confirm/edit
       `local_llm_base_url` → click **Probe** → list of models from
       the sibling project appears.
 - [ ] **A2.** AI Chat → ask *"what's 2+2"* → streamed answer from
@@ -43,7 +43,7 @@ Sibling local-AI engine running; no Anthropic key.
 
 No sibling project required; Anthropic API key configured.
 
-- [ ] **B1.** Settings → LLM Config → paste an Anthropic key → set
+- [ ] **B1.** Settings → AI Config → paste an Anthropic key → set
       "Anthropic Claude" as the active profile → save.
 - [ ] **B2.** AI Chat → ask *"what's 2+2"* → streamed answer from
       Claude. Verify (`ss -tnp` / equivalent) **no probe attempts

@@ -442,7 +442,7 @@ void WorkflowsViewPanel::setup_connections() {
             if (!resolved.provider.isEmpty())
                 llm_resolved_lbl_->setText(resolved.provider.toUpper() + " / " + resolved.model_id + " (inherited)");
             else
-                llm_resolved_lbl_->setText("No provider — Settings > LLM Config");
+                llm_resolved_lbl_->setText("No provider — Settings > AI Config");
         } else {
             const auto pr2 = LlmProfileRepository::instance().list_profiles();
             const auto profs = pr2.is_ok() ? pr2.value() : QVector<LlmProfile>{};

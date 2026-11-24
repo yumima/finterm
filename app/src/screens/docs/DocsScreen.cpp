@@ -929,7 +929,7 @@ QWidget* DocsScreen::page_agent_config() {
 QWidget* DocsScreen::page_alpha_arena() {
     return make_page("ALPHA ARENA", "AI models trade the same market with paper money",
                      {
-                         {"OVERVIEW", "Alpha Arena lets the AI models set up in Settings > LLM Config trade one market "
+                         {"OVERVIEW", "Alpha Arena lets the AI models set up in Settings > AI Config trade one market "
                                       "with paper money, against each other and a rule-based grid bot. In every cycle "
                                       "each model gets the same prices, indicators and headlines, and its own "
                                       "portfolio; what it decides is filled at the exchange's bid or ask, less a 0.1% "

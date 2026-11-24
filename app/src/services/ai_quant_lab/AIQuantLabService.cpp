@@ -496,7 +496,7 @@ void AIQuantLabService::run_deep_agent(const QJsonObject& params) {
     if (!config.contains("llm_provider"))
         config = llm_config();
     if (config.isEmpty()) {
-        emit error_occurred("deep_agent", "No LLM profile: set one up in Settings > LLM Config");
+        emit error_occurred("deep_agent", "No LLM profile: set one up in Settings > AI Config");
         return;
     }
     QJsonObject payload{{"task", params["task"]}};

@@ -151,7 +151,7 @@ PortfolioInsightsPanel::PortfolioInsightsPanel(QWidget* parent) : QWidget(parent
             // config issue (no LLM key in the agent's profile, etc.).
             render_error(agent_content_, "Agent completed but returned no content.\n\n"
                                          "Check the agent's LLM profile in Agent Config → Agents, "
-                                         "and make sure an API key is set in Settings → LLM Configuration.");
+                                         "and make sure an API key is set in Settings → AI Config.");
         } else {
             const QString msg = r.error.isEmpty() ? QStringLiteral("No response received.") : r.error;
             render_error(agent_content_, "Agent run failed.\n\n" + msg);
@@ -695,7 +695,7 @@ void PortfolioInsightsPanel::run_ai(bool force) {
     auto& llm = ai_chat::LlmService::instance();
     if (!llm.is_configured()) {
         render_error(ai_content_,
-                     "No LLM configured.\n\nOpen Settings → LLM Configuration, add a provider with an API key, "
+                     "No LLM configured.\n\nOpen Settings → AI Config, add a provider with an API key, "
                      "then try again. The Agent Config tab shares the same LLM setup.");
         return;
     }
@@ -767,7 +767,7 @@ void PortfolioInsightsPanel::run_agent(bool force) {
     auto& llm = ai_chat::LlmService::instance();
     if (!llm.is_configured()) {
         render_error(agent_content_,
-                     "No LLM configured.\n\nOpen Settings → LLM Configuration, add a provider with an API key, "
+                     "No LLM configured.\n\nOpen Settings → AI Config, add a provider with an API key, "
                      "then try again.");
         return;
     }

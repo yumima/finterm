@@ -21,7 +21,7 @@ def resolve(config: dict[str, Any]) -> tuple[str, str, str]:
     key = str(config.get("llm_api_key") or "").strip()
     base = str(config.get("llm_base_url") or "").strip()
     if not provider or not model:
-        raise ValueError("No LLM profile: choose one, or set one up in Settings > LLM Config")
+        raise ValueError("No LLM profile: choose one, or set one up in Settings > AI Config")
     if not key and provider not in _LOCAL:
         raise ValueError(f"The LLM profile has no API key for {provider}")
     # A base is the profile's own endpoint, often a proxy with its own key: the

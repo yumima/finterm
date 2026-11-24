@@ -1,9 +1,9 @@
 // LlmConfigSection.cpp — LLM provider configuration panel (Qt port)
 
+#include "screens/settings/EnginePanel.h"
 #include "screens/settings/LlmConfigSection.h"
 
 #include "ai_chat/HearthService.h"
-#include "ai_chat/HearthSupervisor.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -428,23 +428,15 @@ QWidget* LlmConfigSection::build_form_panel() {
     field_style(base_url_edit_);
     form->addRow(b_lbl, base_url_edit_);
 
-    // Local engine (hearth) discovery — informational. resolve() always
-    // defaults chat + embeddings to hearth regardless; this just surfaces
-    // whether it's actually up + its contract version. The probe is async.
-    auto* eng_lbl = new QLabel("Local engine");
-    engine_row_lbl_ = eng_lbl;
+    // hearth: found or not, connected or not, and what to do about it. The
+    // app's, not one provider's: it serves memory and read-aloud whoever chats.
+    auto* eng_lbl = new QLabel("Local AI (hearth)");
     lbl_style(eng_lbl);
-    engine_status_lbl_ = new QLabel("checking…");
-    engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
-    engine_status_lbl_->setToolTip("Local AI engine (hearth), default 127.0.0.1:11435");
-    form->addRow(eng_lbl, engine_status_lbl_);
-    connect(&HearthService::instance(), &HearthService::detected, this, &LlmConfigSection::refresh_engine_status);
-    HearthService::instance().detect();
-
-    // "Manage local engine" opt-in — finterm starts/stops hearth automatically.
-    // Off by default: users running hearth themselves (or bare Ollama) are
-    // unaffected. Persisted in SettingsRepository under "hearth.manage".
-    manage_engine_check_ = new QCheckBox("Manage local engine (start hearth automatically)");
+    form->addRow(eng_lbl, new EnginePanel(EnginePanel::Mode::Full));
+    connect(&HearthService::instance(), &HearthService::link_changed, this, [this]() {
+        load_providers();
+        emit config_changed();
+    });
     const QString check_style = "QCheckBox{color:" + QString(ui::colors::TEXT_PRIMARY()) +
                                 ";spacing:8px;}"
                                 "QCheckBox::indicator{width:16px;height:16px;border:1px solid " +
@@ -453,34 +445,6 @@ QWidget* LlmConfigSection::build_form_panel() {
                                 ";}"
                                 "QCheckBox::indicator:checked{background:" +
                                 QString(ui::colors::AMBER()) + ";border-color:" + QString(ui::colors::AMBER()) + ";}";
-    manage_engine_check_->setStyleSheet(check_style);
-    manage_engine_check_->setToolTip("Start hearth on launch and keep it running");
-    {
-        auto r = SettingsRepository::instance().get("hearth.manage", "false");
-        manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");
-    }
-    // Connect BEFORE set_enabled so a construction-time self-disable (binary not
-    // found) is caught and the checkbox/setting are synced.
-    connect(&HearthSupervisor::instance(), &HearthSupervisor::state_changed, this, [this](HearthSupervisor::State s) {
-        // If the supervisor disabled itself (binary not found), sync
-        // the checkbox and persist so the mismatch doesn't survive restart.
-        if (s == HearthSupervisor::State::Disabled && !HearthSupervisor::instance().is_enabled() &&
-            manage_engine_check_ && manage_engine_check_->isChecked()) {
-            manage_engine_check_->blockSignals(true);
-            manage_engine_check_->setChecked(false);
-            manage_engine_check_->blockSignals(false);
-            SettingsRepository::instance().set("hearth.manage", "false", "ai");
-        }
-        refresh_engine_status();
-    });
-    connect(manage_engine_check_, &QCheckBox::toggled, this, [this](bool on) {
-        SettingsRepository::instance().set("hearth.manage", on ? "true" : "false", "ai");
-        HearthSupervisor::instance().set_enabled(on);
-        refresh_engine_status();
-    });
-    // Sync the supervisor to the persisted setting (now that handlers are wired).
-    HearthSupervisor::instance().set_enabled(manage_engine_check_->isChecked());
-    form->addRow(new QLabel(""), manage_engine_check_);
 
     // Tools toggle
     tools_check_ = new QCheckBox("Enable MCP Tools (navigation, market data, portfolio, etc.)");
@@ -536,8 +500,8 @@ QWidget* LlmConfigSection::build_form_panel() {
         const QString provider = provider_edit_->text().trimmed();
         if (provider.isEmpty())
             return;
-        if (auto r = LlmConfigRepository::instance().set_active(provider); r.is_err()) {
-            show_status("Could not set default: " + QString::fromStdString(r.error()), true);
+        if (QString e = make_default(provider); !e.isEmpty()) {
+            show_status("Could not set default: " + e, true);
             return;
         }
         ai_chat::LlmService::instance().reload_config();
@@ -752,18 +716,9 @@ void LlmConfigSection::load_providers() {
 void LlmConfigSection::populate_form(const QString& provider) {
     provider_edit_->setText(provider);
 
-    // The local-engine rows describe hearth, which only exists on the loopback
-    // path. Showing "✓ hearth 0.1.0" under a direct Gemini config claimed the
-    // cloud provider was being served by the local engine — it isn't. They are
-    // rows of the shared form, so they were rendered for every provider; make
-    // them belong to the provider they actually describe.
-    const bool local = !ai_chat::provider_requires_api_key(provider);
-    if (form_ && engine_row_lbl_)
-        form_->setRowVisible(engine_row_lbl_, local);
-    if (manage_engine_check_)
-        manage_engine_check_->setVisible(local);
+    // Search is hearth's own, for a chat with it.
     if (web_search_check_)
-        web_search_check_->setVisible(local);
+        web_search_check_->setVisible(!ai_chat::provider_requires_api_key(provider));
 
     // Say which provider is the default, and offer to change it. Previously the
     // only way to become default was a side effect of Save, so the answer was
@@ -846,6 +801,14 @@ void LlmConfigSection::on_provider_selected(int row) {
     populate_form(provider);
 }
 
+QString LlmConfigSection::make_default(const QString& provider) {
+    // Choosing hearth for the chat is saying yes to it.
+    if (ai_chat::is_hearth_provider(provider))
+        return HearthService::instance().connect_engine(/*for_chat=*/true);
+    auto r = LlmConfigRepository::instance().set_active(provider);
+    return r.is_err() ? QString::fromStdString(r.error()) : QString();
+}
+
 void LlmConfigSection::on_save_provider() {
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
@@ -858,7 +821,18 @@ void LlmConfigSection::on_save_provider() {
     cfg.api_key = api_key_edit_->text().trimmed();
     cfg.model = model_combo_->currentText().trimmed();
     cfg.base_url = base_url_edit_->text().trimmed();
-    cfg.is_active = true;
+    // As it was: the row is written whole, and a second active row would make
+    // which provider chats a matter of row order.
+    bool any_active = false;
+    if (auto provs = LlmConfigRepository::instance().list_providers(); provs.is_ok())
+        for (const auto& p : provs.value()) {
+            // hearth's row counts once hearth is the user's
+            any_active |= p.is_active && (!ai_chat::is_hearth_provider(p.provider) ||
+                                          HearthService::instance().link() == engine::Link::Connected);
+            if (p.provider.toLower() == provider)
+                cfg.is_active = p.is_active;
+        }
+    cfg.is_active = cfg.is_active && any_active;
     cfg.tools_enabled = tools_check_->isChecked();
 
     // Basic validation
@@ -884,15 +858,11 @@ void LlmConfigSection::on_save_provider() {
     // the default was impossible to reason about. The first provider
     // configured still becomes the default (otherwise there'd be none); after
     // that it is an explicit choice via "Set as default".
-    bool any_active = false;
-    if (auto provs = LlmConfigRepository::instance().list_providers(); provs.is_ok())
-        for (const auto& p : provs.value())
-            if (p.is_active)
-                any_active = true;
-    if (!any_active) {
-        if (auto r3 = LlmConfigRepository::instance().set_active(provider); r3.is_err()) {
-            show_status("Failed to activate: " + QString::fromStdString(r3.error()), true);
-            LOG_ERROR(TAG, "set_active failed for " + provider + ": " + QString::fromStdString(r3.error()));
+    const bool becomes_default = !any_active;
+    if (becomes_default) {
+        if (QString e = make_default(provider); !e.isEmpty()) {
+            show_status("Failed to activate: " + e, true);
+            LOG_ERROR(TAG, "set_active failed for " + provider + ": " + e);
             return;
         }
     }
@@ -910,16 +880,18 @@ void LlmConfigSection::on_save_provider() {
     // reports success but the row never lands (e.g. autocommit off, FK rollback,
     // wrong DB path). Without this the old code would say "Saved" and the user
     // only finds out on restart.
-    auto verify = LlmConfigRepository::instance().get_active_provider();
-    if (!verify.is_ok() || verify.value().provider.toLower() != provider) {
-        QString detail = verify.is_ok() ? QString("active is '%1' not '%2'").arg(verify.value().provider, provider)
-                                        : QString::fromStdString(verify.error());
-        show_status("Save verification failed: " + detail, true);
-        LOG_ERROR(TAG, "Save verification failed — " + detail);
+    bool landed = false;
+    if (auto provs = LlmConfigRepository::instance().list_providers(); provs.is_ok())
+        for (const auto& p : provs.value())
+            landed |= p.provider.toLower() == provider && p.model == cfg.model && p.base_url == cfg.base_url &&
+                      p.is_active == (cfg.is_active || becomes_default);
+    if (!landed) {
+        show_status("Save verification failed: " + provider + " is not stored as entered", true);
+        LOG_ERROR(TAG, "Save verification failed for " + provider);
         return;
     }
 
-    show_status("Saved and set as active provider", false);
+    show_status(cfg.is_active || becomes_default ? "Saved — the default provider" : "Saved", false);
     load_providers();
     ai_chat::LlmService::instance().reload_config();
     emit config_changed();
@@ -1002,7 +974,6 @@ void LlmConfigSection::on_test_connection() {
 }
 
 void LlmConfigSection::on_fetch_models() {
-    HearthService::instance().detect(); // also refresh the local-engine status
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
         show_status("Select a provider first", true);
@@ -1078,38 +1049,6 @@ void LlmConfigSection::show_status(const QString& msg, bool error) {
                                      : "color:" + QString(ui::colors::POSITIVE()) + ";");
     status_lbl_->show();
     QTimer::singleShot(4000, status_lbl_, &QLabel::hide);
-}
-
-void LlmConfigSection::refresh_engine_status() {
-    if (!engine_status_lbl_)
-        return;
-    const auto s = HearthService::instance().status();
-    QString text;
-    QString color = ui::colors::TEXT_SECONDARY();
-    if (!s.probed) {
-        text = "checking…";
-    } else if (s.present && s.is_hearth) {
-        text = QString("✓ hearth %1 (contract %2)").arg(s.version, s.contract);
-        color = ui::colors::POSITIVE();
-    } else if (s.present) {
-        text = "engine reachable (not hearth) at " + s.base_url;
-    } else {
-        // Not detected (yet). Reflect supervisor state so the message isn't
-        // contradictory when finterm is actively managing the engine.
-        const auto sup = HearthSupervisor::instance().state();
-        const bool managed = HearthSupervisor::instance().is_enabled();
-        if (sup == HearthSupervisor::State::Starting)
-            text = "starting hearth…";
-        else if (sup == HearthSupervisor::State::Crashed)
-            text = "hearth crashed — check logs";
-        else if (managed)
-            text = "hearth not responding yet…";
-        else
-            text = "not detected — enable Manage above, or run `hearth start`";
-        color = ui::colors::AMBER();
-    }
-    engine_status_lbl_->setText(text);
-    engine_status_lbl_->setStyleSheet("color:" + color + ";");
 }
 
 // ============================================================================

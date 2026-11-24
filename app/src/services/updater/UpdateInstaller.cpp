@@ -1,5 +1,6 @@
 #include "services/updater/UpdateInstaller.h"
 
+#include "core/util/ChildEnvironment.h"
 #include "core/config/AppPaths.h"
 #include "core/config/BuildInfo.h"
 #include "core/config/ProfileManager.h"
@@ -182,34 +183,6 @@ QString write_helper(const QString& kind) {
         return {};
     QFile::setPermissions(out, QFile::permissions(out) | QFileDevice::ExeOwner | QFileDevice::ReadOwner);
     return out;
-}
-
-/// The environment for the relaunched app: an AppImage's runtime puts its own
-/// mount (APPDIR …) into the environment — the old version's mount, gone once
-/// it exits. Path lists (LD_LIBRARY_PATH, QT_PLUGIN_PATH, PATH, XDG_DATA_DIRS…)
-/// lose only their entries under it; the user's own entries stay.
-QProcessEnvironment clean_environment() {
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    const QString appdir = env.value(QStringLiteral("APPDIR"));
-    for (const QString& k : {QStringLiteral("APPDIR"), QStringLiteral("APPIMAGE"), QStringLiteral("ARGV0"),
-                             QStringLiteral("OWD")})
-        env.remove(k);
-    if (appdir.isEmpty())
-        return env;
-    for (const QString& k : env.keys()) {
-        const QString v = env.value(k);
-        if (!v.contains(appdir))
-            continue;
-        QStringList kept;
-        for (const QString& part : v.split(QLatin1Char(':')))
-            if (!part.contains(appdir))
-                kept << part;
-        if (kept.isEmpty() || (kept.size() == 1 && kept.first().isEmpty()))
-            env.remove(k);
-        else
-            env.insert(k, kept.join(QLatin1Char(':')));
-    }
-    return env;
 }
 
 /// The running build, as the updater names releases.

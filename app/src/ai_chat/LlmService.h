@@ -46,7 +46,7 @@ inline bool provider_requires_api_key(const QString& provider) {
 }
 
 /// "true" lets a chat with tools use hearth's web search; anything else does
-/// not. Off unless the user turns it on (Settings > LLM Config).
+/// not. Off unless the user turns it on (Settings > AI Config).
 inline constexpr const char* kWebSearchSetting = "hearth.web_search";
 
 /// Map a provider string to its target agent runtime (R1, R3).
@@ -409,6 +409,7 @@ class LlmService : public QObject {
     QJsonObject build_gemini_request(bool use_tools, const QString& user_message,
                                      const std::vector<ConversationMessage>& history, const PersonaScope& persona = {});
 
+    QString no_endpoint_error(const PersonaScope& persona) const;
     QString get_endpoint_url(const PersonaScope& persona = {}) const;
 
     // Effective request target: the per-call override when the role binding set

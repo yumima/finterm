@@ -736,12 +736,12 @@ void AiChatBubble::on_send() {
         return;
 
     if (!ai_chat::LlmService::instance().is_configured()) {
-        add_assistant_message(QStringLiteral("AI chat is not configured. Please go to **Settings → LLM Config** "
+        add_assistant_message(QStringLiteral("AI chat is not configured. Please go to **Settings → AI Config** "
                                              "and add an API key or select the finterm provider."),
                               false);
         // Live mode shows its own page: say it there, and don't listen again
         // (every utterance would hit the same wall).
-        voice_error_ = QStringLiteral("AI chat is not configured — Settings › LLM Config");
+        voice_error_ = QStringLiteral("AI chat is not configured — Settings › AI Config");
         update_status();
         return;
     }

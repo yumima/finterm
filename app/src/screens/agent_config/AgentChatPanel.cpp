@@ -194,7 +194,7 @@ void AgentChatPanel::build_ui() {
     hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;border:1px solid %3;"
                                           "border-radius:3px;padding:2px 8px;")
                                       .arg(col::TEXT_SECONDARY(), col::BG_BASE(), col::BORDER_MED()));
-    hdr_model_lbl_->setToolTip("Active LLM — configure in Settings > LLM Configuration");
+    hdr_model_lbl_->setToolTip("Active LLM — configure in Settings > AI Config");
     hl->addWidget(hdr_model_lbl_);
 
     // Status chip
@@ -610,7 +610,7 @@ void AgentChatPanel::update_llm_status() {
                                           .arg(col::NEGATIVE(), col::BG_BASE(), col::NEGATIVE()));
         hdr_status_lbl_->setText("Unconfigured");
         hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::NEGATIVE()));
-        status_label_->setText("No LLM provider configured — go to Settings > LLM Configuration");
+        status_label_->setText("No LLM provider configured — go to Settings > AI Config");
     }
 }
 
@@ -624,7 +624,7 @@ void AgentChatPanel::send_message() {
     // Guard: require LLM config
     auto& llm = ai_chat::LlmService::instance();
     if (!llm.is_configured()) {
-        add_system_bubble("No LLM provider configured. Go to Settings > LLM Configuration to set one up.");
+        add_system_bubble("No LLM provider configured. Go to Settings > AI Config to set one up.");
         return;
     }
 

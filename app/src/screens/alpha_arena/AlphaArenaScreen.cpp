@@ -1305,7 +1305,7 @@ void AlphaArenaScreen::populate_model_list() {
 
     // 3. Fallback: show a hint if nothing is configured
     if (model_entries_.isEmpty()) {
-        auto* placeholder = new QListWidgetItem("No LLM providers configured — go to Settings → LLM Config");
+        auto* placeholder = new QListWidgetItem("No LLM providers configured — go to Settings → AI Config");
         placeholder->setFlags(Qt::NoItemFlags); // not selectable
         placeholder->setForeground(QColor(colors::TEXT_SECONDARY()));
         model_list_->addItem(placeholder);

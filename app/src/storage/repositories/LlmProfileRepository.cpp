@@ -191,7 +191,11 @@ ResolvedLlmProfile LlmProfileRepository::profile_to_resolved(const LlmProfile& p
 
 ResolvedLlmProfile LlmProfileRepository::legacy_fallback() const {
     // Read from llm_configs (old table) as last resort
-    auto r = db().execute("SELECT provider, api_key, base_url, model FROM llm_configs WHERE is_active = 1 LIMIT 1");
+    auto r = db().execute("SELECT provider, api_key, base_url, model FROM llm_configs WHERE is_active = 1 "
+                          // hearth's row, only for a user who connected it
+                          "AND (lower(provider) NOT IN ('hearth','ollama') OR EXISTS "
+                          "(SELECT 1 FROM settings WHERE key = 'hearth.link' AND value = 'connected')) "
+                          "ORDER BY provider LIMIT 1");
     if (r.is_err())
         return {};
     auto& q = r.value();

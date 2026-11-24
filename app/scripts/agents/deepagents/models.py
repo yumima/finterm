@@ -27,7 +27,7 @@ def create_model(config: dict[str, Any]):
     base_url = str(config.get("llm_base_url") or "").strip()
 
     if not provider or not model:
-        raise ValueError("No LLM profile: choose one, or set one up in Settings > LLM Config")
+        raise ValueError("No LLM profile: choose one, or set one up in Settings > AI Config")
     if not api_key and provider not in _LOCAL:
         raise ValueError(f"The LLM profile has no API key for {provider}")
 

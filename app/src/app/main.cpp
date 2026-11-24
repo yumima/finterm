@@ -1,4 +1,4 @@
-#include "ai_chat/HearthSupervisor.h"
+#include "ai_chat/HearthService.h"
 #include "ai_chat/LlmService.h"
 #include "app/MainWindow.h"
 #include "auth/AuthManager.h"
@@ -497,6 +497,7 @@ int main(int argc, char* argv[]) {
     finterm::register_migration_v056();
     finterm::register_migration_v057();
     finterm::register_migration_v058();
+    finterm::register_migration_v059();
 
     // Open cache database (non-fatal if fails)
     QString cache_path = finterm::AppPaths::data() + "/cache.db";
@@ -520,16 +521,6 @@ int main(int argc, char* argv[]) {
     LOG_INFO("App", "Starting session manager...");
     // Start session
     finterm::SessionManager::instance().start_session();
-
-    // Honor the "Manage local engine" opt-in at launch: if enabled, start the
-    // hearth supervisor now. Otherwise it's only wired when Settings → LLM
-    // Config is opened, so "start on launch" wouldn't actually happen. Safe
-    // no-op when the setting is unset/false or the hearth binary is missing.
-    {
-        auto m = finterm::SettingsRepository::instance().get("hearth.manage", "false");
-        if (m.is_ok() && m.value() == "true")
-            finterm::HearthSupervisor::instance().set_enabled(true);
-    }
 
     // Initialize in-process auth service (replaces external stub server).
     // On the very first launch (no auth.db present), wipe any legacy single-user
@@ -576,6 +567,22 @@ int main(int argc, char* argv[]) {
 #endif
 
     finterm::auth::AuthService::instance().initialize();
+    // hearth, for a user who connected it and wants it with finterm; and the
+    // look that decides whether to ask one who has not (EngineIndicator). Both
+    // are the user's settings, so they wait for the user to be in.
+    // The chat's configuration is the user's, too: read again for whoever is in.
+    QObject::connect(&finterm::auth::AuthManager::instance(), &finterm::auth::AuthManager::logged_out, &app,
+                     []() { finterm::ai_chat::LlmService::instance().reload_config(); });
+    QObject::connect(&finterm::auth::AuthManager::instance(), &finterm::auth::AuthManager::terminal_unlocked, &app, []() {
+        finterm::ai_chat::LlmService::instance().reload_config();
+        QTimer::singleShot(3000, qApp, []() {
+            auto& hearth = finterm::HearthService::instance();
+            if (hearth.linked())
+                hearth.start_if_wanted();
+            else if (hearth.link() == finterm::engine::Link::Unasked)
+                hearth.detect();
+        });
+    });
 
     // Initialize auth: load_session() synchronously opens the per-user DB if a
     // saved session exists, so the DB is available for the theme load below.
@@ -753,7 +760,7 @@ int main(int argc, char* argv[]) {
 
             if (!finterm::ai_chat::LlmService::instance().is_configured())
                 LOG_WARN("App",
-                         "LLM provider not configured — AI chat will prompt user to configure Settings → LLM Config");
+                         "LLM provider not configured — AI chat will prompt user to configure Settings → AI Config");
 
             // Warm agent discovery cache (same reason as the main path).
             QTimer::singleShot(0, &app, []() { finterm::services::AgentService::instance().discover_agents(); });
@@ -843,7 +850,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!finterm::ai_chat::LlmService::instance().is_configured())
-        LOG_WARN("App", "LLM provider not configured — AI chat will prompt user to configure Settings → LLM Config");
+        LOG_WARN("App", "LLM provider not configured — AI chat will prompt user to configure Settings → AI Config");
 
     // Warm the agent discovery cache on startup. This populates
     // AgentService::cached_agents() so any screen that lists agents

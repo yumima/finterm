@@ -609,7 +609,7 @@ class SuperAgent:
                 "success": False,
                 "error": (
                     "No LLM model configured. "
-                    "GUI: Settings > LLM Configuration. "
+                    "GUI: Settings > AI Config. "
                     "Programmatic: pass user_config={'model': {'provider': '...', 'model_id': '...'}} "
                     "to execute() / execute_multi()."
                 ),
@@ -650,7 +650,7 @@ class SuperAgent:
             error_msg = str(e)
             # Provide helpful error for common issues
             if "api_key" in error_msg.lower() or "authentication" in error_msg.lower() or "unauthorized" in error_msg.lower():
-                error_msg = f"API key error for provider '{model_provider}': {error_msg}. Check your API key in Settings > LLM Configuration."
+                error_msg = f"API key error for provider '{model_provider}': {error_msg}. Check your API key in Settings > AI Config."
             elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
                 error_msg = f"Connection error for '{model_provider}': {error_msg}. Check your base URL and network."
 

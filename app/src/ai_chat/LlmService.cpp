@@ -203,8 +203,15 @@ void LlmService::ensure_config() const {
     tools_enabled_ = true;
     web_search_ = SettingsRepository::instance().get(kWebSearchSetting, "false").value() == "true";
 
+    // hearth is used only by a user who said so: its rows are not there for
+    // one who has not been asked, or has disconnected it.
+    const bool engine = HearthService::instance().linked();
+    bool any_row = false;
     auto providers = LlmConfigRepository::instance().list_providers();
     if (providers.is_ok()) {
+        any_row = !providers.value().isEmpty();
+        if (!engine)
+            providers.value().removeIf([](const LlmConfig& c) { return is_hearth_provider(c.provider); });
         for (const auto& c : providers.value()) {
             if (c.is_active) {
                 provider_ = c.provider.toLower();
@@ -215,30 +222,21 @@ void LlmService::ensure_config() const {
                 break;
             }
         }
-        // Fallback: first config if none active
-        if (provider_.isEmpty() && !providers.value().isEmpty()) {
-            const auto& c = providers.value().first();
-            provider_ = c.provider.toLower();
-            api_key_ = c.api_key;
-            base_url_ = c.base_url;
-            model_ = c.model;
-            tools_enabled_ = c.tools_enabled;
-        }
     }
 
-    // No-key fallback: the local engine, hearth (R17). If it is unreachable,
+    // No provider: the local engine, if the user connected it (R17); without
+    // one there is none, and chat says so. If it is unreachable,
     // do_request surfaces a connection error — no silent failover to any
     // other provider (R1).
-    if (provider_.isEmpty()) {
-        // Auto-use the local engine (hearth) by default; explicit Settings
-        // config (loaded above) overrides. resolve() is deterministic and
-        // I/O-free, so it's safe to call under this lock / on the GUI thread.
-        const auto engine = HearthService::instance().resolve();
+    if (provider_.isEmpty() && engine && !any_row) {
+        // resolve() is deterministic and I/O-free, so it's safe to call under
+        // this lock / on the GUI thread.
+        const auto at = HearthService::instance().resolve();
         provider_ = "hearth";
-        base_url_ = engine.base_url;
+        base_url_ = at.base_url;
         // With hearth, address the role alias and let the engine pick the
         // concrete model; otherwise a sensible default model name.
-        model_ = engine.is_hearth ? "primary_chat" : "llama3.1:8b";
+        model_ = at.is_hearth ? "primary_chat" : "llama3.1:8b";
         LOG_INFO(TAG, QString("No LLM provider configured — using local engine "
                               "at %1 (model %2)")
                           .arg(base_url_, model_));
@@ -337,6 +335,8 @@ namespace {
 /// configured base wins. Empty for providers without an OpenAI-shape root
 /// (Gemini's native API).
 QString api_root(const QString& p, const QString& cfg_base) {
+    if (is_hearth_provider(p))
+        return normalize_llm_base(LlmService::stored_base(p, cfg_base)) + QStringLiteral("/v1");
     if (!cfg_base.trimmed().isEmpty())
         return normalize_llm_base(cfg_base) + QStringLiteral("/v1");
     if (p == "openai")
@@ -355,8 +355,6 @@ QString api_root(const QString& p, const QString& cfg_base) {
         return QStringLiteral("https://api.moonshot.ai/v1");
     if (p == "xai")
         return QStringLiteral("https://api.x.ai/v1");
-    if (is_hearth_provider(p))
-        return normalize_llm_base(LlmService::stored_base(p, {})) + QStringLiteral("/v1");
     return {};
 }
 } // namespace
@@ -368,8 +366,12 @@ QString LlmService::provider_api_root(const QString& provider, const QString& ba
 
 // static
 QString LlmService::stored_base(const QString& provider, const QString& base_url) {
-    return base_url.trimmed().isEmpty() && is_hearth_provider(provider) ? HearthService::instance().engine_base_url()
-                                                                         : base_url;
+    if (!is_hearth_provider(provider))
+        return base_url;
+    // An agent built for a disconnected hearth must fail, and say at what.
+    if (!HearthService::instance().linked())
+        return QStringLiteral("http://hearth-is-not-connected.invalid");
+    return base_url.trimmed().isEmpty() ? HearthService::instance().engine_base_url() : base_url;
 }
 
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
@@ -395,8 +397,12 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     ensure_config();
     const QString p = provider_;
     SpeechEndpoint ep;
-    if (is_hearth_provider(p)) {
-        const QString root = api_root(p, base_url_);
+    // hearth reads aloud for whoever connected it, the chat being elsewhere or
+    // not; OpenAI has voices of its own.
+    const bool engine = HearthService::instance().linked();
+    if (engine && p != "openai") {
+        const bool chats = is_hearth_provider(p);
+        const QString root = chats ? api_root(p, base_url_) : api_root(QStringLiteral("hearth"), {});
         // "ollama" is a legacy alias of this provider, and a base on Ollama's
         // own port is bare Ollama, which has no speech route — a guaranteed 404.
         if (QUrl(root).port() == 11434)
@@ -441,7 +447,9 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     // A remote engine (incl. a remote hearth) is not: it may bill per call.
     const QString host = QUrl(ep.url).host();
     ep.local = host == "127.0.0.1" || host == "localhost" || host == "::1";
-    ep.headers = get_headers();
+    // Another provider's key is not hearth's to see.
+    if (ep.kind != QLatin1String("hearth") || is_hearth_provider(p))
+        ep.headers = get_headers();
     ep.headers["Content-Type"] = "application/json";
     return ep;
 }
@@ -487,7 +495,7 @@ QJsonObject LlmService::profile_to_json(const ResolvedLlmProfile& p) {
     obj["provider"] = p.provider;
     obj["model_id"] = p.model_id;
     obj["api_key"] = p.api_key;
-    obj["base_url"] = p.base_url;
+    obj["base_url"] = stored_base(p.provider, p.base_url);
     obj["temperature"] = p.temperature;
     obj["max_tokens"] = p.max_tokens;
     if (!p.system_prompt.isEmpty())
@@ -671,9 +679,22 @@ QJsonObject LlmService::build_ollama_native_request(const QString& user_message,
     return req;
 }
 
+QString LlmService::no_endpoint_error(const PersonaScope& persona) const {
+    // Called with mutex_ held
+    const QString p = eff_provider(persona);
+    if (p.isEmpty())
+        return QStringLiteral("No AI is connected — choose one in Settings › AI Config");
+    if (is_hearth_provider(p) && !HearthService::instance().linked())
+        return QStringLiteral("hearth is not connected — connect it in Settings › AI Config");
+    return "No endpoint URL for provider: " + p;
+}
+
 QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     // Called with mutex_ held
     const QString p = eff_provider(persona);
+    // A role can be bound to hearth by a user who has since disconnected it.
+    if (is_hearth_provider(p) && !HearthService::instance().linked())
+        return {};
 
     const QString cfg_base = eff_base_url(persona);
     // Gemini's native API puts the model in the PATH, not the body, so a
@@ -1080,6 +1101,8 @@ PersonaScope LlmService::next_quota_fallback(const PersonaScope& current) const 
         for (const auto& p : provs.value()) {
             if (provider_requires_api_key(p.provider) || p.model.isEmpty())
                 continue;
+            if (is_hearth_provider(p.provider) && !HearthService::instance().linked())
+                continue; // not the user's to fall back on
             if (p.provider.compare(provider, Qt::CaseInsensitive) == 0)
                 continue; // already there
             // Carry the caller's REQUEST settings across the hop, not just
@@ -1335,7 +1358,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 
     QString url = get_endpoint_url(persona);
     if (url.isEmpty()) {
-        resp.error = "No endpoint URL for provider: " + eff_provider(persona);
+        resp.error = no_endpoint_error(persona);
         return resp;
     }
 
@@ -1404,7 +1427,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         native = false;
         url = get_endpoint_url(persona);
         if (url.isEmpty()) {
-            resp.error = "No endpoint URL for provider: " + eff_provider(persona);
+            resp.error = no_endpoint_error(persona);
             return resp;
         }
         req_body = build_openai_request(user_message, history, false, use_tools, persona);
@@ -2196,8 +2219,8 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return "https://api.deepseek.com/models";
     if (p == "openrouter")
         return "https://openrouter.ai/api/v1/models";
-    if (is_hearth_provider(p))
-        return api_root(p, {}) + "/models";
+    if (is_hearth_provider(p)) // asked before connecting, too: it is a list of names
+        return normalize_llm_base(HearthService::instance().engine_base_url()) + "/v1/models";
     if (p == "xai")
         return "https://api.x.ai/v1/models";
     if (p == "kimi")

@@ -614,7 +614,7 @@ void AgentsViewPanel::refresh_llm_pill() {
         llm_resolved_lbl_->setStyleSheet(
             QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     } else {
-        llm_resolved_lbl_->setText("No provider configured — go to Settings > LLM Config");
+        llm_resolved_lbl_->setText("No provider configured — go to Settings > AI Config");
         llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
     }
 }

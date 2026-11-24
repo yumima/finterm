@@ -968,6 +968,30 @@ target_link_libraries(test_number_grounding PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_number_grounding PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME number_grounding COMMAND test_number_grounding)
 
+# ── hearth: its states, and what finterm offers for each ─────────────────────
+add_executable(test_engine_state ai_chat/test_engine_state.cpp)
+target_include_directories(test_engine_state PRIVATE ../src)
+target_link_libraries(test_engine_state PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_engine_state PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME engine_state COMMAND test_engine_state)
+
+# ── hearth: the user's answer, and the chat's provider around it ─────────────
+add_executable(test_engine_link
+    storage/test_engine_link.cpp
+    ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/migrations/MigrationRunner.cpp
+    ../src/storage/sqlite/migrations/v001_initial.cpp
+    ../src/storage/sqlite/migrations/v002_llm_chat.cpp
+    ../src/storage/sqlite/migrations/v010_llm_profiles.cpp
+    ../src/storage/sqlite/migrations/v059_engine_link.cpp
+    ../src/storage/repositories/EngineLinkRepository.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_engine_link PRIVATE ../src)
+target_link_libraries(test_engine_link PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+set_target_properties(test_engine_link PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME engine_link COMMAND test_engine_link)
+
 # ── News brief formatting (TL;DR + DIGEST panes) ─────────────────────────────
 # Everything this covers failed silently: a '•'-bulleted brief lost its whole
 # BY CATEGORY pane because the fallback compared against a truncated character

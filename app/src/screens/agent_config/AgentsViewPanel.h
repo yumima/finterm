@@ -18,7 +18,7 @@
 namespace finterm::screens {
 
 /// AGENTS view — 3-panel layout for listing, editing, and testing agents.
-/// LLM provider/model is sourced from LlmService (configured in Settings > LLM Config).
+/// LLM provider/model is sourced from LlmService (configured in Settings > AI Config).
 class AgentsViewPanel : public QWidget {
     Q_OBJECT
   public:

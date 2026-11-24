@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "core/net/NetSpeedMeter.h"
 #include "python/PythonSetupManager.h"
+#include "screens/settings/EnginePanel.h"
 #include "ui/theme/Theme.h"
 #include "ui/widgets/SpeedSparkline.h"
 
@@ -192,6 +193,15 @@ void SetupScreen::build_ui() {
             .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY, colors::BG_RAISED()));
     connect(skip_btn_, &QPushButton::clicked, this, &SetupScreen::on_skip_clicked);
     cl->addWidget(skip_btn_);
+
+    // Local AI is installed by itself, or already here: said, not asked — there
+    // is no user yet whose answer could be kept (the question comes once, in
+    // the status bar, after sign-in).
+    auto* engine_title = new QLabel("Local AI (optional)", center);
+    engine_title->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600; margin-top:14px;")
+                                    .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+    cl->addWidget(engine_title);
+    cl->addWidget(new EnginePanel(EnginePanel::Mode::LookOnly, center));
 
     // Install dir — small, dim, for power users
     auto* dir_label = new QLabel("Installing to: " + python::PythonSetupManager::instance().install_dir(), center);

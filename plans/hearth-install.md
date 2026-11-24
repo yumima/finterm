@@ -32,11 +32,11 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 
 **2. finterm connects**
 - [x] 2.1 hearth: `start --background`
-- [ ] 2.2 Detect: ready, stopped, no model, unsupported version, absent
-- [ ] 2.3 Connect and disconnect; remember "no"; restore the previous provider
-- [ ] 2.4 The chat provider is a separate choice from memory and voices; a real "no engine" state
-- [ ] 2.5 Delete HearthSupervisor; keep "start hearth when finterm opens"
-- [ ] 2.6 One panel for first-run setup and Settings; current users migrate as connected
+- [x] 2.2 Detect: ready, stopped, no model, unsupported version, absent
+- [x] 2.3 Connect and disconnect; remember "no"; restore the previous provider
+- [x] 2.4 The chat provider is a separate choice from memory and voices; a real "no engine" state
+- [x] 2.5 Delete HearthSupervisor; keep "start hearth when finterm opens"
+- [x] 2.6 One panel for first-run setup and Settings; current users migrate as connected
 
 **3. One repository, reliable engine**
 - [ ] 3.1 Bring in mantel with its history

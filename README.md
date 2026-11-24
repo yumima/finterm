@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`029e6c7d4`](https://github.com/yumima/finterm/commit/029e6c7d4) hearth: no web search unless the user turns it on; one address for it; uv is verified
 - [`6d771b282`](https://github.com/yumima/finterm/commit/6d771b282) review: a draft is not a decision; a cell's output grows in place; user code has slots of its own
 - [`8add4d09c`](https://github.com/yumima/finterm/commit/8add4d09c) alpha arena: a model on hearth is not given a web search the others don't have
 - [`1f0c6dcde`](https://github.com/yumima/finterm/commit/1f0c6dcde) alpha arena, notebook: what the review found

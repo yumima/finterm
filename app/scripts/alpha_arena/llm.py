@@ -54,7 +54,7 @@ def connection_for(model: dict, connections: list[dict]) -> dict:
     # A competition of before 4.1.1 knows its models by name only.
     found = by_key or [c for c in same if not model.get("key") and c.get("name") == model["name"]]
     if not found:
-        raise NoAnswer(f"{model['name']} is not in Settings > LLM Config any more")
+        raise NoAnswer(f"{model['name']} is not in Settings > AI Config any more")
     return {**found[0], "model_id": model["model_id"]}
 
 

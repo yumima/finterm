@@ -115,7 +115,7 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, 
     f.close();
 
     if (!ai_chat::LlmService::instance().is_configured())
-        return Result<SkillProposal>::err("LLM service not configured — Settings → LLM Config");
+        return Result<SkillProposal>::err("LLM service not configured — Settings → AI Config");
 
     const QString prompt = build_prompt(skill_md, trace.query, trace.response, user_note);
 

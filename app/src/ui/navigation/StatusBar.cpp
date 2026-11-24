@@ -2,6 +2,7 @@
 
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/widgets/EngineIndicator.h"
 #include "ui/widgets/NotifBell.h"
 #include "ui/widgets/NotifPanel.h"
 #include "ui/widgets/NotifToast.h"
@@ -44,6 +45,7 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
     // A newer version, or the one-time "check daily?" question — hidden
     // otherwise (UpdateIndicator).
     hl->addWidget(new UpdateIndicator(this));
+    hl->addWidget(new EngineIndicator(this)); // the one-time question about hearth
     ready_label_ = mk("READY", "sbReady");
     hl->addWidget(ready_label_);
     hl->addWidget(mk("  |  ", "sbSep"));

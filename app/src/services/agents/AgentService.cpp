@@ -132,9 +132,9 @@ QJsonObject AgentService::build_api_keys() const {
                 keys[alias] = p.api_key;
             // Also ship base_url so super_agent/_llm_classify can use the right
             // endpoint (e.g. MiniMax OpenAI-compat behind "anthropic" provider).
-            if (!p.base_url.isEmpty()) {
-                keys[lower + "_base_url"] = p.base_url;
-                keys[lower.toUpper() + "_BASE_URL"] = p.base_url;
+            if (const QString base = ai_chat::LlmService::stored_base(p.provider, p.base_url); !base.isEmpty()) {
+                keys[lower + "_base_url"] = base;
+                keys[lower.toUpper() + "_BASE_URL"] = base;
             }
         }
     }
@@ -2200,7 +2200,7 @@ void AgentService::install_default_tool_handlers() {
         mcp::SampleResponse out;
         auto& llm = ai_chat::LlmService::instance();
         if (!llm.is_configured()) {
-            out.error = "no LLM configured (Settings → LLM Config)";
+            out.error = "no LLM configured (Settings → AI Config)";
             return out;
         }
         // Map the request into LlmService::chat's shape.  System

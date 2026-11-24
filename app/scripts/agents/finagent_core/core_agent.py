@@ -584,7 +584,7 @@ class CoreAgent:
         if not provider:
             raise ValueError(
                 "No LLM provider resolved from config or api_keys. "
-                "Configure an LLM provider in Settings > LLM Config."
+                "Configure an LLM provider in Settings > AI Config."
             )
 
         # Pass any extra model-level kwargs (e.g. max_tool_rounds for FintermChat).

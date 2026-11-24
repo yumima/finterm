@@ -11,50 +11,52 @@ is active.
 ### Anthropic (Claude)
 
 1. Get an API key from <https://console.anthropic.com>.
-2. **Settings → LLM Config** → provider dropdown → **Anthropic**.
+2. **Settings → AI Config** → provider dropdown → **Anthropic**.
 3. Paste the key.  It lands in the OS keychain — never on disk in
    plain text.
 4. Set this as the active profile.
 
-### Local (hearth — default local engine)
+### Local (hearth)
 
-With **no LLM provider configured**, finterm targets the local
-**hearth** engine at `http://127.0.0.1:11435/v1` by default (the same
-base its embeddings + semantic-memory use — one engine for both). Just
-run it:
+[hearth](https://github.com/yumima/hearth) runs AI models on your own
+computer. It is a program of its own: it installs, updates and removes
+itself, and goes on running when finterm closes. finterm finds it, asks
+once, and connects:
 
-```bash
-# hearth (https://github.com/yumima/hearth) — loopback :11435
-hearth start          # brings up the bundled Ollama + the gateway
-```
+- **Settings → AI Config** shows what was found — running, stopped,
+  without a model, too old or too new, or not installed — and what to do
+  about it: **Connect**, **Start**, **Disconnect**.
+- Until you connect, finterm sends hearth nothing but the question what
+  it is. "No thanks" is remembered.
+- Connected, hearth serves memory search and read-aloud whoever you chat
+  with. It serves chat too if you choose it, or have no other provider.
+- **Disconnect** gives the chat back to the provider it had before, or
+  to none. hearth itself stays as it is.
+- **Start hearth when finterm opens** is there for a hearth that does not
+  start by itself at login.
 
-Chat then works with zero config (it addresses the `primary_chat`
-role; hearth picks the model). Override the base with
-`FINTERM_ENGINE_BASE_URL` or in **Settings → LLM Config**.
+Chat addresses hearth's `primary_chat` role; hearth picks the model.
+Override the address with `FINTERM_ENGINE_BASE_URL` or the provider's
+base URL in **Settings → AI Config**.
+
+**Bare Ollama, LM Studio, vLLM, llama.cpp?** Use the provider **hearth**
+with that server's base URL (Ollama `http://localhost:11434`, vLLM
+`http://localhost:8000`, LM Studio `http://localhost:1234`, llama.cpp
+`http://localhost:8080`), or hearth in front of it: hearth is what sizes
+the context, and a bare server's default can cut a long chat short.
 
 **Web search is off.** hearth can search the web inside a chat; finterm
 tells it not to, because the chat can see your portfolio: what the
 model searches for leaves your computer, and a page it reads could try
-to make it send more. **Settings → LLM Config → "Let AI chat search the
+to make it send more. **Settings → AI Config → "Let AI chat search the
 web"** turns it on for chats (agents and one-shot analyses never get
 it). Figures found only on the web are still taken out of an answer.
-
-**Bare Ollama (no hearth)?** Ollama defaults to `localhost:11434`,
-not hearth's `:11435` — so set the base URL explicitly:
-
-1. `ollama pull qwen2.5:14b-instruct && ollama serve`
-2. **Settings → LLM Config** → provider **Ollama** → set base URL to
-   `http://localhost:11434/v1` → **Probe** → pick a model → set active.
-
-Other OpenAI-compat servers work the same way — change the base
-URL.  Defaults: vLLM (`http://localhost:8000/v1`), LM Studio
-(`http://localhost:1234/v1`), llama.cpp (`http://localhost:8080/v1`).
 
 ### No silent failover
 
 If the active runtime is down, finterm tells you in the chat
 surface — it does not fall back to the other runtime.  Switching
-is a one-click change in **Settings → LLM Config**.
+is a one-click change in **Settings → AI Config**.
 
 ## 2. Where the AI lives
 
@@ -318,7 +320,7 @@ any other key dismisses.
 Off by default — the latency is API-bound until a fast local model
 lands.  To turn it on:
 
-1. **Settings → LLM Config** — make sure a profile is configured.
+1. **Settings → AI Config** — make sure a profile is configured.
 2. From a SQLite browser (no UI surface yet), set:
 
    ```sql

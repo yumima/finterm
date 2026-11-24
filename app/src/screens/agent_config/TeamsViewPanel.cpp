@@ -489,7 +489,7 @@ void TeamsViewPanel::refresh_team_llm_label() {
         team_resolved_lbl_->setStyleSheet(
             QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     } else {
-        team_resolved_lbl_->setText("No provider — go to Settings > LLM Config");
+        team_resolved_lbl_->setText("No provider — go to Settings > AI Config");
         team_resolved_lbl_->setStyleSheet(
             QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
     }

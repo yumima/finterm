@@ -642,7 +642,7 @@ QWidget* WorkbenchScreen::build_profiles_section() {
     return build_table_section(QStringLiteral("Profiles"),
                                QStringLiteral("LLM profiles (Anthropic / local / external).  "
                                               "Profile selection drives every agent dispatch.  "
-                                              "Edit via <b>Settings → LLM Config</b>."),
+                                              "Edit via <b>Settings → AI Config</b>."),
                                {QStringLiteral("Name"), QStringLiteral("Provider"), QStringLiteral("Model"),
                                 QStringLiteral("Runtime"), QStringLiteral("Default")},
                                /*stretch_col=*/0, std::move(reload));

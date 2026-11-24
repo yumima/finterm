@@ -102,5 +102,6 @@ void register_migration_v055();
 void register_migration_v056();
 void register_migration_v057();
 void register_migration_v058();
+void register_migration_v059();
 
 } // namespace finterm

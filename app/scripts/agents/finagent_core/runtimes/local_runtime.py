@@ -589,7 +589,7 @@ def run_with_tools_stream(
 
 def probe(base_url: str | None = None, timeout_s: float = 5.0) -> list[str]:
     """List models available at the local server.  Used by the chat
-    UI's "Probe" button (Settings → LLM Config) and by the
+    UI's "Probe" button (Settings → AI Config) and by the
     LocalRuntimeUnavailable banner's diagnostics.
 
     Raises LocalRuntimeUnavailable on connection failure so the caller
