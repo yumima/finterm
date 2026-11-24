@@ -279,6 +279,9 @@ jobs:
           $ErrorActionPreference = "Stop"
           $exe = $env:FINTERM_INSTALLED_EXE -replace '/', '\'
           $dir = Split-Path -Parent $exe
+          # An earlier step left PATH in bash form; a user's is this.
+          $sys = Join-Path $env:SystemRoot "System32"
+          $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0"
           # A copy: the helper deletes the installer it consumes, and this one
           # is the release asset uploaded below.
           $built = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
@@ -305,13 +308,39 @@ jobs:
           if (Test-Path (Join-Path $dir "marker-old.txt")) { throw "the old install was not replaced" }
           if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
           if (-not (Test-Path (Join-Path $data "ci-user-data.txt"))) { throw "the update removed the user's data" }
+          $once = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+          $task = { (Get-ItemProperty -Path $once -ErrorAction SilentlyContinue)."finterm-update" }
+          if (& $task) { throw "the recovery task is still registered after a good update" }
           & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
           Get-Content $status
           $s = Get-Content $status | ConvertFrom-Json
           if (-not $s.ok) { throw "rollback failed: $($s.message)" }
           if (-not (Test-Path (Join-Path $dir "marker-old.txt"))) { throw "the rollback did not restore the previous version" }
           if (-not (Test-Path $built)) { throw "the release installer is gone" }
-          Write-Host "in-place update + rollback OK"
+
+          # Cut short: killed once the old version is being removed, then the
+          # next logon (its registered command, run here) puts it back.
+          Copy-Item -Force $built $setup
+          $hp = Start-Process -FilePath $winps -PassThru -WindowStyle Hidden -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass",
+              "-File", (Resolve-Path $helper).Path, "-AppPid", "0", "-Installer", $setup, "-InstallDir", $dir, "-Previous", $prev,
+              "-Status", $status, "-From", "0.0.1", "-To", "0.0.2")
+          for ($i = 0; (Test-Path $exe) -and -not $hp.HasExited -and $i -lt 1200; $i++) { Start-Sleep -Milliseconds 250 }
+          $cmd = & $task
+          taskkill /F /T /PID $hp.Id 2>&1 | Out-Null
+          Get-Process | Where-Object { $_.Path -and ($_.Path -like "$dir\*" -or $_.Path -eq $setup) } | Stop-Process -Force
+          # (The maintenance tool's self-delete script too: a power cut stops it.)
+          Get-Process cscript, wscript -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 5
+          if (-not $cmd) { throw "no recovery task was registered while the old version was being removed" }
+          if (Test-Path $exe) { throw "the test did not interrupt the update (finterm.exe is there)" }
+          Write-Host "interrupted; logon task ($($cmd.Length) characters): $cmd"
+          if ($cmd.Length -gt 260) { throw "a RunOnce command is at most 260 characters" }
+          & cmd.exe /c $cmd
+          Get-Content $status
+          if (-not (Test-Path $exe)) { throw "the recovery did not restore finterm" }
+          if (& $task) { throw "the recovery task is still registered" }
+          if (Test-Path (Join-Path $env:RUNNER_TEMP "recover-update.ps1")) { throw "the recovery script was left behind" }
+          Write-Host "in-place update + rollback + interrupted update OK"
 
       # ── Default install folder: per user, writable, no admin ─────────────
       # What a user gets by just running the installer: %LOCALAPPDATA%\Programs

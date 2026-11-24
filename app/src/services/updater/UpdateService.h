@@ -87,9 +87,8 @@ class UpdateService : public QObject {
     /// its workspace) and the app quits.
     void restart_now();
 
-    /// Quit without applying the staged update: the session is ending, or
-    /// another finterm was just started from this install (a profile switch).
-    /// It stays staged for the next one.
+    /// Quit without applying the staged update: another finterm was just
+    /// started from this install (a profile switch). It stays staged.
     void hold_apply() { hold_apply_ = true; }
 
     /// What the last update did, reported once by the launch after it
@@ -183,7 +182,8 @@ class UpdateService : public QObject {
     QDateTime retry_at_;
     int failed_tries_ = 0;
     bool download_quiet_ = false;
-    bool hold_apply_ = false; ///< this quit must not start the helper
+    bool hold_apply_ = false;      ///< a profile switch: this quit must not start the helper
+    QDateTime session_hold_until_; ///< the Windows session may be ending
     bool applied_ = false; ///< the helper has been started (no second one at quit)
     std::optional<update_install::Target> in_place_;
     std::unique_ptr<QFile> part_; ///< the download being written (<path>.part)

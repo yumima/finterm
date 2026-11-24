@@ -79,15 +79,17 @@ UpdateService::UpdateService(QObject* parent) : QObject(parent) {
                                                                                     saved.download_url)
                                                        : QString());
     }
-    // A session that is ending (logoff, shutdown) kills what it outlives: the
-    // helper must not be started into that — on Windows it could be stopped
-    // between removing the old version and installing the new. The staged
-    // file stays for the next session (adopt_staged).
+#if defined(Q_OS_WIN)
+    // The session is ending: what is started now is killed, on Windows perhaps
+    // between removing the old version and installing the new (the helper
+    // leaves a logon task for that too). The staged file stays for the next
+    // session, which start_download verifies and uses. A shutdown that was
+    // cancelled says nothing, so the hold passes. (Elsewhere the swap is a
+    // rename, and commitDataRequest does not mean a logoff.)
     connect(qApp, &QGuiApplication::commitDataRequest, this, [this](QSessionManager&) {
-        hold_apply();
-        // A shutdown that was cancelled: quitting applies again.
-        QTimer::singleShot(60 * 1000, this, [this]() { hold_apply_ = false; });
+        session_hold_until_ = QDateTime::currentDateTimeUtc().addSecs(10 * 60);
     });
+#endif
     // A staged update goes in when the app quits.
     connect(qApp, &QCoreApplication::aboutToQuit, this, &UpdateService::apply_on_quit);
 }
@@ -386,6 +388,9 @@ UpdateService::Stage UpdateService::stage() const {
 bool UpdateService::may_stage_quietly() const {
     if (!in_place_ || stage() != Stage::Offered || auto_blocked(offer_.version))
         return false;
+    // What another finterm put in is here already: this session can't apply.
+    if (replaced_by_another_instance())
+        return false;
     // A background download that failed waits (an hour, doubling to a day):
     // each try is the whole installer again.
     return failed_sha256_ != offer_.sha256 || QDateTime::currentDateTimeUtc() >= retry_at_;
@@ -443,6 +448,12 @@ void UpdateService::prompt_install() {
         prompt_pending_ = false; // the download it starts answers it
         handed_version_.clear();
         start_download(offer_, /*quiet=*/false);
+        return;
+    }
+    if (in_place_ && replaced_by_another_instance()) {
+        QMessageBox::information(dialog_parent(), QStringLiteral("finterm"),
+                                 QStringLiteral("An update has been installed here since finterm started. "
+                                                "Quit finterm and start it again to use it."));
         return;
     }
     // The dialog runs a nested event loop in which the schedule can replace
@@ -585,7 +596,8 @@ void UpdateService::restart_now() {
 }
 
 void UpdateService::apply_on_quit() {
-    if (!in_place_ || stage() != Stage::Ready || applied_ || hold_apply_ || staged_file_gone())
+    if (!in_place_ || stage() != Stage::Ready || applied_ || hold_apply_ ||
+        QDateTime::currentDateTimeUtc() < session_hold_until_ || staged_file_gone())
         return;
     // Another profile that quit first applied it: again would keep the new
     // version as its own "previous".
@@ -653,6 +665,13 @@ void UpdateService::clear_last_result() {
 void UpdateService::start_download(const update_policy::Offer& offer, bool quiet) {
     if (downloading_)
         return;
+    // Staged already (while the dialog asking for it was open).
+    if (in_place_ && !ready_version_.isEmpty() && ready_version_ == offer.version && ready_sha256_ == offer.sha256 &&
+        QFileInfo::exists(pending_local_path_)) {
+        if (!quiet)
+            prompt_restart();
+        return;
+    }
     // What was staged goes: a newer release came out, or this one was
     // re-published.
     if (in_place_ && !ready_version_.isEmpty()) {
@@ -690,7 +709,12 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
                 staged();
                 return;
             }
-            QFile::remove(pending_local_path_);
+            // Held open or not ours to delete: backed off like any failure,
+            // not hashed for ever.
+            if (!QFile::remove(pending_local_path_)) {
+                download_failed(QStringLiteral("cannot replace %1").arg(pending_local_path_));
+                return;
+            }
             start_download(offer, download_quiet_);
         });
         watcher->setFuture(QtConcurrent::run([path = pending_local_path_, want = offer.sha256]() {
@@ -770,12 +794,12 @@ void UpdateService::download_failed(const QString& why) {
         part_.reset();
     }
     hasher_.reset();
-    if (download_quiet_) {
-        failed_tries_ = failed_sha256_ == pending_expected_sha256_ ? failed_tries_ + 1 : 1;
-        failed_sha256_ = pending_expected_sha256_;
-        const int hours = std::min(24, 1 << std::min(failed_tries_ - 1, 5));
-        retry_at_ = QDateTime::currentDateTimeUtc().addSecs(hours * 60 * 60);
-    } else
+    // Whoever asked for it: the background one waits before it tries.
+    failed_tries_ = failed_sha256_ == pending_expected_sha256_ ? failed_tries_ + 1 : 1;
+    failed_sha256_ = pending_expected_sha256_;
+    const int hours = std::min(24, 1 << std::min(failed_tries_ - 1, 5));
+    retry_at_ = QDateTime::currentDateTimeUtc().addSecs(hours * 60 * 60);
+    if (!download_quiet_)
         show_error(QStringLiteral("The update could not be downloaded.\n\n%1").arg(why));
     finish_download();
 }

@@ -5,6 +5,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File apply-update.ps1
 #       -AppPid PID -Installer SETUP.EXE -InstallDir DIR -Previous DIR
 #       -Status FILE -From VER -To VER [-Relaunch] [-Rollback] [-AppProfile NAME] [-Lock FILE]
+#       [-Recover]
 #
 # Update: waits for PID to exit (120 s; past that nothing changes), copies the
 # install to PREVIOUS (for a rollback), removes the old install with its own
@@ -25,6 +26,7 @@ param(
     [string]$To = "",
     [switch]$Relaunch,
     [switch]$Rollback,
+    [switch]$Recover, # the logon task of an update that was cut short: put PREVIOUS back
     [string]$AppProfile = "",
     [string]$Lock = "" # the app's record of this helper; removed when done, before any relaunch
 )
@@ -84,9 +86,37 @@ while (Get-Process -ErrorAction SilentlyContinue |
     Start-Sleep -Milliseconds 500
 }
 
+# An update cut short (logoff, power) would leave no finterm: until it is done,
+# the next logon puts PREVIOUS back. A RunOnce value is at most 260 characters,
+# so it runs a small script beside the status.
+$runOnce = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+$recoverScript = if ($Status) { Join-Path (Split-Path -Parent $Status) "recover-update.ps1" } else { "" }
+function Quote([string]$s) { "'" + $s.Replace("'", "''") + "'" }
+function Set-Recovery {
+    if (-not $recoverScript) { return }
+    $line = "& " + (Quote $PSCommandPath) + " -Recover -InstallDir " + (Quote $InstallDir) + " -Previous " + (Quote $Previous) +
+            " -Status " + (Quote $Status) + " -From " + (Quote $From) + " -To " + (Quote $To) + " -AppProfile " + (Quote $AppProfile)
+    # With a BOM: Windows PowerShell reads a script without one as ANSI.
+    [System.IO.File]::WriteAllText($recoverScript, $line, (New-Object System.Text.UTF8Encoding $true))
+    if (-not (Test-Path $runOnce)) { New-Item -Path $runOnce -Force | Out-Null }
+    $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    Set-ItemProperty -Path $runOnce -Name "finterm-update" -Value "$ps -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$recoverScript`""
+}
+function Clear-Recovery {
+    Remove-ItemProperty -Path $runOnce -Name "finterm-update" -ErrorAction SilentlyContinue
+    if ($recoverScript) { Remove-Item -Force $recoverScript -ErrorAction SilentlyContinue }
+}
+
 $kept = $false   # the whole install is in PREVIOUS
 $touched = $false # the install folder has been changed (purge started)
 try {
+    if ($Recover) {
+        if (-not (Test-Path (Join-Path $Previous "finterm.exe"))) { throw "no previous version to restore" }
+        Copy-Tree $Previous $InstallDir
+        Clear-Recovery
+        Write-Status $false "it was interrupted; the previous version was restored"
+        exit 0
+    }
     if ($Rollback) {
         if (-not (Test-Path $Previous)) { throw "no previous version to restore" }
         Copy-Tree $Previous $InstallDir
@@ -101,6 +131,7 @@ try {
     # Keep the running version for a rollback.
     Copy-Tree $InstallDir $Previous
     $kept = $true
+    Set-Recovery
 
     # The installer refuses a folder that already holds an installation:
     # remove it with its own tool, then install the new version there.
@@ -130,10 +161,10 @@ try {
         throw "installing $To failed ($($install.ExitCode))"
     }
 
+    # Done: nothing after this may undo it.
+    $touched = $false
+    Clear-Recovery
     Remove-Item -Force $Installer -ErrorAction SilentlyContinue
-    Write-Status $true "applied"
-    Start-App
-    exit 0
 }
 catch {
     $env:FINTERM_INSTALL_UPDATE = $null
@@ -144,13 +175,18 @@ catch {
     if (-not $Rollback -and $touched -and $kept) {
         try {
             Copy-Tree $Previous $InstallDir
+            Clear-Recovery
             $why = "$why; the previous version was restored"
         }
         catch {
             $why = "$why; restoring the previous version also failed: $($_.Exception.Message) (it is kept in $Previous)"
         }
     }
-    Write-Status $false $why
+    if (-not $touched) { Clear-Recovery }
+    try { Write-Status $false $why } catch {}
     Start-App
     exit 1
 }
+try { Write-Status $true "applied" } catch {}
+Start-App
+exit 0

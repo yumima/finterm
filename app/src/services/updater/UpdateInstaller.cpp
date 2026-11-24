@@ -108,6 +108,19 @@ void say_updating() {
 #endif
 }
 
+/// What this process runs from, as a Target names it — by its path alone: an
+/// install being replaced is not whole.
+QString own_location() {
+#if defined(Q_OS_LINUX)
+    return QFileInfo(qEnvironmentVariable("APPIMAGE")).absoluteFilePath();
+#elif defined(Q_OS_MACOS)
+    QDir d(QCoreApplication::applicationDirPath());
+    return d.cdUp() && d.cdUp() ? d.absolutePath() : QString();
+#else
+    return QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+#endif
+}
+
 bool dir_writable(const QString& dir) {
     // QFileInfo::isWritable reads the mode bits; a probe file is the truth
     // (ACLs, read-only mounts, /Applications for a standard user).
@@ -421,7 +434,6 @@ bool boot_check() {
     // A self-test run is no start of the user's app (it never shows a window).
     if (QCoreApplication::arguments().contains(QStringLiteral("--selftest")))
         return false;
-    const auto mine = in_place_target();
     if (helper_in_flight()) {
         // An update or a rollback is being put in — here? (Another finterm, a
         // dev tree or a copy elsewhere, is not touched by it.) An AppImage is
@@ -430,15 +442,17 @@ bool boot_check() {
         // at once — staying would hold its files — and let another program
         // say why.
         const auto h = read_json(helper_path());
-        const bool here = h && mine && h->value(QStringLiteral("target")).toString() == mine->target;
-        if (!here || mine->kind == QLatin1String("appimage"))
-            return false;
-        say_updating();
-        return true;
+        const QString target = h ? h->value(QStringLiteral("target")).toString() : QString();
+        if (!target.isEmpty() && target == own_location()) {
+            if (h->value(QStringLiteral("kind")).toString() == QLatin1String("appimage"))
+                return false;
+            say_updating();
+            return true;
+        }
     }
     // The install as this process found it, before anything else can change
     // it (empty while a helper is at work: whatever that leaves is not ours).
-    if (mine)
+    if (const auto mine = in_place_target())
         g_startup_stamp = target_stamp(*mine);
     auto pending = read_json(pending_path());
     if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile())
