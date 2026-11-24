@@ -32,7 +32,8 @@ namespace finterm {
 namespace {
 
 constexpr const char* kHearthTag = "HearthService";
-constexpr int kProbeTimeoutMs = 600;
+constexpr int kProbeTimeoutMs = 2500; // a port nobody listens on refuses at once; a busy hearth takes its time
+constexpr int kConnectTries = 8;      // looks after a start, a second apart
 constexpr int kAnswerTimeoutMs = 5000; // it is hearth, and may be busy
 constexpr int kStartTimeoutMs = 90000; // the command itself gives up after 45 s
 constexpr int kAwaitMs = 1000, kAwaitTries = 45; // an older one, which we look for ourselves
@@ -152,15 +153,39 @@ void HearthService::apply_status(const Status& s) {
     }
     if (usable_changed) // linked() says otherwise now
         ai_chat::LlmService::instance().reload_config();
-    if (connect_after_ && !starting_) {
+    if (connect_after_ && !starting_)
+        connect_now_started(s.state);
+    emit detected();
+}
+
+void HearthService::connect_now_started(engine::State state) {
+    const auto give_up = [this](const QString& why) {
+        connect_after_.reset();
+        emit started(false, why);
+    };
+    if (!Database::instance().is_open() || Database::instance().path() != connect_for_) {
+        connect_after_.reset(); // another user is in: it is not theirs to connect
+        return;
+    }
+    switch (state) {
+    case engine::State::Ready:
+    case engine::State::NoModel: {
         const bool for_chat = *connect_after_;
         connect_after_.reset();
-        const bool same_user = Database::instance().is_open() && Database::instance().path() == connect_for_;
-        if (same_user && (s.state == engine::State::Ready || s.state == engine::State::NoModel))
-            if (const QString e = connect_engine(for_chat); !e.isEmpty())
-                emit started(false, e);
+        if (const QString e = connect_engine(for_chat); !e.isEmpty())
+            emit started(false, e);
+        return;
     }
-    emit detected();
+    case engine::State::Unsupported:
+        return give_up(QStringLiteral("hearth is running, and does not match this finterm: it was not connected"));
+    case engine::State::Foreign:
+        return give_up(QStringLiteral("another program answers where hearth should: it was not connected"));
+    default:
+        // A look from before it was up, or one it was too busy to answer.
+        if (--connect_tries_ <= 0)
+            return give_up(QStringLiteral("hearth was started, and does not answer yet: connect it when it does"));
+        QTimer::singleShot(kAwaitMs, this, [this]() { detect(); });
+    }
 }
 
 HearthService::Status HearthService::status() const {
@@ -215,6 +240,8 @@ QString HearthService::decline_engine() {
 // ── its program ──────────────────────────────────────────────────────────────
 
 QString HearthService::install_dir() {
+    if (const QString own = qEnvironmentVariable("HEARTH_DATA"); QDir::isAbsolutePath(own))
+        return QDir::cleanPath(QDir::fromNativeSeparators(own));
 #if defined(Q_OS_WIN)
     const QString base = qEnvironmentVariable("LOCALAPPDATA", QDir::homePath() + "/AppData/Local");
 #elif defined(Q_OS_MACOS)
@@ -243,6 +270,7 @@ QString HearthService::program() {
 
 void HearthService::start_and_connect(bool for_chat) {
     connect_after_ = for_chat;
+    connect_tries_ = kConnectTries;
     connect_for_ = Database::instance().path();
     start();
 }

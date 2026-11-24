@@ -497,6 +497,8 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
     }
     if (action_uses_terminal_tools(action))
         attach_tools(config);
+    // Stored addresses are meant as of now: hearth's only while it is connected.
+    config = ai_chat::LlmService::with_engine_bases(config);
     QJsonObject payload;
     payload["action"] = action;
     payload["api_keys"] = build_api_keys();
@@ -528,7 +530,7 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
     // Resolve user_id for per-persona SQLite isolation on the Python side.
     // Priority: params["user_id"] (caller override) > config["user_id"] > session-derived.
     // Session: user_info.id > 0 → QString::number(id); id == 0 (guest/unauth) → "guest".
-    QJsonObject enriched_params = params;
+    QJsonObject enriched_params = ai_chat::LlmService::with_engine_bases(params); // a team's members are in here
     if (!enriched_params.contains("user_id") || enriched_params["user_id"].toString().isEmpty()) {
         QString uid;
         if (config.contains("user_id") && !config["user_id"].toString().isEmpty()) {

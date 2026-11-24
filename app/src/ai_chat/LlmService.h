@@ -264,6 +264,10 @@ class LlmService : public QObject {
     /// (HearthService::engine_base_url), and stays blank for every other one.
     static QString stored_base(const QString& provider, const QString& base_url);
 
+    /// An agent's, team's or workflow's config with every model's stored base
+    /// as it is meant now (stored_base), members' and nested ones too.
+    static QJsonObject with_engine_bases(QJsonObject config);
+
     // Fetch available models for a provider (async — emits models_fetched)
     void fetch_models(const QString& provider, const QString& api_key, const QString& base_url = {});
 
@@ -487,6 +491,7 @@ class LlmService : public QObject {
         int status = 0;
         QByteArray body;
         QString error;
+        bool timed_out = false;
     };
     static HttpResult blocking_post(const QString& url, const QJsonObject& body, const QMap<QString, QString>& headers);
 

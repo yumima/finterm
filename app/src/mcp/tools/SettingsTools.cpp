@@ -2,6 +2,8 @@
 
 #include "mcp/tools/SettingsTools.h"
 
+#include "ai_chat/LlmService.h"
+#include "ai_chat/HearthService.h"
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "services/notifications/NotificationFieldStore.h"
@@ -156,16 +158,30 @@ std::vector<ToolDef> get_settings_tools() {
         t.category = "settings";
         t.input_schema.properties = QJsonObject{
             {"provider", QJsonObject{{"type", "string"},
-                                     {"description", "Provider name (openai, anthropic, ollama, groq, google)"}}}};
+                                     {"description", "A provider set up in Settings › AI Config (hearth, anthropic, openai, gemini, groq, …)"}}}};
         t.input_schema.required = {"provider"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString provider = args["provider"].toString();
             if (provider.isEmpty())
                 return ToolResult::fail("Missing 'provider'");
 
-            auto r = LlmConfigRepository::instance().set_active(provider);
+            // hearth is the user's to connect, by their own hand.
+            if (ai_chat::is_hearth_provider(provider) && HearthService::instance().link() != engine::Link::Connected)
+                return ToolResult::fail("hearth is not connected; the user can connect it in Settings › AI Config");
+            QString row;
+            if (auto rows = LlmConfigRepository::instance().list_providers(); rows.is_ok())
+                for (const auto& p : rows.value())
+                    if (p.provider.compare(provider, Qt::CaseInsensitive) == 0 ||
+                        (ai_chat::is_hearth_provider(provider) && ai_chat::is_hearth_provider(p.provider)))
+                        row = p.provider;
+            if (row.isEmpty())
+                return ToolResult::fail("No provider '" + provider + "' is set up in Settings › AI Config");
+
+            auto r = LlmConfigRepository::instance().set_active(row);
             if (r.is_err())
                 return ToolResult::fail("Failed to set active LLM: " + QString::fromStdString(r.error()));
+            ai_chat::LlmService::instance().reload_config();
+            provider = row;
 
             EventBus::instance().publish("llm.provider_changed", QVariantMap{{"provider", provider}});
 

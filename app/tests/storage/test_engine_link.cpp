@@ -66,6 +66,7 @@ void TestEngineLink::init() {
     auto r = Database::instance().reopen(dir_.filePath(QStringLiteral("%1.db").arg(n_++)));
     QVERIFY2(r.is_ok(), r.is_err() ? r.error().c_str() : "");
     sql("DELETE FROM llm_configs"); // v002 seeds one
+    sql("DELETE FROM llm_profiles");
 }
 
 void TestEngineLink::a_new_user_is_asked() {
@@ -90,6 +91,10 @@ void TestEngineLink::who_used_hearth_keeps_it_data() {
         << QString(anthropic) + "INSERT INTO llm_configs (provider, model, is_active) VALUES ('hearth','m',0);" << false;
     QTest::newRow("another, and had hearth managed")
         << QString(anthropic) + "INSERT INTO settings (key, value) VALUES ('hearth.manage','true');" << true;
+    QTest::newRow("another, and the default profile is hearth's")
+        << QString(anthropic) + "INSERT INTO llm_profiles (id, name, provider, model_id, is_default) VALUES ('p','p','hearth','m',1);" << true;
+    QTest::newRow("another, and a profile of hearth's nobody uses")
+        << QString(anthropic) + "INSERT INTO llm_profiles (id, name, provider, model_id, is_default) VALUES ('p','p','hearth','m',0);" << false;
     QTest::newRow("another, and had it unmanaged")
         << QString(anthropic) + "INSERT INTO settings (key, value) VALUES ('hearth.manage','false');" << false;
     QTest::newRow("another, with embedded memory")

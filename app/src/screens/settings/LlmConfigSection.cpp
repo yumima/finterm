@@ -434,7 +434,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     lbl_style(eng_lbl);
     form->addRow(eng_lbl, new EnginePanel(EnginePanel::Mode::Full));
     connect(&HearthService::instance(), &HearthService::link_changed, this, [this]() {
-        load_providers();
+        refresh_provider_labels(); // not the form: what is being typed there stays
         emit config_changed();
     });
     const QString check_style = "QCheckBox{color:" + QString(ui::colors::TEXT_PRIMARY()) +
@@ -646,17 +646,9 @@ QWidget* LlmConfigSection::build_global_panel() {
 // Data Loading
 // ============================================================================
 
-void LlmConfigSection::load_providers() {
-    // Remember the currently-selected provider so a reload (e.g. after Save)
-    // doesn't snap the user back to the first row. Fall back to the active
-    // provider on first load, then row 0 if nothing else applies.
-    QString prior_selection;
-    if (provider_list_->currentItem())
-        prior_selection = provider_list_->currentItem()->data(Qt::UserRole).toString();
-
-    provider_list_->blockSignals(true);
+QString LlmConfigSection::fill_provider_list() {
+    const QSignalBlocker block(provider_list_);
     provider_list_->clear();
-
     QString active_provider;
     auto result = LlmConfigRepository::instance().list_providers();
     if (result.is_ok()) {
@@ -674,15 +666,58 @@ void LlmConfigSection::load_providers() {
             auto* item = new QListWidgetItem(display);
             item->setData(Qt::UserRole, p.provider);
             // Only the active provider gets amber color
-            if (p.is_active)
-                item->setForeground(QColor(ui::colors::AMBER()));
-            else
-                item->setForeground(QColor(ui::colors::TEXT_SECONDARY()));
+            item->setForeground(QColor(p.is_active ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
             provider_list_->addItem(item);
         }
     }
+    return active_provider;
+}
 
-    provider_list_->blockSignals(false);
+QString LlmConfigSection::active_provider() {
+    const auto provs = LlmConfigRepository::instance().list_providers();
+    if (provs.is_ok())
+        for (const auto& p : provs.value())
+            if (p.is_active)
+                return p.provider;
+    return {};
+}
+
+void LlmConfigSection::show_default_badge(const QString& provider, const QString& active) {
+    // Say which provider is the default, and offer to change it. Previously the
+    // only way to become default was a side effect of Save, so the answer was
+    // both invisible and easy to change by accident.
+    const bool is_default = (!active.isEmpty() && active == provider);
+    if (default_badge_) {
+        default_badge_->setText(is_default ? "DEFAULT — used by roles set to “Use default”" : "Not the default");
+        default_badge_->setStyleSheet(QString("color:%1;font-size:11px;font-weight:%2;")
+                                          .arg(is_default ? ui::colors::AMBER() : ui::colors::TEXT_DIM())
+                                          .arg(is_default ? "700" : "400"));
+    }
+    if (set_default_btn_) {
+        set_default_btn_->setVisible(!is_default);
+        set_default_btn_->setEnabled(!is_default);
+    }
+}
+
+void LlmConfigSection::refresh_provider_labels() {
+    const QString selected = provider_list_->currentItem() ? provider_list_->currentItem()->data(Qt::UserRole).toString() : QString();
+    const QString active = fill_provider_list();
+    const QSignalBlocker block(provider_list_);
+    for (int i = 0; i < provider_list_->count(); ++i)
+        if (provider_list_->item(i)->data(Qt::UserRole).toString() == selected)
+            provider_list_->setCurrentRow(i);
+    show_default_badge(selected, active);
+}
+
+void LlmConfigSection::load_providers() {
+    // Remember the currently-selected provider so a reload (e.g. after Save)
+    // doesn't snap the user back to the first row. Fall back to the active
+    // provider on first load, then row 0 if nothing else applies.
+    QString prior_selection;
+    if (provider_list_->currentItem())
+        prior_selection = provider_list_->currentItem()->data(Qt::UserRole).toString();
+
+    const QString active_provider = fill_provider_list();
 
     // Load global settings
     auto gs = LlmConfigRepository::instance().get_global_settings();
@@ -720,26 +755,7 @@ void LlmConfigSection::populate_form(const QString& provider) {
     if (web_search_check_)
         web_search_check_->setVisible(!ai_chat::provider_requires_api_key(provider));
 
-    // Say which provider is the default, and offer to change it. Previously the
-    // only way to become default was a side effect of Save, so the answer was
-    // both invisible and easy to change by accident.
-    QString active;
-    auto provs = LlmConfigRepository::instance().list_providers();
-    if (provs.is_ok())
-        for (const auto& p : provs.value())
-            if (p.is_active)
-                active = p.provider;
-    const bool is_default = (!active.isEmpty() && active == provider);
-    if (default_badge_) {
-        default_badge_->setText(is_default ? "DEFAULT — used by roles set to “Use default”" : "Not the default");
-        default_badge_->setStyleSheet(QString("color:%1;font-size:11px;font-weight:%2;")
-                                          .arg(is_default ? ui::colors::AMBER() : ui::colors::TEXT_DIM())
-                                          .arg(is_default ? "700" : "400"));
-    }
-    if (set_default_btn_) {
-        set_default_btn_->setVisible(!is_default);
-        set_default_btn_->setEnabled(!is_default);
-    }
+    show_default_badge(provider, active_provider());
 
     // Populate model combo with fallback suggestions
     model_combo_->blockSignals(true);
@@ -914,10 +930,12 @@ void LlmConfigSection::on_delete_provider() {
 
     LlmConfigRepository::instance().delete_provider(provider);
     load_providers();
-    // Reload so LlmService drops the deleted config immediately (mirrors save);
-    // if it was the active provider, this picks up the local-engine fallback.
+    // Reload so LlmService drops the deleted config immediately (mirrors save).
     ai_chat::LlmService::instance().reload_config();
     emit config_changed();
+    // Which of the others is used is the user's choice, not the first row's.
+    if (active_provider().isEmpty() && provider_list_->count() > 0)
+        show_status("No default provider now: choose one and press Set as default", true);
 }
 
 void LlmConfigSection::on_save_global() {

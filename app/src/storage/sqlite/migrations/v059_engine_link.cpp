@@ -43,8 +43,11 @@ Result<void> apply_v059(QSqlDatabase& db) {
                           count("SELECT COUNT(*) FROM (" + first + ") WHERE " + hearth);
         const bool role = any(db, "SELECT COUNT(*) FROM llm_profile_assignments a JOIN llm_profiles p ON p.id = a.profile_id "
                                   "WHERE lower(p.provider) IN ('hearth','ollama')");
+        // …or follows the default profile, as every role without one of its own does
+        const bool by_default =
+            any(db, "SELECT COUNT(*) FROM llm_profiles WHERE is_default = 1 AND lower(provider) IN ('hearth','ollama')");
         const bool memory = any(db, "SELECT COUNT(*) FROM memory_entries WHERE embedding IS NOT NULL");
-        connected = managed || chat || role || memory;
+        connected = managed || chat || role || by_default || memory;
         if (connected && !run("INSERT OR IGNORE INTO settings (key, value, category) VALUES ('hearth.link', 'connected', 'ai')"))
             return failed();
         if (managed &&

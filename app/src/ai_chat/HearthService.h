@@ -100,12 +100,14 @@ class HearthService : public QObject {
     void link_was_changed();
     void finish_start(bool ok, const QString& message);
     void await_serving(int tries_left);
+    void connect_now_started(engine::State state);
 
     mutable QMutex mutex_;
     Status status_;
     bool detecting_ = false;
     QProcess* starting_ = nullptr;
     std::optional<bool> connect_after_; ///< for_chat, while a start is to be followed by connecting
+    int connect_tries_ = 0;
     QString connect_for_;               ///< whose database that was asked in
     QSet<QString> start_offered_;       ///< databases start_if_wanted() has been run for
 };

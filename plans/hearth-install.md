@@ -48,7 +48,9 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
       1500-token one. No queue of ours changes that (nothing pre-empts a running answer);
       finterm gives an engine on this computer 5 minutes and says it may be busy
 - [x] 3.7 Voices out of finterm's folder
-- [ ] 3.8 Switch the developer machine over (asks first)
+- [ ] 3.8 Switch the developer machine over (asks first): merge `engine` into main of hearth and
+      finterm, run from there; then delete the mantel repository (local and GitHub; user
+      decided 2026-11-24, every commit is in hearth) and the *-engine worktrees and branches
 
 **4. Linux install**
 - [x] 4.1 Hardware check: NVIDIA, AMD, Apple, RAM, disk
@@ -62,11 +64,11 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 - [x] 4.9 Login service
 - [x] 4.10 `hearth update`: previous version kept, data backed up
 - [x] 4.11 `hearth uninstall`, with "keep models"
-- [ ] 4.12 Licence review and notices
+- [x] 4.12 Licence review and notices
 
 **5. Windows, macOS, release**
-- [ ] 5.1 Installers and login services
-- [ ] 5.2 Kokoro voices and speech recognition; Piper tutor voices Linux-only at first
+- [x] 5.1 Installers and login services
+- [x] 5.2 Kokoro voices and speech recognition; Piper tutor voices Linux-only at first
 - [ ] 5.3 CI with a tiny model, then clean-machine tests
 - [ ] 5.4 Website: tabs at yumima.github.io, hearth's pages and `install.sh` (creating the repository asks first)
 - [ ] 5.5 First release on all three (asks first)

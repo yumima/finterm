@@ -577,9 +577,11 @@ int main(int argc, char* argv[]) {
         finterm::ai_chat::LlmService::instance().reload_config();
         QTimer::singleShot(3000, qApp, []() {
             auto& hearth = finterm::HearthService::instance();
-            if (hearth.linked())
+            // Looked for whether connected (it may have been updated, or not) or
+            // never asked about; not for one who said no.
+            if (hearth.link() == finterm::engine::Link::Connected)
                 hearth.start_if_wanted();
-            else if (hearth.link() == finterm::engine::Link::Unasked)
+            if (hearth.link() != finterm::engine::Link::Declined)
                 hearth.detect();
         });
     });

@@ -1,5 +1,6 @@
 #include "screens/news/NewsDetailPanel.h"
 
+#include "ai_chat/LlmUrl.h"
 #include "core/logging/Logger.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/tts/SpeechText.h"
@@ -160,12 +161,13 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
 
     root->addWidget(stack_, 1);
 
-    // Analyze timeout guard (30s)
+    // Analyze timeout guard
     analyze_timeout_ = new QTimer(this);
     analyze_timeout_->setSingleShot(true);
     // On-device analysis (local LLM) is slower than the old cloud call — give it
     // headroom before the button re-enables as a safety net.
-    analyze_timeout_->setInterval(120000);
+    // Not before the request itself gives up: a second click would queue another.
+    analyze_timeout_->setInterval(kLocalChatTimeoutMs + 10000);
     connect(analyze_timeout_, &QTimer::timeout, this, [this]() {
         if (analyze_btn_) {
             analyze_btn_->setText("ANALYZE");

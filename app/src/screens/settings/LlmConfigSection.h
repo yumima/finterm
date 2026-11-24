@@ -111,6 +111,10 @@ class LlmConfigSection : public QWidget {
 
     // ── Provider tab helpers ──────────────────────────────────────────────────
     void load_providers();
+    QString fill_provider_list();    // the active provider
+    void refresh_provider_labels();  // the list and badge only, not the form
+    static QString active_provider();
+    void show_default_badge(const QString& provider, const QString& active);
     void populate_form(const QString& provider);
     QString make_default(const QString& provider); // "" on success, else why not
     void show_status(const QString& msg, bool error = false);

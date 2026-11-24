@@ -33,7 +33,10 @@ HearthInstaller& HearthInstaller::instance() {
 }
 
 HearthInstaller::HearthInstaller(QObject* parent)
-    : QObject(parent), script_(engine::install_script()), nam_(new QNetworkAccessManager(this)) {}
+    : QObject(parent), script_(engine::install_script()), nam_(new QNetworkAccessManager(this)) {
+    // Not left half done behind a closed window: it goes on from there next time.
+    connect(qApp, &QCoreApplication::aboutToQuit, this, &HearthInstaller::cancel);
+}
 
 void HearthInstaller::start() {
     if (running_ || !available())

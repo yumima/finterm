@@ -374,6 +374,25 @@ QString LlmService::stored_base(const QString& provider, const QString& base_url
     return base_url.trimmed().isEmpty() ? HearthService::instance().engine_base_url() : base_url;
 }
 
+// static
+QJsonObject LlmService::with_engine_bases(QJsonObject config) {
+    // (A model config; other things have a "provider" too.)
+    if (config.value("provider").isString() && (config.contains("base_url") || config.contains("model_id")))
+        config["base_url"] = stored_base(config.value("provider").toString(), config.value("base_url").toString());
+    for (auto it = config.begin(); it != config.end(); ++it) {
+        if (it.value().isObject()) {
+            it.value() = with_engine_bases(it.value().toObject());
+        } else if (it.value().isArray()) {
+            QJsonArray a = it.value().toArray();
+            for (int i = 0; i < a.size(); ++i)
+                if (a.at(i).isObject())
+                    a[i] = with_engine_bases(a.at(i).toObject());
+            it.value() = a;
+        }
+    }
+    return config;
+}
+
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     // The read-aloud voice, "model:id" (TtsService::set_engine_voice). Read
     // before taking mutex_: the settings store has its own locking.
@@ -495,7 +514,7 @@ QJsonObject LlmService::profile_to_json(const ResolvedLlmProfile& p) {
     obj["provider"] = p.provider;
     obj["model_id"] = p.model_id;
     obj["api_key"] = p.api_key;
-    obj["base_url"] = stored_base(p.provider, p.base_url);
+    obj["base_url"] = p.base_url; // as stored: this is saved with agents, and resolved when one runs
     obj["temperature"] = p.temperature;
     obj["max_tokens"] = p.max_tokens;
     if (!p.system_prompt.isEmpty())
@@ -684,8 +703,10 @@ QString LlmService::no_endpoint_error(const PersonaScope& persona) const {
     const QString p = eff_provider(persona);
     if (p.isEmpty())
         return QStringLiteral("No AI is connected — choose one in Settings › AI Config");
-    if (is_hearth_provider(p) && !HearthService::instance().linked())
+    if (is_hearth_provider(p) && HearthService::instance().link() != engine::Link::Connected)
         return QStringLiteral("hearth is not connected — connect it in Settings › AI Config");
+    if (is_hearth_provider(p))
+        return QStringLiteral("This hearth does not match this finterm — see Settings › AI Config");
     return "No endpoint URL for provider: " + p;
 }
 
@@ -1275,6 +1296,7 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
         if (!reply->isFinished()) {
             reply->abort();
             reply->deleteLater();
+            result.timed_out = true;
             result.error = is_loopback_url(url)
                                ? QStringLiteral("The engine on this computer did not answer in %1 minutes — it may be busy "
                                                 "with another program's request")
@@ -1418,7 +1440,8 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     // this, which will be just as true next time. A 5xx or a transport error is
     // a bad moment, not a missing feature, so the native route is re-tried on
     // the next call rather than written off for the life of the process.
-    if (native && !http.success) {
+    // (Not when it ran out of time: the same request again would only wait as long.)
+    if (native && !http.success && !http.timed_out) {
         const bool permanent = http.status >= 400 && http.status < 500;
         LOG_INFO(TAG, QString("Native route at %1 failed (HTTP %2: %3) — falling back to /v1%4")
                           .arg(url)
