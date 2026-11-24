@@ -1442,6 +1442,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_economics_analytics_engine.py
     )
     set_tests_properties(economics_analytics_engine PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+    # The notebook's kernel: one namespace, in order, no deadline, interruptible.
+    add_test(
+        NAME notebook_kernel
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_notebook_kernel.py
+    )
+    set_tests_properties(notebook_kernel PROPERTIES TIMEOUT 120)
     # Alpha Arena's technical features: agno_trading imports (it once could
     # not, and every agent ran with empty features).
     add_test(

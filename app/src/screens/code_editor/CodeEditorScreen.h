@@ -1,9 +1,12 @@
 // src/screens/code_editor/CodeEditorScreen.h
-// Python Colab — Jupyter notebook with Obsidian design system.
+// Python notebook (.ipynb). Its cells run in one Python process of its own
+// (NotebookKernel), in order.
 // Responsive cells, markdown rendering, keyboard shortcuts, collapsible output.
 #pragma once
 
 #include "screens/IStatefulScreen.h"
+
+#include "services/notebook/NotebookKernel.h"
 
 #include <QHideEvent>
 #include <QJsonArray>
@@ -13,9 +16,11 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QShowEvent>
+#include <QSet>
 #include <QSplitter>
 #include <QTextBrowser>
 #include <QTextEdit>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -30,6 +35,7 @@ struct CellOutput {
     QString error_name; // for errors
     QString error_value;
     QStringList traceback;
+    QJsonObject raw; // as read from the file (images and all), and written back
 };
 
 struct NotebookCell {
@@ -39,7 +45,8 @@ struct NotebookCell {
     QString source;
     QVector<CellOutput> outputs;
     int execution_count = 0;
-    bool running = false;
+    bool running = false; // running, or waiting to
+    QJsonObject raw;      // as read from the file: what this screen does not know is kept
 };
 
 // -- Code editor with line numbers --------------------------------------------
@@ -65,7 +72,8 @@ class CellWidget : public QWidget {
     explicit CellWidget(const NotebookCell& cell, int index, QWidget* parent = nullptr);
 
     void set_cell_data(const NotebookCell& cell);
-    NotebookCell cell_data() const;
+    /// What the editor holds now; the screen's cell has it after sync_cells().
+    QString source() const;
     void set_running(bool running);
     void set_outputs(const QVector<CellOutput>& outputs, int exec_count);
     void set_selected(bool selected);
@@ -100,7 +108,6 @@ class CellWidget : public QWidget {
     bool selected_ = false;
     bool output_collapsed_ = false;
     bool md_editing_ = false;
-    QString title_;
 
     // Gutter
     QWidget* gutter_ = nullptr;
@@ -176,6 +183,16 @@ class CodeEditorScreen : public QWidget, public IStatefulScreen {
     void on_rename_cell(const QString& cell_id);
 
   private:
+    void reset_notebook();
+    bool load_notebook(const QString& path, QString* why);
+    QJsonObject notebook_json() const;
+    /// What is typed goes into cells_: before anything reads or rebuilds them.
+    void sync_cells();
+    void on_kernel_state();
+    void on_kernel_output(const QString& cell_id, const services::notebook::KernelOutput& out);
+    void on_kernel_finished(const QString& cell_id, bool ran, bool ok);
+    void show_outputs();
+
     void build_ui();
     QWidget* build_toolbar();
     QWidget* build_status_bar();
@@ -192,6 +209,10 @@ class CodeEditorScreen : public QWidget, public IStatefulScreen {
     QVector<NotebookCell> cells_;
     int execution_counter_ = 0;
     QString notebook_path_;
+    QJsonObject notebook_raw_; // the file's own metadata
+    services::notebook::NotebookKernel* kernel_ = nullptr;
+    QSet<QString> dirty_outputs_; // shown on the next tick: a cell may print without end
+    QTimer* output_timer_ = nullptr;
 
     // UI
     QSplitter* splitter_ = nullptr;
@@ -201,6 +222,9 @@ class CodeEditorScreen : public QWidget, public IStatefulScreen {
     QVBoxLayout* cells_layout_ = nullptr;
     QLabel* status_label_ = nullptr;
     QLabel* kernel_label_ = nullptr;
+    QLabel* python_label_ = nullptr;
+    QPushButton* interrupt_btn_ = nullptr;
+    QPushButton* restart_btn_ = nullptr;
     QString selected_cell_id_;
     bool sidebar_visible_ = true;
 };

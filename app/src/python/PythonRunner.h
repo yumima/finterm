@@ -81,9 +81,20 @@ class PythonRunner : public QObject {
     /// Ask it to end, and make it when it has not after `grace_ms`.
     void stop_background(quint64 handle, int grace_ms = 10'000);
 
-    /// Run arbitrary Python code (for notebook/colab cells).
-    /// Creates a temp file, executes it, returns stdout/stderr.
+    /// Run Python code from a temp file; returns stdout/stderr. `cb` may be
+    /// called at once when it cannot start.
+    /// finterm's own snippet: in the ordinary slots, with their deadline.
     void run_code(const QString& code, Callback cb);
+    /// The user's (a workflow's code node): takes what it takes, as a job.
+    void run_user_code(const QString& code, Callback cb);
+
+    /// A script that is spoken to over stdin (the notebook's kernel): not
+    /// started, its stdin left open, in the Cells folder. Holds no slot and has
+    /// no deadline; ends with the app. Null when it cannot run, `why` saying it.
+    QProcess* create_server(const QString& script, QString* why);
+
+    /// Looking for Python at start is not over: is_available() can't say yet.
+    bool is_initializing() const { return !python_init_done_; }
 
     /// Resolve path to python executable
     QString python_path() const;
@@ -120,10 +131,21 @@ class PythonRunner : public QObject {
     static QString find_scripts_dir();
 
   private:
+    struct QueuedRequest {
+        QString script;
+        QStringList args;
+        Callback cb;
+        StreamCallback on_line;
+        int timeout_ms = kProcessTimeoutMs;
+    };
+
     PythonRunner();
     QString find_python_sync() const;
     void find_python_async();
     void start_next();
+    void queue_code(const QString& code, Callback cb, QQueue<QueuedRequest>& queue, int timeout_ms);
+    /// A process running venv's Python, with what every one of them needs. Not started.
+    QProcess* new_process(const QString& venv, const QStringList& args, const QProcessEnvironment& env, WorkDir dir);
     /// The process for a script: program, launcher arguments, folder, and its
     /// arguments written to stdin once it runs. Not started.
     QProcess* make_process(const QString& script, const QStringList& args, const QProcessEnvironment& env);
@@ -144,13 +166,6 @@ class PythonRunner : public QObject {
     static constexpr int kJobLanes = 2;
     int job_active_ = 0;
 
-    struct QueuedRequest {
-        QString script;
-        QStringList args;
-        Callback cb;
-        StreamCallback on_line;
-        int timeout_ms = kProcessTimeoutMs;
-    };
     QQueue<QueuedRequest> queue_;
     QQueue<QueuedRequest> interactive_queue_;
     QQueue<QueuedRequest> job_queue_;

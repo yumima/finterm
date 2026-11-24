@@ -1,13 +1,10 @@
 // src/screens/code_editor/CodeEditorScreen.cpp
-// Python Colab — Obsidian design system implementation.
-// Responsive cells, markdown rendering, keyboard shortcuts, collapsible output.
 #include "screens/code_editor/CodeEditorScreen.h"
 
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
 #include "services/file_manager/FileManagerService.h"
-#include "services/notebook/NotebookKernel.h"
 #include "ui/theme/Theme.h"
 
 #include <QAbstractTextDocumentLayout>
@@ -25,6 +22,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollArea>
@@ -32,9 +30,13 @@
 #include <QSplitter>
 #include <QTextBrowser>
 #include <QTextEdit>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QTimer>
 #include <QUuid>
 #include <QVBoxLayout>
+
+#include <utility>
 
 namespace finterm::screens {
 
@@ -319,7 +321,6 @@ void CellWidget::adjust_editor_height() {
 void CellWidget::set_cell_data(const NotebookCell& cell) {
     cell_id_ = cell.id;
     cell_type_ = cell.cell_type;
-    title_ = cell.title;
     execution_count_ = cell.execution_count;
     running_ = cell.running;
 
@@ -349,14 +350,8 @@ void CellWidget::set_cell_data(const NotebookCell& cell) {
     }
 }
 
-NotebookCell CellWidget::cell_data() const {
-    NotebookCell cell;
-    cell.id = cell_id_;
-    cell.cell_type = cell_type_;
-    cell.title = title_;
-    cell.source = editor_->toPlainText();
-    cell.execution_count = execution_count_;
-    return cell;
+QString CellWidget::source() const {
+    return editor_->toPlainText();
 }
 
 void CellWidget::set_running(bool running) {
@@ -798,8 +793,17 @@ void CellNavigator::rebuild(const QVector<NotebookCell>& cells, const QString& s
 // ═════════════════════════════════════════════════════════════════════════════
 
 CodeEditorScreen::CodeEditorScreen(QWidget* parent) : QWidget(parent) {
+    using services::notebook::NotebookKernel;
+    kernel_ = new NotebookKernel(this);
+    connect(kernel_, &NotebookKernel::state_changed, this, &CodeEditorScreen::on_kernel_state);
+    connect(kernel_, &NotebookKernel::output, this, &CodeEditorScreen::on_kernel_output);
+    connect(kernel_, &NotebookKernel::finished, this, &CodeEditorScreen::on_kernel_finished);
+    output_timer_ = new QTimer(this);
+    output_timer_->setSingleShot(true);
+    connect(output_timer_, &QTimer::timeout, this, &CodeEditorScreen::show_outputs);
+
     build_ui();
-    on_new_notebook();
+    reset_notebook();
 }
 
 void CodeEditorScreen::showEvent(QShowEvent* event) {
@@ -934,6 +938,16 @@ QWidget* CodeEditorScreen::build_toolbar() {
     connect(run_all_btn, &QPushButton::clicked, this, &CodeEditorScreen::on_run_all);
     hl->addWidget(run_all_btn);
 
+    interrupt_btn_ = make_btn("INTERRUPT");
+    interrupt_btn_->setToolTip("Stop the running cell; those waiting are dropped");
+    connect(interrupt_btn_, &QPushButton::clicked, kernel_, &services::notebook::NotebookKernel::interrupt);
+    hl->addWidget(interrupt_btn_);
+
+    restart_btn_ = make_btn("RESTART");
+    restart_btn_->setToolTip("End the notebook's Python: its variables go, whatever runs is stopped");
+    connect(restart_btn_, &QPushButton::clicked, kernel_, &services::notebook::NotebookKernel::restart);
+    hl->addWidget(restart_btn_);
+
     hl->addStretch();
 
     auto* sidebar_btn = make_btn("SIDEBAR");
@@ -942,16 +956,14 @@ QWidget* CodeEditorScreen::build_toolbar() {
 
     add_sep();
 
-    kernel_label_ = new QLabel("KERNEL: IDLE", bar);
-    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
-                                         " letter-spacing:0.5px; padding:0 8px;")
-                                     .arg(colors::POSITIVE(), fonts::DATA_FAMILY));
+    kernel_label_ = new QLabel(bar);
     hl->addWidget(kernel_label_);
 
-    auto* py_label = new QLabel("Python 3.12", bar);
-    py_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; padding-left:8px;")
-                                .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
-    hl->addWidget(py_label);
+    python_label_ = new QLabel(bar);
+    python_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; padding-left:8px;")
+                                     .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+    hl->addWidget(python_label_);
+    on_kernel_state();
 
     return bar;
 }
@@ -985,9 +997,16 @@ QWidget* CodeEditorScreen::build_status_bar() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void CodeEditorScreen::on_new_notebook() {
+    reset_notebook();
+    ScreenStateManager::instance().notify_changed(this);
+}
+
+void CodeEditorScreen::reset_notebook() {
+    kernel_->restart(); // another notebook's variables are not this one's
     cells_.clear();
     execution_counter_ = 0;
     notebook_path_.clear();
+    notebook_raw_ = {};
 
     NotebookCell cell;
     cell.id = new_cell_id();
@@ -1036,6 +1055,8 @@ void CodeEditorScreen::on_delete_cell(const QString& cell_id) {
     if (cells_.size() <= 1)
         return;
 
+    kernel_->cancel(cell_id);
+    sync_cells();
     int idx = find_cell_index(cell_id);
     if (idx >= 0) {
         cells_.removeAt(idx);
@@ -1055,10 +1076,6 @@ void CodeEditorScreen::on_move_cell_up(const QString& cell_id) {
     if (idx <= 0)
         return;
 
-    auto* cw = find_cell_widget(cell_id);
-    if (cw)
-        cells_[idx] = cw->cell_data();
-
     cells_.swapItemsAt(idx, idx - 1);
     rebuild_cells();
     update_navigator();
@@ -1068,10 +1085,6 @@ void CodeEditorScreen::on_move_cell_down(const QString& cell_id) {
     int idx = find_cell_index(cell_id);
     if (idx < 0 || idx >= cells_.size() - 1)
         return;
-
-    auto* cw = find_cell_widget(cell_id);
-    if (cw)
-        cells_[idx] = cw->cell_data();
 
     cells_.swapItemsAt(idx, idx + 1);
     rebuild_cells();
@@ -1083,13 +1096,11 @@ void CodeEditorScreen::on_toggle_cell_type(const QString& cell_id) {
     if (idx < 0)
         return;
 
-    auto* cw = find_cell_widget(cell_id);
-    if (cw)
-        cells_[idx] = cw->cell_data();
-
+    kernel_->cancel(cell_id);
     cells_[idx].cell_type = (cells_[idx].cell_type == "code") ? "markdown" : "code";
     cells_[idx].outputs.clear();
     cells_[idx].execution_count = 0;
+    cells_[idx].running = false;
 
     rebuild_cells();
     update_navigator();
@@ -1141,7 +1152,6 @@ void CodeEditorScreen::on_clear_outputs() {
         cell.outputs.clear();
         cell.execution_count = 0;
     }
-    execution_counter_ = 0;
     rebuild_cells();
     update_status();
     update_navigator();
@@ -1170,89 +1180,92 @@ void CodeEditorScreen::advance_to_next(const QString& current_id) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void CodeEditorScreen::on_run_cell(const QString& cell_id) {
-    int idx = find_cell_index(cell_id);
-    if (idx < 0)
+    const int idx = find_cell_index(cell_id);
+    if (idx < 0 || kernel_->holds(cell_id))
+        return;
+    sync_cells();
+    NotebookCell& cell = cells_[idx];
+    if (cell.cell_type != "code" || cell.source.trimmed().isEmpty())
         return;
 
-    auto* cw = find_cell_widget(cell_id);
-    if (cw) {
-        cells_[idx] = cw->cell_data();
+    cell.running = true;
+    cell.outputs.clear();
+    cell.execution_count = ++execution_counter_;
+    dirty_outputs_.remove(cell_id);
+    if (auto* cw = find_cell_widget(cell_id)) {
+        cw->set_outputs({}, cell.execution_count);
         cw->set_running(true);
     }
+    kernel_->run(cell_id, cell.execution_count, cell.source);
+}
 
-    if (cells_[idx].cell_type != "code")
+void CodeEditorScreen::on_kernel_state() {
+    using State = services::notebook::NotebookKernel::State;
+    const State state = kernel_->state();
+    const bool busy = state == State::Busy || state == State::Starting;
+    kernel_label_->setText(state == State::Off        ? "KERNEL: OFF"
+                           : state == State::Starting ? "KERNEL: STARTING"
+                           : state == State::Busy     ? "KERNEL: BUSY"
+                                                      : "KERNEL: IDLE");
+    kernel_label_->setToolTip(state == State::Off ? "Starts with the first cell you run" : QString());
+    kernel_label_->setStyleSheet(
+        QString("color:%1; font-family:%2; font-size:12px; font-weight:600; letter-spacing:0.5px; padding:0 8px;")
+            .arg(busy                  ? colors::WARNING()
+                 : state == State::Off ? colors::TEXT_SECONDARY()
+                                       : colors::POSITIVE(),
+                 fonts::DATA_FAMILY));
+    python_label_->setText(kernel_->python_version().isEmpty() ? QString() : "Python " + kernel_->python_version());
+    interrupt_btn_->setEnabled(busy);
+    restart_btn_->setEnabled(state != State::Off);
+}
+
+void CodeEditorScreen::on_kernel_output(const QString& cell_id, const services::notebook::KernelOutput& out) {
+    const int idx = find_cell_index(cell_id);
+    if (idx < 0)
         return;
+    auto& outputs = cells_[idx].outputs;
+    if (out.type == "stream" && !outputs.isEmpty() && outputs.last().type == "stream" &&
+        outputs.last().name == out.name) {
+        outputs.last().text += out.text;
+    } else {
+        CellOutput o;
+        o.type = out.type;
+        o.name = out.name;
+        o.text = out.text;
+        o.error_name = out.error_name;
+        o.error_value = out.error_value;
+        o.traceback = out.traceback;
+        outputs.append(o);
+    }
+    dirty_outputs_.insert(cell_id);
+    if (!output_timer_->isActive()) // long output is dearer to show: less often
+        output_timer_->start(outputs.last().text.size() > 100'000 ? 1000 : 120);
+}
 
-    QString code = cells_[idx].source;
-    if (code.trimmed().isEmpty())
+void CodeEditorScreen::show_outputs() {
+    const auto ids = std::exchange(dirty_outputs_, {});
+    for (const QString& id : ids) {
+        const int idx = find_cell_index(id);
+        auto* cw = find_cell_widget(id);
+        if (idx >= 0 && cw)
+            cw->set_outputs(cells_[idx].outputs, cells_[idx].execution_count);
+    }
+}
+
+void CodeEditorScreen::on_kernel_finished(const QString& cell_id, bool ran, bool /*ok*/) {
+    const int idx = find_cell_index(cell_id);
+    if (idx < 0)
         return;
-
-    ++execution_counter_;
-    int exec_num = execution_counter_;
-
-    kernel_label_->setText("KERNEL: BUSY");
-    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
-                                         " letter-spacing:0.5px; padding:0 8px;")
-                                     .arg(colors::WARNING(), fonts::DATA_FAMILY));
-
-    QPointer<CodeEditorScreen> self = this;
-    QString cid = cell_id;
-
-    services::notebook::run_cell(this, code, [self, cid, exec_num](const python::PythonResult& result) {
-        if (!self)
-            return;
-
-        int idx = self->find_cell_index(cid);
-        if (idx < 0)
-            return;
-
-        QVector<CellOutput> outputs;
-
-        if (result.success) {
-            if (!result.output.isEmpty()) {
-                CellOutput out;
-                out.type = "stream";
-                out.name = "stdout";
-                out.text = result.output;
-                outputs.append(out);
-            }
-        } else {
-            CellOutput out;
-            out.type = "error";
-            out.error_name = "ExecutionError";
-            out.error_value = result.error.isEmpty() ? QString("Process exited with code %1").arg(result.exit_code)
-                                                     : result.error.split('\n').last();
-            out.traceback = result.error.split('\n');
-            out.text = result.error;
-            outputs.append(out);
-
-            if (!result.output.isEmpty()) {
-                CellOutput stdout_out;
-                stdout_out.type = "stream";
-                stdout_out.name = "stdout";
-                stdout_out.text = result.output;
-                outputs.prepend(stdout_out);
-            }
-        }
-
-        self->cells_[idx].outputs = outputs;
-        self->cells_[idx].execution_count = exec_num;
-        self->cells_[idx].running = false;
-
-        auto* widget = self->find_cell_widget(cid);
-        if (widget) {
-            widget->set_outputs(outputs, exec_num);
-            widget->set_running(false);
-        }
-
-        self->kernel_label_->setText("KERNEL: IDLE");
-        self->kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
-                                                   " letter-spacing:0.5px; padding:0 8px;")
-                                               .arg(colors::POSITIVE(), fonts::DATA_FAMILY));
-
-        self->update_status();
-        self->update_navigator();
-    });
+    cells_[idx].running = false;
+    if (!ran)
+        cells_[idx].execution_count = 0;
+    if (auto* cw = find_cell_widget(cell_id)) {
+        cw->set_running(false);
+        cw->set_outputs(cells_[idx].outputs, cells_[idx].execution_count);
+    }
+    dirty_outputs_.remove(cell_id);
+    update_status();
+    update_navigator();
 }
 
 void CodeEditorScreen::on_run_and_advance(const QString& cell_id) {
@@ -1261,54 +1274,127 @@ void CodeEditorScreen::on_run_and_advance(const QString& cell_id) {
 }
 
 void CodeEditorScreen::on_run_all() {
-    for (const auto& cell : cells_) {
-        if (cell.cell_type == "code")
-            on_run_cell(cell.id);
-    }
+    QStringList ids;
+    for (const auto& cell : std::as_const(cells_))
+        ids << cell.id;
+    for (const QString& id : std::as_const(ids)) // in order; an error drops the rest
+        on_run_cell(id);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // File I/O
 // ─────────────────────────────────────────────────────────────────────────────
 
+namespace {
+
+QString joined(const QJsonValue& v) { // nbformat: a string, or a list of its lines
+    if (!v.isArray())
+        return v.toString();
+    QString out;
+    for (const auto& line : v.toArray())
+        out += line.toString();
+    return out;
+}
+
+QJsonArray lines_of(const QString& text) {
+    QJsonArray out;
+    const QStringList lines = text.split('\n');
+    for (int i = 0; i < lines.size(); ++i) {
+        const bool last = i + 1 == lines.size();
+        if (!last || !lines[i].isEmpty())
+            out.append(last ? lines[i] : lines[i] + '\n');
+    }
+    return out;
+}
+
+CellOutput output_from_json(const QJsonObject& o) {
+    static const QRegularExpression ansi(QStringLiteral("\x1b\\[[0-9;]*m"));
+    CellOutput out;
+    out.raw = o;
+    const QString type = o["output_type"].toString();
+    if (type == "stream") {
+        out.type = "stream";
+        out.name = o["name"].toString();
+        out.text = joined(o["text"]);
+    } else if (type == "error") {
+        out.type = "error";
+        out.error_name = o["ename"].toString();
+        out.error_value = o["evalue"].toString();
+        for (const auto& line : o["traceback"].toArray())
+            out.traceback << line.toString().remove(ansi);
+    } else { // execute_result, display_data
+        out.type = "execute_result";
+        const QJsonObject data = o["data"].toObject();
+        out.text = joined(data["text/plain"]);
+        if (out.text.isEmpty())
+            out.text = "[" + QStringList(data.keys()).join(", ") + "]";
+    }
+    return out;
+}
+
+QJsonObject output_to_json(const CellOutput& out, int execution_count) {
+    if (!out.raw.isEmpty())
+        return out.raw;
+    if (out.type == "error")
+        return {{"output_type", "error"},
+                {"ename", out.error_name},
+                {"evalue", out.error_value},
+                {"traceback", QJsonArray::fromStringList(out.traceback)}};
+    if (out.type == "stream")
+        return {{"output_type", "stream"}, {"name", out.name}, {"text", lines_of(out.text)}};
+    return {{"output_type", "execute_result"},
+            {"execution_count", execution_count},
+            {"data", QJsonObject{{"text/plain", lines_of(out.text)}}},
+            {"metadata", QJsonObject{}}};
+}
+
+} // namespace
+
 void CodeEditorScreen::on_open_notebook() {
-    QString path =
+    const QString path =
         QFileDialog::getOpenFileName(this, "Open Notebook", {}, "Jupyter Notebooks (*.ipynb);;All Files (*)");
     if (path.isEmpty())
         return;
+    QString why;
+    if (!load_notebook(path, &why)) {
+        QMessageBox::warning(this, "Open Notebook", why);
+        return;
+    }
+    LOG_INFO("CodeEditor", "Opened notebook: " + path);
+    ScreenStateManager::instance().notify_changed(this);
+}
 
+bool CodeEditorScreen::load_notebook(const QString& path, QString* why) {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return;
+    if (!file.open(QIODevice::ReadOnly)) {
+        *why = QString("%1 could not be opened: %2").arg(path, file.errorString());
+        return false;
+    }
+    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    if (!root["cells"].isArray()) {
+        *why = QString("%1 is not a Jupyter notebook (format 4).").arg(path);
+        return false;
+    }
 
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (doc.isNull())
-        return;
-
-    QJsonArray json_cells = doc.object()["cells"].toArray();
-
+    kernel_->restart();
     cells_.clear();
     execution_counter_ = 0;
+    notebook_raw_ = root;
+    notebook_raw_.remove("cells");
 
-    for (const auto& jc : json_cells) {
-        QJsonObject co = jc.toObject();
+    for (const auto& jc : root["cells"].toArray()) {
+        const QJsonObject co = jc.toObject();
         NotebookCell cell;
         cell.id = new_cell_id();
+        cell.raw = co;
         cell.cell_type = co["cell_type"].toString("code");
-
-        QJsonValue src = co["source"];
-        if (src.isArray()) {
-            QStringList lines;
-            for (const auto& line : src.toArray())
-                lines << line.toString();
-            cell.source = lines.join("");
-        } else {
-            cell.source = src.toString();
-        }
-
-        QJsonObject cell_metadata = co["metadata"].toObject();
-        cell.title = cell_metadata.value("finterm_title").toString(cell_metadata.value("fincept_title").toString()).trimmed(); // older notebooks: fincept_title
+        cell.source = joined(co["source"]);
+        const QJsonObject metadata = co["metadata"].toObject();
+        cell.title = metadata.value("finterm_title").toString(metadata.value("fincept_title").toString()).trimmed(); // older notebooks: fincept_title
         cell.execution_count = co["execution_count"].toInt(0);
+        execution_counter_ = qMax(execution_counter_, cell.execution_count);
+        for (const auto& out : co["outputs"].toArray())
+            cell.outputs.append(output_from_json(out.toObject()));
         cells_.append(cell);
     }
 
@@ -1324,17 +1410,49 @@ void CodeEditorScreen::on_open_notebook() {
     rebuild_cells();
     update_status();
     update_navigator();
-    LOG_INFO("CodeEditor", "Opened notebook: " + path);
-    ScreenStateManager::instance().notify_changed(this);
+    return true;
+}
+
+QJsonObject CodeEditorScreen::notebook_json() const {
+    QJsonArray cells;
+    for (const auto& cell : cells_) {
+        QJsonObject co = cell.raw;
+        co["cell_type"] = cell.cell_type;
+        if (co["id"].toString().isEmpty())
+            co["id"] = cell.id;
+        co["source"] = lines_of(cell.source);
+        QJsonObject metadata = co["metadata"].toObject();
+        metadata.remove("fincept_title");
+        metadata.remove("finterm_title");
+        if (!cell.title.trimmed().isEmpty())
+            metadata["finterm_title"] = cell.title.trimmed();
+        co["metadata"] = metadata;
+        if (cell.cell_type == "code") {
+            co["execution_count"] = cell.execution_count > 0 ? QJsonValue(cell.execution_count) : QJsonValue();
+            QJsonArray outputs;
+            for (const auto& out : cell.outputs)
+                outputs.append(output_to_json(out, cell.execution_count));
+            co["outputs"] = outputs;
+        } else { // format 4: only a code cell has these
+            co.remove("execution_count");
+            co.remove("outputs");
+        }
+        cells.append(co);
+    }
+
+    QJsonObject root = notebook_raw_;
+    root["cells"] = cells;
+    root["nbformat"] = 4;
+    root["nbformat_minor"] = qMax(5, root["nbformat_minor"].toInt()); // 5: cells have ids
+    QJsonObject metadata = root["metadata"].toObject();
+    if (!metadata.contains("kernelspec"))
+        metadata["kernelspec"] = QJsonObject{{"display_name", "Python 3"}, {"language", "python"}, {"name", "python3"}};
+    root["metadata"] = metadata;
+    return root;
 }
 
 void CodeEditorScreen::on_save_notebook() {
-    for (int i = 0; i < cells_.size(); ++i) {
-        auto* cw = find_cell_widget(cells_[i].id);
-        if (cw)
-            cells_[i] = cw->cell_data();
-    }
-
+    sync_cells();
     QString path = notebook_path_;
     if (path.isEmpty()) {
         path = QFileDialog::getSaveFileName(this, "Save Notebook", "notebook.ipynb", "Jupyter Notebooks (*.ipynb)");
@@ -1342,56 +1460,31 @@ void CodeEditorScreen::on_save_notebook() {
             return;
     }
 
-    QJsonArray json_cells;
-    for (const auto& cell : cells_) {
-        QJsonObject co;
-        co["cell_type"] = cell.cell_type;
-
-        QJsonArray src_lines;
-        for (const auto& line : cell.source.split('\n'))
-            src_lines.append(line + "\n");
-        co["source"] = src_lines;
-        QJsonObject cell_metadata;
-        if (!cell.title.trimmed().isEmpty())
-            cell_metadata["finterm_title"] = cell.title.trimmed();
-        co["metadata"] = cell_metadata;
-
-        if (cell.cell_type == "code") {
-            co["execution_count"] = cell.execution_count > 0 ? QJsonValue(cell.execution_count) : QJsonValue();
-            co["outputs"] = QJsonArray();
-        }
-        json_cells.append(co);
+    QSaveFile file(path); // the old file stays until the new one is whole
+    const QByteArray json = QJsonDocument(notebook_json()).toJson(QJsonDocument::Indented);
+    if (!file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit()) {
+        QMessageBox::warning(this, "Save Notebook", QString("%1 could not be saved: %2").arg(path, file.errorString()));
+        return;
     }
-
-    QJsonObject root;
-    root["cells"] = json_cells;
-    root["nbformat"] = 4;
-    root["nbformat_minor"] = 5;
-
-    QJsonObject metadata;
-    QJsonObject kernelspec;
-    kernelspec["display_name"] = "Python 3";
-    kernelspec["language"] = "python";
-    kernelspec["name"] = "python3";
-    metadata["kernelspec"] = kernelspec;
-    root["metadata"] = metadata;
-
-    QFile file(path);
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-        file.close();
-        notebook_path_ = path;
-        LOG_INFO("CodeEditor", "Saved notebook: " + path);
-        services::FileManagerService::instance().import_file(path, "code_editor");
-    }
+    notebook_path_ = path;
+    LOG_INFO("CodeEditor", "Saved notebook: " + path);
+    services::FileManagerService::instance().import_file(path, "code_editor");
     update_status();
+    ScreenStateManager::instance().notify_changed(this);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+void CodeEditorScreen::sync_cells() {
+    for (auto& cell : cells_)
+        if (const auto* cw = find_cell_widget(cell.id))
+            cell.source = cw->source();
+}
+
 void CodeEditorScreen::rebuild_cells() {
+    sync_cells();
     while (cells_layout_->count() > 1) {
         auto* item = cells_layout_->takeAt(0);
         if (item->widget())
@@ -1469,25 +1562,13 @@ QVariantMap CodeEditorScreen::save_state() const {
 
 void CodeEditorScreen::restore_state(const QVariantMap& state) {
     const QString path = state.value("notebook_path").toString();
-    if (!path.isEmpty() && notebook_path_ != path) {
-        QFile f(path);
-        if (f.exists()) {
-            notebook_path_ = path; // pre-set so on_open_notebook picks it up
-            // simulate the open flow directly
-            QFile file(path);
-            if (file.open(QIODevice::ReadOnly)) {
-                QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-                if (!doc.isNull()) {
-                    // Delegate to on_open_notebook by setting the path and triggering
-                    // the full load — but on_open_notebook opens a dialog so we
-                    // reconstruct just enough to restore the path label/status.
-                    // Full re-open would require extracting the load logic to a helper.
-                    // For now: restore the path so the title bar shows the last file.
-                    update_status();
-                }
-            }
-        }
-    }
+    if (path.isEmpty() || notebook_path_ == path || !QFile::exists(path))
+        return;
+    // The cells come with the path: with the path alone, Save would write the
+    // new notebook's one cell over the file.
+    QString why;
+    if (!load_notebook(path, &why))
+        LOG_WARN("CodeEditor", why);
 }
 
 } // namespace finterm::screens

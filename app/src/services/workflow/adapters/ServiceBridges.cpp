@@ -621,7 +621,11 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                     QString::fromUtf8(QJsonDocument(inputs[0].isObject() ? QJsonDocument(inputs[0].toObject())
                                                                          : QJsonDocument(inputs[0].toArray()))
                                           .toJson(QJsonDocument::Compact));
-                code = QString("import json\n_input = json.loads('%1')\n").arg(input_json.replace("'", "\\'")) + code;
+                // A JSON string is a Python string literal too. (Between quotes put round it
+                // by hand, every escape in it was undone before json.loads saw it.)
+                const QByteArray literal = QJsonDocument(QJsonArray{input_json}).toJson(QJsonDocument::Compact);
+                code = QStringLiteral("import json\n_input = json.loads(") +
+                       QString::fromUtf8(literal.mid(1, literal.size() - 2)) + QStringLiteral(")\n") + code;
             }
 
             // Append a JSON output wrapper if user doesn't print JSON themselves
@@ -630,7 +634,7 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                         "   print(_json.dumps({'executed': True}))\n";
             }
 
-            PythonRunner::instance().run_code(code, [cb](const PythonResult& res) {
+            PythonRunner::instance().run_user_code(code, [cb](const PythonResult& res) {
                 if (!res.success) {
                     cb(false, {}, res.error.isEmpty() ? "Code execution failed" : res.error);
                     return;

@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`c62926437`](https://github.com/yumima/finterm/commit/c62926437) **chore(release):** update README download links and updates.json for v4.1.0
+- [`023279470`](https://github.com/yumima/finterm/commit/023279470) review: a resumed RD-Agent job does its work; a key goes to its own endpoint only; the panel says what is so
 - [`a959f384e`](https://github.com/yumima/finterm/commit/a959f384e) voice: the app opens the microphone; nothing is installed by hand
 - [`4ae5fa611`](https://github.com/yumima/finterm/commit/4ae5fa611) agents: their skills' text reaches them; a local model that only thinks is asked not to
 - [`5083d9593`](https://github.com/yumima/finterm/commit/5083d9593) rd-agent: jobs run in a process the app keeps; the MCP server serves finterm's own tools

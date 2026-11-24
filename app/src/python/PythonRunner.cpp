@@ -374,9 +374,15 @@ void PythonRunner::run_job(const QString& script, const QStringList& args, Callb
     start_next();
 }
 
-/// Run arbitrary Python code (for notebook/colab cells).
-/// Creates a temp file, executes it, returns output.
 void PythonRunner::run_code(const QString& code, Callback cb) {
+    queue_code(code, std::move(cb), queue_, kProcessTimeoutMs);
+}
+
+void PythonRunner::run_user_code(const QString& code, Callback cb) {
+    queue_code(code, std::move(cb), job_queue_, kJobTimeoutMs);
+}
+
+void PythonRunner::queue_code(const QString& code, Callback cb, QQueue<QueuedRequest>& queue, int timeout_ms) {
     if (python_init_done_ && python_path_.isEmpty()) {
         cb({false, {}, "Python not available — run first-time setup from the app", -1});
         return;
@@ -396,8 +402,21 @@ void PythonRunner::run_code(const QString& code, Callback cb) {
     }
 
     // Queue as a special request — use the temp file path directly
-    queue_.enqueue({"__code__:" + temp_path, {}, std::move(cb), {}});
+    queue.enqueue({"__code__:" + temp_path, {}, std::move(cb), {}, timeout_ms});
     start_next();
+}
+
+QProcess* PythonRunner::create_server(const QString& script, QString* why) {
+    const QString path = scripts_dir_ + "/" + script;
+    if (python_path_.isEmpty()) {
+        *why = QStringLiteral("Python not available — run first-time setup from the app");
+        return nullptr;
+    }
+    if (!QFileInfo::exists(path)) {
+        *why = QStringLiteral("Script not found: ") + path;
+        return nullptr;
+    }
+    return new_process(QStringLiteral("venv-numpy2"), {path}, build_python_env(), WorkDir::Cells);
 }
 
 // JSON would carry half a surrogate pair (a headline cut inside an emoji) as it
@@ -409,12 +428,10 @@ static QStringList well_formed(const QStringList& args) {
     return out;
 }
 
-QProcess* PythonRunner::make_process(const QString& script, const QStringList& args, const QProcessEnvironment& env) {
-    const bool is_code = script.startsWith("__code__:");
-    // The right venv for the script; notebook code always runs in venv-numpy2.
+QProcess* PythonRunner::new_process(const QString& venv, const QStringList& args, const QProcessEnvironment& env,
+                                    WorkDir dir) {
     QString python_exe = python_path_;
-    const QString venv_py =
-        PythonSetupManager::instance().python_path(is_code ? "venv-numpy2" : select_venv_for_script(script));
+    const QString venv_py = PythonSetupManager::instance().python_path(venv);
     if (QFileInfo::exists(venv_py))
         python_exe = venv_py;
 
@@ -422,35 +439,43 @@ QProcess* PythonRunner::make_process(const QString& script, const QStringList& a
     // A script can run for an hour (the 13F sync): it ends with the app,
     // however the app ends, rather than writing on as an orphan.
     lifecycle::bind_to_app(proc);
-    // The arguments go over stdin, never on the command line, which every
-    // account on the machine can read: they carry API keys, a wallet's
-    // private key, the user's positions. finterm_run.py takes them from
-    // there and runs the script as if they had been its argv.
-    QByteArray input;
     proc->setProgram(python_exe);
-    if (is_code) {
-        proc->setArguments({script.mid(9)});
-    } else {
-        proc->setArguments({scripts_dir_ + "/launch/finterm_run.py", script});
-        input = QJsonDocument(QJsonArray::fromStringList(well_formed(args))).toJson(QJsonDocument::Compact) + '\n';
-    }
-    connect(proc, &QProcess::started, proc, [proc, input]() {
-        if (!input.isEmpty())
-            proc->write(input);
-        proc->closeWriteChannel(); // nothing more will come: a script that reads on gets EOF
-    });
+    proc->setArguments(args);
 
     // NOTE: scripts_dir_ is on PYTHONPATH (build_python_env). Never add a
     // script's own parent folder to it: a sub-package sharing a library's name
     // would hide the library ("edgar" once did, for every SEC tool).
     proc->setProcessEnvironment(env);
-    proc->setWorkingDirectory(work_dir(is_code ? WorkDir::Cells : WorkDir::Scripts));
+    proc->setWorkingDirectory(work_dir(dir));
 
 #ifdef _WIN32
     proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
         cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
     });
 #endif
+    return proc;
+}
+
+QProcess* PythonRunner::make_process(const QString& script, const QStringList& args, const QProcessEnvironment& env) {
+    const bool is_code = script.startsWith("__code__:");
+    // The arguments go over stdin, never on the command line, which every
+    // account on the machine can read: they carry API keys, a wallet's
+    // private key, the user's positions. finterm_run.py takes them from
+    // there and runs the script as if they had been its argv.
+    QByteArray input;
+    QStringList command{script.mid(9)};
+    if (!is_code) {
+        command = {scripts_dir_ + "/launch/finterm_run.py", script};
+        input = QJsonDocument(QJsonArray::fromStringList(well_formed(args))).toJson(QJsonDocument::Compact) + '\n';
+    }
+    // The right venv for the script; code always runs in venv-numpy2.
+    auto* proc = new_process(is_code ? QStringLiteral("venv-numpy2") : select_venv_for_script(script), command, env,
+                             is_code ? WorkDir::Cells : WorkDir::Scripts);
+    connect(proc, &QProcess::started, proc, [proc, input]() {
+        if (!input.isEmpty())
+            proc->write(input);
+        proc->closeWriteChannel(); // nothing more will come: a script that reads on gets EOF
+    });
     return proc;
 }
 
@@ -568,7 +593,7 @@ void PythonRunner::start_next() {
 
         ++*slots_held;
 
-        // Determine if this is inline code (a notebook cell) or a script file
+        // Determine if this is inline code or a script file
         const bool is_code = req.script.startsWith("__code__:");
         const QString temp_file = is_code ? req.script.mid(9) : QString(); // strip "__code__:" prefix
         auto* proc = make_process(req.script, req.args, build_python_env());
