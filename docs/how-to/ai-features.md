@@ -32,6 +32,13 @@ Chat then works with zero config (it addresses the `primary_chat`
 role; hearth picks the model). Override the base with
 `FINTERM_ENGINE_BASE_URL` or in **Settings → LLM Config**.
 
+**Web search is off.** hearth can search the web inside a chat; finterm
+tells it not to, because the chat can see your portfolio: what the
+model searches for leaves your computer, and a page it reads could try
+to make it send more. **Settings → LLM Config → "Let AI chat search the
+web"** turns it on for chats (agents and one-shot analyses never get
+it). Figures found only on the web are still taken out of an answer.
+
 **Bare Ollama (no hearth)?** Ollama defaults to `localhost:11434`,
 not hearth's `:11435` — so set the base URL explicitly:
 

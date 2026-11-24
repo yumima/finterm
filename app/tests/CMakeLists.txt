@@ -700,6 +700,15 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(number_grounding_agents PROPERTIES TIMEOUT 60)
 endif()
 
+# ── What a local engine is sent: none of its web tools unasked ───────────────
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME llm_request_bodies
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_llm_request_bodies.py
+    )
+    set_tests_properties(llm_request_bodies PROPERTIES TIMEOUT 30)
+endif()
+
 if(Python3_Interpreter_FOUND)
     add_test(
         NAME daemon_singleflight

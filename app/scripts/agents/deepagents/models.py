@@ -53,6 +53,9 @@ def create_model(config: dict[str, Any]):
         raise ValueError(f"The LLM profile for {provider} has no base URL")
     from langchain_openai import ChatOpenAI
 
+    if provider in _LOCAL:
+        cap["extra_body"] = {"web_search": False}  # as finagent_core's local_engines.NO_WEB_SEARCH
+
     class PlainTextChat(ChatOpenAI):
         def _get_request_payload(self, *args: Any, **kwargs: Any) -> dict:
             payload = super()._get_request_payload(*args, **kwargs)

@@ -120,13 +120,13 @@ class AgentFactory:
         # without one — "OPENAI_API_KEY not set"); role aliases
         # (primary_chat/...) resolve at the gateway. See local_engines.
         from finagent_core.registries.local_engines import (
-            PLACEHOLDER_KEY, is_local_engine, local_base_url)
+            PLACEHOLDER_KEY, engine_fields, is_local_engine, local_base_url)
         if is_local_engine(provider, base_url):
             from agno.models.openai import OpenAIChat
             b = local_base_url(provider, base_url)
             kwargs = dict(id=model_id, api_key=api_key or PLACEHOLDER_KEY,
                           temperature=temperature, max_tokens=max_tokens,
-                          base_url=b, role_map=_STANDARD_ROLE_MAP)
+                          base_url=b, role_map=_STANDARD_ROLE_MAP, extra_body=engine_fields(provider, base_url, api_key) or None)
             return OpenAIChat(**{k: v for k, v in kwargs.items() if v is not None})
 
         # ── Custom base_url → OpenAI-compatible endpoint ──────────────────────

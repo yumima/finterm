@@ -45,6 +45,10 @@ inline bool provider_requires_api_key(const QString& provider) {
     return !is_hearth_provider(provider);
 }
 
+/// "true" lets a chat with tools use hearth's web search; anything else does
+/// not. Off unless the user turns it on (Settings > LLM Config).
+inline constexpr const char* kWebSearchSetting = "hearth.web_search";
+
 /// Map a provider string to its target agent runtime (R1, R3).
 ///   "anthropic" → "anthropic"     (Claude Agent SDK path)
 ///   "hearth"/"ollama" → "local"         (minimal OpenAI-compatible loop)
@@ -256,6 +260,10 @@ class LlmService : public QObject {
     /// the provider's own. Empty for one without an OpenAI-shape API (Gemini).
     static QString provider_api_root(const QString& provider, const QString& base_url);
 
+    /// A stored base as it is meant: blank is hearth's own address for hearth
+    /// (HearthService::engine_base_url), and stays blank for every other one.
+    static QString stored_base(const QString& provider, const QString& base_url);
+
     // Fetch available models for a provider (async — emits models_fetched)
     void fetch_models(const QString& provider, const QString& api_key, const QString& base_url = {});
 
@@ -286,6 +294,7 @@ class LlmService : public QObject {
     mutable int max_tokens_ = 4096;
     mutable QString system_prompt_;
     mutable bool tools_enabled_ = true;
+    mutable bool web_search_ = false; // kWebSearchSetting
     mutable bool config_loaded_ = false;
 
     void ensure_config() const;
@@ -437,8 +446,10 @@ class LlmService : public QObject {
     /// no-tools path worked. One helper so the next follow-up body cannot
     /// reintroduce it. Called with mutex_ held.
     void set_openai_max_tokens(QJsonObject& body, const PersonaScope& persona) const;
-    /// Ask a local endpoint not to reason, when the persona says so.
-    void set_no_think(QJsonObject& body, const PersonaScope& persona) const;
+    /// The fields only a local engine takes: no reasoning when the persona
+    /// says so, and whether hearth may add its web tools. Every OpenAI-shaped
+    /// chat body gets them (ctest llm_request_bodies). Called with mutex_ held.
+    void set_engine_fields(QJsonObject& body, const PersonaScope& persona, bool with_tools) const;
 
     // Synchronous HTTP helpers (use QNetworkAccessManager + QEventLoop)
     // Must be called from a background thread.

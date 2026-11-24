@@ -66,6 +66,7 @@ class LlmConfigSection : public QWidget {
     QPushButton* test_btn_ = nullptr;
     QCheckBox* tools_check_ = nullptr;
     QCheckBox* manage_engine_check_ = nullptr; // opt-in hearth supervision
+    QCheckBox* web_search_check_ = nullptr;    // ai_chat::kWebSearchSetting
     QLabel* status_lbl_ = nullptr;
     QLabel* engine_status_lbl_ = nullptr; // local-engine (hearth) discovery
     QLabel* engine_row_lbl_ = nullptr;    // its form-row label, hidden for cloud providers

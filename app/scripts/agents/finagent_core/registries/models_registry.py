@@ -404,7 +404,7 @@ class ModelsRegistry:
             # "hearth" (finterm's engine, as Settings saves it) and any
             # provider pointed at this machine count too — see local_engines.
             from finagent_core.registries.local_engines import (
-                PLACEHOLDER_KEY, is_local_engine, local_base_url)
+                PLACEHOLDER_KEY, engine_fields, is_local_engine, local_base_url)
             # (A provider whose SDK takes no base_url — anthropic & co — keeps
             # its own redirect below, which cleans "/anthropic"-style paths.)
             _is_local_engine = is_local_engine(provider_lower, effective_base_url or "")
@@ -417,6 +417,10 @@ class ModelsRegistry:
                     "api_key": final_api_key or PLACEHOLDER_KEY,
                     "role_map": _STANDARD_ROLE_MAP,
                 }
+                _extra = {**(kwargs.pop("extra_body", None) or {}),
+                          **engine_fields(provider_lower, effective_base_url or "", final_api_key or "")}
+                if _extra:
+                    oai_kwargs["extra_body"] = _extra
                 if "temperature" in kwargs:
                     oai_kwargs["temperature"] = kwargs.pop("temperature")
                 if "max_tokens" in kwargs:
@@ -458,6 +462,9 @@ class ModelsRegistry:
                     oai_kwargs["api_key"] = final_api_key
                 elif _is_local_engine:
                     oai_kwargs["api_key"] = PLACEHOLDER_KEY  # a proxy on this machine
+                _extra = engine_fields(provider_lower, effective_base_url, final_api_key or "")
+                if _extra:
+                    oai_kwargs["extra_body"] = _extra
                 if "temperature" in kwargs:
                     oai_kwargs["temperature"] = kwargs.pop("temperature")
                 if "max_tokens" in kwargs:

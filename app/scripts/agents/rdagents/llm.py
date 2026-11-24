@@ -62,6 +62,9 @@ def apply(config: dict[str, Any]) -> None:
     import functools
     import litellm
     common = {"api_key": key, **({"api_base": base} if base else {})}
-    for name in ("completion", "embedding"):
+    chat = dict(common)
+    if str(config.get("llm_provider") or "").lower().strip() in _LOCAL:
+        chat["extra_body"] = {"web_search": False}  # as finagent_core's local_engines.NO_WEB_SEARCH
+    for name, fixed in (("completion", chat), ("embedding", common)):
         # rdagent does `from litellm import completion`: replaced before it does.
-        setattr(litellm, name, functools.partial(getattr(litellm, name), **common))
+        setattr(litellm, name, functools.partial(getattr(litellm, name), **fixed))

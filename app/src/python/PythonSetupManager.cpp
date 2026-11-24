@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QFuture>
 #include <QMetaObject>
 #include <QMutexLocker>
@@ -651,6 +652,17 @@ bool PythonSetupManager::download_uv() {
     ext = "tar.gz";
 #endif
 
+    // What the release publishes beside each archive, for kUvVersion. uv then
+    // runs with the user's rights and installs everything else: it is not run
+    // unless it is that file.
+    static const QHash<QString, QString> kUvSha256 = {
+        {"x86_64-pc-windows-msvc", "2cf29c8ffaa2549aa0f86927b2510008e8ca3dcd2100277d86faf437382a371b"},
+        {"aarch64-apple-darwin", "189108cd026c25d40fb086eaaf320aac52c3f7aab63e185bac51305a1576fc7e"},
+        {"x86_64-apple-darwin", "a338354420dba089218c05d4d585e4bcf174a65fe53260592b2af19ceec85835"},
+        {"x86_64-unknown-linux-musl", "bb493f1e6ae426c06b5a103cb71aa60c678976d2377f0590644538658656c2a7"},
+        {"aarch64-unknown-linux-musl", "0589f6d27bbbe2e205aa6fc25e4cd28ab97e984cdba20842de8d3a00714e13e9"},
+    };
+
     QString archive_name = QString("uv-%1.%2").arg(target, ext);
     QString url = QString("https://github.com/astral-sh/uv/releases/download/%1/%2").arg(kUvVersion, archive_name);
     QString archive_path = dir + "/" + archive_name;
@@ -661,6 +673,20 @@ bool PythonSetupManager::download_uv() {
     QString err = download_file(url, archive_path);
     if (!err.isEmpty()) {
         LOG_ERROR("PythonSetup", "UV download failed: " + err);
+        return false;
+    }
+
+    QString got;
+    {
+        QFile archive(archive_path);
+        QCryptographicHash h(QCryptographicHash::Sha256);
+        if (archive.open(QIODevice::ReadOnly) && h.addData(&archive))
+            got = QString::fromLatin1(h.result().toHex());
+    }
+    if (got.isEmpty() || got != kUvSha256.value(target)) {
+        LOG_ERROR("PythonSetup", QString("UV download is not the published file (sha256 %1, expected %2) — removed")
+                                     .arg(got.isEmpty() ? QStringLiteral("unreadable") : got, kUvSha256.value(target)));
+        QFile::remove(archive_path);
         return false;
     }
 

@@ -468,7 +468,7 @@ QJsonObject model_for_profile_id(const QString& profile_id) {
     r.provider = p.provider;
     r.model_id = p.model_id;
     r.api_key = p.api_key;
-    r.base_url = p.base_url;
+    r.base_url = ai_chat::LlmService::stored_base(p.provider, p.base_url);
     r.temperature = p.temperature;
     r.max_tokens = p.max_tokens;
     r.system_prompt = p.system_prompt;
@@ -517,7 +517,7 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
                 active_llm["provider"] = llm.active_provider();
                 active_llm["model_id"] = llm.active_model();
                 active_llm["api_key"] = llm.active_api_key();
-                active_llm["base_url"] = llm.active_base_url();
+                active_llm["base_url"] = ai_chat::LlmService::stored_base(llm.active_provider(), llm.active_base_url());
                 active_llm["temperature"] = llm.active_temperature();
                 active_llm["max_tokens"] = llm.active_max_tokens();
                 payload["active_llm"] = active_llm;

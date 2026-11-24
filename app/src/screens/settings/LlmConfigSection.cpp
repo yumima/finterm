@@ -67,7 +67,7 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
     if (p == "kimi")
         return {}; // defaults to https://api.moonshot.ai
     if (ai_chat::is_hearth_provider(p))
-        return "http://127.0.0.1:11435"; // hearth's default loopback (no /v1 — LlmService appends it)
+        return HearthService::instance().engine_base_url(); // the root: LlmService appends /v1
     if (p == "xai")
         return {};
     return {};
@@ -496,6 +496,26 @@ QWidget* LlmConfigSection::build_form_panel() {
     tools_check_->setToolTip("Lets the AI navigate screens and fetch data");
     form->addRow(new QLabel(""), tools_check_);
 
+    // Off by default, and saved as it is set: it is the app's, not a provider's.
+    web_search_check_ = new QCheckBox("Let AI chat search the web (through hearth)");
+    web_search_check_->setStyleSheet(check_style);
+    web_search_check_->setToolTip("The chat can see your portfolio. With this on, what the model searches for leaves\n"
+                                  "this computer, and a web page it reads could try to make it send more.\n"
+                                  "A figure found only on the web is still taken out of the answer.");
+    web_search_check_->setChecked(
+        SettingsRepository::instance().get(ai_chat::kWebSearchSetting, "false").value() == "true");
+    connect(web_search_check_, &QCheckBox::toggled, this, [this](bool on) {
+        if (auto r = SettingsRepository::instance().set(ai_chat::kWebSearchSetting, on ? "true" : "false", "ai");
+            r.is_err()) {
+            show_status("Could not save: " + QString::fromStdString(r.error()), true);
+            QSignalBlocker block(web_search_check_);
+            web_search_check_->setChecked(!on);
+            return;
+        }
+        ai_chat::LlmService::instance().reload_config();
+    });
+    form->addRow(new QLabel(""), web_search_check_);
+
     vl->addLayout(form);
 
     // Which provider is the default, and how to change it. This used to be an
@@ -742,6 +762,8 @@ void LlmConfigSection::populate_form(const QString& provider) {
         form_->setRowVisible(engine_row_lbl_, local);
     if (manage_engine_check_)
         manage_engine_check_->setVisible(local);
+    if (web_search_check_)
+        web_search_check_->setVisible(local);
 
     // Say which provider is the default, and offer to change it. Previously the
     // only way to become default was a side effect of Save, so the answer was

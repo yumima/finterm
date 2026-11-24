@@ -20,6 +20,23 @@ DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11435"
 PLACEHOLDER_KEY = "sk-no-key"  # local engines ignore the key; the client needs one
 LOCAL_PROVIDERS = {"hearth", "ollama"}
 
+# For a local engine's request body. A hearth from before 2026-11-24 adds its
+# own web search and page reading to any chat that does not say no; an agent
+# works with the user's data, and a page it reads could have it send that out.
+# finterm's agents have their own tools.
+NO_WEB_SEARCH = {"web_search": False}
+
+
+def engine_fields(provider: str, base_url: str = "", api_key: str = "") -> dict:
+    """What a request's body must also say (LlmService::set_engine_fields' rule):
+    to a local engine, no web search. An endpoint with a key of its own, on this
+    machine or not, may be a proxy to a cloud that refuses a field it does not
+    know, so it is sent none."""
+    keyless = not api_key or api_key == PLACEHOLDER_KEY
+    if (provider or "").lower() in LOCAL_PROVIDERS or (keyless and is_local_engine(provider, base_url)):
+        return dict(NO_WEB_SEARCH)
+    return {}
+
 
 def _parse(base_url: str):
     url = (base_url or "").strip()

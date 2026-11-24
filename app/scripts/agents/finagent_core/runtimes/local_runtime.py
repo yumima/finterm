@@ -1,9 +1,10 @@
 """local_runtime — OpenAI-compatible local runtime (Track 2).
 
 Sibling of `anthropic_runtime.py`.  Talks to whatever OpenAI-compat
-server the user pointed `local_llm_base_url` at — typically the
-sibling local-AI-engine project, or directly to Ollama
-(`http://localhost:11434/v1`), llama.cpp, vLLM, LM Studio, etc.
+server the user pointed `local_llm_base_url` at — by default
+finterm's own engine, hearth (see local_engines), or directly Ollama
+(`http://localhost:11434/v1`), llama.cpp, vLLM, LM Studio, etc.  The
+FINTERM_LOCAL_BASE_URL env var or `base_url=` names another.
 
 Shape mirrors anthropic_runtime exactly so the eval harness +
 production callers (alpha_arena BaseAgent, AgentService consumers)
@@ -26,9 +27,11 @@ design doc R-A3 acceptance criterion).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Callable, Iterator
 from urllib import error, request
 
@@ -41,12 +44,6 @@ class LocalRuntimeUnavailable(RuntimeError):
     auto-fall-back to Anthropic (R5)."""
 
 
-# Default base URL — Ollama's OpenAI-compat endpoint.  Override via
-# the FINTERM_LOCAL_BASE_URL env var or by passing `base_url=` to
-# run_text().  Production reads it from LlmConfigRepository on the
-# C++ side and passes it through.
-DEFAULT_BASE_URL = "http://localhost:11434/v1"
-
 # Reasonable default model identifier — most local stacks ship a
 # model with this exact tag.  Caller usually overrides.
 DEFAULT_MODEL = "qwen2.5:14b-instruct"
@@ -56,17 +53,43 @@ def _resolve_endpoint(base_url: str | None, model: str | None, api_key: str | No
     """Resolve URL / model / key with env-var fallbacks.  Centralised so
     run_text and run_with_tools agree on the precedence (caller-supplied
     kwarg > env var > module default)."""
-    url = (base_url or os.environ.get("FINTERM_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    url = (base_url or _default_base_url()).rstrip("/")
     model_id = model or os.environ.get("FINTERM_LOCAL_MODEL") or DEFAULT_MODEL
     key = api_key or os.environ.get("FINTERM_LOCAL_API_KEY") or "sk-no-key"
     return url, model_id, key
+
+
+def _local_engines():
+    """registries/local_engines.py, by its file: this module is also loaded on
+    its own, where the package is not importable."""
+    global _engines
+    if _engines is None:
+        path = Path(__file__).resolve().parents[1] / "registries" / "local_engines.py"
+        spec = importlib.util.spec_from_file_location("_local_runtime_engines", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _engines = module
+    return _engines
+
+
+_engines = None
+
+
+def _body(url: str, key: str, payload: dict) -> bytes:
+    """The request as sent: to an engine on this machine, without its own web
+    tools (see local_engines.engine_fields)."""
+    return json.dumps({**payload, **_local_engines().engine_fields("", url, key)}).encode("utf-8")
+
+
+def _default_base_url() -> str:
+    return os.environ.get("FINTERM_LOCAL_BASE_URL") or _local_engines().local_base_url("hearth")
 
 
 def _post_chat_completions(url: str, key: str, payload: dict, timeout_s: float) -> dict:
     """POST a single `chat/completions` request and parse the response.
     Wraps every transport / JSON failure into `LocalRuntimeUnavailable`
     so the caller's error path is uniform."""
-    body = json.dumps(payload).encode("utf-8")
+    body = _body(url, key, payload)
     req = request.Request(
         f"{url}/chat/completions",
         data=body,
@@ -120,7 +143,7 @@ def _stream_chat_completions(url: str, key: str, payload: dict,
     """
     payload = dict(payload)
     payload["stream"] = True
-    body = json.dumps(payload).encode("utf-8")
+    body = _body(url, key, payload)
     req = request.Request(
         f"{url}/chat/completions",
         data=body,
@@ -572,7 +595,7 @@ def probe(base_url: str | None = None, timeout_s: float = 5.0) -> list[str]:
     Raises LocalRuntimeUnavailable on connection failure so the caller
     can surface a clear error — no empty-list-equals-success ambiguity.
     """
-    url = (base_url or os.environ.get("FINTERM_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    url = (base_url or _default_base_url()).rstrip("/")
     req = request.Request(
         f"{url}/models",
         headers={

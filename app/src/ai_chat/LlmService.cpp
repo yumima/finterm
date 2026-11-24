@@ -201,6 +201,7 @@ void LlmService::ensure_config() const {
     // — that's the right call given 2000 was never a meaningful user choice.
     max_tokens_ = 0;
     tools_enabled_ = true;
+    web_search_ = SettingsRepository::instance().get(kWebSearchSetting, "false").value() == "true";
 
     auto providers = LlmConfigRepository::instance().list_providers();
     if (providers.is_ok()) {
@@ -225,11 +226,9 @@ void LlmService::ensure_config() const {
         }
     }
 
-    // No-key fallback: local OpenAI-compatible service (R17). Defaults to
-    // Ollama-style http://localhost:11434/v1 — Track 2 #5 will expose this
-    // as a configurable "Local LLM service" field. If the local server is
-    // unreachable, do_request surfaces a connection error — no silent
-    // failover to any other provider (R1).
+    // No-key fallback: the local engine, hearth (R17). If it is unreachable,
+    // do_request surfaces a connection error — no silent failover to any
+    // other provider (R1).
     if (provider_.isEmpty()) {
         // Auto-use the local engine (hearth) by default; explicit Settings
         // config (loaded above) overrides. resolve() is deterministic and
@@ -357,7 +356,7 @@ QString api_root(const QString& p, const QString& cfg_base) {
     if (p == "xai")
         return QStringLiteral("https://api.x.ai/v1");
     if (is_hearth_provider(p))
-        return QStringLiteral("http://localhost:11434/v1");
+        return normalize_llm_base(LlmService::stored_base(p, {})) + QStringLiteral("/v1");
     return {};
 }
 } // namespace
@@ -365,6 +364,12 @@ QString api_root(const QString& p, const QString& cfg_base) {
 // static
 QString LlmService::provider_api_root(const QString& provider, const QString& base_url) {
     return api_root(provider.trimmed().toLower(), base_url);
+}
+
+// static
+QString LlmService::stored_base(const QString& provider, const QString& base_url) {
+    return base_url.trimmed().isEmpty() && is_hearth_provider(provider) ? HearthService::instance().engine_base_url()
+                                                                         : base_url;
 }
 
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
@@ -391,10 +396,7 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     const QString p = provider_;
     SpeechEndpoint ep;
     if (is_hearth_provider(p)) {
-        // The chat route falls back to Ollama's :11434 when no base is stored,
-        // but Ollama has no speech route — only hearth's gateway does.
-        const QString root =
-            api_root(p, base_url_.trimmed().isEmpty() ? HearthService::instance().engine_base_url() : base_url_);
+        const QString root = api_root(p, base_url_);
         // "ollama" is a legacy alias of this provider, and a base on Ollama's
         // own port is bare Ollama, which has no speech route — a guaranteed 404.
         if (QUrl(root).port() == 11434)
@@ -525,7 +527,23 @@ int LlmService::resolved_max_tokens(const PersonaScope& persona) const {
     return kFallback;
 }
 
-void LlmService::set_no_think(QJsonObject& body, const PersonaScope& persona) const {
+void LlmService::set_engine_fields(QJsonObject& body, const PersonaScope& persona, bool with_tools) const {
+    const bool keyless = eff_api_key(persona).isEmpty();
+
+    // hearth's own web tools (web_search / web_fetch): never unless the user
+    // turned them on, and then only for a chat that has tools. A chat reads the
+    // portfolio; a model that also reads web pages can be told by one of them
+    // to put what it knows into a search or a URL. Said out loud because a
+    // hearth from before 2026-11-24 attaches the tools to a request that says
+    // nothing — and runs its own tool loop, which a structured one-shot must
+    // not get either: it breaks the determinism pinned with temperature 0 and
+    // can answer "_(stopped after 6 tool rounds)_" (seen on a FinGPT forecast).
+    // An endpoint with a key may be a cloud, or a proxy to one, that refuses a
+    // field it does not know: it is not sent one. (local_engines.engine_fields
+    // is the agents' copy of this rule.)
+    if (keyless || is_hearth_provider(eff_provider(persona)))
+        body["web_search"] = with_tools && web_search_;
+
     // Local-only `think:false`. Gated on the EFFECTIVE key so a role bound to a
     // cloud model never receives this non-standard field (they'd 400), even
     // when the configured provider is local — and vice versa.
@@ -542,7 +560,7 @@ void LlmService::set_no_think(QJsonObject& body, const PersonaScope& persona) co
     // do_request() then asks again without it and remembers (no_effort_none_).
     // A server may still honour neither, so a budget must not be sized as if
     // reasoning were certainly off — see NewsService::summarize_headlines.
-    if (!persona.think && eff_api_key(persona).isEmpty()) {
+    if (!persona.think && keyless) {
         body["think"] = false;
         QMutexLocker route_lock(&no_native_route_mutex_);
         if (!no_effort_none_.contains(get_endpoint_url(persona)))
@@ -591,8 +609,7 @@ bool LlmService::use_ollama_native(const PersonaScope& persona, bool use_tools) 
 QString LlmService::ollama_native_url(const PersonaScope& persona) const {
     // Called with mutex_ held. Mirrors get_endpoint_url's base resolution so a
     // custom base_url reaches both routes.
-    const QString cfg_base = eff_base_url(persona);
-    const QString base = cfg_base.isEmpty() ? QStringLiteral("http://localhost:11434") : normalize_llm_base(cfg_base);
+    const QString base = normalize_llm_base(stored_base(eff_provider(persona), eff_base_url(persona)));
     return base + QStringLiteral("/api/chat");
 }
 
@@ -910,21 +927,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // a cloud role binding from ever taking effect.
     req["model"] = eff_model(persona);
     req["messages"] = messages;
-    set_no_think(req, persona);
-    // Opt tool-less one-shots out of hearth's automatic web search. hearth
-    // (search.enabled + search.auto default TRUE) attaches its own web tools to
-    // any /v1 chat that doesn't say otherwise and runs its own tool loop —
-    // right for an open-ended chat, wrong twice for a structured one-shot
-    // whose method is "answer from the material supplied": it breaks the
-    // determinism these calls pin with temperature 0, and when the model goes
-    // hunting for data the prompt deliberately lacks it can exhaust the loop
-    // and return "_(stopped after 6 tool rounds)_" as the whole answer —
-    // observed live on the FinGPT forecast for a pre-IPO ticker. `web_search`
-    // is a hearth extension (popped before passthrough), so it is gated
-    // local-only exactly like `think` below; tool-attached chats keep hearth's
-    // default, where an extra web tool is capability, not contamination.
-    if (!attaches_tools && eff_api_key(persona).isEmpty())
-        req["web_search"] = false;
+    set_engine_fields(req, persona, attaches_tools);
     // Constrained JSON decoding, gated on local for the same reason as `think`:
     // this is standard OpenAI, but not every cloud provider behind this code
     // path accepts it, and a 400 would be a worse failure than the one it
@@ -1730,7 +1733,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         fu["messages"] = loop_messages;
         // Temperature intentionally omitted — provider default.
         set_openai_max_tokens(fu, persona);
-        set_no_think(fu, persona);
+        set_engine_fields(fu, persona, /*with_tools=*/true);
 
         QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(resolve_tool_globs(persona));
         if (!tools.isEmpty())
@@ -1812,7 +1815,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
         set_openai_max_tokens(fu, persona);
-        set_no_think(fu, persona);
+        set_engine_fields(fu, persona, /*with_tools=*/false);
         // Deliberately omit the tools field so the model is forced to produce text.
 
         auto http = blocking_post(url, fu, headers);
@@ -2077,7 +2080,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         follow_body["messages"] = msgs;
         // Temperature intentionally omitted — provider default.
         set_openai_max_tokens(follow_body, persona);
-        set_no_think(follow_body, persona);
+        set_engine_fields(follow_body, persona, /*with_tools=*/false);
     }
 
     // No tools in follow-up to prevent infinite loop
@@ -2193,12 +2196,8 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return "https://api.deepseek.com/models";
     if (p == "openrouter")
         return "https://openrouter.ai/api/v1/models";
-    if (is_hearth_provider(p)) {
-        QString base = base_url.isEmpty() ? "http://localhost:11434" : base_url;
-        if (base.endsWith('/'))
-            base.chop(1);
-        return base + "/api/tags";
-    }
+    if (is_hearth_provider(p))
+        return api_root(p, {}) + "/models";
     if (p == "xai")
         return "https://api.x.ai/v1/models";
     if (p == "kimi")

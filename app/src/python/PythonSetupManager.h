@@ -122,7 +122,7 @@ class PythonSetupManager : public QObject {
     // the latest patch, producing non-reproducible installs and contributing
     // to confusion during crash triage (see issue #215).
     static constexpr const char* kPythonVersion = "3.12.7";
-    static constexpr const char* kUvVersion = "0.7.12";
+    static constexpr const char* kUvVersion = "0.7.12"; // with its hashes: download_uv()
 
     mutable QMutex failed_mutex_; // both venvs install in parallel
     QStringList failed_packages_;
