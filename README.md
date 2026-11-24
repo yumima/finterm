@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`0949970f5`](https://github.com/yumima/finterm/commit/0949970f5) updater: the Windows swap, finished — installer's lists kept, the gap covered, leftovers never block
 - [`558363557`](https://github.com/yumima/finterm/commit/558363557) updater: Windows replaces itself by a folder rename, not an uninstall and reinstall
 - [`c2ac36ce3`](https://github.com/yumima/finterm/commit/c2ac36ce3) updater: an interrupted Windows update is undone at the next logon; review fixes
 - [`52726e0e1`](https://github.com/yumima/finterm/commit/52726e0e1) updater: hardened for release — rollback copy kept, one helper at a time, no retry loop, the Windows rules tested

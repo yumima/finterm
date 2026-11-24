@@ -142,12 +142,13 @@ if ($AppPid -gt 0) {
 }
 # … and for anything else running from the install (a finterm started in the
 # meantime leaves by itself).
-$prefix = $InstallDir + '\'
+$prefixes = @(($InstallDir + '\'), ($Previous + '\'))
 $deadline = (Get-Date).AddSeconds(120)
 while (Get-Process -ErrorAction SilentlyContinue |
-       Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }) {
+       Where-Object { $path = $_.Path
+                      $path -and ($prefixes | Where-Object { $path.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }) }) {
     if ((Get-Date) -gt $deadline) {
-        Write-Status $false "a program is still running from $InstallDir; nothing was changed"
+        Write-Status $false "a program is still running from $InstallDir (or the previous version); nothing was changed"
         Start-App # finterm itself has gone: bring it back
         exit 1
     }
@@ -176,9 +177,13 @@ try {
             ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $New -Recurse -Force }
         if (-not (Test-Path -LiteralPath (Join-Path $New "FintermMaintenanceTool.exe"))) { throw "the uninstaller could not be copied" }
         # On the disk before the renames are: what the app cannot start without.
+        # For a power cut's sake only — a file a scanner has open is left.
         Get-ChildItem -LiteralPath $New -Recurse -File | Where-Object { $_.Extension -in ".exe", ".dll" } | ForEach-Object {
-            $f = [System.IO.File]::Open($_.FullName, "Open", "ReadWrite")
-            try { $f.Flush($true) } finally { $f.Close() }
+            try {
+                $f = [System.IO.File]::Open($_.FullName, "Open", "ReadWrite", "ReadWrite, Delete")
+                try { $f.Flush($true) } finally { $f.Close() }
+            }
+            catch {}
         }
         # It can be renamed (a scanner is done with it) before the install is.
         $ready = Get-Fresh "$InstallDir.ready"
@@ -186,7 +191,10 @@ try {
         $New = $ready
         # The older previous version goes only once the new one is in.
         $older = Get-Fresh "$Previous.old"
-        if (Test-Path -LiteralPath $Previous) { Rename-Dir $Previous $older }
+        if (Test-Path -LiteralPath $Previous) {
+            try { Rename-Dir $Previous $older }
+            catch { throw "$Previous is in use (a program open in it?): $($_.Exception.Message)" }
+        }
         try { Switch-Install $New $Previous $Previous }
         catch {
             if ((Test-Path -LiteralPath $older) -and -not (Test-Path -LiteralPath $Previous)) { Rename-Dir $older $Previous }
