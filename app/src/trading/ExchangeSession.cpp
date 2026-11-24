@@ -184,6 +184,10 @@ bool ExchangeSession::start_ws(const QString& primary_symbol, const QStringList&
         ws_connected_ = false;
     });
 
+    auto env = QProcessEnvironment::systemEnvironment();
+    python::PythonRunner::insert_data_dirs(env);
+    ws_process_->setProcessEnvironment(env);
+    ws_process_->setWorkingDirectory(python::PythonRunner::work_dir());
     ws_process_->start(python_path, args);
     LOG_INFO(kSessionTag, QString("WS stream start requested for %1/%2").arg(exchange_id_, primary_symbol));
     return true;

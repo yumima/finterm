@@ -68,7 +68,7 @@ void call_backend(QObject* ctx, const QString& action, const QJsonObject& payloa
 
     auto* proc = new QProcess(QCoreApplication::instance());
     proc->setProcessEnvironment(runner.build_python_env());
-    proc->setWorkingDirectory(runner.scripts_dir());
+    proc->setWorkingDirectory(python::PythonRunner::work_dir());
     auto* timer = new QTimer(proc);
     timer->setSingleShot(true);
     QObject::connect(timer, &QTimer::timeout, proc, [proc, action, timeout_ms]() {

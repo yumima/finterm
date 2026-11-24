@@ -845,6 +845,9 @@ def main() -> None:
     if not params and len(sys.argv) >= 3:
         params = {"task_id": sys.argv[2]}
 
+    # rdagent keeps its workspaces, logs and caches where it runs.
+    os.chdir(workspace_base())
+
     try:
         result = handler(params)
         _out(result)

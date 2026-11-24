@@ -68,7 +68,7 @@ class PythonSttProvider : public SttProvider {
         env.insert("PYTHONIOENCODING", "utf-8");
         env.insert("PYTHONDONTWRITEBYTECODE", "1");
         env.insert("PYTHONUNBUFFERED", "1");
-        env.insert("FINTERM_DATA_DIR", python::PythonSetupManager::instance().install_dir());
+        python::PythonRunner::insert_data_dirs(env);
 
         const QString scripts_dir = python::PythonRunner::instance().scripts_dir();
         const QString existing_pypath = env.value("PYTHONPATH");
@@ -84,7 +84,7 @@ class PythonSttProvider : public SttProvider {
         extend_environment(env);
 
         process_->setProcessEnvironment(env);
-        process_->setWorkingDirectory(scripts_dir);
+        process_->setWorkingDirectory(python::PythonRunner::work_dir());
 
 #ifdef _WIN32
         process_->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {

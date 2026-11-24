@@ -78,6 +78,10 @@ void ExchangeDaemonPool::start() {
 
     QStringList args;
     args << "-u" << "-B" << script_path;
+    auto env = QProcessEnvironment::systemEnvironment();
+    python::PythonRunner::insert_data_dirs(env);
+    process_->setProcessEnvironment(env);
+    process_->setWorkingDirectory(python::PythonRunner::work_dir());
     process_->start(python_path, args);
     LOG_INFO(kPoolTag, "Exchange daemon starting...");
 }

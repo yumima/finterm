@@ -16,6 +16,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+from finterm_paths import agents_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +46,7 @@ class SessionModule:
             auto_save: Auto-save after each message
             **kwargs: Additional configuration
         """
-        self.storage_path = storage_path or "./sessions.db"
+        self.storage_path = storage_path or str(agents_dir() / "sessions.db")
         self.auto_save = auto_save
         self.config = kwargs
 

@@ -117,15 +117,8 @@ QString PythonRunner::scripts_dir() const {
 // (e.g., AgentService's stdin/stream paths). Anything every Python spawn needs
 // — encoding pins, FINTERM_DATA_DIR, FINAGENT_DATA_DIR, base PYTHONPATH — lives
 // here. Script-specific path additions (parent-of-pkg) stay in run().
-QProcessEnvironment PythonRunner::build_python_env() const {
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert("PYTHONIOENCODING", "utf-8");
-    env.insert("PYTHONDONTWRITEBYTECODE", "1");
-    env.insert("PYTHONUNBUFFERED", "1");
-
-    const QString install_dir = PythonSetupManager::instance().install_dir();
-    env.insert("FINTERM_DATA_DIR", install_dir);
-
+void PythonRunner::insert_data_dirs(QProcessEnvironment& env) {
+    env.insert("FINTERM_DATA_DIR", PythonSetupManager::instance().install_dir());
     // FINTERM_USER_DIR: the active profile's user/ folder — where every
     // script keeps PERSONAL data (finterm_paths.user_root()). FINTERM_DATA_DIR
     // above stays the app root for system data (cache, market_data, models).
@@ -135,6 +128,21 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     env.insert("FINTERM_USER_DATA_DIR", finterm::AppPaths::data());
     // The active profile's regenerable cache (finterm_paths.cache_dir()).
     env.insert("FINTERM_CACHE_DIR", finterm::AppPaths::cache());
+}
+
+QString PythonRunner::work_dir() {
+    const QString dir = finterm::AppPaths::features() + QStringLiteral("/work");
+    QDir().mkpath(dir);
+    return dir;
+}
+
+QProcessEnvironment PythonRunner::build_python_env() const {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    env.insert("PYTHONDONTWRITEBYTECODE", "1");
+    env.insert("PYTHONUNBUFFERED", "1");
+
+    insert_data_dirs(env);
 
     // Which vendor answers daily bars and quotes before Yahoo (price_sources.py;
     // Settings › Data Sources). A local QSettings, not AppConfig's shared one:
@@ -497,7 +505,7 @@ void PythonRunner::start_next() {
         // share a top-level name with a local package.
 
         proc->setProcessEnvironment(env);
-        proc->setWorkingDirectory(scripts_dir_);
+        proc->setWorkingDirectory(work_dir());
 
 #ifdef _WIN32
         proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {

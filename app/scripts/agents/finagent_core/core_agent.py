@@ -11,6 +11,8 @@ import logging
 import json
 from fnmatch import fnmatchcase
 
+from finterm_paths import agents_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -800,7 +802,7 @@ class CoreAgent:
             from agno.memory import AgentMemory
             from agno.memory.db.sqlite import SqliteMemoryDb
 
-            db_path = memory_config.get("db_path", "agent_memory.db")
+            db_path = memory_config.get("db_path") or str(agents_dir() / "agent_memory.db")
             table_name = memory_config.get("table_name", "agent_memory")
 
             db = SqliteMemoryDb(
@@ -928,7 +930,7 @@ class CoreAgent:
                 from agno.storage.sqlite import SqliteStorage
                 return SqliteStorage(
                     table_name=storage_config.get("table_name", "agent_sessions"),
-                    db_file=storage_config.get("db_path", "agent_storage.db"),
+                    db_file=storage_config.get("db_path") or str(agents_dir() / "agent_storage.db"),
                 )
             elif storage_type == "postgres":
                 from agno.storage.postgres import PostgresStorage

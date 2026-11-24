@@ -77,6 +77,14 @@ class PythonRunner : public QObject {
     /// sets the shared base env.
     QProcessEnvironment build_python_env() const;
 
+    /// Where the data folders are, for any Python process (part of the above):
+    /// finterm_paths resolves the active profile's from it. No keyring read.
+    static void insert_data_dirs(QProcessEnvironment& env);
+
+    /// The folder every Python process runs in: what a library writes to "here"
+    /// is the user's, and the scripts' folder is replaced by an update.
+    static QString work_dir();
+
     /// Check if python is available
     bool is_available() const;
 

@@ -60,8 +60,8 @@ void SkillDiffsSection::build_ui() {
     auto* hdr = new QLabel(QStringLiteral("<b>Vendor skill drift</b> — compare finterm's bundled "
                                           "<code>SKILL.md</code> files against an upstream clone of "
                                           "<code>anthropics/financial-services</code>.  Review divergences "
-                                          "row-by-row; per-row <b>Accept upstream</b> overwrites the local "
-                                          "file (confirm required)."));
+                                          "row-by-row; per-row <b>Accept upstream</b> keeps upstream's file "
+                                          "as your own copy (confirm required)."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -155,6 +155,12 @@ void SkillDiffsSection::on_run_diff() {
         return;
     }
 
+    const QString python = python::PythonRunner::instance().python_path();
+    if (python.isEmpty()) {
+        show_status(QStringLiteral("Python isn't set up yet (Settings › Python Env)"), true);
+        return;
+    }
+
     // Persist now so the next launch already has the path.
     save_upstream_path(upstream);
 
@@ -165,12 +171,18 @@ void SkillDiffsSection::on_run_diff() {
     // a single processEvents() pre-flush before the wait only
     // covered the queued repaints, not the long tail.
     diff_proc_ = new QProcess(this);
-    diff_proc_->setProgram(python::PythonRunner::instance().python_path());
+    diff_proc_->setProgram(python);
+    diff_proc_->setWorkingDirectory(python::PythonRunner::work_dir());
     diff_proc_->setArguments({script, "--upstream", upstream, "--local", skill_store::shipped_root(), "--overlay",
                               skill_store::user_root(), "--json"});
     connect(diff_proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
-        if (e == QProcess::FailedToStart) // (no finished() follows)
-            on_diff_finished(2);
+        if (e != QProcess::FailedToStart || !diff_proc_)
+            return; // (the rest end in finished())
+        const QString why = diff_proc_->errorString();
+        diff_proc_->deleteLater();
+        diff_proc_ = nullptr;
+        run_btn_->setEnabled(true);
+        show_status(QStringLiteral("Diff could not start: %1").arg(why), true);
     });
     connect(diff_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
             [this](int code, QProcess::ExitStatus) { on_diff_finished(code); });
@@ -370,8 +382,8 @@ void SkillDiffsSection::on_accept_upstream() {
 
     const auto choice = QMessageBox::question(
         this, QStringLiteral("Confirm accept upstream"),
-        QStringLiteral("Use <b>%1</b> for this skill?<br><br>It is kept as your own copy, which app updates leave "
-                       "alone:<br><code>%2</code><br>Delete that file to go back to the one finterm ships.")
+        QStringLiteral("Keep <b>%1</b> as your copy of this skill?<br><br>App updates leave it alone, and finterm "
+                       "shows it instead of the one it ships:<br><code>%2</code><br>Delete that file to go back to the one finterm ships.")
             .arg(p.upstream.toHtmlEscaped(), skill_store::user_copy(p.rel).toHtmlEscaped()),
         QMessageBox::Yes | QMessageBox::No);
     if (choice != QMessageBox::Yes)

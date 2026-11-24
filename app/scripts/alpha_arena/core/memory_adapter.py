@@ -21,6 +21,7 @@ if str(finagent_path) not in sys.path:
     sys.path.insert(0, str(finagent_path))
 
 from alpha_arena.utils.logging import get_logger
+from finterm_paths import feature_dir
 
 logger = get_logger("memory_adapter")
 
@@ -123,7 +124,8 @@ class AgentMemory:
             from modules.session_module import SessionModule
 
             self._session_module = SessionModule(
-                storage_path=self.storage_path or f"./alpha_arena_sessions/{self.competition_id}.db",
+                storage_path=self.storage_path or str(
+                    feature_dir("alpha_arena", "sessions") / f"{self.competition_id}.db"),
                 auto_save=True,
             )
 

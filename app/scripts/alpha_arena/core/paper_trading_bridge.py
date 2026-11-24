@@ -112,8 +112,8 @@ def get_db_path() -> Path:
     # Try different possible locations for the database
     possible_paths = [
         # Windows AppData
-        Path(os.environ.get("APPDATA", "")) / "finterm" / "fincept_terminal.db",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "finterm" / "fincept_terminal.db",
+        *(Path(os.environ[v]) / "finterm" / "fincept_terminal.db"
+          for v in ("APPDATA", "LOCALAPPDATA") if os.environ.get(v)),
         # Linux/Mac
         Path.home() / ".config" / "finterm" / "fincept_terminal.db",
         Path.home() / ".local" / "share" / "finterm" / "fincept_terminal.db",

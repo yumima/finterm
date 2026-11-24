@@ -363,7 +363,7 @@ void PythonWorker::launch_process() {
     proc_ = new QProcess(this);
     lifecycle::bind_to_app(proc_); // ends with the app, however the app ends
     proc_->setProcessEnvironment(runner.build_python_env());
-    proc_->setWorkingDirectory(scripts_dir);
+    proc_->setWorkingDirectory(PythonRunner::work_dir());
     proc_->setReadChannel(QProcess::StandardOutput);
 
 #ifdef _WIN32

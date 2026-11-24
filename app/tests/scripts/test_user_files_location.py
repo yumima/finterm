@@ -45,9 +45,12 @@ check("exchange market lists are in the cache",
       exchange_client.get_markets_cache_path("x").startswith(str(TMP / "cache")))
 
 # Any line of a shipped script that names a file or folder to write beside itself
-pattern = re.compile(r"__file__.*(workspaces|\.cache\b|\.log\b|\.db\b|\.sqlite)")
-bad = [f"{p.relative_to(SCRIPTS)}:{n}" for p in SCRIPTS.rglob("*.py") if "tests" not in p.parts
+# (or, as a bare name, in the folder it happens to run in).
+pattern = re.compile(r"__file__.*(workspaces|\.cache\b|\.log\b|\.db\b|\.sqlite)"
+                     r"|(\bget\([^)]*,|\bor|=) *f?['\"](\./[^'\"]*|\w+)\.(db|sqlite3?)['\"]")
+bad = [f"{p.relative_to(SCRIPTS)}:{n}" for p in SCRIPTS.rglob("*.py") if "tests" not in p.relative_to(SCRIPTS).parts
        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1) if pattern.search(line)]
+check("(scripts were looked through)", len(list(SCRIPTS.rglob("*.py"))) > 100)
 check("no script keeps a log, cache, database or workspace beside itself", not bad, bad)
 
 # The user's copy of a skill is the one compared

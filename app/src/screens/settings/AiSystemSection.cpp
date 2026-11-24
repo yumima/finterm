@@ -502,7 +502,7 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     root->addWidget(edit, 1);
 
     auto* copy_btn = new QPushButton(QStringLiteral("Copy to clipboard"));
-    auto* save_btn = new QPushButton(QStringLiteral("Use this version…"));
+    auto* save_btn = new QPushButton(QStringLiteral("Keep as my copy…"));
     auto* close_btn = new QPushButton(QStringLiteral("Close"));
     connect(copy_btn, &QPushButton::clicked, dlg, [p]() { QApplication::clipboard()->setText(p.proposed_content); });
     // Capture `this` via QPointer — the dialog has WA_DeleteOnClose
@@ -514,14 +514,14 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     connect(save_btn, &QPushButton::clicked, dlg, [self_save, p, dlg]() {
         // Hard confirm before any disk write.
         const QString confirm =
-            QStringLiteral("Use the proposed SKILL.md?\n\nIt is kept as your own copy, which app updates leave "
-                           "alone:\n%1\nDelete that file to go back to the one finterm ships.")
+            QStringLiteral("Keep the proposed SKILL.md as your copy?\n\nApp updates leave it alone, and finterm shows "
+                           "it instead of the one it ships:\n%1\nDelete that file to go back to the one finterm ships.")
                 .arg(services::skill_store::user_copy(p.skill_rel));
         bool ok = false;
         const QString typed = QInputDialog::getText(dlg, QStringLiteral("Confirm"),
-                                                    confirm + QStringLiteral("\n\nType 'use' to confirm:"),
+                                                    confirm + QStringLiteral("\n\nType 'keep' to confirm:"),
                                                     QLineEdit::Normal, QString(), &ok);
-        if (!ok || typed != QStringLiteral("use"))
+        if (!ok || typed != QStringLiteral("keep"))
             return;
         QString error;
         if (!services::skill_store::save(p.skill_rel, p.proposed_content.toUtf8(), &error)) {

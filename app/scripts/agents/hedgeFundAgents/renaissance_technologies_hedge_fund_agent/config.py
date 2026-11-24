@@ -251,33 +251,23 @@ def get_config() -> RenTechConfig:
         _config = RenTechConfig.development()
 
         # Auto-configure paths using cross-platform utilities
-        try:
-            from .utils.paths import (
-                get_memory_path,
-                get_knowledge_path,
-                get_frontend_db_path,
-            )
+        from .utils.paths import (
+            get_memory_path,
+            get_knowledge_path,
+            get_frontend_db_path,
+        )
 
-            # Set database paths if not already configured
-            if _config.database.sqlite_path is None:
-                _config.database.sqlite_path = get_memory_path()
+        # Set database paths if not already configured
+        if _config.database.sqlite_path is None:
+            _config.database.sqlite_path = get_memory_path()
 
-            if _config.database.vector_db_path is None:
-                _config.database.vector_db_path = get_knowledge_path()
+        if _config.database.vector_db_path is None:
+            _config.database.vector_db_path = get_knowledge_path()
 
-            if _config.database.frontend_db_path is None:
-                frontend_db = get_frontend_db_path()
-                if frontend_db:
-                    _config.database.frontend_db_path = str(frontend_db)
-
-        except ImportError as e:
-            # Fallback to relative paths if utils not available (shouldn't happen)
-            import logging
-            logging.warning(f"Could not import path utilities: {e}")
-            if _config.database.sqlite_path is None:
-                _config.database.sqlite_path = "rentech_memory.db"
-            if _config.database.vector_db_path is None:
-                _config.database.vector_db_path = "./rentech_knowledge"
+        if _config.database.frontend_db_path is None:
+            frontend_db = get_frontend_db_path()
+            if frontend_db:
+                _config.database.frontend_db_path = str(frontend_db)
 
     return _config
 

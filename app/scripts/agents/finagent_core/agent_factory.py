@@ -11,6 +11,7 @@ from agno.agent import Agent
 
 
 from finagent_core.clock import with_current_date as _with_date
+from finterm_paths import agents_dir
 
 
 class AgentFactory:
@@ -328,7 +329,7 @@ class AgentFactory:
         if storage_type == "sqlite":
             from agno.db.sqlite import SqliteDb
             return SqliteDb(
-                db_file=storage_config.get("db_file", "agent_sessions.db")
+                db_file=storage_config.get("db_file") or str(agents_dir() / "agent_sessions.db")
             )
 
         elif storage_type == "postgres":
