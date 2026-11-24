@@ -6,7 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
-- [`c076b4db6`](https://github.com/yumima/finterm/commit/c076b4db6) user files: Python runs in the user's folder
+- [`8e1455d45`](https://github.com/yumima/finterm/commit/8e1455d45) user files: Python runs in the user's folder
 - [`c1f602fe7`](https://github.com/yumima/finterm/commit/c1f602fe7) user files: nothing the user makes is kept inside the program's folder
 - [`41a2ed174`](https://github.com/yumima/finterm/commit/41a2ed174) updater: the Windows helper's flush never fails an update; a previous version in use says so
 - [`0949970f5`](https://github.com/yumima/finterm/commit/0949970f5) updater: the Windows swap, finished — installer's lists kept, the gap covered, leftovers never block
