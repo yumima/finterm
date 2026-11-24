@@ -375,22 +375,8 @@ QString LlmService::stored_base(const QString& provider, const QString& base_url
 }
 
 // static
-QJsonObject LlmService::with_engine_bases(QJsonObject config) {
-    // (A model config; other things have a "provider" too.)
-    if (config.value("provider").isString() && (config.contains("base_url") || config.contains("model_id")))
-        config["base_url"] = stored_base(config.value("provider").toString(), config.value("base_url").toString());
-    for (auto it = config.begin(); it != config.end(); ++it) {
-        if (it.value().isObject()) {
-            it.value() = with_engine_bases(it.value().toObject());
-        } else if (it.value().isArray()) {
-            QJsonArray a = it.value().toArray();
-            for (int i = 0; i < a.size(); ++i)
-                if (a.at(i).isObject())
-                    a[i] = with_engine_bases(a.at(i).toObject());
-            it.value() = a;
-        }
-    }
-    return config;
+QJsonObject LlmService::with_engine_bases(const QJsonObject& config) {
+    return with_model_bases(config, &LlmService::stored_base);
 }
 
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {

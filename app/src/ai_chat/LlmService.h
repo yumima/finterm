@@ -266,7 +266,7 @@ class LlmService : public QObject {
 
     /// An agent's, team's or workflow's config with every model's stored base
     /// as it is meant now (stored_base), members' and nested ones too.
-    static QJsonObject with_engine_bases(QJsonObject config);
+    static QJsonObject with_engine_bases(const QJsonObject& config);
 
     // Fetch available models for a provider (async — emits models_fetched)
     void fetch_models(const QString& provider, const QString& api_key, const QString& base_url = {});

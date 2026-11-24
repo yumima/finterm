@@ -12,6 +12,8 @@
 // single chokepoint that kills the whole double-/v1 bug class.
 
 #include <QHostAddress>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <QUrl>
 
@@ -39,6 +41,32 @@ inline bool is_loopback_url(const QString& url) {
     const QString host = QUrl(url).host().toLower();
     return host == QLatin1String("localhost") || host == QLatin1String("::1") ||
            (host.startsWith(QLatin1String("127.")) && QHostAddress(host).isLoopback());
+}
+
+/// A config with the base URL of every model in it — nested ones, and lists of
+/// a team's members, too — replaced by `base(provider, stored base)`. A model is
+/// an object with a provider and a base_url or model_id; other things have a
+/// "provider" as well, and are left alone.
+template <typename Base>
+QJsonObject with_model_bases(QJsonObject config, const Base& base) {
+    if (config.value(QLatin1String("provider")).isString() &&
+        (config.contains(QLatin1String("base_url")) || config.contains(QLatin1String("model_id"))))
+        config[QLatin1String("base_url")] =
+            base(config.value(QLatin1String("provider")).toString(), config.value(QLatin1String("base_url")).toString());
+    const QStringList keys = config.keys();
+    for (const QString& k : keys) {
+        const QJsonValue v = config.value(k);
+        if (v.isObject()) {
+            config[k] = with_model_bases(v.toObject(), base);
+        } else if (v.isArray()) {
+            QJsonArray a = v.toArray();
+            for (int i = 0; i < a.size(); ++i)
+                if (a.at(i).isObject())
+                    a[i] = with_model_bases(a.at(i).toObject(), base);
+            config[k] = a;
+        }
+    }
+    return config;
 }
 
 /// How long a chat request may take. An engine on this computer answers one
