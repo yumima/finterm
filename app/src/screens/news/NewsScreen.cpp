@@ -45,6 +45,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace finterm::screens {
 
@@ -773,14 +774,16 @@ void NewsScreen::on_monitor_deleted(const QString& id) {
 }
 
 void NewsScreen::on_analyze_requested(const QString& url) {
-    if (analyze_in_flight_) // local LLM can outlast the button timeout — don't double-launch
+    if (!analyzing_url_.isEmpty()) { // one at a time; the last one asked for is next
+        analyze_next_ = url == analyzing_url_ ? QString() : url;
         return;
-    analyze_in_flight_ = true;
+    }
+    analyzing_url_ = url;
     QPointer<NewsScreen> self = this;
-    services::NewsService::instance().analyze_article(url, [self](bool ok, services::NewsAnalysis analysis) {
+    services::NewsService::instance().analyze_article(url, [self, url](bool ok, services::NewsAnalysis analysis) {
         if (!self)
             return;
-        self->analyze_in_flight_ = false;
+        self->analyzing_url_.clear();
         if (ok) {
             // Name the model that actually wrote it when a quota fallback
             // switched away from the configured one (display only).
@@ -790,9 +793,11 @@ void NewsScreen::on_analyze_requested(const QString& url) {
                         .arg(analysis.model_used, analysis.provider_used,
                              analysis.requested_model.isEmpty() ? QStringLiteral("the configured model")
                                                                 : analysis.requested_model);
-            self->detail_panel_->show_analysis(analysis);
+            self->detail_panel_->show_analysis(url, analysis);
         } else
-            self->detail_panel_->show_analysis_error("AI analysis is unavailable right now.");
+            self->detail_panel_->show_analysis_error(url, "AI analysis is unavailable right now.");
+        if (const QString next = std::exchange(self->analyze_next_, {}); !next.isEmpty())
+            self->on_analyze_requested(next);
     });
 }
 

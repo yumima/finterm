@@ -28,8 +28,9 @@ class NewsDetailPanel : public QWidget {
     explicit NewsDetailPanel(QWidget* parent = nullptr);
 
     void show_article(const services::NewsArticle& article);
-    void show_analysis(const services::NewsAnalysis& analysis);
-    void show_analysis_error(const QString& message);
+    /// Of the article at `url`: not shown under another one.
+    void show_analysis(const QString& url, const services::NewsAnalysis& analysis);
+    void show_analysis_error(const QString& url, const QString& message);
     void show_related(const QVector<services::NewsArticle>& related);
     void show_monitor_matches(const QVector<QPair<services::NewsMonitor, QStringList>>& matches);
     void show_entities(const services::EntityResult& entities);

@@ -178,12 +178,13 @@ void HearthService::connect_now_started(engine::State state) {
     }
     case engine::State::Unsupported:
         return give_up(QStringLiteral("hearth is running, and does not match this finterm: it was not connected"));
-    case engine::State::Foreign:
-        return give_up(QStringLiteral("another program answers where hearth should: it was not connected"));
     default:
-        // A look from before it was up, or one it was too busy to answer.
+        // A look from before it was up, or one it was too busy to answer, or
+        // not in full (which reads as another program).
         if (--connect_tries_ <= 0)
-            return give_up(QStringLiteral("hearth was started, and does not answer yet: connect it when it does"));
+            return give_up(state == engine::State::Foreign
+                               ? QStringLiteral("another program answers where hearth should: it was not connected")
+                               : QStringLiteral("hearth was started, and does not answer yet: connect it when it does"));
         QTimer::singleShot(kAwaitMs, this, [this]() { detect(); });
     }
 }
@@ -215,6 +216,7 @@ QString HearthService::connect_engine(bool for_chat) {
     auto r = EngineLinkRepository::instance().connect(for_chat);
     if (r.is_err())
         return QString::fromStdString(r.error());
+    connect_after_.reset(); // the user's last word, whatever was waiting
     LOG_INFO(kHearthTag, for_chat ? "connected, for chat too" : "connected");
     link_was_changed();
     return {};
@@ -224,6 +226,7 @@ QString HearthService::disconnect_engine() {
     auto r = EngineLinkRepository::instance().disconnect();
     if (r.is_err())
         return QString::fromStdString(r.error());
+    connect_after_.reset();
     LOG_INFO(kHearthTag, "disconnected");
     link_was_changed();
     return {};

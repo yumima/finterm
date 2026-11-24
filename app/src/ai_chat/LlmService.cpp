@@ -687,8 +687,10 @@ QJsonObject LlmService::build_ollama_native_request(const QString& user_message,
 QString LlmService::no_endpoint_error(const PersonaScope& persona) const {
     // Called with mutex_ held
     const QString p = eff_provider(persona);
-    if (p.isEmpty())
-        return QStringLiteral("No AI is connected — choose one in Settings › AI Config");
+    if (p.isEmpty()) // (hearth's row is not read while it cannot be used)
+        return HearthService::instance().link() == engine::Link::Connected && !HearthService::instance().linked()
+                   ? QStringLiteral("This hearth does not match this finterm — see Settings › AI Config")
+                   : QStringLiteral("No AI is connected — choose one in Settings › AI Config");
     if (is_hearth_provider(p) && HearthService::instance().link() != engine::Link::Connected)
         return QStringLiteral("hearth is not connected — connect it in Settings › AI Config");
     if (is_hearth_provider(p))
@@ -2427,7 +2429,7 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
         QMutexLocker lock(&mutex_);
         ensure_config();
         if (provider_.isEmpty())
-            return LlmResponse{.content = {}, .error = "No LLM provider configured"};
+            return LlmResponse{.content = {}, .error = no_endpoint_error({})};
     }
     // Release mutex_ before the blocking round-trip so a long call (e.g. a slow
     // local news analysis on a QtConcurrent thread) can't freeze the UI thread,
@@ -2447,9 +2449,26 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
     return request_with_fallback(user_message, history, use_tools, persona);
 }
 
+// A request keeps the provider it began with through all its rounds: choosing
+// another meanwhile — in Settings, or a tool it calls — is for the next one, not
+// for its next round, which would take the new model to the old address.
+PersonaScope LlmService::pinned(PersonaScope p) const {
+    QMutexLocker lock(&mutex_);
+    ensure_config();
+    if (p.model.isEmpty())
+        p.model = model_;
+    if (p.provider.isEmpty()) {
+        p.provider = provider_;
+        p.api_key = api_key_;
+        p.base_url = base_url_;
+    }
+    return p;
+}
+
 LlmResponse LlmService::request_with_fallback(const QString& user_message,
                                               const std::vector<ConversationMessage>& history, bool use_tools,
-                                              const PersonaScope& persona) {
+                                              const PersonaScope& scope) {
+    const PersonaScope persona = pinned(scope);
     PersonaScope target = persona;
     const QString requested_model = eff_model(persona);
     EvidenceScope evidence; // tool results of every attempt below
@@ -2566,7 +2585,7 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
 
     if (p.isEmpty()) {
         on_chunk("", true);
-        LlmResponse err{.content = {}, .error = "No LLM provider configured"};
+        LlmResponse err{.content = {}, .error = no_endpoint_error({})};
         // Per-call delivery when provided (scoped to the caller); else the
         // legacy broadcast signal. We're on the caller's (UI) thread here.
         if (on_done)

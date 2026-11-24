@@ -700,7 +700,11 @@ void LlmConfigSection::show_default_badge(const QString& provider, const QString
 }
 
 void LlmConfigSection::refresh_provider_labels() {
-    const QString selected = provider_list_->currentItem() ? provider_list_->currentItem()->data(Qt::UserRole).toString() : QString();
+    if (!provider_list_->currentItem()) { // nothing is being typed
+        load_providers();
+        return;
+    }
+    const QString selected = provider_list_->currentItem()->data(Qt::UserRole).toString();
     const QString active = fill_provider_list();
     const QSignalBlocker block(provider_list_);
     for (int i = 0; i < provider_list_->count(); ++i)

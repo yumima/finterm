@@ -254,7 +254,8 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     static constexpr int kBriefWatchdogMs = 180000;
     // Same gate for AI Analyze: local-LLM analysis can exceed the button's
     // re-enable timeout, so guard against launching a second concurrent run.
-    bool analyze_in_flight_ = false;
+    QString analyzing_url_; // "" = none running
+    QString analyze_next_;
 };
 
 } // namespace finterm::screens

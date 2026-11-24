@@ -10,6 +10,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QUrl>
@@ -35,7 +36,13 @@ HearthInstaller& HearthInstaller::instance() {
 HearthInstaller::HearthInstaller(QObject* parent)
     : QObject(parent), script_(engine::install_script()), nam_(new QNetworkAccessManager(this)) {
     // Not left half done behind a closed window: it goes on from there next time.
-    connect(qApp, &QCoreApplication::aboutToQuit, this, &HearthInstaller::cancel);
+    // (Waited for, or the script alone is killed first and what it runs goes on.)
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+        const QPointer<QProcess> p = proc_;
+        cancel();
+        if (p)
+            p->waitForFinished(5000);
+    });
 }
 
 void HearthInstaller::start() {

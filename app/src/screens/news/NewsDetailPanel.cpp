@@ -836,7 +836,9 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
         });
 }
 
-void NewsDetailPanel::show_analysis_error(const QString& message) {
+void NewsDetailPanel::show_analysis_error(const QString& url, const QString& message) {
+    if (!has_article_ || current_article_.link != url)
+        return;
     analyze_btn_->setText("ANALYZE");
     analyze_btn_->setEnabled(true);
     analyze_timeout_->stop();
@@ -856,7 +858,9 @@ void NewsDetailPanel::show_analysis_error(const QString& message) {
     reveal_article_section(analysis_section_);
 }
 
-void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {
+void NewsDetailPanel::show_analysis(const QString& url, const services::NewsAnalysis& analysis) {
+    if (!has_article_ || current_article_.link != url)
+        return;
     analyze_btn_->setText("ANALYZE");
     analyze_btn_->setEnabled(true);
     analyze_timeout_->stop();
