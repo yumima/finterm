@@ -16,12 +16,12 @@ sys.path.insert(0, str(analytics_path))
 # Use absolute imports instead of relative imports
 from corporateFinance.config import DEAL_TYPES, PAYMENT_METHODS, INDUSTRIES
 from corporateFinance.deal_database.database_schema import MADatabase
-from mcp.edgar import base as edgar_base, financials as edgar_financials
+from sec_edgar import base as edgar_base, financials as edgar_financials
 
 
 class _EdgarAdapter:
     """Thin adapter so deal_parser can call the same methods as before,
-    now backed by mcp.edgar (System 1 / edgartools)."""
+    now backed by sec_edgar (System 1 / edgartools)."""
 
     def resolve_cik(self, name: str):
         result = edgar_base.resolve_cik(name)

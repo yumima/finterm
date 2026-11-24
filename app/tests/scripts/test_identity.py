@@ -77,7 +77,7 @@ for root, _, files in os.walk(SCRIPTS):
 # client). Every module importing it must call sec_http.route_edgartools() —
 # the contact as its identity (without one SEC refuses it and edgartools
 # prompts on stdin) and its requests on the shared gate — or, inside the
-# mcp/edgar package, import the package's base, which does.
+# sec_edgar package, import the package's base, which does.
 EDGAR_IMPORT = re.compile(r"^\s*(from\s+edgar(\.\w+)*\s+import|import\s+edgar\b)", re.M)
 edgar_users = 0
 for root, _, files in os.walk(SCRIPTS):
@@ -91,7 +91,7 @@ for root, _, files in os.walk(SCRIPTS):
             continue
         edgar_users += 1
         routed = "sec_http.route_edgartools()" in src
-        via_base = (rel.startswith(os.path.join("mcp", "edgar") + os.sep)
+        via_base = (rel.startswith("sec_edgar" + os.sep)
                     and re.search(r"^from \.base import", src, re.M))
         if not (routed or via_base):
             fails.append(f"{rel} imports edgartools without sec_http.route_edgartools() "

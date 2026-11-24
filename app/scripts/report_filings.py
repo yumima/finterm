@@ -373,7 +373,7 @@ def fetch(symbol):
     if not symbol:
         return {"error": "no ticker given"}
     try:
-        from mcp.edgar.base import Company, check_edgar_available, initialize_edgar
+        from sec_edgar.base import Company, check_edgar_available, initialize_edgar
         check_edgar_available()
         initialize_edgar()  # declares the configured contact — SEC refuses requests without one
         company = Company(symbol)

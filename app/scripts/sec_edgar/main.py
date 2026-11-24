@@ -5,7 +5,7 @@ Edgar MCP - Main CLI Entry Point
 Unified command-line interface for all Edgar MCP modules.
 
 Usage:
-    python -m mcp.edgar.main <command> [args...]
+    python -m sec_edgar.main <command> [args...]
 
 Commands are organized by module:
 - base: Configuration and ticker search
@@ -14,7 +14,7 @@ Commands are organized by module:
 - financials: XBRL financial data
 
 Example:
-    python -m mcp.edgar.main 10k_sections AAPL business risk_factors
+    python -m sec_edgar.main 10k_sections AAPL business risk_factors
 """
 
 import sys
@@ -282,12 +282,12 @@ def main():
     """Main CLI entry point"""
     if len(sys.argv) < 2:
         print(json.dumps({
-            "error": "Usage: python -m mcp.edgar.main <command> [args...]",
+            "error": "Usage: python -m sec_edgar.main <command> [args...]",
             "examples": [
-                "python -m mcp.edgar.main find_company Apple",
-                "python -m mcp.edgar.main 10k_sections AAPL business risk_factors",
-                "python -m mcp.edgar.main 10q_sections MSFT part_i_item_2",
-                "python -m mcp.edgar.main get_financials TSLA 4 true",
+                "python -m sec_edgar.main find_company Apple",
+                "python -m sec_edgar.main 10k_sections AAPL business risk_factors",
+                "python -m sec_edgar.main 10q_sections MSFT part_i_item_2",
+                "python -m sec_edgar.main get_financials TSLA 4 true",
             ],
             "command_groups": {
                 "base": "Configuration and company search",

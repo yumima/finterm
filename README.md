@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`e40744486`](https://github.com/yumima/finterm/commit/e40744486) python: RD-Agent, Deep Agents and Alternative Investments start again; cells run apart from scripts
 - [`8e1455d45`](https://github.com/yumima/finterm/commit/8e1455d45) user files: Python runs in the user's folder
 - [`c1f602fe7`](https://github.com/yumima/finterm/commit/c1f602fe7) user files: nothing the user makes is kept inside the program's folder
 - [`41a2ed174`](https://github.com/yumima/finterm/commit/41a2ed174) updater: the Windows helper's flush never fails an update; a previous version in use says so

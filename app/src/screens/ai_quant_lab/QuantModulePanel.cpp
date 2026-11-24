@@ -2735,6 +2735,10 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
     // ── RD-Agent: stop_task / resume_task ────────────────────────────────────
     if (command == "stop_task" || command == "resume_task") {
+        if (!payload["success"].toBool()) {
+            display_error(payload["error"].toString("Unknown error"));
+            return;
+        }
         status_label_->setText(payload["message"].toString(command));
         if (rd_agent_output_)
             rd_agent_output_->setPlainText(payload["message"].toString());
@@ -2743,6 +2747,10 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
     // ── RD-Agent: start_ui ───────────────────────────────────────────────────
     if (command == "start_ui") {
+        if (!payload["success"].toBool()) {
+            display_error(payload["error"].toString("Unknown error"));
+            return;
+        }
         auto url = payload["url"].toString();
         if (!url.isEmpty()) {
             status_label_->setText(QString("Log viewer: %1").arg(url));

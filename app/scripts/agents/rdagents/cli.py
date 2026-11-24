@@ -824,6 +824,17 @@ _COMMANDS = {
 }
 
 
+# A job runs on a thread of the process that starts it, and its record is in
+# that process's memory. Each command is a process of its own: the job would
+# end, unseen, with the command that started it. Saying "started" would be a lie.
+_JOB_COMMANDS = {
+    "start_factor_mining", "start_model_optimization", "start_quant_research", "run_autonomous_research",
+    "extract_factors_from_pdf", "start_kaggle_task", "start_ds_task", "start_multitrace_research",
+    "resume_task", "start_ui",
+}
+_JOBS_UNAVAILABLE = "RD-Agent jobs can't run from finterm yet (they need a background worker). Nothing was started."
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         _err("No command specified. Usage: cli.py <command> [json_params]")
@@ -844,6 +855,10 @@ def main() -> None:
     # For commands that take a bare task_id as second arg
     if not params and len(sys.argv) >= 3:
         params = {"task_id": sys.argv[2]}
+
+    if command in _JOB_COMMANDS:
+        _out({"success": False, "error": _JOBS_UNAVAILABLE})
+        return
 
     # rdagent keeps its workspaces, logs and caches where it runs.
     os.chdir(workspace_base())

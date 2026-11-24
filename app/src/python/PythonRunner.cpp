@@ -491,13 +491,13 @@ void PythonRunner::start_next() {
         // FINAGENT_DATA_DIR, base PYTHONPATH = scripts_dir_).
         QProcessEnvironment env = build_python_env();
 
-        // NOTE: do NOT prepend parent-of-pkg (e.g. <scripts>/mcp) to PYTHONPATH
+        // NOTE: do NOT prepend parent-of-pkg (e.g. <scripts>/agents) to PYTHONPATH
         // for sub-package scripts. scripts_dir_ is already on PYTHONPATH (see
-        // build_python_env line 141), so `python -m mcp.edgar.main` resolves
+        // build_python_env line 141), so `python -m sec_edgar.main` resolves
         // both the package itself AND its relative imports correctly.
         //
         // Adding parent-of-pkg used to *shadow* third-party libraries: if a
-        // local sub-package shares a name with a venv package (e.g. our
+        // local sub-package shares a name with a venv package (e.g. our old
         // `<scripts>/mcp/edgar/` vs the `edgartools` PyPI library which
         // exports module `edgar`), Python's `from edgar import Company` would
         // resolve to the local empty package and fail with `ImportError:

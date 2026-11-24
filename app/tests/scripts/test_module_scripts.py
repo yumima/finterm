@@ -45,6 +45,16 @@ for name in named:
             print(f"FAIL - {init.relative_to(SCRIPTS)}:{hit[0]} imports its sibling {hit[1]} (runs before {name})")
             fails += 1
         folder = folder.parent
+# scripts/ is first on the path: a name here that is a library's hides it
+# (scripts/mcp hid the MCP library from every agent).
+REQ = [APP / "resources" / f"requirements-numpy{v}.txt" for v in (1, 2)]
+libs = {re.split(r"[^A-Za-z0-9_.-]", l.strip())[0].lower().replace("-", "_")
+        for r in REQ for l in r.read_text(encoding="utf-8").splitlines() if l.strip() and not l.startswith(("#", "-"))}
+libs |= {"mcp", "edgar", "agno", "rdagent", "qlib", "deepagents"}
+for p in SCRIPTS.iterdir():
+    if (p.is_dir() and any(p.rglob("*.py")) or p.suffix == ".py") and p.stem.lower() in libs:
+        print(f"FAIL - scripts/{p.name} hides the library of that name")
+        fails += 1
 if len(named) < 30:
     print(f"FAIL - only {len(named)} scripts found in the C++ sources")
     fails += 1

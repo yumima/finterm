@@ -188,7 +188,7 @@ class ResearchAgent(BaseAgent):
     async def initialize(self) -> bool:
         """Initialize the research agent"""
         try:
-            from mcp.edgar import base as edgar_base
+            from sec_edgar import base as edgar_base
             edgar_base.initialize_edgar()
             self._edgar_available = True
             logger.info("Edgar tools available for research")
@@ -215,7 +215,7 @@ class ResearchAgent(BaseAgent):
             return None
 
         try:
-            from mcp.edgar import base as edgar_base
+            from sec_edgar import base as edgar_base
             data = edgar_base.get_company_info(ticker)
 
             if data.get("success"):
@@ -245,7 +245,7 @@ class ResearchAgent(BaseAgent):
             return []
 
         try:
-            from mcp.edgar import base as edgar_base
+            from sec_edgar import base as edgar_base
             form = form_types[0] if form_types else "8-K"
             data = edgar_base.search_filings(ticker, form, months_back=12)
 
@@ -271,7 +271,7 @@ class ResearchAgent(BaseAgent):
             return []
 
         try:
-            from mcp.edgar import financials as edgar_financials
+            from sec_edgar import financials as edgar_financials
             data = edgar_financials.get_financials(ticker)
 
             financials = []
@@ -304,7 +304,7 @@ class ResearchAgent(BaseAgent):
             return []
 
         try:
-            from mcp.edgar import forms_insider as edgar_insider
+            from sec_edgar import forms_insider as edgar_insider
             data = edgar_insider.get_insider_transactions(ticker, limit)
 
             if data.get("success"):

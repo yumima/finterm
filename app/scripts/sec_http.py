@@ -45,7 +45,7 @@ timeout (the server took the request; asking again doubles the load). A
 caller that wants more (the 13F sync re-asking a large submission on 5xx or
 timeout) does it itself, through the same gate.
 
-The one SEC client outside this module is edgartools (scripts/mcp/edgar): it
+The one SEC client outside this module is edgartools (scripts/sec_edgar): it
 builds its own httpx client. Every module
 that imports it calls route_edgartools() (test_identity checks), which
 (1) declares the user's contact as its identity — set_identity(user_agent()),

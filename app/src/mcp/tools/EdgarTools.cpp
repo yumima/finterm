@@ -14,10 +14,10 @@
 namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "EdgarTools";
-static constexpr const char* SCRIPT = "mcp/edgar/main.py";
+static constexpr const char* SCRIPT = "sec_edgar/main.py";
 static constexpr int kEdgarTtlSec = 30 * 60; // 30 min — SEC filings rarely change intra-day
 
-// ── Helper: run mcp/edgar/main.py synchronously and return parsed JSON ───────
+// ── Helper: run sec_edgar/main.py synchronously and return parsed JSON ───────
 
 static ToolResult run_edgar(const QStringList& args) {
     // Cache key: join all args
@@ -101,7 +101,7 @@ std::vector<ToolDef> get_edgar_tools() {
             QString company = args["company"].toString().trimmed();
             if (company.isEmpty())
                 return ToolResult::fail("Missing 'company'");
-            return run_edgar({"resolve_cik", company}); // → mcp/edgar/main.py resolve_cik
+            return run_edgar({"resolve_cik", company}); // → sec_edgar/main.py resolve_cik
         };
         tools.push_back(std::move(t));
     }

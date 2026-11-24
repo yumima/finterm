@@ -1,6 +1,6 @@
 #pragma once
 // EdgarTools.h — SEC EDGAR MCP tools
-// Direct interface to scripts/mcp/edgar/main.py (System 1)
+// Direct interface to scripts/sec_edgar/main.py (System 1)
 // Separate from M&A Analytics — covers general SEC data: CIK resolution,
 // XBRL financials, filing text, valuation multiples, filing search.
 
