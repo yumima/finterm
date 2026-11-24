@@ -41,7 +41,7 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 **3. One repository, reliable engine**
 - [x] 3.1 Bring in mantel with its history
 - [x] 3.2 One lock file, two environments
-- [ ] 3.3 Process handling for all three systems, then CI on all three
+- [x] 3.3 Process handling for all three systems, then CI on all three
 - [x] 3.4 Retire hearth's chat page and window; `hearth client` opens mantel
 - [x] 3.5 Restart Ollama when it dies; keep its log
 - [x] 3.6 Sharing the GPU: Ollama answers in order; a short request waited 85 s behind a
@@ -51,17 +51,17 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 - [ ] 3.8 Switch the developer machine over (asks first)
 
 **4. Linux install**
-- [ ] 4.1 Hardware check: NVIDIA, AMD, Apple, RAM, disk
-- [ ] 4.2 Model catalog and ranked list
-- [ ] 4.3 Generic model tests
-- [ ] 4.4 `install.sh`, with optional mantel
-- [ ] 4.5 Private Ollama
-- [ ] 4.6 Setup page: models, voices, speech recognition
-- [ ] 4.7 Verified download, measure, then assign; one failure does not stop the rest
-- [ ] 4.8 Models page: list, add, switch, safe removal; the embedding model is fixed
-- [ ] 4.9 Login service
-- [ ] 4.10 `hearth update`: previous version kept, data backed up
-- [ ] 4.11 `hearth uninstall`, with "keep models"
+- [x] 4.1 Hardware check: NVIDIA, AMD, Apple, RAM, disk
+- [x] 4.2 Model catalog and ranked list
+- [x] 4.3 Generic model tests
+- [x] 4.4 `install.sh`, with optional mantel
+- [x] 4.5 Private Ollama
+- [x] 4.6 Setup page: models, voices, speech recognition
+- [x] 4.7 Verified download, measure, then assign; one failure does not stop the rest
+- [x] 4.8 Models page: list, add, switch, safe removal; the embedding model is fixed
+- [x] 4.9 Login service
+- [x] 4.10 `hearth update`: previous version kept, data backed up
+- [x] 4.11 `hearth uninstall`, with "keep models"
 - [ ] 4.12 Licence review and notices
 
 **5. Windows, macOS, release**

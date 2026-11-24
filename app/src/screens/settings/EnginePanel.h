@@ -23,6 +23,7 @@ class EnginePanel : public QWidget {
   private:
     void refresh();
     void run_primary();
+    void get_hearth();
     void say(const QString& text, bool problem);
 
     Mode mode_;

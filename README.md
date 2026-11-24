@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`f6a80eaea`](https://github.com/yumima/finterm/commit/f6a80eaea) hearth: a busy engine is not a dead one; its own voice folder
 - [`57fb47f85`](https://github.com/yumima/finterm/commit/57fb47f85) hearth: finterm finds it, asks once, connects and disconnects
 - [`029e6c7d4`](https://github.com/yumima/finterm/commit/029e6c7d4) hearth: no web search unless the user turns it on; one address for it; uv is verified
 - [`6d771b282`](https://github.com/yumima/finterm/commit/6d771b282) review: a draft is not a decision; a cell's output grows in place; user code has slots of its own

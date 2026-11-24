@@ -777,6 +777,7 @@ set(AI_CHAT_SOURCES
     src/ai_chat/LlmService.cpp
     src/ai_chat/EmbeddingsClient.cpp
     src/ai_chat/HearthService.cpp
+    src/ai_chat/HearthInstaller.cpp
     src/ai_chat/ModelCatalog.cpp
     src/ai_chat/ChatPane.cpp
     src/ai_chat/ElicitPrompter.cpp

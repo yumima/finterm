@@ -982,6 +982,17 @@ target_link_libraries(test_engine_state PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_engine_state PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME engine_state COMMAND test_engine_state)
 
+# ── "Get hearth": only the script this finterm knows is run ──────────────────
+add_executable(test_hearth_installer
+    ai_chat/test_hearth_installer.cpp
+    ../src/ai_chat/HearthInstaller.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_hearth_installer PRIVATE ../src)
+target_link_libraries(test_hearth_installer PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+set_target_properties(test_hearth_installer PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME hearth_installer COMMAND test_hearth_installer)
+
 # ── hearth: the user's answer, and the chat's provider around it ─────────────
 add_executable(test_engine_link
     storage/test_engine_link.cpp

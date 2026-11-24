@@ -1,6 +1,7 @@
 #include "screens/settings/EnginePanel.h"
 
 #include "ai_chat/EngineText.h"
+#include "ai_chat/HearthInstaller.h"
 #include "ai_chat/HearthService.h"
 #include "storage/repositories/EngineLinkRepository.h"
 #include "ui/components/ExternalLink.h"
@@ -78,6 +79,11 @@ EnginePanel::EnginePanel(Mode mode, QWidget* parent) : QWidget(parent), mode_(mo
             say(message, true);
         refresh();
     });
+    connect(&HearthInstaller::instance(), &HearthInstaller::changed, this, &EnginePanel::refresh);
+    connect(&HearthInstaller::instance(), &HearthInstaller::finished, this, [this](bool ok, const QString& message) {
+        say(message, !ok);
+        HearthService::instance().detect();
+    });
     connect(primary_, &QPushButton::clicked, this, &EnginePanel::run_primary);
     connect(secondary_, &QPushButton::clicked, this, [this]() {
         const QString chat = EngineLinkRepository::instance().chat_provider();
@@ -109,6 +115,10 @@ void EnginePanel::say(const QString& text, bool problem) {
 
 void EnginePanel::run_primary() {
     say({}, false);
+    if (HearthInstaller::instance().running()) {
+        HearthInstaller::instance().cancel();
+        return;
+    }
     auto& hearth = HearthService::instance();
     switch (current_view().primary) {
     case Action::Connect:
@@ -128,8 +138,10 @@ void EnginePanel::run_primary() {
         ui::open_external_link(hearth.engine_base_url() + "/");
         break;
     case Action::HowToUpdate:
-    case Action::Get:
         ui::open_external_link(QString::fromLatin1(HearthService::kHomepage));
+        break;
+    case Action::Get:
+        get_hearth();
         break;
     case Action::Recheck:
         hearth.detect();
@@ -139,20 +151,38 @@ void EnginePanel::run_primary() {
     }
 }
 
+void EnginePanel::get_hearth() {
+    auto& installer = HearthInstaller::instance();
+    if (!installer.available()) {
+        ui::open_external_link(QString::fromLatin1(HearthService::kHomepage));
+        return;
+    }
+    const auto answer = QMessageBox::question(
+        window(), QStringLiteral("Get hearth"),
+        QStringLiteral("finterm downloads hearth's installer and runs it. hearth goes into a folder of its own, for this "
+                       "user, and can be removed again with \"hearth uninstall\".\n\nIt downloads up to 2 GB now, and the "
+                       "model you choose afterwards. finterm can be used meanwhile."),
+        QMessageBox::Ok | QMessageBox::Cancel);
+    if (answer == QMessageBox::Ok)
+        installer.start();
+}
+
 void EnginePanel::refresh() {
     auto& hearth = HearthService::instance();
+    auto& installer = HearthInstaller::instance();
     auto& repo = EngineLinkRepository::instance();
     const auto v = current_view();
     const bool full = mode_ == Mode::Full;
     const bool busy = hearth.starting();
 
-    headline_->setText(busy ? QStringLiteral("Starting hearth…") : v.headline);
+    const bool installing = installer.running();
+    headline_->setText(installing ? QStringLiteral("Installing hearth…") : busy ? QStringLiteral("Starting hearth…") : v.headline);
     headline_->setStyleSheet(css(v.good ? ui::colors::POSITIVE() : ui::colors::TEXT_PRIMARY()) + "font-weight:600;");
-    detail_->setText(v.detail);
+    detail_->setText(installing ? installer.last_line() : v.detail);
     detail_->setStyleSheet(css(ui::colors::TEXT_SECONDARY()));
 
-    primary_->setText(v.primary_text);
-    primary_->setVisible(full && v.primary != Action::None);
+    primary_->setText(installing ? QStringLiteral("Stop") : v.primary_text);
+    primary_->setVisible(full && (installing || v.primary != Action::None));
     primary_->setEnabled(!busy);
     secondary_->setVisible(full && v.can_disconnect);
     secondary_->setEnabled(!busy);
