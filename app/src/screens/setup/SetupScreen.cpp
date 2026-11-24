@@ -388,6 +388,11 @@ void SetupScreen::on_progress(const python::SetupProgress& progress) {
         } else if (progress.progress >= 100) {
             // Step finished — stop pulse and snap to full
             mark_step_done(key);
+            if (progress.partial) {
+                s.status->setText("PARTIAL");
+                s.status->setStyleSheet(
+                    QString("color:%1; font-family:%2; font-size:12px;").arg(colors::WARNING(), fonts::DATA_FAMILY));
+            }
         } else {
             // Mid-step real progress (pass-2 per-package installs send real %)
             stop_pulse(key);
@@ -416,14 +421,24 @@ void SetupScreen::on_setup_done(bool success, const QString& error) {
         elapsed_timer_->stop();
 
     if (success) {
-        LOG_INFO("SetupScreen", "Python setup completed — all steps done");
-        status_label_->setText("Everything is ready! Launching finterm...");
-        status_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;")
-                                         .arg(colors::GREEN(), fonts::DATA_FAMILY));
-        begin_btn_->setText("LAUNCH");
+        const QStringList missing = python::PythonSetupManager::instance().failed_packages();
+        LOG_INFO("SetupScreen", missing.isEmpty() ? QStringLiteral("Python setup completed — all steps done")
+                                                  : "Python setup completed without " + missing.join(", "));
+        QString names = missing.mid(0, 3).join(", ");
+        if (missing.size() > 3)
+            names += QString(" and %1 more").arg(missing.size() - 3);
+        status_label_->setText(missing.isEmpty()
+                                   ? QStringLiteral("Everything is ready! Launching finterm...")
+                                   : QString("Could not install %1 — finterm will try again at the next start. "
+                                             "Launching...")
+                                         .arg(names));
+        status_label_->setStyleSheet(
+            QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;")
+                .arg(missing.isEmpty() ? colors::GREEN() : colors::WARNING(), fonts::DATA_FAMILY));
+        begin_btn_->setText("LAUNCHING...");
         if (timeout_timer_)
             timeout_timer_->stop();
-        QTimer::singleShot(1500, this, [this]() { emit setup_complete(); });
+        QTimer::singleShot(missing.isEmpty() ? 1500 : 6000, this, [this]() { emit setup_complete(); });
     } else {
         // Stop all running pulses
         for (auto it = steps_.keyBegin(); it != steps_.keyEnd(); ++it)

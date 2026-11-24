@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`d84103b35`](https://github.com/yumima/finterm/commit/d84103b35) release: the old release is deleted only once the site is out; the site deploy tries again
 - [`997a3b6b2`](https://github.com/yumima/finterm/commit/997a3b6b2) **chore(release):** update README download links and updates.json for v4.1.0
 - [`d58530310`](https://github.com/yumima/finterm/commit/d58530310) rd-agent: jobs say they can't run instead of "started"; scripts/mcp no longer hides the MCP library
 - [`e40744486`](https://github.com/yumima/finterm/commit/e40744486) python: RD-Agent, Deep Agents and Alternative Investments start again; cells run apart from scripts

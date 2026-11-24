@@ -26,6 +26,8 @@ import signal
 import sys
 import threading
 
+from install_hint import install_hint  # beside this script
+
 
 def emit(obj: dict) -> None:
     """Write a JSON line to stdout and flush immediately."""
@@ -54,13 +56,13 @@ def main() -> None:
             Microphone,
         )
     except ImportError as e:
-        emit({"fatal": f"deepgram-sdk not installed — run: pip install deepgram-sdk ({e})"})
+        emit({"fatal": f"deepgram-sdk 3 or 4 not installed — {install_hint('deepgram-sdk>=3.5,<5')} ({e})"})
         sys.exit(1)
 
     try:
         import pyaudio  # noqa: F401  — required by Microphone helper
     except ImportError:
-        emit({"fatal": "PyAudio not installed — run: pip install PyAudio"})
+        emit({"fatal": f"PyAudio not installed — {install_hint('PyAudio')}"})
         sys.exit(1)
 
     # Graceful shutdown flag

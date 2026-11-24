@@ -439,6 +439,7 @@ void AiChatBubble::build_chat_panel() {
     cvl->addWidget(scroll_area_, 1);
 
     status_lbl_ = new QLabel;
+    status_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse); // errors name commands to copy
     status_lbl_->setWordWrap(true);
     status_lbl_->setContentsMargins(16, 2, 16, 2);
     status_lbl_->setStyleSheet(
@@ -599,7 +600,9 @@ QWidget* AiChatBubble::build_live_page() {
     v->addWidget(orb_, 3);
 
     live_state_lbl_ = new QLabel;
+    live_state_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse); // errors name commands to copy
     live_state_lbl_->setAlignment(Qt::AlignCenter);
+    live_state_lbl_->setWordWrap(true);
     live_state_lbl_->setStyleSheet(
         QString("color:%1;font-size:15px;font-weight:700;background:transparent;").arg(col::TEXT_PRIMARY()));
     v->addWidget(live_state_lbl_);

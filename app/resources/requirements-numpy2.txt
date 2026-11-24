@@ -167,6 +167,7 @@ mlflow>=2.0.0
 faiss-cpu>=1.7.0
 mplfinance>=0.12.0
 
-# Voice recognition (speech-to-text via Google API)
-SpeechRecognition>=3.10.0
-PyAudio>=0.2.14
+# Not here: PyAudio (microphone input). It has wheels for Windows only; on Linux
+# and macOS it builds from source against PortAudio, and one package that fails
+# to install brings first-time setup back at every start. Voice input's other
+# packages are installed by hand too (see scripts/voice).

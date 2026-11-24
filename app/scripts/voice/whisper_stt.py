@@ -34,6 +34,8 @@ import sys
 import threading
 from collections import deque
 
+from install_hint import install_hint  # beside this script
+
 
 def emit(obj: dict) -> None:
     """Write a JSON line to stdout and flush immediately."""
@@ -52,16 +54,16 @@ def _require(import_path: str, install_hint: str):
 
 def main() -> None:
     # Dependencies — fail fast with clear install hints so the UI can surface them.
-    _require("numpy", "run: pip install numpy")
-    _require("pyaudio", "run: pip install PyAudio")
-    _require("webrtcvad", "run: pip install webrtcvad")
+    _require("numpy", install_hint("numpy"))
+    _require("pyaudio", install_hint("PyAudio"))
+    _require("webrtcvad", install_hint("webrtcvad-wheels"))
 
     # faster-whisper is a Python package whose top-level module name has a dash
     # replaced with an underscore — guard with the direct import here.
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:  # noqa: BLE001
-        emit({"fatal": f"faster-whisper not installed — run: pip install faster-whisper ({e})"})
+        emit({"fatal": f"faster-whisper not installed — {install_hint('faster-whisper')} ({e})"})
         sys.exit(1)
 
     import numpy as np

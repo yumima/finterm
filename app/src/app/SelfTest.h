@@ -12,7 +12,7 @@
 // a user's desktop could notice. The release workflow now installs the built
 // Windows installer and runs this before publishing.
 //
-// Exit code: 0 data fetched · 2 Python setup failed · 3 no data from the
+// Exit code: 0 data fetched · 2 Python setup failed or incomplete · 3 no data from the
 // daemon · 4 timed out. The report (stdout, and the file if a path is given)
 // says which stage, and why.
 
@@ -23,6 +23,7 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
@@ -87,7 +88,15 @@ inline int run(QCoreApplication& app, const QString& report_path) {
             [finish](bool ok, QJsonObject result, QString error) {
                 const double price = result.value("price").toDouble(std::nan(""));
                 QJsonObject extra{{"quote", result}};
-                if (ok && std::isfinite(price) && price > 0.0)
+                // Setup succeeds without single packages, and then runs again at every
+                // start: an install that does that is not a good one, data or not.
+                const QStringList failed = python::PythonSetupManager::instance().failed_packages();
+                if (!failed.isEmpty())
+                    extra["failed_packages"] = QJsonArray::fromStringList(failed);
+                const bool priced = ok && std::isfinite(price) && price > 0.0;
+                if (priced && !failed.isEmpty())
+                    finish(2, "setup", "data arrives, but could not install " + failed.join(", "), extra);
+                else if (priced)
                     finish(0, "data", QStringLiteral("AAPL %1 via the data daemon").arg(price), extra);
                 else
                     finish(3, "data",
@@ -114,10 +123,11 @@ inline int run(QCoreApplication& app, const QString& report_path) {
                          });
         QObject::connect(&setup, &python::PythonSetupManager::setup_complete, &app,
                          [finish, ask_for_data](bool success, const QString& error) {
-                             if (!success)
+                             if (!success) {
                                  finish(2, "setup", error.isEmpty() ? QStringLiteral("setup failed") : error);
-                             else
-                                 ask_for_data();
+                                 return;
+                             }
+                             ask_for_data();
                          });
         setup.run_setup();
     } else {

@@ -830,8 +830,11 @@ int main(int argc, char* argv[]) {
         QObject::connect(
             &mgr, &finterm::python::PythonSetupManager::setup_complete, &mgr,
             [](bool success, const QString& error) {
-                if (success)
+                const QStringList failed = finterm::python::PythonSetupManager::instance().failed_packages();
+                if (success && failed.isEmpty())
                     LOG_INFO("App", "Background package sync completed successfully");
+                else if (success)
+                    LOG_WARN("App", "Background package sync done without " + failed.join(", "));
                 else
                     LOG_WARN("App", "Background package sync failed (non-fatal): " + error);
             },

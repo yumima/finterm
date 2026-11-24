@@ -456,9 +456,13 @@ void ChatPane::wire_audio() {
         input_box_->setPlainText(text.trimmed());
         on_send();
     });
-    connect(&stt, &services::SpeechService::error_occurred, this, [this](const QString&) {
-        if (voice_mode_)
-            toggle_voice_mode(); // bail out of voice mode on STT failure
+    connect(&stt, &services::SpeechService::error_occurred, this, [this](const QString& message) {
+        if (!voice_mode_)
+            return;
+        toggle_voice_mode(); // bail out of voice mode on STT failure, and say why
+        show_welcome(false);
+        add_bubble(QStringLiteral("system"), message, /*markdown=*/false);
+        scroll_to_bottom();
     });
 
     auto& tts = services::TtsService::instance();

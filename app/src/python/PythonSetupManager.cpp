@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QMetaObject>
+#include <QMutexLocker>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
@@ -25,6 +26,9 @@
 #include <atomic>
 
 namespace finterm::python {
+
+// At most this many packages that failed one by one are tried again.
+static constexpr int kRetryAtMost = 5;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -469,6 +473,11 @@ void PythonSetupManager::run_setup() {
                 Qt::QueuedConnection);
         };
 
+        {
+            QMutexLocker lock(&self->failed_mutex_);
+            self->failed_packages_.clear();
+        }
+
         LOG_INFO("PythonSetup", "run_setup: calling check_status...");
         auto status = self->check_status();
         LOG_INFO("PythonSetup", QString("run_setup: status — uv=%1 py=%2 venv1_ready=%3 venv2_ready=%4")
@@ -564,21 +573,17 @@ void PythonSetupManager::run_setup() {
         if (need_pkg1) {
             pf1 = QtConcurrent::run([self, &p1_ok]() {
                 p1_ok = self && self->install_packages("venv-numpy1", "requirements-numpy1.txt");
-                if (self) {
-                    self->emit_progress("packages-numpy1", p1_ok ? 100 : 0,
-                                        p1_ok ? "NumPy 1.x packages installed" : "NumPy 1.x package install failed",
-                                        !p1_ok);
-                }
+                // On success install_packages has said how it went, failures included.
+                if (self && !p1_ok)
+                    self->emit_progress("packages-numpy1", 0, "NumPy 1.x package install failed", true);
             });
         }
         if (need_pkg2) {
             pf2 = QtConcurrent::run([self, &p2_ok]() {
                 p2_ok = self && self->install_packages("venv-numpy2", "requirements-numpy2.txt");
-                if (self) {
-                    self->emit_progress("packages-numpy2", p2_ok ? 100 : 0,
-                                        p2_ok ? "NumPy 2.x packages installed" : "NumPy 2.x package install failed",
-                                        !p2_ok);
-                }
+                // On success install_packages has said how it went, failures included.
+                if (self && !p2_ok)
+                    self->emit_progress("packages-numpy2", 0, "NumPy 2.x package install failed", true);
             });
         }
 
@@ -603,7 +608,10 @@ void PythonSetupManager::run_setup() {
         }
 
         // ── Done ────────────────────────────────────────────────────────────
-        self->emit_progress("complete", 100, "Setup complete! All environments ready.");
+        const QStringList missing = self->failed_packages();
+        self->emit_progress("complete", 100,
+                            missing.isEmpty() ? QStringLiteral("Setup complete! All environments ready.")
+                                              : QString("Setup done without %1").arg(missing.join(", ").left(120)));
         QMetaObject::invokeMethod(
             self,
             [self]() {
@@ -612,6 +620,11 @@ void PythonSetupManager::run_setup() {
             },
             Qt::QueuedConnection);
     });
+}
+
+QStringList PythonSetupManager::failed_packages() const {
+    QMutexLocker lock(&failed_mutex_);
+    return failed_packages_;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -838,6 +851,15 @@ bool PythonSetupManager::install_packages(const QString& venv_name, const QStrin
     }
 
     QStringList failed = install_packages_individually(venv_name, packages, env, step_key);
+    // A download that timed out once is not a package that cannot install. Many
+    // failures are no network, and going through them all again would not help.
+    if (!failed.isEmpty() && failed.size() <= kRetryAtMost) {
+        LOG_WARN("PythonSetup", QString("[%1] retrying %2 package(s): %3")
+                                    .arg(venv_name)
+                                    .arg(failed.size())
+                                    .arg(failed.join(", ").left(300)));
+        failed = install_packages_individually(venv_name, failed, env, step_key);
+    }
 
     if (failed.isEmpty()) {
         LOG_INFO("PythonSetup", QString("[%1] All packages installed individually").arg(venv_name));
@@ -852,8 +874,17 @@ bool PythonSetupManager::install_packages(const QString& venv_name, const QStrin
         // Do NOT write the marker when any packages failed — the stale/absent
         // marker ensures check_status() returns needs_setup=true on the next
         // launch so the failed packages are retried automatically.
+        {
+            QMutexLocker lock(&failed_mutex_);
+            for (const QString& pkg : std::as_const(failed)) // some are in both lists
+                if (!failed_packages_.contains(pkg))
+                    failed_packages_ << pkg;
+        }
         emit_progress(step_key, 100,
-                      QString("Done — %1 package(s) failed (will retry on next launch)").arg(failed.size()));
+                      QString("Done — %1 package(s) failed: %2 (will retry on next launch)")
+                          .arg(failed.size())
+                          .arg(failed.join(", ").left(120)),
+                      false, true);
     }
 
     return true;
@@ -898,7 +929,8 @@ QStringList PythonSetupManager::install_packages_individually(const QString& ven
 
     for (int i = 0; i < total; ++i) {
         const QString& pkg = packages[i];
-        int pct = 10 + static_cast<int>(90.0 * i / total);
+        // Never back: the retry of a few failures stays at the end of the bar.
+        int pct = total <= kRetryAtMost ? 99 : 10 + static_cast<int>(90.0 * i / total);
         emit_progress(step_key, pct, QString("Installing %1/%2: %3").arg(i + 1).arg(total).arg(pkg));
 
         QString pkg_stderr;
@@ -1142,8 +1174,9 @@ QString PythonSetupManager::compute_requirements_hash(const QString& filename) c
 // Emit progress (thread-safe)
 // ─────────────────────────────────────────────────────────────────────────────
 
-void PythonSetupManager::emit_progress(const QString& step, int pct, const QString& msg, bool err) {
-    SetupProgress p{step, pct, msg, err};
+void PythonSetupManager::emit_progress(const QString& step, int pct, const QString& msg, bool err,
+                                       bool partial) {
+    SetupProgress p{step, pct, msg, err, partial};
     LOG_INFO("PythonSetup", QString("[%1 %2%] %3").arg(step).arg(pct).arg(msg));
     QMetaObject::invokeMethod(this, [this, p]() { emit progress_changed(p); }, Qt::QueuedConnection);
 }

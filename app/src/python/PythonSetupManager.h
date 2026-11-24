@@ -12,8 +12,10 @@
 #pragma once
 
 #include <QMap>
+#include <QMutex>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace finterm::python {
 
@@ -37,6 +39,7 @@ struct SetupProgress {
     int progress = 0; // 0-100 — default-initialized to prevent garbage reads
     QString message;
     bool is_error = false;
+    bool partial = false; // the step ended, without some of its packages
 };
 
 class PythonSetupManager : public QObject {
@@ -49,6 +52,10 @@ class PythonSetupManager : public QObject {
 
     /// Run the full setup (async, emits progress signals)
     void run_setup();
+
+    /// Packages the last run_setup() could not install. Setup still succeeds
+    /// without them, but runs again at the next start. Thread-safe.
+    QStringList failed_packages() const;
 
     /// Get the install directory (the data root, AppPaths::root)
     QString install_dir() const;
@@ -70,7 +77,7 @@ class PythonSetupManager : public QObject {
     explicit PythonSetupManager(QObject* parent = nullptr);
     Q_DISABLE_COPY_MOVE(PythonSetupManager)
 
-    void emit_progress(const QString& step, int pct, const QString& msg, bool err = false);
+    void emit_progress(const QString& step, int pct, const QString& msg, bool err = false, bool partial = false);
 
     // Installation steps
     bool download_uv();
@@ -116,6 +123,9 @@ class PythonSetupManager : public QObject {
     // to confusion during crash triage (see issue #215).
     static constexpr const char* kPythonVersion = "3.12.7";
     static constexpr const char* kUvVersion = "0.7.12";
+
+    mutable QMutex failed_mutex_; // both venvs install in parallel
+    QStringList failed_packages_;
 
     // Session-lifetime caches — requirements files never change at runtime.
     mutable QString cached_python_path_;               // cleared after fresh Python install

@@ -959,7 +959,7 @@ set(SERVICE_SOURCES
     src/services/prediction/kalshi/KalshiWsClient.cpp
     src/services/prediction/kalshi/KalshiAdapter.cpp
 
-    # Speech-to-text service (Python speech_recognition + Google API)
+    # Speech-to-text service (local Whisper or Deepgram, scripts/voice)
     src/services/stt/SpeechService.cpp
 
     # Text-to-speech service (local Piper)

@@ -219,6 +219,13 @@ finterm registers automatically the first time it connects.
   outbound traffic.
 - **Deepgram** (paid, opt-in) — needs a Deepgram API key.
 
+Voice input's Python packages are not part of first-time setup: `PyAudio`, plus
+`faster-whisper` and `webrtcvad-wheels` (Whisper) or `deepgram-sdk>=3.5,<5`
+(Deepgram; 5 and later dropped the API finterm uses). Tap the mic icon and the
+message names what is missing and the command that installs it into finterm's
+own environment. On Linux and macOS PyAudio is built from source and needs
+PortAudio first (`apt install portaudio19-dev`, `brew install portaudio`).
+
 Tap the mic icon in the chat composer to dictate.
 
 ## 8. What works on which runtime
