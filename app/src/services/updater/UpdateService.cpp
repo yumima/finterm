@@ -861,7 +861,6 @@ void UpdateService::on_download_reply_finished() {
     }
     part_.reset();
     hasher_.reset();
-    emit download_finished(pending_local_path_);
 
     if (download_in_place_) {
         staged();

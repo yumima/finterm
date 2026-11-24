@@ -7,7 +7,7 @@
 //
 // Actions per row:
 //   - View diff    side-by-side QPlainTextEdit of local vs upstream
-//   - Accept upstream    overwrite the local SKILL.md with upstream
+//   - Accept upstream    keep upstream's SKILL.md as the user's copy
 //                        (gated behind a confirm — same safety
 //                        pattern as the Track 7C propose-fix flow)
 //
@@ -61,7 +61,8 @@ class SkillDiffsSection : public QWidget {
     /// (local: the vendored skills tree; upstream: the configured
     /// upstream clone) to defeat path-traversal via tampered JSON.
     struct Paths {
-        QString local;
+        QString local; // the file in use: the user's copy, else the shipped one
+        QString rel;   // its path within the skills tree (see SkillStore)
         QString upstream;
         QString name;
     };

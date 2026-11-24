@@ -512,13 +512,6 @@ class AgentLoader:
         )
         return agent
 
-    def save_agent_config(self, card: AgentCard) -> Path:
-        """Save agent card to config file"""
-        config_file = self.config_dir / f"{card.id}_agent.json"
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(card.to_dict(), f, indent=2)
-        return config_file
-
 
 # Singleton instance
 _loader: Optional[AgentLoader] = None

@@ -116,9 +116,6 @@ class UpdateService : public QObject {
     /// stage() changed (a download started, failed, or was handed over).
     void stage_changed();
 
-    /// Emitted after a successful verified download, before launch.
-    void download_finished(const QString& filepath);
-
   private slots:
     void on_manifest_reply_finished();
     void on_download_reply_finished();

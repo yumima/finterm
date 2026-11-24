@@ -15,6 +15,7 @@ import os
 import json
 
 from alpha_arena.utils.logging import get_logger
+from finterm_paths import feature_dir
 from alpha_arena.types.models import (
     MarketData,
     ModelDecision,
@@ -113,8 +114,6 @@ def get_db_path() -> Path:
         # Windows AppData
         Path(os.environ.get("APPDATA", "")) / "finterm" / "fincept_terminal.db",
         Path(os.environ.get("LOCALAPPDATA", "")) / "finterm" / "fincept_terminal.db",
-        # Development paths
-        Path(__file__).parent.parent.parent.parent.parent.parent / "fincept_terminal.db",
         # Linux/Mac
         Path.home() / ".config" / "finterm" / "fincept_terminal.db",
         Path.home() / ".local" / "share" / "finterm" / "fincept_terminal.db",
@@ -125,8 +124,8 @@ def get_db_path() -> Path:
             logger.info(f"Found database at: {path}")
             return path
 
-    # Default to Windows AppData
-    default_path = Path(os.environ.get("APPDATA", "C:/")) / "finterm" / "fincept_terminal.db"
+    # None: with the user's data (never relative to the program's folder).
+    default_path = feature_dir("alpha_arena") / "paper_trading.db"
     logger.warning(f"Database not found, using default: {default_path}")
     return default_path
 

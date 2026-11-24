@@ -11,6 +11,9 @@ import json
 import time
 import ccxt
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # scripts/
+from finterm_paths import cache_dir  # noqa: E402
+
 # Markets cache TTL — 30 minutes is a safe balance between freshness and speed.
 # Exchange market lists rarely change within a session.
 _MARKETS_CACHE_TTL = 1800
@@ -18,9 +21,7 @@ _MARKETS_CACHE_TTL = 1800
 
 def get_markets_cache_path(exchange_id: str) -> str:
     """Return path to the per-exchange markets cache file."""
-    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
-    os.makedirs(cache_dir, exist_ok=True)
-    return os.path.join(cache_dir, f"markets_{exchange_id}.json")
+    return str(cache_dir("exchange") / f"markets_{exchange_id}.json")
 
 
 def load_cached_markets(exchange_id: str) -> dict | None:

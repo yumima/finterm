@@ -21,10 +21,12 @@ import logging
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # scripts/
+from finterm_paths import cache_dir
 from condition_evaluator import load_candles_from_db, evaluate_condition_group
 
 # ── Heavy debug logging ──────────────────────────────────────────────
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'algo_runner_debug.log')
+LOG_FILE = str(cache_dir('algo_trading') / 'algo_runner_debug.log')
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s [%(levelname)s] %(message)s',

@@ -200,6 +200,18 @@ target_link_libraries(test_update_policy PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_update_policy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME update_policy COMMAND test_update_policy)
 
+# ── Skill store ──────────────────────────────────────────────────────────────
+# A skill the user changes is their own copy: it wins over the shipped one,
+# which an update replaces and nothing here writes.
+add_executable(test_skill_store
+    services/test_skill_store.cpp
+    ../src/services/agents/SkillStore.cpp
+)
+target_include_directories(test_skill_store PRIVATE ../src)
+target_link_libraries(test_skill_store PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_skill_store PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME skill_store COMMAND test_skill_store)
+
 # ── In-place update helper ───────────────────────────────────────────────────
 # apply-update.sh swaps an AppImage / a macOS bundle for the staged update,
 # keeps the previous version, rolls back, waits for the app, reports a status.
@@ -637,6 +649,17 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_sec_statement_overlay.py
     )
     set_tests_properties(sec_statement_overlay PROPERTIES TIMEOUT 60)
+endif()
+
+# ── User files ───────────────────────────────────────────────────────────────
+# What finterm writes for the user is never beside the scripts: an update
+# replaces the program's folder.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME user_files_location
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_user_files_location.py
+    )
+    set_tests_properties(user_files_location PROPERTIES TIMEOUT 60)
 endif()
 
 # ── Earnings release + webcast links ─────────────────────────────────────────

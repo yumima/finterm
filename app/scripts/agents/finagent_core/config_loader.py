@@ -49,19 +49,6 @@ class ConfigLoader:
 
         return self._validate_config(config, tab_name)
 
-    def save_config(self, tab_name: str, config: Dict[str, Any]) -> None:
-        """
-        Save configuration for a tab
-
-        Args:
-            tab_name: Tab name
-            config: Configuration dictionary
-        """
-        config_file = self.config_dir / f"{tab_name}_config.json"
-
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2)
-
     def list_configs(self) -> list[str]:
         """List all available tab configurations"""
         configs = []

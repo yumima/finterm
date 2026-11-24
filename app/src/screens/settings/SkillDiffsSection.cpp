@@ -1,10 +1,11 @@
 #include "screens/settings/SkillDiffsSection.h"
 
 #include "core/logging/Logger.h"
+#include "python/PythonRunner.h"
+#include "services/agents/SkillStore.h"
 #include "storage/repositories/SettingsRepository.h"
 
 #include <QApplication>
-#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFile>
@@ -22,6 +23,8 @@
 
 namespace finterm::screens {
 
+namespace skill_store = services::skill_store;
+
 namespace {
 
 constexpr const char* kSdSettingsKey = "skill_diffs.upstream_path";
@@ -34,37 +37,11 @@ constexpr int kSdColLocalSha = 2;
 constexpr int kSdColUpSha = 3;
 constexpr int kSdColCount = 4;
 
-/// Resolve the in-app `vendor_skills_diff.py` script.  Same pattern
-/// as TtsService — check the installed scripts/ dir first, then the
-/// dev-build sibling.
+/// The `vendor_skills_diff.py` script of this installation.
 QString resolve_script_path() {
-    const QString app = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-        app + "/scripts/agents/ci/vendor_skills_diff.py",
-        app + "/../app/scripts/agents/ci/vendor_skills_diff.py",
-    };
-    for (const auto& p : candidates) {
-        if (QFileInfo::exists(p))
-            return p;
-    }
-    return {};
-}
-
-/// The vendored skills tree — local SKILL.md writes must canonicalise
-/// underneath this.  Same candidate search as resolve_script_path so
-/// dev + installed layouts both work.  Returns canonical path or
-/// empty.
-QString resolve_local_skills_root() {
-    const QString app = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-        app + "/scripts/agents/finagent_core/skills",
-        app + "/../app/scripts/agents/finagent_core/skills",
-    };
-    for (const auto& p : candidates) {
-        if (QFileInfo(p).isDir())
-            return QFileInfo(p).canonicalFilePath();
-    }
-    return {};
+    const QString p =
+        python::PythonRunner::instance().scripts_dir() + QStringLiteral("/agents/ci/vendor_skills_diff.py");
+    return QFileInfo::exists(p) ? p : QString();
 }
 
 } // anonymous namespace
@@ -188,8 +165,13 @@ void SkillDiffsSection::on_run_diff() {
     // a single processEvents() pre-flush before the wait only
     // covered the queued repaints, not the long tail.
     diff_proc_ = new QProcess(this);
-    diff_proc_->setProgram(QStringLiteral("python3"));
-    diff_proc_->setArguments({script, "--upstream", upstream, "--json"});
+    diff_proc_->setProgram(python::PythonRunner::instance().python_path());
+    diff_proc_->setArguments({script, "--upstream", upstream, "--local", skill_store::shipped_root(), "--overlay",
+                              skill_store::user_root(), "--json"});
+    connect(diff_proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart) // (no finished() follows)
+            on_diff_finished(2);
+    });
     connect(diff_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
             [this](int code, QProcess::ExitStatus) { on_diff_finished(code); });
     run_btn_->setEnabled(false);
@@ -233,13 +215,10 @@ void SkillDiffsSection::populate_table(const QJsonObject& report) {
     const QJsonArray diverged = report.value(QStringLiteral("diverged")).toArray();
     const QJsonArray new_up = report.value(QStringLiteral("new_upstream")).toArray();
 
-    // Diverged rows expose local_path / upstream_path / sha pair.
+    // Diverged rows expose rel_path / upstream_path / sha pair.
     // new_upstream rows just have the name — we synthesise the local
     // path we'd write into so the per-row Accept can still do the
     // right thing.
-    const QString repo_local_skills_rel = report.value(QStringLiteral("local_root")).toString();
-    const QString app_root = QFileInfo(QCoreApplication::applicationDirPath()).absolutePath();
-
     int total = diverged.size() + new_up.size();
     table_->setRowCount(total);
     int row = 0;
@@ -248,7 +227,7 @@ void SkillDiffsSection::populate_table(const QJsonObject& report) {
         const QJsonObject e = v.toObject();
         const QString name = e.value(QStringLiteral("name")).toString();
         auto* name_item = new QTableWidgetItem(name);
-        name_item->setData(Qt::UserRole, e.value(QStringLiteral("local_path")).toString());
+        name_item->setData(Qt::UserRole, e.value(QStringLiteral("rel_path")).toString());
         name_item->setData(Qt::UserRole + 1, e.value(QStringLiteral("upstream_path")).toString());
         table_->setItem(row, kSdColName, name_item);
         table_->setItem(row, kSdColKind, new QTableWidgetItem(QStringLiteral("diverged")));
@@ -282,36 +261,14 @@ SkillDiffsSection::Paths SkillDiffsSection::paths_for_row(int row) {
     if (!name_item)
         return out;
     out.name = name_item->text();
-    const QString rel_local = name_item->data(Qt::UserRole).toString();
+    out.rel = name_item->data(Qt::UserRole).toString();
     const QString raw_upstream = name_item->data(Qt::UserRole + 1).toString();
 
-    // Local-path allow-list — refuse any candidate whose canonical
-    // resolution escapes the vendored skills tree.  Defends against a
-    // tampered JSON report whose local_path is "../../../etc/passwd"
-    // that happens to exist; without this the Accept-upstream flow
-    // would overwrite arbitrary user-readable files.
-    const QString local_root = resolve_local_skills_root();
-    if (!rel_local.isEmpty() && !local_root.isEmpty()) {
-        const QString app = QCoreApplication::applicationDirPath();
-        const QStringList candidates = {
-            app + "/" + rel_local,
-            app + "/../" + rel_local,
-            app + "/../../" + rel_local,
-        };
-        for (const auto& c : candidates) {
-            if (!QFileInfo::exists(c))
-                continue;
-            const QString canon = QFileInfo(c).canonicalFilePath();
-            if (canon.isEmpty())
-                continue;
-            // Must live under local_root with a trailing slash so
-            // "skills_other/foo" doesn't prefix-match "skills/".
-            if (canon.startsWith(local_root + QLatin1Char('/'))) {
-                out.local = canon;
-                break;
-            }
-        }
-    }
+    // Only a skill this installation ships, whatever the report says: the
+    // path is checked against the shipped tree before anything is written.
+    const QString shipped = skill_store::shipped_root();
+    if (!out.rel.isEmpty() && skill_store::relative_to(shipped, shipped + QLatin1Char('/') + out.rel) == out.rel)
+        out.local = skill_store::in_use(out.rel);
 
     // Upstream-path allow-list — must canonicalise under the
     // configured upstream root from the last report.  Same defense
@@ -411,16 +368,15 @@ void SkillDiffsSection::on_accept_upstream() {
         return;
     }
 
-    const auto choice = QMessageBox::question(this, QStringLiteral("Confirm accept upstream"),
-                                              QStringLiteral("Overwrite\n  <b>%1</b>\nwith\n  <b>%2</b>?\n\n"
-                                                             "Recover via <code>git checkout</code> if needed.")
-                                                  .arg(p.local, p.upstream),
-                                              QMessageBox::Yes | QMessageBox::No);
+    const auto choice = QMessageBox::question(
+        this, QStringLiteral("Confirm accept upstream"),
+        QStringLiteral("Use <b>%1</b> for this skill?<br><br>It is kept as your own copy, which app updates leave "
+                       "alone:<br><code>%2</code><br>Delete that file to go back to the one finterm ships.")
+            .arg(p.upstream.toHtmlEscaped(), skill_store::user_copy(p.rel).toHtmlEscaped()),
+        QMessageBox::Yes | QMessageBox::No);
     if (choice != QMessageBox::Yes)
         return;
 
-    // Atomic write: <local>.tmp + rename, mirrors the Track 7C
-    // propose-fix safety pattern.
     QFile up(p.upstream);
     if (!up.open(QIODevice::ReadOnly)) {
         show_status(QStringLiteral("Read failed: %1").arg(up.errorString()), true);
@@ -429,27 +385,12 @@ void SkillDiffsSection::on_accept_upstream() {
     const QByteArray bytes = up.readAll();
     up.close();
 
-    const QString tmp_path = p.local + QStringLiteral(".tmp");
-    QFile tmp(tmp_path);
-    if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        show_status(QStringLiteral("Write failed (open .tmp): %1").arg(tmp.errorString()), true);
+    QString error;
+    if (!skill_store::save(p.rel, bytes, &error)) {
+        show_status(QStringLiteral("Write failed: %1").arg(error), true);
         return;
     }
-    if (tmp.write(bytes) != bytes.size() || !tmp.flush()) {
-        const QString err = tmp.errorString();
-        tmp.close();
-        QFile::remove(tmp_path);
-        show_status(QStringLiteral("Write failed (write/flush): %1").arg(err), true);
-        return;
-    }
-    tmp.close();
-    QFile::remove(p.local);
-    if (!QFile::rename(tmp_path, p.local)) {
-        QFile::remove(tmp_path);
-        show_status(QStringLiteral("Write failed (rename): could not move .tmp into place"), true);
-        return;
-    }
-    show_status(QStringLiteral("Accepted upstream → %1").arg(p.local));
+    show_status(QStringLiteral("Accepted upstream → %1").arg(skill_store::user_copy(p.rel)));
     table_->removeRow(row);
 }
 

@@ -29,7 +29,7 @@ namespace finterm::services {
 
 struct SkillProposal {
     QString skill_name;       ///< extracted from trace config_json
-    QString skill_path;       ///< absolute path to the SKILL.md
+    QString skill_rel;        ///< the SKILL.md within the skills tree (see SkillStore)
     QString original_content; ///< the SKILL.md as it stands today
     QString proposed_content; ///< model's suggested replacement
     QString rationale;        ///< model's one-paragraph reasoning
@@ -39,12 +39,12 @@ class SkillProposalService {
   public:
     static SkillProposalService& instance();
 
-    /// Resolve a skill name to its on-disk SKILL.md path.  Searches
-    /// `<app>/scripts/agents/finagent_core/skills/**/SKILL.md` for a
+    /// Resolve a skill name to its SKILL.md within the skills tree.
+    /// Searches the shipped tree for a
     /// front-matter `name: <skill_name>` match, falling back to a
     /// directory-name match for skills whose front-matter is missing.
     /// Returns empty string when nothing matches.
-    QString resolve_skill_path(const QString& skill_name) const;
+    QString resolve_skill(const QString& skill_name) const;
 
     /// Generate a proposal.  Blocking — call from a background
     /// thread via QtConcurrent::run.  Returns Err on:

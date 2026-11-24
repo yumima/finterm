@@ -2,6 +2,7 @@
 
 #include "services/agents/BudgetService.h"
 #include "services/agents/SkillProposalService.h"
+#include "services/agents/SkillStore.h"
 #include "storage/repositories/AgentFeedbackRepository.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
@@ -481,7 +482,7 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
 
     auto* root = new QVBoxLayout(dlg);
     auto* header =
-        new QLabel(QStringLiteral("<b>Skill:</b> %1<br><b>Path:</b> <code>%2</code>").arg(p.skill_name, p.skill_path));
+        new QLabel(QStringLiteral("<b>Skill:</b> %1<br><b>Path:</b> <code>%2</code>").arg(p.skill_name, services::skill_store::in_use(p.skill_rel)));
     header->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(header);
 
@@ -501,7 +502,7 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     root->addWidget(edit, 1);
 
     auto* copy_btn = new QPushButton(QStringLiteral("Copy to clipboard"));
-    auto* save_btn = new QPushButton(QStringLiteral("Overwrite SKILL.md…"));
+    auto* save_btn = new QPushButton(QStringLiteral("Use this version…"));
     auto* close_btn = new QPushButton(QStringLiteral("Close"));
     connect(copy_btn, &QPushButton::clicked, dlg, [p]() { QApplication::clipboard()->setText(p.proposed_content); });
     // Capture `this` via QPointer — the dialog has WA_DeleteOnClose
@@ -511,52 +512,26 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     // already uses this idiom — carry it through to the save handler.
     QPointer<AiSystemSection> self_save = this;
     connect(save_btn, &QPushButton::clicked, dlg, [self_save, p, dlg]() {
-        // Hard confirm before any disk write — SKILL.md is a
-        // checked-in file and an accidental overwrite is annoying
-        // to undo without git.
-        const QString confirm = QStringLiteral("Overwrite %1?\n\nThe current SKILL.md will be replaced "
-                                               "with the proposed content.  Recover with `git diff` / "
-                                               "`git checkout` if needed.")
-                                    .arg(p.skill_path);
+        // Hard confirm before any disk write.
+        const QString confirm =
+            QStringLiteral("Use the proposed SKILL.md?\n\nIt is kept as your own copy, which app updates leave "
+                           "alone:\n%1\nDelete that file to go back to the one finterm ships.")
+                .arg(services::skill_store::user_copy(p.skill_rel));
         bool ok = false;
-        const QString typed = QInputDialog::getText(dlg, QStringLiteral("Confirm overwrite"),
-                                                    confirm + QStringLiteral("\n\nType 'overwrite' to confirm:"),
+        const QString typed = QInputDialog::getText(dlg, QStringLiteral("Confirm"),
+                                                    confirm + QStringLiteral("\n\nType 'use' to confirm:"),
                                                     QLineEdit::Normal, QString(), &ok);
-        if (!ok || typed != QStringLiteral("overwrite"))
+        if (!ok || typed != QStringLiteral("use"))
             return;
-        // Atomic write: write to <path>.tmp then rename over the
-        // original.  Avoids the "truncate succeeded, write failed,
-        // SKILL.md is now empty" failure mode.
-        const QString tmp_path = p.skill_path + QStringLiteral(".tmp");
-        QFile tmp(tmp_path);
-        if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QString error;
+        if (!services::skill_store::save(p.skill_rel, p.proposed_content.toUtf8(), &error)) {
             if (self_save)
-                self_save->show_status(QStringLiteral("Write failed (open .tmp): %1").arg(tmp.errorString()), true);
-            return;
-        }
-        const QByteArray bytes = p.proposed_content.toUtf8();
-        if (tmp.write(bytes) != bytes.size() || !tmp.flush()) {
-            const QString err = tmp.errorString();
-            tmp.close();
-            QFile::remove(tmp_path);
-            if (self_save)
-                self_save->show_status(QStringLiteral("Write failed (write/flush): %1").arg(err), true);
-            return;
-        }
-        tmp.close();
-        // QFile::rename fails if the destination exists on some
-        // platforms — remove first, accept the tiny window where
-        // the original is gone before .tmp moves into place (the
-        // .tmp still holds the new content so recovery is possible).
-        QFile::remove(p.skill_path);
-        if (!QFile::rename(tmp_path, p.skill_path)) {
-            QFile::remove(tmp_path);
-            if (self_save)
-                self_save->show_status(QStringLiteral("Write failed (rename): could not move .tmp into place"), true);
+                self_save->show_status(QStringLiteral("Write failed: %1").arg(error), true);
             return;
         }
         if (self_save)
-            self_save->show_status(QStringLiteral("Overwrote %1").arg(p.skill_path));
+            self_save->show_status(
+                QStringLiteral("Saved %1").arg(services::skill_store::user_copy(p.skill_rel)));
         dlg->accept();
     });
     connect(close_btn, &QPushButton::clicked, dlg, &QDialog::accept);

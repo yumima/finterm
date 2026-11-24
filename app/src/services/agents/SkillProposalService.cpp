@@ -2,8 +2,8 @@
 
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
+#include "services/agents/SkillStore.h"
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -17,22 +17,6 @@ namespace finterm::services {
 namespace {
 
 constexpr const char* kSkillTag = "SkillProposalService";
-
-/// Where the on-disk skills live.  In a dev build:
-///   <build>/scripts/agents/finagent_core/skills/...
-/// In an installed build the same path under applicationDirPath.
-QString skills_root() {
-    const QString app = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-        app + "/scripts/agents/finagent_core/skills",
-        app + "/../app/scripts/agents/finagent_core/skills",
-    };
-    for (const auto& p : candidates) {
-        if (QFileInfo(p).isDir())
-            return p;
-    }
-    return {};
-}
 
 /// Extract `name: <value>` from a YAML front-matter block.  Returns
 /// empty when the file has no front-matter or no name key.
@@ -82,42 +66,29 @@ SkillProposalService& SkillProposalService::instance() {
     return s;
 }
 
-QString SkillProposalService::resolve_skill_path(const QString& skill_name) const {
+QString SkillProposalService::resolve_skill(const QString& skill_name) const {
     if (skill_name.isEmpty())
         return {};
-    const QString root = skills_root();
+    const QString root = skill_store::shipped_root();
     if (root.isEmpty())
         return {};
-
-    // Resolve the root to its canonical form so we can check
-    // candidates haven't escaped via symlink.  Without this a
-    // symlinked SKILL.md inside the skills tree could resolve to
-    // an arbitrary write target outside it.
-    const QString canonical_root = QFileInfo(root).canonicalFilePath();
-    if (canonical_root.isEmpty())
-        return {};
-    const QString root_prefix = canonical_root + QLatin1Char('/');
-
-    auto accept = [&root_prefix](const QString& candidate) -> bool {
-        const QString c = QFileInfo(candidate).canonicalFilePath();
-        return !c.isEmpty() && c.startsWith(root_prefix);
-    };
 
     QDirIterator it(root, {QStringLiteral("SKILL.md")}, QDir::Files, QDirIterator::Subdirectories);
     QString fallback;
     while (it.hasNext()) {
         const QString path = it.next();
-        if (!accept(path))
+        const QString rel = skill_store::relative_to(root, path);
+        if (rel.isEmpty())
             continue;
-        const QString name = read_frontmatter_name(path);
-        if (name == skill_name)
-            return path;
+        // (The shipped file names the skill; the user's copy may have lost it.)
+        if (read_frontmatter_name(path) == skill_name)
+            return rel;
         // Directory-name fallback for skills whose front-matter is
         // missing or malformed.  E.g. .../skills/foo/bar/SKILL.md
         // matches skill name "bar".
         const QString dir_name = QFileInfo(path).absoluteDir().dirName();
         if (fallback.isEmpty() && dir_name == skill_name)
-            fallback = path;
+            fallback = rel;
     }
     return fallback;
 }
@@ -133,11 +104,11 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, 
         return Result<SkillProposal>::err(
             "trace.config_json has no \"skill\" key — propose-fix needs a slash-dispatched turn");
 
-    const QString path = resolve_skill_path(skill_name);
-    if (path.isEmpty())
+    const QString rel = resolve_skill(skill_name);
+    if (rel.isEmpty())
         return Result<SkillProposal>::err(std::string("no SKILL.md found for skill: ") + skill_name.toStdString());
 
-    QFile f(path);
+    QFile f(skill_store::in_use(rel));
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return Result<SkillProposal>::err(std::string("failed to read SKILL.md: ") + f.errorString().toStdString());
     const QString skill_md = QString::fromUtf8(f.readAll());
@@ -180,7 +151,7 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, 
     const QJsonObject obj = env.object();
     SkillProposal out;
     out.skill_name = skill_name;
-    out.skill_path = path;
+    out.skill_rel = rel;
     out.original_content = skill_md;
     out.proposed_content = obj.value(QStringLiteral("skill_md")).toString();
     out.rationale = obj.value(QStringLiteral("rationale")).toString();

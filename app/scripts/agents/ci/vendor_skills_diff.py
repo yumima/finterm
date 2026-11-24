@@ -28,8 +28,8 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-LOCAL_SKILLS = REPO_ROOT / "app" / "scripts" / "agents" / "finagent_core" / "skills"
+# The skills shipped beside this script, in the repo and in an install alike.
+LOCAL_SKILLS = Path(__file__).resolve().parents[1] / "finagent_core" / "skills"
 
 
 def hash_file(path: Path) -> str:
@@ -56,6 +56,12 @@ def main() -> int:
         "--upstream", required=True,
         help="Path to a clone of github.com/anthropics/financial-services")
     parser.add_argument(
+        "--local", default=str(LOCAL_SKILLS),
+        help="The skills tree to compare (default: the one beside this script)")
+    parser.add_argument(
+        "--overlay", default="",
+        help="The user's own copies, laid out as --local: one there is compared instead")
+    parser.add_argument(
         "--strict", action="store_true",
         help="Exit non-zero on any divergence or new-upstream content")
     parser.add_argument(
@@ -76,7 +82,12 @@ def main() -> int:
     if not upstream_skills_root.exists():
         upstream_skills_root = upstream_root
 
-    local = collect_skills(LOCAL_SKILLS)
+    local_root = Path(args.local).expanduser().resolve()
+    if not local_root.is_dir():
+        print(f"ERROR: --local path does not exist: {local_root}", file=sys.stderr)
+        return 2
+    overlay = Path(args.overlay).expanduser() if args.overlay else None
+    local = collect_skills(local_root)
     upstream = collect_skills(upstream_skills_root)
 
     vendored: list[str] = []
@@ -89,6 +100,9 @@ def main() -> int:
         if up_path is None:
             local_only.append(name)
             continue
+        rel = local_path.relative_to(local_root)
+        if overlay is not None and (overlay / rel).is_file():
+            local_path = overlay / rel
         local_hash = hash_file(local_path)
         up_hash = hash_file(up_path)
         if local_hash == up_hash:
@@ -98,7 +112,8 @@ def main() -> int:
                 "name": name,
                 "local_sha": local_hash[:12],
                 "upstream_sha": up_hash[:12],
-                "local_path": str(local_path.relative_to(REPO_ROOT)),
+                "rel_path": rel.as_posix(),
+                "local_path": str(local_path),
                 "upstream_path": str(up_path),
             })
 
@@ -108,7 +123,7 @@ def main() -> int:
 
     report = {
         "upstream_root": str(upstream_root),
-        "local_root": str(LOCAL_SKILLS.relative_to(REPO_ROOT)),
+        "local_root": str(local_root),
         "vendored": vendored,
         "diverged": diverged,
         "new_upstream": new_upstream,
@@ -119,7 +134,7 @@ def main() -> int:
         print(json.dumps(report, indent=2))
     else:
         print(f"Upstream root: {upstream_root}")
-        print(f"Local root:    {LOCAL_SKILLS.relative_to(REPO_ROOT)}")
+        print(f"Local root:    {local_root}")
         print()
         print(f"Vendored & unchanged ({len(vendored)}):")
         for name in vendored:

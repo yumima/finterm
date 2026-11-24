@@ -209,38 +209,6 @@ def load_agent_cards(config_dir: Optional[Path] = None) -> Dict[str, AgentCard]:
     return _AGENT_CARDS
 
 
-def save_agent_card(card: AgentCard, config_dir: Optional[Path] = None) -> bool:
-    """
-    Save an agent card to a JSON file.
-
-    Args:
-        card: AgentCard to save
-        config_dir: Optional directory to save to
-
-    Returns:
-        True if saved successfully
-    """
-    if config_dir is None:
-        config_dir = _get_config_dir()
-
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    file_name = card.name.lower().replace(" ", "_") + ".json"
-    file_path = config_dir / file_name
-
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(card.model_dump(), f, indent=2)
-
-        _AGENT_CARDS[card.name] = card
-        logger.info(f"Saved agent card: {card.name}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to save agent card {card.name}: {e}")
-        return False
-
-
 def get_agent_card(name: str) -> Optional[AgentCard]:
     """
     Get an agent card by name.

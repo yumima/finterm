@@ -1,10 +1,12 @@
 #pragma once
+#include <QHash>
 #include <QObject>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QQueue>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 
 #include <functional>
 

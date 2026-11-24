@@ -388,11 +388,13 @@ and surfaces the drift in an inbox-style table.
    populates with diverged + new-upstream rows.
 3. **View diff** — side-by-side `QPlainTextEdit` of local vs
    upstream `SKILL.md`.
-4. **Accept upstream** — atomic `.tmp` + rename overwrite, gated
-   behind a `QMessageBox` confirm.  Local + upstream paths are
-   both canonicalised and required to live under their allow-list
-   roots (vendored skills tree / configured upstream root) so a
-   tampered JSON report can't write outside.
+4. **Accept upstream** — keeps upstream's file as your own copy, under
+   your profile's data (`user/skills/…`), gated behind a
+   `QMessageBox` confirm.  App updates leave it alone and it wins over
+   the shipped one; delete it to go back.  "Propose SKILL.md fix" keeps
+   its result the same way.  The skill must be one this installation
+   ships and the upstream path must lie under the configured root, so a
+   tampered JSON report can't read or write elsewhere.
 
 `new_upstream` rows surface for awareness; per-row actions are
 disabled because the script doesn't carry a target path for skills

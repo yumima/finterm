@@ -37,6 +37,8 @@ sys.path.insert(0, str(_HERE))
 # Also add scripts/agents/ so deepagents imports work if needed
 sys.path.insert(0, str(_HERE.parent))
 
+from task_manager import workspace_base  # noqa: E402
+
 logging.basicConfig(
     stream=sys.stderr,
     level=logging.INFO,
@@ -93,7 +95,7 @@ def cmd_check_status(_params: dict[str, Any]) -> dict[str, Any]:
         "success":        True,
         "rdagent_version": rdagent_version,
         "availability":   avail,
-        "workspace_base": str(Path(__file__).parent / "workspaces"),
+        "workspace_base": str(workspace_base()),
     }
 
 
@@ -152,7 +154,7 @@ def cmd_start_factor_mining(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"factor_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "factor_mining", {
@@ -201,7 +203,7 @@ def cmd_start_model_optimization(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"model_{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "model_optimization", {
@@ -249,7 +251,7 @@ def cmd_start_quant_research(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"quant_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "quant_research", {
@@ -444,7 +446,7 @@ def cmd_resume_task(params: dict[str, Any]) -> dict[str, Any]:
 
     task_type      = task.get("type", "factor_mining")
     max_iterations = task.get("config", {}).get("max_iterations", 10)
-    workspace      = task.get("workspace", str(Path(__file__).parent / "workspaces" / task_id))
+    workspace      = task.get("workspace", str(workspace_base() / task_id))
 
     if task_type == "factor_mining":
         td = task.get("config", {}).get("task_description", "")
@@ -490,7 +492,7 @@ def cmd_extract_factors_from_pdf(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"pdf_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "pdf_factor_extraction", {
@@ -534,7 +536,7 @@ def cmd_start_kaggle_task(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"kaggle_{competition}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "kaggle", {
@@ -582,7 +584,7 @@ def cmd_start_ds_task(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"ds_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "data_science", {
@@ -631,7 +633,7 @@ def cmd_start_multitrace_research(params: dict[str, Any]) -> dict[str, Any]:
     apply_llm_config(llm_config)
 
     task_id = f"mcts_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    workspace = str(Path(__file__).parent / "workspaces" / task_id)
+    workspace = str(workspace_base() / task_id)
 
     tm = get_task_manager()
     tm.create(task_id, "multitrace_mcts", {

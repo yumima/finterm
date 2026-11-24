@@ -5,7 +5,7 @@ Responsibilities:
   - TaskManager: thread-safe in-memory task registry (status, progress, results)
   - TaskExecutor: runs LoopBase.run() on a background asyncio event loop thread
   - Progress callbacks: hook into LoopBase step completions to update TaskManager
-  - Workspace management: each task gets scripts/agents/rdagents/workspaces/{task_id}/
+  - Workspace management: each task gets its folder in workspace_base(), the user's data
 """
 
 from __future__ import annotations
@@ -14,15 +14,22 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+sys.path.append(str(Path(__file__).resolve().parents[2]))  # scripts/
+from finterm_paths import feature_dir  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
-# Base workspace directory
-_WORKSPACE_BASE = Path(__file__).parent / "workspaces"
+
+def workspace_base() -> Path:
+    """Where the tasks' folders are: what they produce is the user's, so with
+    the user's data (beside this script an app update would replace it)."""
+    return feature_dir("rdagents", "workspaces")
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +44,7 @@ class TaskManager:
         self._lock = threading.Lock()
 
     def create(self, task_id: str, task_type: str, config: dict[str, Any]) -> None:
-        workspace = str(_WORKSPACE_BASE / task_id)
+        workspace = str(workspace_base() / task_id)
         with self._lock:
             self._tasks[task_id] = {
                 "id":                  task_id,
