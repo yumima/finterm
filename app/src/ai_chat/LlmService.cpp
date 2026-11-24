@@ -525,6 +525,31 @@ int LlmService::resolved_max_tokens(const PersonaScope& persona) const {
     return kFallback;
 }
 
+void LlmService::set_no_think(QJsonObject& body, const PersonaScope& persona) const {
+    // Local-only `think:false`. Gated on the EFFECTIVE key so a role bound to a
+    // cloud model never receives this non-standard field (they'd 400), even
+    // when the configured provider is local — and vice versa.
+    //
+    // Two spellings of the same thing, since which one is honoured depends on
+    // what is listening (measured 2026-11-24, qwen3.8, Ollama 0.40):
+    //
+    //   hearth /v1 (:11435)        honours `think`.
+    //   Ollama /v1 direct (:11434) DROPS `think` without a word — the model
+    //     reasons for the whole budget and returns an empty message — and
+    //     honours `reasoning_effort: "none"` (4 tokens against 49).
+    //
+    // The second is standard OpenAI, so a server may also refuse its value:
+    // do_request() then asks again without it and remembers (no_effort_none_).
+    // A server may still honour neither, so a budget must not be sized as if
+    // reasoning were certainly off — see NewsService::summarize_headlines.
+    if (!persona.think && eff_api_key(persona).isEmpty()) {
+        body["think"] = false;
+        QMutexLocker route_lock(&no_native_route_mutex_);
+        if (!no_effort_none_.contains(get_endpoint_url(persona)))
+            body["reasoning_effort"] = QStringLiteral("none");
+    }
+}
+
 void LlmService::set_openai_max_tokens(QJsonObject& body, const PersonaScope& persona) const {
     const QString p = eff_provider(persona);
     const int mx = resolved_max_tokens(persona);
@@ -559,8 +584,7 @@ bool LlmService::use_ollama_native(const PersonaScope& persona, bool use_tools) 
         return false;
     // /api/chat speaks Ollama's own tool schema, not OpenAI's, and this
     // service's whole tool loop is written against the latter. A tool-using
-    // request keeps the /v1 route and its reasoning; that is a latency cost on
-    // a path that is already multi-round-trip, not a correctness one.
+    // request keeps the /v1 route, where `reasoning_effort` says the same.
     return !use_tools;
 }
 
@@ -886,28 +910,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // a cloud role binding from ever taking effect.
     req["model"] = eff_model(persona);
     req["messages"] = messages;
-    // Local-only `think:false`. Gated on the EFFECTIVE key so a role bound to a
-    // cloud model never receives this non-standard field (they'd 400), even
-    // when the configured provider is local — and vice versa.
-    //
-    // BEST EFFORT, NOT A GUARANTEE — and which it is depends on what is
-    // listening, not on the field. `think` is an Ollama NATIVE option, so a
-    // server's /v1 shim is free to drop it. Measured:
-    //
-    //   Ollama /v1 direct (:11434), qwen3.5:9b — DROPPED. The model reasons
-    //     for the whole budget and returns an empty message.
-    //   hearth /v1 (:11435)                    — HONOURED. hearth forwards it
-    //     to Ollama's native API; reasoning is fully suppressed.
-    //
-    // `chat_template_kwargs.enable_thinking` and the `/no_think` soft switch
-    // were both tried against Ollama's /v1 and are ignored there too.
-    //
-    // So a caller must NOT size max_tokens on the assumption that reasoning is
-    // suppressed. Against a reasoning model the budget has to hold the
-    // chain-of-thought as well, or the request returns finish_reason=length
-    // with an empty message — see the budgets in NewsService::summarize_headlines.
-    if (!persona.think && eff_api_key(persona).isEmpty())
-        req["think"] = false;
+    set_no_think(req, persona);
     // Opt tool-less one-shots out of hearth's automatic web search. hearth
     // (search.enabled + search.auto default TRUE) attaches its own web tools to
     // any /v1 chat that doesn't say otherwise and runs its own tool loop —
@@ -1405,6 +1408,20 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         http = blocking_post(url, req_body, hdr);
     }
 
+    // See build_openai_request: this server does not take the value.
+    if (!native && !http.success && http.status >= 400 && http.status < 500 && req_body.contains("reasoning_effort")) {
+        QJsonObject plain = req_body;
+        plain.remove("reasoning_effort");
+        const auto again = blocking_post(url, plain, hdr);
+        if (again.success) { // it was that, and not the key or the model
+            LOG_INFO(TAG, QString("%1 refuses reasoning_effort \"none\" (HTTP %2)").arg(url).arg(http.status));
+            QMutexLocker route_lock(&no_native_route_mutex_);
+            no_effort_none_.insert(url);
+            req_body = plain;
+            http = again;
+        }
+    }
+
     if (!http.success) {
         resp.error = http.error;
         return resp;
@@ -1713,6 +1730,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         fu["messages"] = loop_messages;
         // Temperature intentionally omitted — provider default.
         set_openai_max_tokens(fu, persona);
+        set_no_think(fu, persona);
 
         QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(resolve_tool_globs(persona));
         if (!tools.isEmpty())
@@ -1794,6 +1812,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
         set_openai_max_tokens(fu, persona);
+        set_no_think(fu, persona);
         // Deliberately omit the tools field so the model is forced to produce text.
 
         auto http = blocking_post(url, fu, headers);
@@ -2058,6 +2077,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         follow_body["messages"] = msgs;
         // Temperature intentionally omitted — provider default.
         set_openai_max_tokens(follow_body, persona);
+        set_no_think(follow_body, persona);
     }
 
     // No tools in follow-up to prevent infinite loop

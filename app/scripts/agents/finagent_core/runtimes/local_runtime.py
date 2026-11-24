@@ -191,6 +191,34 @@ def _first_message(url: str, data: dict) -> dict:
     return {"role": "assistant", "content": str(first)}
 
 
+def _ask(url: str, key: str, payload: dict, timeout_s: float) -> dict:
+    """The message a request is answered with, when there is one.
+
+    A reasoning model can spend its whole budget thinking and answer nothing
+    (finish_reason "length", empty content); a larger budget only buys more
+    thinking. It is then asked once more not to think: Ollama's /v1 ignores
+    `think` but honours `reasoning_effort: "none"`, as hearth does.
+    """
+    data = _post_chat_completions(url, key, payload, timeout_s)
+    msg = _first_message(url, data)
+    if _answers(msg):
+        return msg
+    if (data.get("choices") or [{}])[0].get("finish_reason") == "length":
+        data = _post_chat_completions(url, key, {**payload, "reasoning_effort": "none"}, timeout_s)
+        msg = _first_message(url, data)
+        if _answers(msg):
+            return msg
+    raise LocalRuntimeUnavailable(
+        f"the model at {url} ended without an answer "
+        f"(finish_reason={(data.get('choices') or [{}])[0].get('finish_reason')}, max_tokens={payload.get('max_tokens')})"
+    )
+
+
+def _answers(msg: dict) -> bool:
+    content = msg.get("content")
+    return bool(msg.get("tool_calls")) or (isinstance(content, str) and bool(content.strip()))
+
+
 def run_text(
     prompt: str,
     *,
@@ -219,16 +247,13 @@ def run_text(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    data = _post_chat_completions(url, key, {
+    return _ask(url, key, {
         "model": model_id,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": False,
-    }, timeout_s)
-    msg = _first_message(url, data)
-    content = msg.get("content")
-    return content if isinstance(content, str) else ""
+    }, timeout_s).get("content") or ""
 
 
 def run_text_stream(
@@ -269,6 +294,7 @@ def run_text_stream(
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
+    said = False
     for event in _stream_chat_completions(url, key, payload, timeout_s):
         choices = event.get("choices") or []
         if not choices:
@@ -281,7 +307,10 @@ def run_text_stream(
             continue
         content = delta.get("content")
         if isinstance(content, str) and content:
+            said = said or bool(content.strip())
             yield content
+    if not said:  # it only thought (see _ask)
+        yield _ask(url, key, {**payload, "reasoning_effort": "none", "stream": False}, timeout_s).get("content") or ""
 
 
 def run_with_tools(
@@ -332,7 +361,7 @@ def run_with_tools(
     messages.append({"role": "user", "content": prompt})
 
     for turn in range(max_turns):
-        data = _post_chat_completions(url, key, {
+        msg = _ask(url, key, {
             "model": model_id,
             "messages": messages,
             "tools": tools,
@@ -340,7 +369,6 @@ def run_with_tools(
             "temperature": temperature,
             "stream": False,
         }, timeout_s)
-        msg = _first_message(url, data)
         tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else None
 
         if not tool_calls:
@@ -521,6 +549,13 @@ def run_with_tools_stream(
             yield {"type": "turn_end", "finish_reason": finish_reason or "tool_calls"}
             continue  # loop into next turn
 
+        if not "".join(assistant_content_parts).strip():  # it only thought (see _ask)
+            msg = _ask(url, key, {
+                "model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature,
+                "reasoning_effort": "none", "stream": False,
+            }, timeout_s)
+            yield {"type": "content", "text": msg.get("content") or ""}
+            finish_reason = "stop"
         yield {"type": "turn_end", "finish_reason": finish_reason or "stop"}
         return
 

@@ -81,11 +81,10 @@ struct PersonaScope {
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
     //
-    // A REQUEST, not a guarantee: whether it takes effect depends on which
-    // local endpoint answers. hearth forwards it to Ollama's native API and it
-    // holds; Ollama's own /v1 shim drops it and the model reasons through the
-    // whole budget. Never size max_tokens as though reasoning were suppressed
-    // — see build_openai_request for the measurements.
+    // A REQUEST, not a guarantee: hearth and Ollama both honour it (each by its
+    // own field), another local server may not. Never size max_tokens as though
+    // reasoning were certainly suppressed — see set_no_think for the
+    // measurements.
     bool think = true;
     // Ask the backend to constrain decoding to a single JSON object
     // (OpenAI `response_format`, which hearth forwards to Ollama's grammar
@@ -367,6 +366,7 @@ class LlmService : public QObject {
     /// request and remembering the answer is the only test that stays right
     /// when the user repoints the base URL.
     mutable QSet<QString> no_native_route_;
+    mutable QSet<QString> no_effort_none_; // /v1 URLs that refuse reasoning_effort "none"; same mutex
     mutable QMutex no_native_route_mutex_;
     QJsonObject build_ollama_native_request(const QString& user_message,
                                             const std::vector<ConversationMessage>& history,
@@ -437,6 +437,8 @@ class LlmService : public QObject {
     /// no-tools path worked. One helper so the next follow-up body cannot
     /// reintroduce it. Called with mutex_ held.
     void set_openai_max_tokens(QJsonObject& body, const PersonaScope& persona) const;
+    /// Ask a local endpoint not to reason, when the persona says so.
+    void set_no_think(QJsonObject& body, const PersonaScope& persona) const;
 
     // Synchronous HTTP helpers (use QNetworkAccessManager + QEventLoop)
     // Must be called from a background thread.

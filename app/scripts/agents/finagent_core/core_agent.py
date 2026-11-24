@@ -634,6 +634,10 @@ class CoreAgent:
                         or "You are a helpful AI assistant.")
         from finagent_core.clock import with_current_date
         from finagent_core.number_grounding import DIRECTIVE
+        from finagent_core.runtimes.skills_loader import skills_text
+        skills = skills_text(config.get("skills"))
+        if skills:
+            instructions = f"{instructions}\n\n{skills}" if isinstance(instructions, str) else [*instructions, skills]
         # Every agent is told the figures rule; get_response_content enforces
         # it whether or not the model obeys (number_grounding.py).
         instructions = with_current_date(instructions)

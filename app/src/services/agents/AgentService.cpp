@@ -443,6 +443,9 @@ QJsonObject merge_agent_row(const QJsonObject& config) {
     if (!out.contains(QStringLiteral("allow_tools")) && db.value(QStringLiteral("allow_tools")).isArray() &&
         !db.value(QStringLiteral("allow_tools")).toArray().isEmpty())
         out[QStringLiteral("allow_tools")] = db.value(QStringLiteral("allow_tools"));
+    // A caller with skills of its own chose them; an empty list is no choice.
+    if (out.value(QStringLiteral("skills")).toArray().isEmpty() && db.value(QStringLiteral("skills")).isArray())
+        out[QStringLiteral("skills")] = db.value(QStringLiteral("skills"));
     if (!out.contains(QStringLiteral("tools")) && db.value(QStringLiteral("tools")).isArray())
         out[QStringLiteral("tools")] = db.value(QStringLiteral("tools"));
     return out;

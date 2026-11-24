@@ -1138,6 +1138,11 @@ if(Python3_Interpreter_FOUND)
         NAME rd_jobs
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_rd_jobs.py
     )
+    # Agents are given their skills' text; a model that only thought is asked again.
+    add_test(
+        NAME agent_skills
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_agent_skills.py
+    )
     # The contact identity declared to SEC / FINRA / OSM: only a plain,
     # header-safe address is sent (SEC 403s an undeclared client).
     add_test(
