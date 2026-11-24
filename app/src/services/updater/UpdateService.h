@@ -184,6 +184,7 @@ class UpdateService : public QObject {
     QDateTime retry_at_;
     int failed_tries_ = 0;
     bool download_quiet_ = false;
+    bool download_in_place_ = false;
     bool hold_apply_ = false; ///< a profile switch: this quit must not start the helper
     bool applied_ = false; ///< the helper has been started (no second one at quit)
     std::optional<update_install::Target> target_;   ///< what this build can replace

@@ -11,7 +11,9 @@
 # with the installer's own files (its uninstaller keeps working), and the
 # folders change places by two renames: DIR -> PREVIOUS, DIR.new -> DIR. Until
 # then nothing of the install is touched, so being cut short (logoff, power,
-# a full disk) costs nothing; shortcuts and the Apps entry stay valid.
+# a full disk) costs nothing; shortcuts and the Apps entry stay valid. Cut
+# short between the two, the next logon renames PREVIOUS back (and does
+# nothing at all when DIR is there).
 # Rollback (-Rollback): PREVIOUS changes places with DIR.
 #
 # It waits for PID, and for anything running from DIR, to exit (120 s each;
@@ -59,12 +61,22 @@ function Write-Status([bool]$ok, [string]$message) {
 
 function Start-App {
     if (-not ($Relaunch -and (Test-Path -LiteralPath $Exe))) { return }
-    if ($AppProfile) { Start-Process -FilePath $Exe -WorkingDirectory $InstallDir -ArgumentList @("--profile", $AppProfile) }
-    else { Start-Process -FilePath $Exe -WorkingDirectory $InstallDir }
+    # Not from the install: what finterm opens would keep the folder in use.
+    if ($AppProfile) { Start-Process -FilePath $Exe -WorkingDirectory $env:USERPROFILE -ArgumentList @("--profile", $AppProfile) }
+    else { Start-Process -FilePath $Exe -WorkingDirectory $env:USERPROFILE }
 }
 
 function Remove-Tree([string]$dir) {
-    if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+    for ($i = 0; Test-Path -LiteralPath $dir; $i++) {
+        try { Remove-Item -LiteralPath $dir -Recurse -Force }
+        catch { if ($i -ge 10) { throw }; Start-Sleep -Milliseconds 500 }
+    }
+}
+
+# A folder name that is free: $base, or another when a leftover won't go.
+function Get-Fresh([string]$base) {
+    try { Remove-Tree $base; return $base }
+    catch { return "$base-" + (Get-Date).ToString("yyyyMMddHHmmss") }
 }
 
 # One folder rename, tried for 15 s (a virus scanner may have a file open). It
@@ -76,11 +88,41 @@ function Rename-Dir([string]$src, [string]$dst) {
     }
 }
 
-# DIR -> $aside, $in -> DIR; on any failure DIR is as it was.
-function Switch-Install([string]$in, [string]$aside) {
-    Rename-Dir $InstallDir $aside
+# The moment between the two renames: should this be cut short there, the next
+# logon renames PREVIOUS back. Only if DIR is missing, and best effort (a
+# managed PC may refuse it; a RunOnce value is at most 260 characters).
+$runOnce = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+function Set-Recovery([string]$from) {
+    try {
+        $line = "cmd.exe /d /c if not exist `"$InstallDir`" move `"$from`" `"$InstallDir`""
+        if ($line.Length -gt 260) { return }
+        if (-not (Test-Path $runOnce)) { New-Item -Path $runOnce -Force | Out-Null }
+        Set-ItemProperty -Path $runOnce -Name "finterm-update" -Value $line
+    }
+    catch {}
+}
+function Clear-Recovery { Remove-ItemProperty -Path $runOnce -Name "finterm-update" -ErrorAction SilentlyContinue }
+
+# DIR -> $aside, $in -> DIR; on any failure DIR is as it was. $keep is the
+# version a logon would put back.
+function Switch-Install([string]$in, [string]$aside, [string]$keep) {
+    Set-Recovery $keep
+    try { Rename-Dir $InstallDir $aside }
+    catch {
+        Clear-Recovery
+        throw "$InstallDir is in use (a program open in it?): $($_.Exception.Message)"
+    }
     try { Rename-Dir $in $InstallDir }
-    catch { Rename-Dir $aside $InstallDir; throw }
+    catch {
+        $why = $_.Exception.Message
+        for ($i = 0; -not (Test-Path -LiteralPath $InstallDir) -and $i -lt 4; $i++) {
+            try { Rename-Dir $aside $InstallDir } catch {}
+        }
+        # (Still missing: the logon task stays.)
+        if (Test-Path -LiteralPath $InstallDir) { Clear-Recovery }
+        throw $why
+    }
+    Clear-Recovery
 }
 
 function Set-AppsVersion([string]$version) {
@@ -116,39 +158,50 @@ $done = "applied"
 try {
     if ($Rollback) {
         if (-not (Test-Path -LiteralPath (Join-Path $Previous "finterm.exe"))) { throw "no previous version to restore" }
-        $failed = "$InstallDir.failed"
-        Remove-Tree $failed
-        Switch-Install $Previous $failed
+        $failed = Get-Fresh "$InstallDir.failed"
+        Switch-Install $Previous $failed $Previous
         $done = "restored"
-        try { Set-AppsVersion $To; Remove-Tree $failed } catch {}
+        try { Remove-Tree $failed } catch {}
+        try { Set-AppsVersion $To } catch {}
     }
     else {
         if (-not (Test-Path -LiteralPath $Package)) { throw "the staged update is missing: $Package" }
         if (-not (Test-Path -LiteralPath $Exe)) { throw "the install to replace is missing: $InstallDir" }
-        Remove-Tree $New
+        $New = Get-Fresh $New
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         [System.IO.Compression.ZipFile]::ExtractToDirectory($Package, $New)
         if (-not (Test-Path -LiteralPath (Join-Path $New "finterm.exe"))) { throw "the update package holds no finterm" }
-        foreach ($name in $InstallerFiles) {
-            Get-ChildItem -Path (Join-Path $InstallDir $name) -Force -ErrorAction SilentlyContinue |
-                Copy-Item -Destination $New -Recurse -Force
+        Get-ChildItem -LiteralPath $InstallDir -Force |
+            Where-Object { $n = $_.Name; $InstallerFiles | Where-Object { $n -like $_ } } |
+            ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $New -Recurse -Force }
+        if (-not (Test-Path -LiteralPath (Join-Path $New "FintermMaintenanceTool.exe"))) { throw "the uninstaller could not be copied" }
+        # On the disk before the renames are: what the app cannot start without.
+        Get-ChildItem -LiteralPath $New -Recurse -File | Where-Object { $_.Extension -in ".exe", ".dll" } | ForEach-Object {
+            $f = [System.IO.File]::Open($_.FullName, "Open", "ReadWrite")
+            try { $f.Flush($true) } finally { $f.Close() }
         }
+        # It can be renamed (a scanner is done with it) before the install is.
+        $ready = Get-Fresh "$InstallDir.ready"
+        Rename-Dir $New $ready
+        $New = $ready
         # The older previous version goes only once the new one is in.
-        $older = "$Previous.old"
-        Remove-Tree $older
+        $older = Get-Fresh "$Previous.old"
         if (Test-Path -LiteralPath $Previous) { Rename-Dir $Previous $older }
-        try { Switch-Install $New $Previous }
+        try { Switch-Install $New $Previous $Previous }
         catch {
             if ((Test-Path -LiteralPath $older) -and -not (Test-Path -LiteralPath $Previous)) { Rename-Dir $older $Previous }
             throw
         }
         # Done: nothing after this may undo it.
-        try { Set-AppsVersion $To; Remove-Tree $older; Remove-Item -Force -LiteralPath $Package } catch {}
+        try { Remove-Item -Force -LiteralPath $Package } catch {}
+        try { Remove-Tree $older } catch {}
+        try { Set-AppsVersion $To } catch {}
     }
 }
 catch {
     $why = $_.Exception.Message
-    try { Remove-Tree $New } catch {}
+    # (Kept while there is no install: it is a whole version.)
+    if (-not $Rollback -and (Test-Path -LiteralPath $Exe)) { try { Remove-Tree $New } catch {} }
     try { Write-Status $false $why } catch {}
     Start-App
     exit 1

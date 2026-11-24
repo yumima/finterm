@@ -258,9 +258,9 @@ jobs:
           $dir = Split-Path -Parent ($env:FINTERM_INSTALLED_EXE -replace '/', '\')
           $stage = Join-Path $env:RUNNER_TEMP "update-package"
           Copy-Item -Recurse -Path $dir -Destination $stage
-          foreach ($n in "FintermMaintenanceTool*", "components.xml", "network.xml", "InstallationLog.txt", "installer.dat", "installerResources", "Licenses") {
-              Get-ChildItem -Path (Join-Path $stage $n) -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-          }
+          $own = "FintermMaintenanceTool*", "components.xml", "network.xml", "InstallationLog.txt", "installer.dat", "installerResources", "Licenses"
+          Get-ChildItem -LiteralPath $stage -Force | Where-Object { $n = $_.Name; $own | Where-Object { $n -like $_ } } |
+              ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
           $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
           $zip = $setup -replace '-setup\.exe$', '-update.zip'
           Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -336,7 +336,11 @@ jobs:
           if (Test-Path $old) { throw "the old version was not replaced" }
           if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
           if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "the uninstaller is gone" }
-          if (Test-Path "$dir.new") { throw "$dir.new was left behind" }
+          foreach ($n in "new", "ready", "previous.old") { if (Test-Path "$dir.$n") { throw "$dir.$n was left behind" } }
+          $lists = { param($d) (Get-ChildItem -Recurse -File (Join-Path $d "installerResources") -ErrorAction SilentlyContinue | Measure-Object).Count }
+          if ((& $lists $dir) -ne (& $lists $prev)) { throw "the installer's file lists were not carried over" }
+          $once = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+          if ((Get-ItemProperty -Path $once -ErrorAction SilentlyContinue)."finterm-update") { throw "the recovery task is still registered" }
           $apps = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
               Where-Object { $_.InstallLocation -and $_.InstallLocation.Replace('/', '\').TrimEnd('\') -ieq $dir }
           if ($apps.DisplayVersion -ne "9.9.9") { throw "the Apps entry says '$($apps.DisplayVersion)'" }
@@ -368,6 +372,18 @@ jobs:
           Copy-Item -Force $built $zip
           Done (Helper @("-Package", "`"$zip`"", "-From", "0.0.1", "-To", "9.9.9"))
           if (Test-Path $old) { throw "the update after it did not go in" }
+
+          # 4b. Cut short between the two renames: the logon line puts it back,
+          # and does nothing when the install is there.
+          Set-Content -Path (Join-Path $dir "marker-gap.txt") -Value "x"
+          $line = "cmd.exe /d /c if not exist `"$dir`" move `"$prev`" `"$dir`""
+          if ((Get-Content $helper -Raw) -notmatch 'cmd.exe /d /c if not exist `"\$InstallDir`" move `"\$from`" `"\$InstallDir`"') { throw "the helper's logon line changed; update this test" }
+          cmd.exe /d /c "if not exist `"$dir`" move `"$prev`" `"$dir`""
+          if (-not (Test-Path (Join-Path $dir "marker-gap.txt"))) { throw "the logon line touched a whole install" }
+          [System.IO.Directory]::Move($dir, "$dir.gap")
+          cmd.exe /d /c "if not exist `"$dir`" move `"$prev`" `"$dir`""
+          if (-not (Test-Path $exe)) { throw "the logon line did not put the previous version back ($line)" }
+          [System.IO.Directory]::Move($dir, $prev); [System.IO.Directory]::Move("$dir.gap", $dir)
 
           # 5. The new version starts, the data is there, the uninstaller works.
           $report = Join-Path $env:RUNNER_TEMP "updated-selftest.json"

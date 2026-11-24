@@ -680,6 +680,8 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
         ready_version_.clear();
         ready_sha256_.clear();
     }
+    // What this download is for: the offer may change while it runs.
+    download_in_place_ = in_place_.has_value();
     download_version_ = offer.version;
     download_quiet_ = quiet;
     pending_expected_sha256_ = offer.sha256;
@@ -861,7 +863,7 @@ void UpdateService::on_download_reply_finished() {
     hasher_.reset();
     emit download_finished(pending_local_path_);
 
-    if (in_place_) {
+    if (download_in_place_) {
         staged();
         return;
     }

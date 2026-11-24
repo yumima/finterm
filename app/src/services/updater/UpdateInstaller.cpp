@@ -467,8 +467,14 @@ bool boot_check() {
     }
     // The install as this process found it, before anything else can change
     // it (empty while a helper is at work: whatever that leaves is not ours).
-    if (const auto mine = in_place_target())
+    if (const auto mine = in_place_target()) {
         g_startup_stamp = target_stamp(*mine);
+#if defined(Q_OS_WIN)
+        // The shortcuts start finterm in its folder; what it opens would
+        // inherit that and keep the folder from being renamed.
+        QDir::setCurrent(QDir::homePath());
+#endif
+    }
     auto pending = read_json(pending_path());
     if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile() ||
         !same_path(pending->value(QStringLiteral("target")).toString(), own_location()))
@@ -509,7 +515,10 @@ bool boot_check() {
 
 void confirm_boot() {
     auto pending = read_json(pending_path());
-    if (pending && pending->value(QStringLiteral("to")).toString() == QCoreApplication::applicationVersion()) {
+    // This copy's, under this profile: another that starts says nothing of it.
+    if (pending && pending->value(QStringLiteral("to")).toString() == QCoreApplication::applicationVersion() &&
+        pending->value(QStringLiteral("profile")).toString() == running_profile() &&
+        same_path(pending->value(QStringLiteral("target")).toString(), own_location())) {
         QFile::remove(pending_path());
         LOG_INFO("UpdateInstaller", "Updated version confirmed: " + QCoreApplication::applicationVersion());
     }
