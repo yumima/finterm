@@ -76,7 +76,7 @@ UpdateService::UpdateService(QObject* parent) : QObject(parent) {
     if (in_place_) {
         const auto saved = update_policy::offer_from_json(QSettings().value(kOfferKey).toByteArray());
         const bool wanted = update_policy::supersedes(saved, running());
-        update_install::sweep_stale(*in_place_, wanted ? update_install::staged_path(*in_place_, saved.version,
+        update_install::sweep_stale(*in_place_, wanted ? update_install::staged_path(*in_place_, saved.id(),
                                                                                     localized(saved).download_url)
                                                        : QString());
     }
@@ -708,7 +708,7 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
     download_quiet_ = quiet;
     pending_expected_sha256_ = offer.sha256;
     if (in_place_) {
-        pending_local_path_ = update_install::staged_path(*in_place_, offer.version, offer.download_url);
+        pending_local_path_ = update_install::staged_path(*in_place_, offer.id(), offer.download_url);
     } else {
         const QString file_name = QFileInfo(QUrl(offer.download_url).path()).fileName();
         const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);

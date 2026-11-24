@@ -61,6 +61,9 @@ void NotebookKernel::start() {
         QTimer::singleShot(kPythonWaitMs, this, &NotebookKernel::pump);
         return;
     }
+    buf_.clear();
+    stderr_.clear();
+    how_.clear();
     QString why;
     proc_ = runner.create_server(QStringLiteral("launch/finterm_kernel.py"), &why);
     if (!proc_) {
@@ -69,19 +72,18 @@ void NotebookKernel::start() {
         return;
     }
     proc_->setParent(this);
-    buf_.clear();
-    stderr_.clear();
     connect(proc_, &QProcess::readyReadStandardOutput, this, &NotebookKernel::on_stdout);
     connect(proc_, &QProcess::readyReadStandardError, this, [this]() {
         stderr_ = (stderr_ + proc_->readAllStandardError()).right(8192);
     });
     connect(proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [this](int code, QProcess::ExitStatus status) {
+            [this](int code, QProcess::ExitStatus) {
                 on_stdout();
+                if (!proc_)
+                    return; // what it was answered with restarted it
                 stderr_ = (stderr_ + proc_->readAllStandardError()).right(8192);
-                on_ended(status == QProcess::NormalExit
-                             ? QStringLiteral("The notebook's Python ended (exit code %1)").arg(code)
-                             : QStringLiteral("The notebook's Python crashed"));
+                on_ended(QStringLiteral("The notebook's Python ended (%1)")
+                             .arg(how_.isEmpty() ? QStringLiteral("exit code %1").arg(code) : how_));
             });
     connect(proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart)
@@ -131,6 +133,8 @@ void NotebookKernel::on_event(const QJsonObject& event) {
         for (const auto& line : event.value("traceback").toArray())
             out.traceback << line.toString();
         emit output(id, out);
+    } else if (type == QLatin1String("ended")) {
+        how_ = event.value("how").toString();
     } else if (type == QLatin1String("done") && id == running_) {
         const bool ok = event.value("ok").toBool();
         running_.clear();
@@ -179,7 +183,7 @@ void NotebookKernel::on_ended(const QString& how) {
 void NotebookKernel::interrupt() {
     drop_waiting();
     if (!running_.isEmpty())
-        send({{"op", "interrupt"}});
+        send({{"op", "interrupt"}, {"id", running_}});
 }
 
 void NotebookKernel::cancel(const QString& cell_id) {
@@ -207,14 +211,17 @@ void NotebookKernel::end_process() {
     if (!proc_)
         return;
     proc_->disconnect(this);
-    // Killed, and gone before it is deleted: not waited for here.
+    // The end of its input ends it and the process its cells run in; killed, it
+    // could leave that one behind. Not waited for here.
     auto* proc = std::exchange(proc_, nullptr);
     proc->setParent(nullptr);
     QObject::connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), proc, &QObject::deleteLater);
-    if (proc->state() == QProcess::NotRunning)
+    if (proc->state() == QProcess::NotRunning) {
         proc->deleteLater();
-    else
-        proc->kill();
+        return;
+    }
+    proc->closeWriteChannel();
+    QTimer::singleShot(3000, proc, &QProcess::kill);
 }
 
 void NotebookKernel::restart() {

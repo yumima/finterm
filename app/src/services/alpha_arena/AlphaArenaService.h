@@ -28,7 +28,7 @@ class AlphaArenaService : public QObject {
   public:
     static AlphaArenaService& instance();
 
-    /// Runs `alpha_arena/main.py <payload>` where payload is `{action, params, api_keys?}`.
+    /// Runs `alpha_arena/main.py <payload>` where payload is `{action, params, connections?}`.
     /// The caller builds the payload; we dispatch and parse the JSON response.
     void run_action(const QJsonObject& payload, ActionCallback cb);
 

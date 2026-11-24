@@ -96,8 +96,13 @@ make = src[src.index("QProcess* PythonRunner::make_process("):]
 make = make[:make.index("\n}\n")]
 uses = [l for l in make.splitlines()[1:] if re.search(r"\bargs\b", l)]
 check("PythonRunner writes the arguments to stdin only", len(uses) == 1 and "well_formed(args)" in uses[0], uses)
+# new_process is where they start; what its callers put on a command line:
+commands = re.findall(r"new_process\((?!const )[^;]*;", src)
 check("...and starts scripts in no other way",
-      src.count("new QProcess") == 2 and not re.search(r"setArguments\((?!\{script\.mid|\{scripts_dir_)", src), src.count("new QProcess"))
+      src.count("new QProcess") == 2 and len(re.findall(r"->setArguments\(", src)) == 1
+      and len(commands) == 2 and any("{path}" in c for c in commands) and any("command, env" in c for c in commands)
+      and re.findall(r"command(?:\{| = \{)(.*?)\};", make) == ["script.mid(9)", 'scripts_dir_ + "/launch/finterm_run.py", script'],
+      (src.count("new QProcess"), commands))
 
 print("finterm_run:", "ok" if not fails else f"{fails} failed")
 sys.exit(1 if fails else 0)

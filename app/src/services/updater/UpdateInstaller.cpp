@@ -270,7 +270,10 @@ std::optional<Target> in_place_target() {
 #endif
 }
 
-QString staged_path(const Target& t, const QString& version, const QString& download_url) {
+QString staged_path(const Target& t, const QString& id, const QString& download_url) {
+    // Two builds of one version are two files: what is put in is what was verified.
+    QString version = id;
+    version.replace(QLatin1Char('+'), QLatin1Char('-'));
     if (t.kind == QLatin1String("appimage"))
         return QDir(t.staging_dir).filePath(QStringLiteral(".finterm-%1.AppImage").arg(version));
     // The updater's own name (sweep_stale matches it), whatever the asset is
@@ -307,8 +310,8 @@ void sweep_stale(const Target& t, const QString& keep) {
     // Only names staged_path gives (and their .part), never the version that
     // runs or the one a rollback puts back.
     static const QRegularExpression staged(
-        QStringLiteral("^\\.finterm-\\d+\\.\\d+\\.\\d+\\.AppImage(\\.\\d+\\.part)?$"
-                       "|^finterm-\\d+\\.\\d+\\.\\d+-setup(\\.[A-Za-z0-9]+)?(\\.\\d+\\.part)?$"));
+        QStringLiteral("^\\.finterm-\\d+\\.\\d+\\.\\d+(-[0-9a-f]+)?\\.AppImage(\\.\\d+\\.part)?$"
+                       "|^finterm-\\d+\\.\\d+\\.\\d+(-[0-9a-f]+)?-setup(\\.[A-Za-z0-9]+)?(\\.\\d+\\.part)?$"));
     const QDir dir(t.staging_dir);
     for (const QFileInfo& f : dir.entryInfoList(QDir::Files | QDir::Hidden)) {
         if (staged.match(f.fileName()).hasMatch() && f != QFileInfo(t.target) && f != QFileInfo(t.previous) &&

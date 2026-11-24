@@ -19,6 +19,7 @@ QString commit() {
 
 QDateTime commit_time() {
     constexpr qint64 t = FINTERM_BUILD_TIME;
+    // EVENT-STAMP: when the commit was made
     return t > 0 ? QDateTime::fromSecsSinceEpoch(t, QTimeZone::UTC) : QDateTime();
 }
 

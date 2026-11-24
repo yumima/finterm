@@ -10,6 +10,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QAction>
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -326,6 +327,7 @@ void CellWidget::set_cell_data(const NotebookCell& cell) {
 
     editor_->blockSignals(true);
     editor_->setPlainText(cell.source);
+    editor_->document()->setModified(false);
     editor_->blockSignals(false);
 
     // Force document layout so height measurement is accurate
@@ -350,7 +352,9 @@ void CellWidget::set_cell_data(const NotebookCell& cell) {
     }
 }
 
-QString CellWidget::source() const {
+std::optional<QString> CellWidget::edited_source() const {
+    if (!editor_->document()->isModified())
+        return std::nullopt;
     return editor_->toPlainText();
 }
 
@@ -1047,6 +1051,8 @@ void CodeEditorScreen::add_cell_after(const QString& after_id, const QString& ty
 
     selected_cell_id_ = cell.id;
     rebuild_cells();
+    if (auto* cw = find_cell_widget(cell.id))
+        cw->focus_editor(); // what is typed next is the cell's, not the button's
     update_status();
     update_navigator();
 }
@@ -1221,12 +1227,17 @@ void CodeEditorScreen::on_kernel_state() {
 
 void CodeEditorScreen::on_kernel_output(const QString& cell_id, const services::notebook::KernelOutput& out) {
     const int idx = find_cell_index(cell_id);
-    if (idx < 0)
-        return;
+    if (idx < 0 || cells_[idx].cell_type != "code")
+        return; // gone, or text since
     auto& outputs = cells_[idx].outputs;
-    if (out.type == "stream" && !outputs.isEmpty() && outputs.last().type == "stream" &&
-        outputs.last().name == out.name) {
-        outputs.last().text += out.text;
+    // One block of stdout and one of stderr: which came first is not known, and
+    // a cell that prints to both in turn would make thousands.
+    CellOutput* block = nullptr;
+    for (int i = outputs.size() - 1; out.type == "stream" && i >= 0 && outputs[i].type == "stream" && !block; --i)
+        if (outputs[i].name == out.name && outputs[i].raw.isEmpty())
+            block = &outputs[i];
+    if (block) {
+        block->text += out.text;
     } else {
         CellOutput o;
         o.type = out.type;
@@ -1370,7 +1381,13 @@ bool CodeEditorScreen::load_notebook(const QString& path, QString* why) {
         *why = QString("%1 could not be opened: %2").arg(path, file.errorString());
         return false;
     }
-    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    const QByteArray bytes = file.readAll();
+    QJsonParseError err{};
+    const QJsonObject root = QJsonDocument::fromJson(bytes, &err).object();
+    if (err.error != QJsonParseError::NoError) {
+        *why = QString("%1 could not be read: %2, at byte %3.").arg(path, err.errorString()).arg(err.offset);
+        return false;
+    }
     if (!root["cells"].isArray()) {
         *why = QString("%1 is not a Jupyter notebook (format 4).").arg(path);
         return false;
@@ -1381,6 +1398,7 @@ bool CodeEditorScreen::load_notebook(const QString& path, QString* why) {
     execution_counter_ = 0;
     notebook_raw_ = root;
     notebook_raw_.remove("cells");
+    file_hash_ = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
 
     for (const auto& jc : root["cells"].toArray()) {
         const QJsonObject co = jc.toObject();
@@ -1460,6 +1478,15 @@ void CodeEditorScreen::on_save_notebook() {
             return;
     }
 
+    // Another tab or program may have saved it since.
+    if (QFile on_disk(path); path == notebook_path_ && on_disk.open(QIODevice::ReadOnly)) {
+        if (QCryptographicHash::hash(on_disk.readAll(), QCryptographicHash::Sha256) != file_hash_ &&
+            QMessageBox::question(this, "Save Notebook",
+                                  QString("%1 was changed since it was opened here. Save over it?").arg(path),
+                                  QMessageBox::Save | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Save)
+            return;
+    }
+
     QSaveFile file(path); // the old file stays until the new one is whole
     const QByteArray json = QJsonDocument(notebook_json()).toJson(QJsonDocument::Indented);
     if (!file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit()) {
@@ -1467,6 +1494,7 @@ void CodeEditorScreen::on_save_notebook() {
         return;
     }
     notebook_path_ = path;
+    file_hash_ = QCryptographicHash::hash(json, QCryptographicHash::Sha256);
     LOG_INFO("CodeEditor", "Saved notebook: " + path);
     services::FileManagerService::instance().import_file(path, "code_editor");
     update_status();
@@ -1480,7 +1508,8 @@ void CodeEditorScreen::on_save_notebook() {
 void CodeEditorScreen::sync_cells() {
     for (auto& cell : cells_)
         if (const auto* cw = find_cell_widget(cell.id))
-            cell.source = cw->source();
+            if (const auto typed = cw->edited_source())
+                cell.source = *typed;
 }
 
 void CodeEditorScreen::rebuild_cells() {

@@ -1,57 +1,13 @@
+"""Alpha Arena: AI models trade the same market with paper money.
+
+main.py is the app's entry point (AlphaArenaService); one process per action.
+
+    market.py    prices: exchanges (crypto), Polymarket
+    features.py  indicators from hourly closes
+    news.py      headlines about an asset
+    book.py      a trader's portfolio, worked out from its fills
+    llm.py       asking a model
+    traders.py   the prompts, and a decision out of an answer; the grid bot
+    arena.py     a cycle: prices, decisions, fills, standings
+    store.py     the database
 """
-Alpha Arena - AI Trading Competition System
-
-A production-ready multi-agent trading competition platform with:
-- Async-first design
-- Pydantic type validation
-- A2A Protocol-inspired agent communication
-- Streaming responses
-- Comprehensive evaluation and tracing
-"""
-
-__version__ = "2.0.0"
-
-from alpha_arena.types.models import (
-    CompetitionConfig,
-    CompetitionModel,
-    CompetitionStatus,
-    LeaderboardEntry,
-    ModelDecision,
-    TradeAction,
-    TradeResult,
-    PortfolioState,
-    CycleResult,
-)
-
-from alpha_arena.types.responses import (
-    StreamResponse,
-    StreamResponseEvent,
-    NotifyResponse,
-    NotifyResponseEvent,
-    BaseResponse,
-)
-
-from alpha_arena.core.base_agent import BaseAgent
-from alpha_arena.core.competition import AlphaArenaCompetition
-
-__all__ = [
-    # Models
-    "CompetitionConfig",
-    "CompetitionModel",
-    "CompetitionStatus",
-    "LeaderboardEntry",
-    "ModelDecision",
-    "TradeAction",
-    "TradeResult",
-    "PortfolioState",
-    "CycleResult",
-    # Responses
-    "StreamResponse",
-    "StreamResponseEvent",
-    "NotifyResponse",
-    "NotifyResponseEvent",
-    "BaseResponse",
-    # Core
-    "BaseAgent",
-    "AlphaArenaCompetition",
-]

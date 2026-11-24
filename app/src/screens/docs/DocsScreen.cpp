@@ -927,24 +927,25 @@ QWidget* DocsScreen::page_agent_config() {
 }
 
 QWidget* DocsScreen::page_alpha_arena() {
-    return make_page("ALPHA ARENA", "Competitive alpha research and strategy ranking",
+    return make_page("ALPHA ARENA", "AI models trade the same market with paper money",
                      {
-                         {"OVERVIEW", "Alpha Arena is a competitive environment where trading strategies are ranked "
-                                      "by performance. Submit strategies, compare against peers, and discover new "
-                                      "alpha sources through community insights."},
-                         {"KEY FEATURES", "■  Strategy leaderboard with real-time rankings\n"
-                                          "■  Performance metrics comparison (Sharpe, returns, drawdown)\n"
-                                          "■  Strategy submission and backtesting\n"
-                                          "■  Community insights and discussion\n"
-                                          "■  Historical performance tracking"},
-                         {"REAL-WORLD USAGE", "■  Benchmark your strategies against others\n"
-                                              "■  Discover new trading ideas from top performers\n"
-                                              "■  Competitive motivation to improve strategy quality\n"
-                                              "■  Community learning through shared insights"},
-                         {"SKILL LEVELS", "BEGINNER: Browse the leaderboard, study top strategies\n"
-                                          "INTERMEDIATE: Submit your first strategy, analyze performance metrics\n"
-                                          "ADVANCED: Optimize strategies for ranking, study factor exposures\n"
-                                          "PRO: Multi-strategy submission, alpha decay analysis, ensemble approaches"},
+                         {"OVERVIEW", "Alpha Arena lets the AI models set up in Settings > LLM Config trade one market "
+                                      "with paper money, against each other and a rule-based grid bot. In every cycle "
+                                      "each model gets the same prices, indicators and headlines, and its own "
+                                      "portfolio; what it decides is filled at the exchange's bid or ask, less a 0.1% "
+                                      "fee."},
+                         {"KEY FEATURES", "■  Crypto at Kraken's or Coinbase's prices, or Polymarket's prediction markets\n"
+                                          "■  Leaderboard, and every decision with its reason\n"
+                                          "■  A model that gave no usable answer is shown as NO DECISION, with why\n"
+                                          "■  METRICS, SENTIMENT (the headlines), GRID and EXCHANGES tabs\n"
+                                          "■  HISTORY opens an earlier competition, to look at or go on with"},
+                         {"REAL-WORLD USAGE", "■  See how models handle the same information\n"
+                                              "■  Compare them with a strategy that uses no model\n"
+                                              "■  Run cycles by hand, or AUTO RUN at an interval while the screen is open"},
+                         {"SKILL LEVELS", "BEGINNER: Two models, baseline mode, run a few cycles\n"
+                                          "INTERMEDIATE: Compare modes (monk trades small and only when confident)\n"
+                                          "ADVANCED: Add the grid bot as a benchmark, choose its range and levels\n"
+                                          "PRO: Prediction markets, where a model must put a price on a probability"},
                      });
 }
 

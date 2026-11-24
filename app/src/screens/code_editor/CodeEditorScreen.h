@@ -24,6 +24,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <optional>
+
 namespace finterm::screens {
 
 // -- Cell data ----------------------------------------------------------------
@@ -72,11 +74,13 @@ class CellWidget : public QWidget {
     explicit CellWidget(const NotebookCell& cell, int index, QWidget* parent = nullptr);
 
     void set_cell_data(const NotebookCell& cell);
-    /// What the editor holds now; the screen's cell has it after sync_cells().
-    QString source() const;
+    /// What was typed, if anything was: text nobody changed stays as the file has
+    /// it (an editor turns a no-break space into a space).
+    std::optional<QString> edited_source() const;
     void set_running(bool running);
     void set_outputs(const QVector<CellOutput>& outputs, int exec_count);
     void set_selected(bool selected);
+    void focus_editor() { editor_->setFocus(); }
     QString cell_id() const { return cell_id_; }
 
   signals:
@@ -210,6 +214,7 @@ class CodeEditorScreen : public QWidget, public IStatefulScreen {
     int execution_counter_ = 0;
     QString notebook_path_;
     QJsonObject notebook_raw_; // the file's own metadata
+    QByteArray file_hash_;     // of the file as last read or written here
     services::notebook::NotebookKernel* kernel_ = nullptr;
     QSet<QString> dirty_outputs_; // shown on the next tick: a cell may print without end
     QTimer* output_timer_ = nullptr;

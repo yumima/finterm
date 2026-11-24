@@ -74,7 +74,7 @@ r = k.run("y = 5\ny * 2")
 check("the last expression's value is shown", [e["text"] for e in r if e["t"] == "result"] == ["10"], r)
 check("...and an assignment or None shows nothing", not any(e["t"] == "result" for e in k.run("None")))
 r = k.run("print('first')\n3")
-check("output comes before the value", [e["t"] for e in r] == ["stream", "result", "done"], r)
+check("output comes before the value", [e["t"] for e in r if e["t"] != "stream"] == ["result", "done"] and r[0]["t"] == "stream" and r[-3]["t"] == "stream", r)
 check("a print without a newline is shown", text(k.run("print('a', end='')")) == "a")
 check("unicode", text(k.run("print('é😀')")) == "é😀\n")
 check("a lone surrogate does not break it", "\\ud83d" in text(k.run("print('\\ud83d')")))
@@ -101,18 +101,37 @@ check("a repr that raises is an error", error(k.run("class B:\n    def __repr__(
 
 k.start("print('go', flush=True)\nimport time\ntime.sleep(60)")
 first = k.read()
-check("output is streamed while the cell runs", first["t"] == "stream" and first["text"] == "go\n", first)
+check("output is streamed while the cell runs", first["t"] == "stream" and first["text"].startswith("go"), first)
 t0 = time.time()
-k.send(op="interrupt")
+k.send(op="interrupt", id=f"c{k.n}")
 r = k.finish()
 check("an interrupt ends a sleep", error(r)["ename"] == "KeyboardInterrupt" and time.time() - t0 < 5, r)
 k.start("while True: pass")
 time.sleep(0.5)
-k.send(op="interrupt")
+k.send(op="interrupt", id=f"c{k.n}")
 check("...and a loop", error(k.finish())["ename"] == "KeyboardInterrupt")
-k.send(op="interrupt")
+k.send(op="interrupt", id=f"c{k.n}")
 time.sleep(0.3)
 check("an interrupt between cells is none", text(k.run("print(x)")) == "20\n")
+hit = 0
+for _ in range(20):
+    k.start("import time\ntime.sleep(20)")
+    k.send(op="interrupt", id=f"c{k.n}")
+    hit += error(k.finish())["ename"] == "KeyboardInterrupt"
+check("one that comes as its cell starts counts", hit == 20, hit)
+k.start("for i in range(3):\n    print('.', end='')\n    time.sleep(0.4)")
+seen = [k.read()["text"] for _ in range(2)]
+k.finish()
+check("a print without a newline is streamed", seen == [".", "."], seen)
+if os.name == "posix":
+    r = k.run("import ctypes\nctypes.PyDLL(None).write(1, b'x' * 200000, 200000)\npass")
+    check("output from C with the interpreter held", len(text(r)) == 200000, len(text(r)))
+    r = k.run("import os, sys\nif os.fork() == 0:\n    pass\nelse:\n    os.wait()\n    print('parent')")
+    check("a fork that reaches the cell's end ends there", text(r) == "parent\n" and [e["t"] for e in r].count("done") == 1, r)
+    check("...and leaves no second answer", text(k.run("print('next')")) == "next\n")
+    r = k.run("import os, tempfile\nkeep = os.dup(1)\nf = tempfile.NamedTemporaryFile(delete=False)\nos.dup2(f.fileno(), 1)\nos.write(1, b'mine')\npass")
+    r = k.run("os.dup2(keep, 1)\nopen(f.name, 'rb').read()")
+    check("a cell's own file on descriptor 1 is its own", [e["text"] for e in r if e["t"] == "result"] == ["b'mine'"], r)
 
 r = k.run("for i in range(300000): print('0123456789')\nprint('end')")
 check("endless output is cut off and said", 2_000_000 <= len(text(r)) < 2_200_000 and "more output" in text(r), len(text(r)))
@@ -126,6 +145,16 @@ busy.start("import time\ntime.sleep(60)")
 time.sleep(0.3)
 busy.p.stdin.close()
 check("...in the middle of a cell too", busy.p.wait(timeout=10) == 0)
+
+crash = Kernel()
+crash.start("import os\nprint('last words', end='')\nos.write(2, b'free(): invalid pointer')\nos.abort()" if os.name == "posix"
+            else "import os\nprint('last words', end='')\nos._exit(3)")
+events = []
+while not events or events[-1]["t"] != "ended":
+    events.append(crash.read())
+check("what a crash said last is shown", text(events) == "last words" and (os.name != "posix" or "invalid pointer" in text(events, "stderr")), events)
+check("...and how it ended", events[-1]["how"] in ("signal 6", "exit code 3"), events[-1])
+check("...and the process is over", crash.p.wait(timeout=10) == 0)
 
 if FAILURES:
     print(f"\n{len(FAILURES)} failure(s)")

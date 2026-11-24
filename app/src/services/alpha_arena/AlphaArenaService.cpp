@@ -61,10 +61,9 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
     auto& runner = finterm::python::PythonRunner::instance();
     const QString script = QStringLiteral("alpha_arena/main.py");
     if (action == QLatin1String("run_cycle"))
-        runner.run_job(script, {json_arg}, std::move(done)); // asks several models in turn: minutes
-    else // creating one waits up to a minute for its models
-        runner.run(script, {json_arg}, std::move(done), {},
-                   action == QLatin1String("create_competition") ? 90'000 : finterm::python::PythonRunner::kProcessTimeoutMs);
+        runner.run_job(script, {json_arg}, std::move(done)); // asks several models: minutes
+    else
+        runner.run(script, {json_arg}, std::move(done), {}, 60'000);
 }
 
 } // namespace finterm::services::alpha_arena

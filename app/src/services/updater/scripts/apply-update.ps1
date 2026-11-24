@@ -163,7 +163,7 @@ try {
         Switch-Install $Previous $failed $Previous
         $done = "restored"
         try { Remove-Tree $failed } catch {}
-        try { Set-AppsVersion $To } catch {}
+        try { Set-AppsVersion ($To -replace '\+.*$', '') } catch {}
     }
     else {
         if (-not (Test-Path -LiteralPath $Package)) { throw "the staged update is missing: $Package" }
@@ -203,7 +203,7 @@ try {
         # Done: nothing after this may undo it.
         try { Remove-Item -Force -LiteralPath $Package } catch {}
         try { Remove-Tree $older } catch {}
-        try { Set-AppsVersion $To } catch {}
+        try { Set-AppsVersion ($To -replace '\+.*$', '') } catch {}
     }
 }
 catch {

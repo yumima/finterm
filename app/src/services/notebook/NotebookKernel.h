@@ -85,6 +85,7 @@ class NotebookKernel : public QObject {
     QByteArray buf_;
     QByteArray stderr_; ///< what a process that failed said last
     QList<Cell> waiting_;
+    QString how_;        ///< how the cells' process ended, as it says
     QString running_; ///< the cell the process has; empty when none
     QString version_;
     State state_ = State::Off;

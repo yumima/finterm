@@ -11,7 +11,6 @@ This directory contains Python scripts powering the backend analytics, data inte
 ```
 scripts/
 ├── agents/              # AI agents for trading and geopolitical analysis
-├── agno_trading/        # Technical-indicator tools Alpha Arena agents use
 ├── ai_quant_lab/        # Quantitative research lab (Qlib, RDAgent)
 ├── Analytics/           # Financial analytics modules
 ├── *.py                 # Data source integrations
@@ -27,7 +26,6 @@ scripts/
 | 📊 **Analytics** | Corporate finance, alternatives, backtesting, quant wrappers | [Analytics/README.md](./Analytics/README.md) |
 | 🤖 **AI Agents** | 30+ agents - hedge funds, investors, geopolitics | [agents/README.md](./agents/README.md) |
 | 🔬 **AI Quant Lab** | Qlib + RDAgent - automated strategy research | [ai_quant_lab/README.md](./ai_quant_lab/README.md) |
-| 🚀 **Agno Trading** | Technical-indicator tools (used by Alpha Arena) | `agno_trading/` |
 
 ## Key Features
 

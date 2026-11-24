@@ -36,8 +36,9 @@ struct Target {
 /// the installer the user runs, as before.
 std::optional<Target> in_place_target();
 
-/// The staged download's path for a version (in the target's staging dir).
-QString staged_path(const Target& t, const QString& version, const QString& download_url);
+/// The staged download's path for a release (update_policy::Release::id), in the
+/// target's staging dir.
+QString staged_path(const Target& t, const QString& id, const QString& download_url);
 
 /// What is installed at the target now (size + time of its main file): it
 /// changes when another instance has applied an update there.
