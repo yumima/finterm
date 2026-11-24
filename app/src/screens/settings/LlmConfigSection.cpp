@@ -702,9 +702,8 @@ void LlmConfigSection::refresh_provider_labels() {
     const bool none = !provider_list_->currentItem();
     const QString selected = none ? QString() : provider_list_->currentItem()->data(Qt::UserRole).toString();
     const QString active = fill_provider_list();
-    if (none) {
-        // Nothing of the list is in the form (it is empty, or of one that was
-        // deleted): the one in use goes into it.
+    if (none && provider_edit_->text().trimmed().isEmpty()) {
+        // The form is empty: the one in use goes into it.
         for (int i = 0; i < provider_list_->count(); ++i)
             if (provider_list_->item(i)->data(Qt::UserRole).toString() == active)
                 provider_list_->setCurrentRow(i);

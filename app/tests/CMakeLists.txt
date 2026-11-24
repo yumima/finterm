@@ -975,6 +975,13 @@ target_link_libraries(test_llm_url PRIVATE Qt6::Core Qt6::Network Qt6::Test)
 set_target_properties(test_llm_url PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME llm_url COMMAND test_llm_url)
 
+add_executable(test_thread_helper mcp/test_thread_helper.cpp)
+target_include_directories(test_thread_helper PRIVATE ../src)
+target_link_libraries(test_thread_helper PRIVATE Qt6::Core Qt6::Concurrent Qt6::Test)
+set_target_properties(test_thread_helper PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME thread_helper COMMAND test_thread_helper)
+set_tests_properties(thread_helper PROPERTIES TIMEOUT 60)
+
 # ── hearth: its states, and what finterm offers for each ─────────────────────
 add_executable(test_engine_state ai_chat/test_engine_state.cpp)
 target_include_directories(test_engine_state PRIVATE ../src)

@@ -39,8 +39,8 @@ namespace finterm::mcp::tools::detail {
 // Use this when the target call is itself synchronous on the main thread —
 // e.g. `service->some_getter()` — and you want the result back on the
 // worker without races.
-// false = it was not run: finterm is closing, and nobody runs posted events any
-// more. (A BlockingQueuedConnection would wait for ever there, and the exit waits
+// false = it was not run: the target is gone, or finterm is closing and nobody
+// runs posted events any more. (A BlockingQueuedConnection would wait for ever there, and the exit waits
 // for the pool this runs in.)
 template <typename F>
 bool run_on_target_thread_sync(QObject* target, F&& fn) {
@@ -51,12 +51,19 @@ bool run_on_target_thread_sync(QObject* target, F&& fn) {
     struct State {
         QMutex m;
         QWaitCondition cv;
-        bool started = false, done = false, abandoned = false;
+        bool started = false, done = false, abandoned = false, dropped = false;
     };
     auto st = std::make_shared<State>();
+    // With the event: run or not, its end is seen (a target that is deleted takes
+    // its events with it).
+    std::shared_ptr<void> event(nullptr, [st](void*) {
+        QMutexLocker lock(&st->m);
+        st->dropped = true;
+        st->cv.wakeAll();
+    });
     QMetaObject::invokeMethod(
         target,
-        [st, &fn]() {
+        [st, &fn, event]() {
             {
                 QMutexLocker lock(&st->m);
                 if (st->abandoned)
@@ -69,10 +76,12 @@ bool run_on_target_thread_sync(QObject* target, F&& fn) {
             st->cv.wakeAll();
         },
         Qt::QueuedConnection);
+    event.reset();
     QMutexLocker lock(&st->m);
     while (!st->done) {
-        st->cv.wait(&st->m, 200);
-        if (!st->started && QCoreApplication::closingDown()) {
+        if (!st->dropped)
+            st->cv.wait(&st->m, 200);
+        if (!st->started && (st->dropped || QCoreApplication::closingDown())) {
             st->abandoned = true;
             return false;
         }
