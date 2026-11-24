@@ -6,6 +6,8 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`997a3b6b2`](https://github.com/yumima/finterm/commit/997a3b6b2) **chore(release):** update README download links and updates.json for v4.1.0
+- [`d58530310`](https://github.com/yumima/finterm/commit/d58530310) rd-agent: jobs say they can't run instead of "started"; scripts/mcp no longer hides the MCP library
 - [`e40744486`](https://github.com/yumima/finterm/commit/e40744486) python: RD-Agent, Deep Agents and Alternative Investments start again; cells run apart from scripts
 - [`8e1455d45`](https://github.com/yumima/finterm/commit/8e1455d45) user files: Python runs in the user's folder
 - [`c1f602fe7`](https://github.com/yumima/finterm/commit/c1f602fe7) user files: nothing the user makes is kept inside the program's folder

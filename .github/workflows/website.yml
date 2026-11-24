@@ -21,17 +21,45 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Two jobs, and the deploy tries again: deploy-pages asks once which artifacts
+# this run has, and GitHub can take a moment to list a finished upload. Within a
+# second of it the answer was none, twice (runs 45283013178, 45318786139). Only
+# deploy-pages' own (internal) listing matters, so the retry is the check. The
+# upload is its own job so that re-running a failed deploy does not upload a
+# second copy, which deploy-pages refuses.
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: actions/jekyll-build-pages@v1
         with: { source: ./site, destination: ./_site }
       - uses: actions/upload-pages-artifact@v3
-      - id: deployment
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.try1.outputs.page_url || steps.try2.outputs.page_url || steps.try3.outputs.page_url }}
+    steps:
+      - id: try1
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+        with: { timeout: 360000 }
+      - if: steps.try1.outcome == 'failure'
+        run: sleep 20
+      - id: try2
+        if: steps.try1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+        with: { timeout: 360000 }
+      - if: steps.try2.outcome == 'failure'
+        run: sleep 60
+      - id: try3
+        if: steps.try2.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with: { timeout: 360000 }

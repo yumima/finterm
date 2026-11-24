@@ -276,8 +276,8 @@ jobs:
           set -uo pipefail
           REPORT="${RUNNER_TEMP}/selftest.json"
           rm -f "${REPORT}"
-          "${FINTERM_INSTALLED_EXE}" --profile selftest --selftest "$(cygpath -w "${REPORT}")"
-          CODE=$?
+          CODE=0   # the shell runs with -e: a failure must not end the step unreported
+          "${FINTERM_INSTALLED_EXE}" --profile selftest --selftest "$(cygpath -w "${REPORT}")" || CODE=$?
           echo "exit code: ${CODE}"
           echo "=== report ==="
           cat "${REPORT}" 2>/dev/null || echo "(no report written)"
@@ -285,7 +285,7 @@ jobs:
             echo "=== app log (tail) ==="
             find "${LOCALAPPDATA:-/c/Users/runneradmin/AppData/Local}" "${APPDATA:-}" -name 'finterm.log' 2>/dev/null \
               | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
-            echo "::error::the installed app could not fetch market data (see the report and log above)"
+            echo "::error::the installed app failed its self-test: $(jq -r '.stage + ": " + .detail' "${REPORT}" 2>/dev/null || echo "no report")"
             exit 1
           fi
 
@@ -774,14 +774,14 @@ jobs:
           rm -f "${REPORT}"
           # No FUSE on the runner: extract-and-run is the documented fallback
           # and runs the same payload. xvfb gives Qt a display; nothing is shown.
-          xvfb-run -a "./${APPIMAGE}" --appimage-extract-and-run --profile selftest --selftest "${REPORT}"
-          CODE=$?
+          CODE=0   # the shell runs with -e: a failure must not end the step unreported
+          xvfb-run -a "./${APPIMAGE}" --appimage-extract-and-run --profile selftest --selftest "${REPORT}" || CODE=$?
           echo "exit code: ${CODE}"
           cat "${REPORT}" 2>/dev/null || echo "(no report written)"
           if [ "${CODE}" -ne 0 ] || ! grep -q '"ok": true' "${REPORT}" 2>/dev/null; then
             find "${HOME}/.local/share/finterm" -name 'finterm.log' 2>/dev/null \
               | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
-            echo "::error::the AppImage could not fetch market data (see the report and log above)"
+            echo "::error::the AppImage failed its self-test: $(jq -r '.stage + ": " + .detail' "${REPORT}" 2>/dev/null || echo "no report")"
             exit 1
           fi
 
@@ -1341,14 +1341,14 @@ jobs:
           hdiutil detach "${MNT}" || true
           EXE="${DEST}/${{ env.APP_NAME }}.app/Contents/MacOS/${{ env.APP_NAME }}"
           [ -x "${EXE}" ] || { echo "::error::the disk image has no runnable app"; ls -R "${DEST}" | head -40; exit 1; }
-          "${EXE}" --profile selftest --selftest "${REPORT}"
-          CODE=$?
+          CODE=0   # the shell runs with -e: a failure must not end the step unreported
+          "${EXE}" --profile selftest --selftest "${REPORT}" || CODE=$?
           echo "exit code: ${CODE}"
           cat "${REPORT}" 2>/dev/null || echo "(no report written)"
           if [ "${CODE}" -ne 0 ] || ! grep -q '"ok": true' "${REPORT}" 2>/dev/null; then
             find "${HOME}/Library/Application Support" "${HOME}/.local/share" -name 'finterm.log' 2>/dev/null \
               | while read -r f; do echo "--- $f"; tail -n 150 "$f"; done
-            echo "::error::the installed app could not fetch market data (see the report and log above)"
+            echo "::error::the installed app failed its self-test: $(jq -r '.stage + ": " + .detail' "${REPORT}" 2>/dev/null || echo "no report")"
             exit 1
           fi
 
@@ -1465,6 +1465,10 @@ jobs:
               (or run with `--appimage-extract-and-run`).
 
             The first start sets up finterm's Python environment (5–15 minutes, once).
+
+            **Upgrading on Windows from 4.0.10 or older** (installed in Program Files):
+            uninstall it first and answer **No** when asked to remove your data, then run
+            this installer. It installs per user and will not install beside the old one.
 
             ### Requirements
             - Windows 10/11 x64
@@ -1723,11 +1727,48 @@ jobs:
           echo "Repo metadata pushed to main"
 
       # A push made with GITHUB_TOKEN starts no workflow, so the site would
-      # keep the previous release's links: start its deploy explicitly.
+      # keep the previous release's links: start its deploy explicitly, and wait
+      # for it. The purge below deletes the files those links point at, so it
+      # runs only once the site is out (4.1.0's deploy failed, the purge went
+      # ahead, and every download button was a 404). If this fails: re-run the
+      # failed job.
       - name: Redeploy the website
+        timeout-minutes: 110
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run website.yml --ref main
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          site=$(git show HEAD:site/_data/release.json | jq -r .version)
+          if [ "${site}" != "${TAG#v}" ]; then
+            echo "::error::the website's data names ${site}, not ${TAG#v}; the previous release is kept"
+            exit 1
+          fi
+          for attempt in 1 2; do
+            since=$(date -u -d '-5 seconds' +%Y-%m-%dT%H:%M:%SZ)
+            id=$(gh workflow run website.yml --ref main | grep -oE '[0-9]+$' | tail -1) || id=""
+            # The start may name no run: then it is the one begun since.
+            for i in $(seq 1 12); do
+              [ -z "${id}" ] || break
+              sleep 5
+              id=$(gh run list --workflow website.yml --event workflow_dispatch --created ">=${since}" \
+                     --limit 1 --json databaseId --jq '.[0].databaseId // empty') || id=""
+            done
+            state="not started"
+            # One run at a time, to its end (40 min covers both its jobs and a
+            # queue): a second one started meanwhile would only wait behind it.
+            for i in $(seq 1 240); do
+              [ -n "${id}" ] || break
+              state=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}" --jq '.status + " " + (.conclusion // "")') || state="unknown"
+              case "${state}" in completed*) break ;; esac
+              sleep 10
+            done
+            echo "attempt ${attempt}: website run ${id:-?}: ${state}"
+            [ "${state}" = "completed success" ] && exit 0
+            sleep 15
+          done
+          echo "::error::the website did not deploy; the previous release is kept"
+          exit 1
 
       # Policy: one release on GitHub — the current one. After this release
       # and its metadata are out, delete every release published BEFORE it,
