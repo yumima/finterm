@@ -235,6 +235,7 @@ QString HearthService::use_another_for_chat(const QString& provider) {
         return QString::fromStdString(r.error());
     if (connect_after_)
         connect_after_ = false; // still to be connected, no longer for the chat
+    link_was_changed();
     return {};
 }
 

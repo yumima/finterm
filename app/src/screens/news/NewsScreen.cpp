@@ -45,7 +45,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <utility>
 
 namespace finterm::screens {
 
@@ -774,8 +773,9 @@ void NewsScreen::on_monitor_deleted(const QString& id) {
 }
 
 void NewsScreen::on_analyze_requested(const QString& url) {
-    if (!analyzing_url_.isEmpty()) { // one at a time; the last one asked for is next
-        analyze_next_ = url == analyzing_url_ ? QString() : url;
+    if (!analyzing_url_.isEmpty()) { // one at a time, in order
+        if (url != analyzing_url_ && !analyze_queue_.contains(url))
+            analyze_queue_ << url;
         return;
     }
     analyzing_url_ = url;
@@ -797,8 +797,8 @@ void NewsScreen::on_analyze_requested(const QString& url) {
             self->detail_panel_->show_analysis(url, analysis);
         } else
             self->detail_panel_->show_analysis_error(url, "AI analysis is unavailable right now.");
-        if (const QString next = std::exchange(self->analyze_next_, {}); !next.isEmpty())
-            self->on_analyze_requested(next);
+        if (!self->analyze_queue_.isEmpty())
+            self->on_analyze_requested(self->analyze_queue_.takeFirst());
     });
 }
 

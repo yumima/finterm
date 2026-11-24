@@ -5,6 +5,8 @@
 #include "services/news/NewsService.h"
 
 #include <QHash>
+#include <QSet>
+#include <QStringList>
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -208,6 +210,9 @@ class NewsDetailPanel : public QWidget {
     services::NewsArticle current_article_;
     bool has_article_ = false;
     QHash<QString, services::NewsAnalysis> analyses_; // by URL: for the article one comes back to
+    QStringList analyses_order_;                      // oldest first
+    QSet<QString> analyzing_;                         // URLs asked for and not answered
+    void show_analyze_button();
     ui::ReadAloudToggle* listen_toggle_ = nullptr; ///< article LISTEN ↔ TtsService
 
     // Read-aloud for the TL;DR, on the ARTICLE DETAIL header bar. Synthesised

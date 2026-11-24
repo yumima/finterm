@@ -69,8 +69,13 @@ Result<void> LlmConfigRepository::save_provider(const LlmConfig& c) {
 }
 
 Result<void> LlmConfigRepository::set_active(const QString& provider) {
-    exec_write("UPDATE llm_configs SET is_active = 0", {});
-    return exec_write("UPDATE llm_configs SET is_active = 1 WHERE provider = ?", {provider});
+    // One statement: never a moment, or a failure, with none active.
+    auto r = db().execute("SELECT 1 FROM llm_configs WHERE provider = ?", {provider});
+    if (r.is_err())
+        return Result<void>::err(r.error());
+    if (!r.value().next())
+        return Result<void>::err("no provider '" + provider.toStdString() + "' is set up");
+    return exec_write("UPDATE llm_configs SET is_active = (provider = ?)", {provider});
 }
 
 Result<void> LlmConfigRepository::delete_provider(const QString& provider) {

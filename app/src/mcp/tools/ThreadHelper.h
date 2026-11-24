@@ -16,6 +16,7 @@
 // helpers consolidate that pattern so each tool file doesn't re-implement
 // it (poorly).
 
+#include <QCoreApplication>
 #include <QMetaObject>
 #include <QMutex>
 #include <QObject>
@@ -24,6 +25,7 @@
 #include <QWaitCondition>
 
 #include <functional>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -37,13 +39,45 @@ namespace finterm::mcp::tools::detail {
 // Use this when the target call is itself synchronous on the main thread —
 // e.g. `service->some_getter()` — and you want the result back on the
 // worker without races.
+// false = it was not run: finterm is closing, and nobody runs posted events any
+// more. (A BlockingQueuedConnection would wait for ever there, and the exit waits
+// for the pool this runs in.)
 template <typename F>
-void run_on_target_thread_sync(QObject* target, F&& fn) {
+bool run_on_target_thread_sync(QObject* target, F&& fn) {
     if (!target || QThread::currentThread() == target->thread()) {
         std::forward<F>(fn)();
-        return;
+        return true;
     }
-    QMetaObject::invokeMethod(target, std::forward<F>(fn), Qt::BlockingQueuedConnection);
+    struct State {
+        QMutex m;
+        QWaitCondition cv;
+        bool started = false, done = false, abandoned = false;
+    };
+    auto st = std::make_shared<State>();
+    QMetaObject::invokeMethod(
+        target,
+        [st, &fn]() {
+            {
+                QMutexLocker lock(&st->m);
+                if (st->abandoned)
+                    return; // fn is gone
+                st->started = true;
+            }
+            fn();
+            QMutexLocker lock(&st->m);
+            st->done = true;
+            st->cv.wakeAll();
+        },
+        Qt::QueuedConnection);
+    QMutexLocker lock(&st->m);
+    while (!st->done) {
+        st->cv.wait(&st->m, 200);
+        if (!st->started && QCoreApplication::closingDown()) {
+            st->abandoned = true;
+            return false;
+        }
+    }
+    return true;
 }
 
 // ── run_async_wait ───────────────────────────────────────────────────────────

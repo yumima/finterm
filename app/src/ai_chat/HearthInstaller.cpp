@@ -35,19 +35,14 @@ HearthInstaller& HearthInstaller::instance() {
 
 HearthInstaller::HearthInstaller(QObject* parent)
     : QObject(parent), script_(engine::install_script()), nam_(new QNetworkAccessManager(this)) {
-    // Not left half done behind a closed window: it goes on from there next time.
-    // (Waited for, or the script alone is killed first and what it runs goes on.)
+    // Not going on behind a closed window. It is asked to end, not killed: what
+    // is in the middle of a switch takes it back first, and needs no finterm for
+    // that. (Waited for, so that on Windows the tree is there to be ended.)
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
         const QPointer<QProcess> p = proc_;
-        const qint64 pid = p ? p->processId() : 0;
         cancel();
-        if (!p || pid <= 0)
-            return;
-        p->waitForFinished(5000);
-#if !defined(Q_OS_WIN)
-        if (p && p->state() != QProcess::NotRunning)
-            ::kill(-static_cast<pid_t>(pid), SIGKILL);
-#endif
+        if (p)
+            p->waitForFinished(5000);
     });
 }
 

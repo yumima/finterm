@@ -255,7 +255,7 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Same gate for AI Analyze: local-LLM analysis can exceed the button's
     // re-enable timeout, so guard against launching a second concurrent run.
     QString analyzing_url_; // "" = none running
-    QString analyze_next_;
+    QStringList analyze_queue_;
 };
 
 } // namespace finterm::screens

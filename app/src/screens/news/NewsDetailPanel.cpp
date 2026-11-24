@@ -169,10 +169,8 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     // Not before the request itself gives up: a second click would queue another.
     analyze_timeout_->setInterval(kLocalChatTimeoutMs + 10000);
     connect(analyze_timeout_, &QTimer::timeout, this, [this]() {
-        if (analyze_btn_) {
-            analyze_btn_->setText("ANALYZE");
-            analyze_btn_->setEnabled(true);
-        }
+        analyzing_.remove(current_article_.link);
+        show_analyze_button();
     });
 }
 
@@ -366,9 +364,8 @@ QWidget* NewsDetailPanel::build_content_view() {
     connect(analyze_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_)
             return;
-        analyze_btn_->setText("ANALYZING...");
-        analyze_btn_->setEnabled(false);
-        analyze_timeout_->start();
+        analyzing_.insert(current_article_.link);
+        show_analyze_button();
         emit analyze_requested(current_article_.link);
     });
     listen_toggle_ = new ui::ReadAloudToggle(
@@ -775,9 +772,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
 
     // Reset analysis
     conceal_article_section(analysis_section_);
-    analyze_btn_->setText("ANALYZE");
-    analyze_btn_->setEnabled(true);
-    analyze_timeout_->stop();
+    show_analyze_button();
 
     // Reflect saved state from DB
     {
@@ -841,11 +836,10 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
 }
 
 void NewsDetailPanel::show_analysis_error(const QString& url, const QString& message) {
+    analyzing_.remove(url);
     if (!has_article_ || current_article_.link != url)
         return;
-    analyze_btn_->setText("ANALYZE");
-    analyze_btn_->setEnabled(true);
-    analyze_timeout_->stop();
+    show_analyze_button();
     ai_sentiment_->clear();
     ai_urgency_->clear();
     // Clear all result layouts so stale rows from a previous success don't linger
@@ -862,20 +856,32 @@ void NewsDetailPanel::show_analysis_error(const QString& url, const QString& mes
     reveal_article_section(analysis_section_);
 }
 
-void NewsDetailPanel::analysis_begins(const QString& url) {
-    if (has_article_ && current_article_.link == url && !analyze_btn_->isEnabled())
+void NewsDetailPanel::show_analyze_button() {
+    const bool busy = has_article_ && analyzing_.contains(current_article_.link);
+    analyze_btn_->setText(busy ? "ANALYZING..." : "ANALYZE");
+    analyze_btn_->setEnabled(!busy);
+    if (busy)
         analyze_timeout_->start();
+    else
+        analyze_timeout_->stop();
+}
+
+void NewsDetailPanel::analysis_begins(const QString& url) {
+    analyzing_.insert(url);
+    show_analyze_button();
 }
 
 void NewsDetailPanel::show_analysis(const QString& url, const services::NewsAnalysis& analysis) {
-    if (analyses_.size() >= 100 && !analyses_.contains(url))
-        analyses_.clear();
+    analyzing_.remove(url);
+    if (!analyses_.contains(url)) {
+        analyses_order_ << url;
+        if (analyses_order_.size() > 100)
+            analyses_.remove(analyses_order_.takeFirst());
+    }
     analyses_.insert(url, analysis);
     if (!has_article_ || current_article_.link != url)
         return;
-    analyze_btn_->setText("ANALYZE");
-    analyze_btn_->setEnabled(true);
-    analyze_timeout_->stop();
+    show_analyze_button();
 
     ai_summary_->setText(analysis.summary.isEmpty() ? "No AI summary available." : analysis.summary);
 

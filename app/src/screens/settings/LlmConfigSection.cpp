@@ -504,7 +504,6 @@ QWidget* LlmConfigSection::build_form_panel() {
             show_status("Could not set default: " + e, true);
             return;
         }
-        ai_chat::LlmService::instance().reload_config();
         load_providers();
         populate_form(provider);
         show_status(provider + " is now the default provider");
@@ -703,8 +702,9 @@ void LlmConfigSection::refresh_provider_labels() {
     const bool none = !provider_list_->currentItem();
     const QString selected = none ? QString() : provider_list_->currentItem()->data(Qt::UserRole).toString();
     const QString active = fill_provider_list();
-    if (none && provider_edit_->text().trimmed().isEmpty()) {
-        // The form is empty: the new row goes into it.
+    if (none) {
+        // Nothing of the list is in the form (it is empty, or of one that was
+        // deleted): the one in use goes into it.
         for (int i = 0; i < provider_list_->count(); ++i)
             if (provider_list_->item(i)->data(Qt::UserRole).toString() == active)
                 provider_list_->setCurrentRow(i);
@@ -937,6 +937,13 @@ void LlmConfigSection::on_delete_provider() {
 
     LlmConfigRepository::instance().delete_provider(provider);
     load_providers();
+    if (provider_list_->count() == 0) { // nothing left for the form to show
+        provider_edit_->clear();
+        api_key_edit_->clear();
+        base_url_edit_->clear();
+        model_combo_->setCurrentText({});
+        show_default_badge({}, {});
+    }
     // Reload so LlmService drops the deleted config immediately (mirrors save).
     ai_chat::LlmService::instance().reload_config();
     emit config_changed();

@@ -6,13 +6,13 @@
 #include "ai_chat/LlmService.h"
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
+#include "mcp/tools/ThreadHelper.h"
 #include "services/notifications/NotificationFieldStore.h"
 #include "storage/repositories/EngineLinkRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
 #include <QCoreApplication>
-#include <QThread>
 #include <QVariantMap>
 
 namespace finterm::mcp::tools {
@@ -186,15 +186,11 @@ std::vector<ToolDef> get_settings_tools() {
                             row = p.provider;
                 error = row.isEmpty() ? "No provider '" + provider + "' is set up in Settings › AI Config"
                                       : HearthService::instance().use_another_for_chat(row);
-                if (error.isEmpty()) {
+                if (error.isEmpty())
                     provider = row;
-                    ai_chat::LlmService::instance().reload_config();
-                }
             };
-            if (QThread::currentThread() == qApp->thread())
-                choose();
-            else
-                QMetaObject::invokeMethod(qApp, choose, Qt::BlockingQueuedConnection);
+            if (!detail::run_on_target_thread_sync(qApp, choose))
+                return ToolResult::fail("finterm is closing");
             if (!error.isEmpty())
                 return ToolResult::fail("Failed to set active LLM: " + error);
             // (The chat that called this goes on with the provider it started with.)
