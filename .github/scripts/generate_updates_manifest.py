@@ -67,6 +67,12 @@ def main() -> int:
             "open-url": release_url,
             "changelog": f"finterm v{version} — see release notes at {release_url}",
         }
+        # Windows replaces itself from a zip of the app (apply-update.ps1); the
+        # installer stays what a user downloads.
+        package = match.replace("-setup.exe", "-update.zip")
+        if package != match and package in files:
+            updates[key]["inplace-url"] = f"https://github.com/{repo}/releases/download/{tag}/{package}"
+            updates[key]["inplace-sha256"] = hashlib.sha256(files[package].read_bytes()).hexdigest()
         print(f"# {key}: {match} sha256={sha[:16]}...", file=sys.stderr, flush=True)
 
     manifest = {

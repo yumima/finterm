@@ -247,6 +247,28 @@ jobs:
           [ -f "$(dirname "${EXE}")/scripts/yfinance_data.py" ] || { echo "::error::installed tree has no scripts/yfinance_data.py"; exit 1; }
           echo "FINTERM_INSTALLED_EXE=${EXE}" >> "$GITHUB_ENV"
 
+      # ── The in-place update package ───────────────────────────────────────
+      # What the installer just put there (before anything has run from it),
+      # without the installer's own files: what apply-update.ps1 unpacks beside
+      # an install. updates.json points at it (inplace-url).
+      - name: Package the in-place update (zip)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = Split-Path -Parent ($env:FINTERM_INSTALLED_EXE -replace '/', '\')
+          $stage = Join-Path $env:RUNNER_TEMP "update-package"
+          Copy-Item -Recurse -Path $dir -Destination $stage
+          foreach ($n in "FintermMaintenanceTool*", "components.xml", "network.xml", "InstallationLog.txt", "installer.dat", "installerResources", "Licenses") {
+              Get-ChildItem -Path (Join-Path $stage $n) -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+          }
+          $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          $zip = $setup -replace '-setup\.exe$', '-update.zip'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)
+          "top level: " + ((Get-ChildItem -Force $stage | Select-Object -Expand Name) -join " ")
+          "installer's own: " + ((Get-ChildItem -Force $dir | Where-Object { -not (Test-Path (Join-Path $stage $_.Name)) } | Select-Object -Expand Name) -join " ")
+          Get-Item $zip | Select-Object Name, Length
+
       - name: Self-test the installed app (Python setup, data daemon, one quote)
         shell: bash
         timeout-minutes: 50
@@ -268,10 +290,10 @@ jobs:
           fi
 
       # ── In-place update: the helper the app runs, on the real install ─────
-      # apply-update.ps1 (embedded in the app) removes the install with its own
-      # maintenance tool and reinstalls into the same folder, unattended —
-      # the same installer stands in for the next version. Then a rollback.
-      # Run with Windows PowerShell (5.1) — what the app starts.
+      # apply-update.ps1 (embedded in the app) unpacks the release's zip beside
+      # the install and swaps the folders; a rollback swaps them back; killed
+      # while it unpacks, the install is untouched; and the uninstaller still
+      # works afterwards. The same version stands in for the next one.
       - name: In-place update and rollback (apply-update.ps1)
         timeout-minutes: 20
         shell: pwsh
@@ -282,65 +304,82 @@ jobs:
           # An earlier step left PATH in bash form; a user's is this.
           $sys = Join-Path $env:SystemRoot "System32"
           $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0"
-          # A copy: the helper deletes the installer it consumes, and this one
-          # is the release asset uploaded below.
-          $built = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
-          $setup = Join-Path $env:RUNNER_TEMP "update-test-setup.exe"
-          Copy-Item -Force $built $setup
-          $helper = "app/src/services/updater/scripts/apply-update.ps1"
-          # By full path, as the app starts it (an earlier step rewrites PATH
-          # in bash form, where "powershell" isn't found).
-          $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+          $winps = Join-Path $sys "WindowsPowerShell\v1.0\powershell.exe"
+          $helper = (Resolve-Path "app/src/services/updater/scripts/apply-update.ps1").Path
+          $built = (Get-ChildItem "app/build/finterm-*-windows-x64-update.zip" | Select-Object -First 1).FullName
+          $zip = Join-Path $env:RUNNER_TEMP "update test.zip" # a copy (the helper deletes it), a space in the name
           $status = Join-Path $env:RUNNER_TEMP "update-status.json"
           $prev = "$dir.previous"
-          Set-Content -Path (Join-Path $dir "marker-old.txt") -Value "old"
-          # The user's data folder: no update may touch it.
-          $data = Join-Path $env:LOCALAPPDATA "finterm"
-          New-Item -ItemType Directory -Force -Path $data | Out-Null
-          Set-Content -Path (Join-Path $data "ci-user-data.txt") -Value "mine"
-          & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -AppPid 0 -Installer $setup -InstallDir $dir -Previous $prev `
-              -Status $status -From 0.0.1 -To 0.0.2
-          Get-Content $status
-          $s = Get-Content $status | ConvertFrom-Json
-          if (-not $s.ok) { throw "update failed: $($s.message)" }
+          $old = Join-Path $dir "marker-old.txt"
+          Set-Content -Path $old -Value "old"
+          $data = Join-Path $env:LOCALAPPDATA "finterm\ci-user-data.txt"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $data) | Out-Null
+          Set-Content -Path $data -Value "mine"
+          function Helper([string[]]$more) {
+              # As the app starts it: one command line, paths quoted.
+              $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$helper`"", "-AppPid", "0", "-InstallDir", "`"$dir`"",
+                     "-Previous", "`"$prev`"", "-Status", "`"$status`"") + $more
+              Start-Process -FilePath $winps -ArgumentList $a -PassThru -NoNewWindow
+          }
+          function Done($p) {
+              $p.WaitForExit()
+              Get-Content $status | Write-Host
+              $s = Get-Content $status | ConvertFrom-Json
+              if (-not $s.ok) { throw "the helper failed: $($s.message)" }
+          }
+
+          # 1. Update: swapped, previous kept, installer's files and data kept.
+          Copy-Item -Force $built $zip
+          Done (Helper @("-Package", "`"$zip`"", "-From", "0.0.1", "-To", "9.9.9"))
           if (-not (Test-Path $exe)) { throw "finterm.exe missing after the update" }
           if (-not (Test-Path (Join-Path $dir "scripts/yfinance_data.py"))) { throw "scripts missing after the update" }
-          if (Test-Path (Join-Path $dir "marker-old.txt")) { throw "the old install was not replaced" }
+          if (Test-Path $old) { throw "the old version was not replaced" }
           if (-not (Test-Path (Join-Path $prev "marker-old.txt"))) { throw "the previous version was not kept" }
-          if (-not (Test-Path (Join-Path $data "ci-user-data.txt"))) { throw "the update removed the user's data" }
-          $once = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
-          $task = { (Get-ItemProperty -Path $once -ErrorAction SilentlyContinue)."finterm-update" }
-          if (& $task) { throw "the recovery task is still registered after a good update" }
-          & $winps -NoProfile -ExecutionPolicy Bypass -File $helper -InstallDir $dir -Previous $prev -Status $status -From 0.0.2 -To 0.0.1 -Rollback
-          Get-Content $status
-          $s = Get-Content $status | ConvertFrom-Json
-          if (-not $s.ok) { throw "rollback failed: $($s.message)" }
-          if (-not (Test-Path (Join-Path $dir "marker-old.txt"))) { throw "the rollback did not restore the previous version" }
-          if (-not (Test-Path $built)) { throw "the release installer is gone" }
+          if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "the uninstaller is gone" }
+          if (Test-Path "$dir.new") { throw "$dir.new was left behind" }
+          $apps = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+              Where-Object { $_.InstallLocation -and $_.InstallLocation.Replace('/', '\').TrimEnd('\') -ieq $dir }
+          if ($apps.DisplayVersion -ne "9.9.9") { throw "the Apps entry says '$($apps.DisplayVersion)'" }
+          Write-Host "update: OK"
 
-          # Cut short: killed once the old version is being removed, then the
-          # next logon (its registered command, run here) puts it back.
-          Copy-Item -Force $built $setup
-          $hp = Start-Process -FilePath $winps -PassThru -WindowStyle Hidden -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass",
-              "-File", (Resolve-Path $helper).Path, "-AppPid", "0", "-Installer", $setup, "-InstallDir", $dir, "-Previous", $prev,
-              "-Status", $status, "-From", "0.0.1", "-To", "0.0.2")
-          for ($i = 0; (Test-Path $exe) -and -not $hp.HasExited -and $i -lt 1200; $i++) { Start-Sleep -Milliseconds 250 }
-          $cmd = & $task
-          taskkill /F /T /PID $hp.Id 2>&1 | Out-Null
-          Get-Process | Where-Object { $_.Path -and ($_.Path -like "$dir\*" -or $_.Path -eq $setup) } | Stop-Process -Force
-          # (The maintenance tool's self-delete script too: a power cut stops it.)
-          Get-Process cscript, wscript -ErrorAction SilentlyContinue | Stop-Process -Force
-          Start-Sleep -Seconds 5
-          if (-not $cmd) { throw "no recovery task was registered while the old version was being removed" }
-          if (Test-Path $exe) { throw "the test did not interrupt the update (finterm.exe is there)" }
-          Write-Host "interrupted; logon task ($($cmd.Length) characters): $cmd"
-          if ($cmd.Length -gt 260) { throw "a RunOnce command is at most 260 characters" }
-          & cmd.exe /c $cmd
-          Get-Content $status
-          if (-not (Test-Path $exe)) { throw "the recovery did not restore finterm" }
-          if (& $task) { throw "the recovery task is still registered" }
-          if (Test-Path (Join-Path $env:RUNNER_TEMP "recover-update.ps1")) { throw "the recovery script was left behind" }
-          Write-Host "in-place update + rollback + interrupted update OK"
+          # 2. Rollback.
+          Done (Helper @("-From", "9.9.9", "-To", "0.0.1", "-Rollback"))
+          if (-not (Test-Path $old)) { throw "the rollback did not restore the previous version" }
+          if (Test-Path "$dir.failed") { throw "$dir.failed was left behind" }
+          Write-Host "rollback: OK"
+
+          # 3. Cut short while unpacking: the install is as it was.
+          Copy-Item -Force $built $zip
+          $p = Helper @("-Package", "`"$zip`"", "-From", "0.0.1", "-To", "9.9.9")
+          for ($i = 0; -not (Test-Path "$dir.new\scripts") -and -not $p.HasExited -and $i -lt 2400; $i++) { Start-Sleep -Milliseconds 25 }
+          if ($p.HasExited) { throw "the test did not interrupt the update" }
+          $p.Kill(); $p.WaitForExit()
+          if (-not (Test-Path $old) -or -not (Test-Path $exe)) { throw "an interrupted update changed the install" }
+          Write-Host "interrupted: OK"
+
+          # 4. A file held open in the install: refused whole, then it works.
+          $held = [System.IO.File]::Open((Join-Path $dir "scripts/yfinance_data.py"), "Open", "Read", "None")
+          $p = Helper @("-Package", "`"$zip`"", "-From", "0.0.1", "-To", "9.9.9"); $p.WaitForExit()
+          $s = Get-Content $status | ConvertFrom-Json
+          $held.Close()
+          if ($s.ok) { throw "an install with a file held open was reported updated" }
+          Write-Host "held open: $($s.message)"
+          if (-not (Test-Path $old) -or -not (Test-Path $exe)) { throw "a refused update changed the install" }
+          Copy-Item -Force $built $zip
+          Done (Helper @("-Package", "`"$zip`"", "-From", "0.0.1", "-To", "9.9.9"))
+          if (Test-Path $old) { throw "the update after it did not go in" }
+
+          # 5. The new version starts, the data is there, the uninstaller works.
+          $report = Join-Path $env:RUNNER_TEMP "updated-selftest.json"
+          $p = Start-Process -FilePath $exe -ArgumentList @("--profile", "selftest", "--selftest", "`"$report`"") -PassThru -Wait
+          if ((Get-Content $report -Raw) -notmatch '"ok": true') { Get-Content $report; throw "the updated app failed its self-test ($($p.ExitCode))" }
+          if (-not (Test-Path $data)) { throw "the user's data was removed" }
+          $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @("purge", "--default-answer", "--confirm-command")
+          for ($i = 0; (Test-Path $exe) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          if ($t.ExitCode -ne 0 -or (Test-Path $exe)) { throw "uninstalling after an update failed ($($t.ExitCode))" }
+          if (-not (Test-Path $data)) { throw "uninstalling removed the user's data" }
+          if (-not (Test-Path $built)) { throw "the release package is gone" }
+          Write-Host "in-place update + rollback + interruption + uninstall OK"
 
       # ── Default install folder: per user, writable, no admin ─────────────
       # What a user gets by just running the installer: %LOCALAPPDATA%\Programs
@@ -433,7 +472,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: finterm-Windows-x64-installer
-          path: app/build/finterm-*-windows-x64-setup.exe
+          path: |
+            app/build/finterm-*-windows-x64-setup.exe
+            app/build/finterm-*-windows-x64-update.zip
+          if-no-files-found: error
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1586,7 +1628,7 @@ jobs:
 
           WORK="$(mktemp -d)"
           echo "Downloading release assets to ${WORK}..."
-          gh release download "${TAG}" --dir "${WORK}" --pattern "finterm-*setup*" || true
+          gh release download "${TAG}" --dir "${WORK}" --pattern "finterm-*setup*" --pattern "finterm-*-update.zip" || true
 
           # Export shell-side vars so the embedded python can read them via os.environ
           export WORK VERSION TAG REPO

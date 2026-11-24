@@ -2,7 +2,7 @@
 // run with IFW's objects stubbed (a command-line purge never loads component
 // scripts, so CI cannot reach them through the uninstaller):
 //   - an install beside another finterm is refused, in the wizard and on the
-//     command line; not for the in-app updater;
+//     command line;
 //   - an uninstall offers to remove the user's data only when no other install
 //     shares it, and removes it only on Yes.
 // Usage: node test_installscript.js <path to installscript.qs>
@@ -16,7 +16,7 @@ function run(o) {
     const seen = { critical: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], operations: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
     const env = { ProgramFiles: "C:\\Program Files", LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a",
-                  TEMP: "C:\\t", USERPROFILE: "C:\\Users\\u", FINTERM_INSTALL_UPDATE: o.update ? "1" : "" };
+                  TEMP: "C:\\t", USERPROFILE: "C:\\Users\\u" };
     const ctx = {
         console: { log() {} },
         systemInfo: { kernelType: o.kernel || "winnt" },
@@ -47,8 +47,6 @@ check("wizard beside Program Files: installs nothing", !!s.threw && s.operations
 s = run({ target: PU, installs: [PF], cli: true, operations: true });
 check("command line beside Program Files: interrupted", s.interrupted === 1 && s.rejected === 0);
 check("command line beside Program Files: installs nothing", !!s.threw && s.operations === 0);
-s = run({ target: PU, installs: [PF, PU], cli: true, update: true, operations: true });
-check("the updater's own install is not refused", s.critical === 0 && !s.threw && s.operations === 1);
 s = run({ target: PU, installs: [], operations: true });
 check("first install goes in", s.critical === 0 && !s.threw && s.operations === 1);
 s = run({ target: PU.replace(/\//g, "\\").toUpperCase(), installs: [PU], operations: true });

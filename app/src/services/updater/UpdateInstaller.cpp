@@ -112,12 +112,27 @@ void say_updating() {
 /// install being replaced is not whole.
 QString own_location() {
 #if defined(Q_OS_LINUX)
-    return QFileInfo(qEnvironmentVariable("APPIMAGE")).absoluteFilePath();
+    const QString appimage = qEnvironmentVariable("APPIMAGE");
+    return appimage.isEmpty() ? QString() : QFileInfo(appimage).absoluteFilePath();
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     return d.cdUp() && d.cdUp() ? d.absolutePath() : QString();
 #else
     return QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+#endif
+}
+
+bool same_path(const QString& a, const QString& b) {
+    if (a.isEmpty() || b.isEmpty())
+        return false;
+    const auto full = [](const QString& p) {
+        const QFileInfo f(p);
+        return f.exists() ? f.canonicalFilePath() : QDir::cleanPath(f.absoluteFilePath());
+    };
+#if defined(Q_OS_WIN)
+    return full(a).compare(full(b), Qt::CaseInsensitive) == 0;
+#else
+    return full(a) == full(b);
 #endif
 }
 
@@ -325,7 +340,7 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
                 QStringLiteral("-From"),        from,                            QStringLiteral("-To"),
                 to};
         if (!rollback)
-            args << QStringLiteral("-Installer") << QDir::toNativeSeparators(staged);
+            args << QStringLiteral("-Package") << QDir::toNativeSeparators(staged);
         if (relaunch)
             args << QStringLiteral("-Relaunch");
         if (rollback)
@@ -443,7 +458,7 @@ bool boot_check() {
         // say why.
         const auto h = read_json(helper_path());
         const QString target = h ? h->value(QStringLiteral("target")).toString() : QString();
-        if (!target.isEmpty() && target == own_location()) {
+        if (same_path(target, own_location())) {
             if (h->value(QStringLiteral("kind")).toString() == QLatin1String("appimage"))
                 return false;
             say_updating();
@@ -455,8 +470,9 @@ bool boot_check() {
     if (const auto mine = in_place_target())
         g_startup_stamp = target_stamp(*mine);
     auto pending = read_json(pending_path());
-    if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile())
-        return false;
+    if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile() ||
+        !same_path(pending->value(QStringLiteral("target")).toString(), own_location()))
+        return false; // another profile's, or another copy's
     const QString running = QCoreApplication::applicationVersion();
     const QString to = pending->value(QStringLiteral("to")).toString();
     if (running == pending->value(QStringLiteral("from")).toString()) {

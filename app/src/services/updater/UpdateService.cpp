@@ -15,7 +15,6 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QPushButton>
-#include <QSessionManager>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QSysInfo>
@@ -71,25 +70,15 @@ UpdateService::UpdateService(QObject* parent) : QObject(parent) {
     net_.setStrictTransportSecurityEnabled(true);
     // Only a release build replaces itself (a dev tree is updated from git).
     if (updates_supported())
-        in_place_ = update_install::in_place_target();
+        target_ = update_install::in_place_target();
+    in_place_ = target_;
     if (in_place_) {
         const auto saved = update_policy::offer_from_json(QSettings().value(kOfferKey).toByteArray());
         const bool wanted = update_policy::is_newer(QApplication::applicationVersion(), saved.version);
         update_install::sweep_stale(*in_place_, wanted ? update_install::staged_path(*in_place_, saved.version,
-                                                                                    saved.download_url)
+                                                                                    localized(saved).download_url)
                                                        : QString());
     }
-#if defined(Q_OS_WIN)
-    // The session is ending: what is started now is killed, on Windows perhaps
-    // between removing the old version and installing the new (the helper
-    // leaves a logon task for that too). The staged file stays for the next
-    // session, which start_download verifies and uses. A shutdown that was
-    // cancelled says nothing, so the hold passes. (Elsewhere the swap is a
-    // rename, and commitDataRequest does not mean a logoff.)
-    connect(qApp, &QGuiApplication::commitDataRequest, this, [this](QSessionManager&) {
-        session_hold_until_ = QDateTime::currentDateTimeUtc().addSecs(10 * 60);
-    });
-#endif
     // A staged update goes in when the app quits.
     connect(qApp, &QCoreApplication::aboutToQuit, this, &UpdateService::apply_on_quit);
 }
@@ -360,10 +349,23 @@ void UpdateService::on_manifest_reply_finished() {
 
 // ── Offer ───────────────────────────────────────────────────────────────────
 
+update_policy::Offer UpdateService::localized(update_policy::Offer offer) const {
+    if (target_ && target_->kind == QLatin1String("ifw") && !offer.inplace_url.isEmpty()) {
+        offer.download_url = offer.inplace_url;
+        offer.sha256 = offer.inplace_sha256;
+    }
+    return offer;
+}
+
 void UpdateService::set_offer(const update_policy::Offer& offer) {
-    const bool changed = offer.version != offer_.version || offer.download_url != offer_.download_url ||
-                         offer.sha256 != offer_.sha256;
-    offer_ = offer;
+    const update_policy::Offer here = localized(offer);
+    const bool changed = here.version != offer_.version || here.download_url != offer_.download_url ||
+                         here.sha256 != offer_.sha256;
+    offer_ = here;
+    // A release without the package is the installer the user runs.
+    in_place_ = target_ && target_->kind == QLatin1String("ifw") && offer.inplace_url.isEmpty() && !offer.version.isEmpty()
+                    ? std::nullopt
+                    : target_;
     QSettings settings;
     if (offer.version.isEmpty())
         settings.remove(kOfferKey);
@@ -596,8 +598,7 @@ void UpdateService::restart_now() {
 }
 
 void UpdateService::apply_on_quit() {
-    if (!in_place_ || stage() != Stage::Ready || applied_ || hold_apply_ ||
-        QDateTime::currentDateTimeUtc() < session_hold_until_ || staged_file_gone())
+    if (!in_place_ || stage() != Stage::Ready || applied_ || hold_apply_ || staged_file_gone())
         return;
     // Another profile that quit first applied it: again would keep the new
     // version as its own "previous".
@@ -667,7 +668,7 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
         return;
     // Staged already (while the dialog asking for it was open).
     if (in_place_ && !ready_version_.isEmpty() && ready_version_ == offer.version && ready_sha256_ == offer.sha256 &&
-        QFileInfo::exists(pending_local_path_)) {
+        stage() == Stage::Ready && QFileInfo::exists(pending_local_path_)) {
         if (!quiet)
             prompt_restart();
         return;

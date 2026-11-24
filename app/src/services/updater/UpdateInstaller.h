@@ -16,8 +16,8 @@
 ///   Linux    the AppImage ($APPIMAGE) is replaced in one rename; the update is
 ///            staged beside it (same filesystem).
 ///   macOS    the .app bundle is swapped; the DMG is staged in the app data.
-///   Windows  the IFW install is removed with its maintenance tool and the new
-///            installer runs unattended into the same folder.
+///   Windows  the new version (the release's zip) is unpacked beside the install
+///            and the two folders change places by rename.
 ///
 /// A version that fails to start twice after an update is rolled back: the
 /// app records the update before handing over (pending boot), counts its own

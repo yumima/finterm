@@ -129,12 +129,9 @@ function otherWindowsInstall(ownDir)
     return "";
 }
 
-// The install to refuse beside, or "". Not for the in-app updater, which puts
-// its own install back (apply-update.ps1 sets FINTERM_INSTALL_UPDATE).
+// The install to refuse beside, or "".
 function installToRefuseBeside()
 {
-    if (installer.environmentVariable("FINTERM_INSTALL_UPDATE") === "1")
-        return "";
     return otherWindowsInstall(installer.value("TargetDir"));
 }
 

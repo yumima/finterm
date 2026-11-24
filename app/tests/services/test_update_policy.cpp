@@ -51,6 +51,8 @@ class TestUpdatePolicy : public QObject {
                                                 {"download-url", "https://example.invalid/l.run"},
                                                 {"sha256", " 34D8 "},
                                                 {"open-url", "https://example.invalid/tag"},
+                                                {"inplace-url", "https://example.invalid/l.zip"},
+                                                {"inplace-sha256", "AB12 "},
                                                 {"changelog", "notes"}}),
                                       "linux-x64", o);
         QCOMPARE(r, ManifestResult::Ok);
@@ -59,6 +61,10 @@ class TestUpdatePolicy : public QObject {
         QCOMPARE(o.sha256, QString("34d8")); // compared lower-case to the computed hex
         QCOMPARE(o.open_url, QString("https://example.invalid/tag"));
         QCOMPARE(o.changelog, QString("notes"));
+        QCOMPARE(o.inplace_url, QString("https://example.invalid/l.zip"));
+        QCOMPARE(o.inplace_sha256, QString("ab12"));
+        QCOMPARE(offer_from_json(offer_to_json(o)).inplace_url, o.inplace_url);
+        QCOMPARE(offer_from_json(offer_to_json(o)).inplace_sha256, o.inplace_sha256);
     }
 
     void manifest_without_this_platform() {

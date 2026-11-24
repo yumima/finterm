@@ -1,24 +1,27 @@
-# apply-update.ps1 — finterm's in-place updater for Windows (Qt Installer
-# Framework install). The app writes this script out (it is embedded in the
-# binary) and starts it detached when it quits with a verified installer staged:
+# apply-update.ps1 — finterm's in-place updater for Windows (an installer's
+# install, per user). The app writes this script out (it is embedded in the
+# binary) and starts it detached when it quits with a verified update staged:
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File apply-update.ps1
-#       -AppPid PID -Installer SETUP.EXE -InstallDir DIR -Previous DIR
-#       -Status FILE -From VER -To VER [-Relaunch] [-Rollback] [-AppProfile NAME] [-Lock FILE]
-#       [-Recover]
+#       -AppPid PID -Package UPDATE.ZIP -InstallDir DIR -Previous DIR
+#       -Status FILE -From VER -To VER [-Relaunch] [-AppProfile NAME] [-Lock FILE]
+#       [-Rollback]
 #
-# Update: waits for PID to exit (120 s; past that nothing changes), copies the
-# install to PREVIOUS (for a rollback), removes the old install with its own
-# maintenance tool ("purge") and installs the new version into the same
-# folder, unattended. If the install fails, PREVIOUS is copied back.
-# Rollback (-Rollback): PREVIOUS is copied back over the install.
-# A one-line JSON STATUS is written for the next launch to report; -Relaunch
-# starts finterm.exe again. The user's data lives elsewhere (AppData) and is
-# never touched.
+# Update: the new version is unpacked beside the install (DIR.new), complete
+# with the installer's own files (its uninstaller keeps working), and the
+# folders change places by two renames: DIR -> PREVIOUS, DIR.new -> DIR. Until
+# then nothing of the install is touched, so being cut short (logoff, power,
+# a full disk) costs nothing; shortcuts and the Apps entry stay valid.
+# Rollback (-Rollback): PREVIOUS changes places with DIR.
+#
+# It waits for PID, and for anything running from DIR, to exit (120 s each;
+# past that it changes nothing), writes a one-line JSON STATUS for the next
+# launch to report, and with -Relaunch starts finterm.exe again. The user's
+# data lives elsewhere (%LOCALAPPDATA%\finterm) and is never touched.
 
 param(
     [int]$AppPid = 0,
-    [string]$Installer = "",
+    [string]$Package = "",
     [Parameter(Mandatory = $true)][string]$InstallDir,
     [Parameter(Mandatory = $true)][string]$Previous,
     [string]$Status = "",
@@ -26,15 +29,19 @@ param(
     [string]$To = "",
     [switch]$Relaunch,
     [switch]$Rollback,
-    [switch]$Recover, # the logon task of an update that was cut short: put PREVIOUS back
     [string]$AppProfile = "",
     [string]$Lock = "" # the app's record of this helper; removed when done, before any relaunch
 )
 
 $ErrorActionPreference = "Stop"
 $Kind = if ($Rollback) { "ifw-rollback" } else { "ifw" }
+$InstallDir = $InstallDir.TrimEnd('\')
+$Previous = $Previous.TrimEnd('\')
 $Exe = Join-Path $InstallDir "finterm.exe"
-$Tool = Join-Path $InstallDir "FintermMaintenanceTool.exe"
+$New = "$InstallDir.new"
+# What the installer keeps beside the app; the update package has none of it.
+$InstallerFiles = @("FintermMaintenanceTool*", "components.xml", "network.xml", "InstallationLog.txt",
+                    "installer.dat", "installerResources", "Licenses")
 
 function Write-Status([bool]$ok, [string]$message) {
     if ($Lock) { Remove-Item -Force $Lock -ErrorAction SilentlyContinue }
@@ -51,16 +58,36 @@ function Write-Status([bool]$ok, [string]$message) {
 }
 
 function Start-App {
-    if (-not ($Relaunch -and (Test-Path $Exe))) { return }
+    if (-not ($Relaunch -and (Test-Path -LiteralPath $Exe))) { return }
     if ($AppProfile) { Start-Process -FilePath $Exe -WorkingDirectory $InstallDir -ArgumentList @("--profile", $AppProfile) }
     else { Start-Process -FilePath $Exe -WorkingDirectory $InstallDir }
 }
 
-function Copy-Tree([string]$src, [string]$dst) {
-    # /MIR mirrors (deletes extras); exit codes below 8 are success for robocopy.
-    # By full path: PATH need not have System32.
-    & (Join-Path $env:SystemRoot "System32\robocopy.exe") $src $dst /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "robocopy $src -> $dst failed ($LASTEXITCODE)" }
+function Remove-Tree([string]$dir) {
+    if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+}
+
+# One folder rename, tried for 15 s (a virus scanner may have a file open). It
+# happens whole or not at all.
+function Rename-Dir([string]$src, [string]$dst) {
+    for ($i = 0; ; $i++) {
+        try { [System.IO.Directory]::Move($src, $dst); return }
+        catch { if ($i -ge 30) { throw }; Start-Sleep -Milliseconds 500 }
+    }
+}
+
+# DIR -> $aside, $in -> DIR; on any failure DIR is as it was.
+function Switch-Install([string]$in, [string]$aside) {
+    Rename-Dir $InstallDir $aside
+    try { Rename-Dir $in $InstallDir }
+    catch { Rename-Dir $aside $InstallDir; throw }
+}
+
+function Set-AppsVersion([string]$version) {
+    $keys = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    Get-ItemProperty $keys -ErrorAction SilentlyContinue |
+        Where-Object { $_.InstallLocation -and $_.InstallLocation.Replace('/', '\').TrimEnd('\') -ieq $InstallDir } |
+        ForEach-Object { Set-ItemProperty -LiteralPath $_.PSPath -Name DisplayVersion -Value $version }
 }
 
 # ── Wait for the app to be gone (it holds the files we replace) ─────────────
@@ -71,10 +98,9 @@ if ($AppPid -gt 0) {
         exit 1
     }
 }
-
 # … and for anything else running from the install (a finterm started in the
 # meantime leaves by itself).
-$prefix = $InstallDir.TrimEnd('\') + '\'
+$prefix = $InstallDir + '\'
 $deadline = (Get-Date).AddSeconds(120)
 while (Get-Process -ErrorAction SilentlyContinue |
        Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }) {
@@ -86,107 +112,47 @@ while (Get-Process -ErrorAction SilentlyContinue |
     Start-Sleep -Milliseconds 500
 }
 
-# An update cut short (logoff, power) would leave no finterm: until it is done,
-# the next logon puts PREVIOUS back. A RunOnce value is at most 260 characters,
-# so it runs a small script beside the status.
-$runOnce = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
-$recoverScript = if ($Status) { Join-Path (Split-Path -Parent $Status) "recover-update.ps1" } else { "" }
-function Quote([string]$s) { "'" + $s.Replace("'", "''") + "'" }
-function Set-Recovery {
-    if (-not $recoverScript) { return }
-    $line = "& " + (Quote $PSCommandPath) + " -Recover -InstallDir " + (Quote $InstallDir) + " -Previous " + (Quote $Previous) +
-            " -Status " + (Quote $Status) + " -From " + (Quote $From) + " -To " + (Quote $To) + " -AppProfile " + (Quote $AppProfile)
-    # With a BOM: Windows PowerShell reads a script without one as ANSI.
-    [System.IO.File]::WriteAllText($recoverScript, $line, (New-Object System.Text.UTF8Encoding $true))
-    if (-not (Test-Path $runOnce)) { New-Item -Path $runOnce -Force | Out-Null }
-    $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-    Set-ItemProperty -Path $runOnce -Name "finterm-update" -Value "$ps -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$recoverScript`""
-}
-function Clear-Recovery {
-    Remove-ItemProperty -Path $runOnce -Name "finterm-update" -ErrorAction SilentlyContinue
-    if ($recoverScript) { Remove-Item -Force $recoverScript -ErrorAction SilentlyContinue }
-}
-
-$kept = $false   # the whole install is in PREVIOUS
-$touched = $false # the install folder has been changed (purge started)
+$done = "applied"
 try {
-    if ($Recover) {
-        if (-not (Test-Path (Join-Path $Previous "finterm.exe"))) { throw "no previous version to restore" }
-        Copy-Tree $Previous $InstallDir
-        Clear-Recovery
-        Write-Status $false "it was interrupted; the previous version was restored"
-        exit 0
-    }
     if ($Rollback) {
-        if (-not (Test-Path $Previous)) { throw "no previous version to restore" }
-        Copy-Tree $Previous $InstallDir
-        Write-Status $true "restored"
-        Start-App
-        exit 0
+        if (-not (Test-Path -LiteralPath (Join-Path $Previous "finterm.exe"))) { throw "no previous version to restore" }
+        $failed = "$InstallDir.failed"
+        Remove-Tree $failed
+        Switch-Install $Previous $failed
+        $done = "restored"
+        try { Set-AppsVersion $To; Remove-Tree $failed } catch {}
     }
-
-    if (-not (Test-Path $Installer)) { throw "the staged installer is missing: $Installer" }
-    if (-not (Test-Path $Tool)) { throw "the maintenance tool is missing: $Tool" }
-
-    # Keep the running version for a rollback.
-    Copy-Tree $InstallDir $Previous
-    $kept = $true
-    Set-Recovery
-
-    # The installer refuses a folder that already holds an installation:
-    # remove it with its own tool, then install the new version there.
-    $touched = $true
-    # --default-answer: any question takes its default (a command-line purge
-    # does not run the uninstaller's question about the user's data at all).
-    # -Wait also waits for the script the tool leaves to delete itself.
-    $purge = Start-Process -FilePath $Tool -ArgumentList @("purge", "--default-answer", "--confirm-command") -Wait -PassThru -WindowStyle Hidden
-    if ($purge.ExitCode -ne 0) { throw "removing the old version failed ($($purge.ExitCode))" }
-    # What the tool leaves (files the app wrote beside itself, e.g. Python
-    # caches) would make the installer refuse a non-empty folder. The whole
-    # install is in PREVIOUS by now.
-    for ($i = 0; (Test-Path $Tool) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
-    # The contents, not the folder: a program may have it as its working
-    # directory, and the installer takes an empty one.
-    for ($i = 0; Test-Path $InstallDir; $i++) {
-        try { Get-ChildItem -LiteralPath $InstallDir -Force | Remove-Item -Recurse -Force; break }
-        catch { if ($i -ge 10) { throw }; Start-Sleep -Seconds 1 }
+    else {
+        if (-not (Test-Path -LiteralPath $Package)) { throw "the staged update is missing: $Package" }
+        if (-not (Test-Path -LiteralPath $Exe)) { throw "the install to replace is missing: $InstallDir" }
+        Remove-Tree $New
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($Package, $New)
+        if (-not (Test-Path -LiteralPath (Join-Path $New "finterm.exe"))) { throw "the update package holds no finterm" }
+        foreach ($name in $InstallerFiles) {
+            Get-ChildItem -Path (Join-Path $InstallDir $name) -Force -ErrorAction SilentlyContinue |
+                Copy-Item -Destination $New -Recurse -Force
+        }
+        # The older previous version goes only once the new one is in.
+        $older = "$Previous.old"
+        Remove-Tree $older
+        if (Test-Path -LiteralPath $Previous) { Rename-Dir $Previous $older }
+        try { Switch-Install $New $Previous }
+        catch {
+            if ((Test-Path -LiteralPath $older) -and -not (Test-Path -LiteralPath $Previous)) { Rename-Dir $older $Previous }
+            throw
+        }
+        # Done: nothing after this may undo it.
+        try { Set-AppsVersion $To; Remove-Tree $older; Remove-Item -Force -LiteralPath $Package } catch {}
     }
-
-    # The updater's own install is never "another finterm" (installscript.qs).
-    $env:FINTERM_INSTALL_UPDATE = "1"
-    $install = Start-Process -FilePath $Installer -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
-        "install", "--root", "`"$InstallDir`"", "--accept-licenses", "--default-answer", "--confirm-command")
-    $env:FINTERM_INSTALL_UPDATE = $null # not for the finterm started next
-    if ($install.ExitCode -ne 0 -or -not (Test-Path $Exe)) {
-        throw "installing $To failed ($($install.ExitCode))"
-    }
-
-    # Done: nothing after this may undo it.
-    $touched = $false
-    Clear-Recovery
-    Remove-Item -Force $Installer -ErrorAction SilentlyContinue
 }
 catch {
-    $env:FINTERM_INSTALL_UPDATE = $null
     $why = $_.Exception.Message
-    # Whatever failed once the old install was touched (a locked file, the
-    # tool, the installer), the previous version goes back: never leave the
-    # user without a working finterm.
-    if (-not $Rollback -and $touched -and $kept) {
-        try {
-            Copy-Tree $Previous $InstallDir
-            Clear-Recovery
-            $why = "$why; the previous version was restored"
-        }
-        catch {
-            $why = "$why; restoring the previous version also failed: $($_.Exception.Message) (it is kept in $Previous)"
-        }
-    }
-    if (-not $touched) { Clear-Recovery }
+    try { Remove-Tree $New } catch {}
     try { Write-Status $false $why } catch {}
     Start-App
     exit 1
 }
-try { Write-Status $true "applied" } catch {}
+try { Write-Status $true $done } catch {}
 Start-App
 exit 0

@@ -50,6 +50,8 @@ ManifestResult parse_manifest(const QByteArray& body, const QString& platform_ke
     o.sha256 = e.value(QStringLiteral("sha256")).toString().trimmed().toLower();
     o.open_url = e.value(QStringLiteral("open-url")).toString().trimmed();
     o.changelog = e.value(QStringLiteral("changelog")).toString();
+    o.inplace_url = e.value(QStringLiteral("inplace-url")).toString().trimmed();
+    o.inplace_sha256 = e.value(QStringLiteral("inplace-sha256")).toString().trimmed().toLower();
     if (o.version.isEmpty() || o.download_url.isEmpty())
         return ManifestResult::Incomplete;
     out = o;
@@ -61,7 +63,9 @@ QByteArray offer_to_json(const Offer& o) {
                                      {"download-url", o.download_url},
                                      {"sha256", o.sha256},
                                      {"open-url", o.open_url},
-                                     {"changelog", o.changelog}})
+                                     {"changelog", o.changelog},
+                                     {"inplace-url", o.inplace_url},
+                                     {"inplace-sha256", o.inplace_sha256}})
         .toJson(QJsonDocument::Compact);
 }
 
@@ -73,6 +77,8 @@ Offer offer_from_json(const QByteArray& json) {
     o.sha256 = e.value(QStringLiteral("sha256")).toString();
     o.open_url = e.value(QStringLiteral("open-url")).toString();
     o.changelog = e.value(QStringLiteral("changelog")).toString();
+    o.inplace_url = e.value(QStringLiteral("inplace-url")).toString();
+    o.inplace_sha256 = e.value(QStringLiteral("inplace-sha256")).toString();
     int a = 0, b = 0, c = 0;
     if (!parse_version(o.version, a, b, c) || o.download_url.isEmpty())
         return {};

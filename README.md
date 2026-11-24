@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`c2ac36ce3`](https://github.com/yumima/finterm/commit/c2ac36ce3) updater: an interrupted Windows update is undone at the next logon; review fixes
 - [`52726e0e1`](https://github.com/yumima/finterm/commit/52726e0e1) updater: hardened for release — rollback copy kept, one helper at a time, no retry loop, the Windows rules tested
 - [`66a994d3f`](https://github.com/yumima/finterm/commit/66a994d3f) **docs:** 4.1.0 install and update facts — Windows per user, the self-test path, opt-in in-place updates
 - [`d2d0d4147`](https://github.com/yumima/finterm/commit/d2d0d4147) release 4.1.0: Windows installs per user; the silent Windows update can't hang

@@ -21,6 +21,10 @@ struct Offer {
     QString sha256; ///< lower-case hex; empty when the manifest carries none
     QString open_url;
     QString changelog;
+    /// The package that replaces an install in place, where that is not the
+    /// download itself (Windows: a zip of the app beside the installer).
+    QString inplace_url;
+    QString inplace_sha256;
 };
 
 enum class ManifestResult {

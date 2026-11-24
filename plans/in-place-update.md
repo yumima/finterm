@@ -55,11 +55,10 @@ new versions. [Turn on] [Not now]"). Until they turn it on, behaviour is exactly
 | Platform | Staged as | Swap | Relaunch |
 |---|---|---|---|
 | Linux AppImage | `<appimage>.new` in the same directory (same filesystem) | `rename()` over `$APPIMAGE`. Atomic, and safe while running (the old inode stays mapped) | `execv` the new path |
-| Windows (IFW) | The verified setup.exe in the app data | After exit the helper copies the install to `<dir>.previous`, removes it with `FintermMaintenanceTool purge`, and runs the setup unattended into the same folder (`install --root … --accept-licenses --default-answer --confirm-command`, the command CI already proves); a failed install is copied back | Helper starts `finterm.exe` |
+| Windows (IFW) | The release's `-update.zip` (the app's files; `inplace-url` in updates.json) in the app data | After exit the helper unpacks it beside the install (`<dir>.new`), copies the installer's own files over (the uninstaller keeps working) and swaps the folders by two renames; `<dir>.previous` is the rollback. Nothing is touched until the new version is whole | Helper starts `finterm.exe` |
 
-(Chosen over an IFW online repository: no second hosted artifact to keep in step with the release, and the
-offline installer + its unattended mode are what CI already installs and self-tests.)
-| macOS (DMG) | `.app` copied out of the mounted DMG with `ditto` into `~/Library/Caches/finterm/update/` | After exit, a helper renames the old bundle to `.old`, moves the new one into place, clears quarantine (`xattr -dr com.apple.quarantine`), then deletes `.old` | `open -n <bundle>` |
+(First built as uninstall + silent reinstall and replaced before release: minutes long, and cut short — logoff,
+power, a locked file — it left no finterm, which every repair for made more ways to fail.)
 
 Windows and macOS can't replace a running binary, so the swap runs in a **tiny detached helper** (a script written by the app) that
 waits for the app's PID to exit, swaps, relaunches, and exits. Linux doesn't need it.

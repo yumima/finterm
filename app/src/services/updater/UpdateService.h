@@ -138,6 +138,8 @@ class UpdateService : public QObject {
     /// Show the offer an earlier run / another profile stored (release builds).
     void restore_saved_offer();
     void set_offer(const update_policy::Offer& offer);
+    /// The offer as this install uses it (Windows in place: the package).
+    update_policy::Offer localized(update_policy::Offer offer) const;
     void prompt_install();
     void prompt_restart();
     /// `quiet`: started by the automatic schedule — a failure is logged and
@@ -182,10 +184,10 @@ class UpdateService : public QObject {
     QDateTime retry_at_;
     int failed_tries_ = 0;
     bool download_quiet_ = false;
-    bool hold_apply_ = false;      ///< a profile switch: this quit must not start the helper
-    QDateTime session_hold_until_; ///< the Windows session may be ending
+    bool hold_apply_ = false; ///< a profile switch: this quit must not start the helper
     bool applied_ = false; ///< the helper has been started (no second one at quit)
-    std::optional<update_install::Target> in_place_;
+    std::optional<update_install::Target> target_;   ///< what this build can replace
+    std::optional<update_install::Target> in_place_; ///< … and the offer has the package for
     std::unique_ptr<QFile> part_; ///< the download being written (<path>.part)
     std::unique_ptr<QCryptographicHash> hasher_;
     QString last_result_;
