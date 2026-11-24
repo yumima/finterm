@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 from finterm_paths import feature_dir
 
 from .book import Book, Fill
+from .traders import clean
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS competitions (
@@ -52,7 +54,7 @@ DROP TABLE IF EXISTS leaderboard_history;
 
 # What the engine before wrote as the reasoning of a HOLD nobody had decided on.
 _NOT_A_HOLD = ("Error: %", "local runtime unavailable: %", "anthropic runtime unavailable: %",
-               "Empty response from LLM%", "Failed to parse LLM response%")
+               "Empty response from LLM%", "Failed to parse LLM response%", "No LLM available%", "No decision from LLM%")
 
 
 def now() -> str:
@@ -67,10 +69,17 @@ class Store:
     def __init__(self, folder: Path | None = None):
         self.folder = Path(folder) if folder else feature_dir("alpha_arena")
         self.path = self.folder / "alpha_arena.db"
+        if self._version() < 2:
+            # One process at a time, and each step by the version found then.
+            with self._lock("migrate", wait_s=60):
+                if self._version() < 1:
+                    self._drop_saved_keys()
+                if self._version() < 2:
+                    self._to_version_2()
+
+    def _version(self) -> int:
         with self._db() as db:
-            db.executescript(_SCHEMA)
-        self._drop_saved_keys()
-        self._to_version_2()
+            return db.execute("PRAGMA user_version").fetchone()[0]
 
     @contextmanager
     def _db(self):
@@ -82,12 +91,14 @@ class Store:
         finally:
             db.close()
 
-    @contextmanager
     def cycle_lock(self, competition_id: str):
-        """One cycle of a competition at a time. A lock the system holds: it goes
-        with the process, however that ends."""
-        name = "".join(c if c.isalnum() or c in "-_" else "_" for c in competition_id)
-        lock = sqlite3.connect(self.folder / f".cycle-{name}.lock", timeout=0, isolation_level=None)
+        """One cycle of a competition at a time."""
+        return self._lock("cycle-" + "".join(c if c.isalnum() or c in "-_" else "_" for c in competition_id))
+
+    @contextmanager
+    def _lock(self, name: str, wait_s: float = 0):
+        """A lock the system holds: it goes with the process, however that ends."""
+        lock = sqlite3.connect(self.folder / f".{name}.lock", timeout=wait_s, isolation_level=None)
         try:
             try:
                 lock.execute("BEGIN EXCLUSIVE")
@@ -105,10 +116,9 @@ class Store:
         replaced rows left in its free pages."""
         db = sqlite3.connect(self.path, timeout=30)
         try:
-            if db.execute("PRAGMA user_version").fetchone()[0] >= 1:
-                return
+            db.executescript(_SCHEMA)
             for competition_id, text in db.execute("SELECT competition_id, config FROM competitions").fetchall():
-                config = json.loads(text)
+                config = read_config(text)  # {} of one that can't be read: nor be used
                 for model in config.get("models", []):
                     model.pop("api_key", None)
                 db.execute("UPDATE competitions SET config = ? WHERE competition_id = ?",
@@ -122,22 +132,22 @@ class Store:
 
     def _to_version_2(self):
         """Portfolios from fills. The numbers of their own that were kept beside
-        the fills were wrong (see book.py): they are worked out again."""
+        the fills were wrong (see book.py): they are worked out again. All of it
+        or none: what fails is tried again at the next start."""
         db = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         db.row_factory = sqlite3.Row
         try:
-            db.execute("BEGIN IMMEDIATE")  # two processes may come here at once
-            if db.execute("PRAGMA user_version").fetchone()[0] >= 2:
-                db.execute("ROLLBACK")
-                return
+            db.execute("BEGIN IMMEDIATE")
             for statement in _SCHEMA_2.split(";"):
                 if statement.strip():
                     db.execute(statement)
             for pattern in _NOT_A_HOLD:
                 db.execute("UPDATE decisions SET error = reasoning, reasoning = '', action = 'none', trade_status = 'none', "
                            "confidence = NULL WHERE action = 'hold' AND reasoning LIKE ?", (pattern,))
-            self._import_fills(db)
-            self._rebuild_snapshots(db)
+            configs = {r["competition_id"]: read_config(r["config"])
+                       for r in db.execute("SELECT competition_id, config FROM competitions")}
+            self._import_fills(db, configs)
+            self._rebuild_snapshots(db, configs)
             db.execute("PRAGMA user_version = 2")
             db.execute("COMMIT")
         except BaseException:
@@ -147,53 +157,63 @@ class Store:
         finally:
             db.close()
 
-    def _import_fills(self, db: sqlite3.Connection):
+    def _import_fills(self, db: sqlite3.Connection, configs: dict[str, dict]):
         old = self.folder / "paper_trading.db"
         if not old.exists():
             return
-        src = sqlite3.connect(f"file:{old.as_posix()}?mode=ro", uri=True)
+        src = sqlite3.connect(old.resolve().as_uri() + "?mode=ro", uri=True, timeout=30)
         try:
-            for competition in db.execute("SELECT competition_id, config FROM competitions").fetchall():
-                for model in json.loads(competition["config"]).get("models", []):
-                    name = f"alpha_arena_{competition['competition_id']}_{model['name']}"
-                    for t in src.execute(
-                            "SELECT t.symbol, t.side, t.quantity, t.price, t.fee, t.timestamp FROM pt_trades t "
-                            "JOIN pt_portfolios p ON p.id = t.portfolio_id WHERE p.name = ? ORDER BY t.timestamp, t.rowid",
-                            (name,)).fetchall():
-                        db.execute("INSERT INTO fills (competition_id, model_name, cycle_number, symbol, side, quantity, "
+            try:
+                tables = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            except sqlite3.OperationalError:
+                raise  # it is in use: the next start
+            except sqlite3.DatabaseError as e:
+                print(f"alpha_arena: {old}: {e}", file=sys.stderr)  # not a database: nothing to take
+                return
+            if not {"pt_trades", "pt_portfolios"} <= tables:
+                return
+            for competition_id, config in configs.items():
+                for model in config.get("models", []):
+                    trades = src.execute(
+                        "SELECT t.symbol, t.side, t.quantity, t.price, t.fee, t.timestamp FROM pt_trades t "
+                        "JOIN pt_portfolios p ON p.id = t.portfolio_id WHERE p.name = ? ORDER BY t.timestamp, t.rowid",
+                        (f"alpha_arena_{competition_id}_{model.get('name')}",)).fetchall()
+                    db.executemany("INSERT INTO fills (competition_id, model_name, cycle_number, symbol, side, quantity, "
                                    "price, fee, timestamp) VALUES (?,?,0,?,?,?,?,?,?)",
-                                   (competition["competition_id"], model["name"], *t))
-        except sqlite3.OperationalError:
-            pass  # not a paper trading database after all: nothing to take
+                                   [(competition_id, model.get("name"), *t) for t in trades])
         finally:
             src.close()
 
     @staticmethod
-    def _rebuild_snapshots(db: sqlite3.Connection):
-        configs = {r["competition_id"]: json.loads(r["config"])
-                   for r in db.execute("SELECT competition_id, config FROM competitions")}
-        for snap in db.execute("SELECT * FROM snapshots").fetchall():
+    def _rebuild_snapshots(db: sqlite3.Connection, configs: dict[str, dict]):
+        prices: dict[tuple, dict] = {}
+        for r in db.execute("SELECT competition_id, cycle_number, symbol, price_at_decision FROM decisions "
+                            "WHERE price_at_decision > 0"):
+            prices.setdefault((r["competition_id"], r["cycle_number"]), {})[r["symbol"]] = r["price_at_decision"]
+        fills: dict[tuple, list] = {}
+        for r in db.execute("SELECT * FROM fills ORDER BY id"):
+            fills.setdefault((r["competition_id"], r["model_name"]), []).append(r)
+        books: dict[tuple, list] = {}  # (book, how many fills are in it), going on from cycle to cycle
+        for snap in db.execute("SELECT * FROM snapshots ORDER BY competition_id, model_name, cycle_number").fetchall():
+            who, at = (snap["competition_id"], snap["model_name"]), prices.get((snap["competition_id"], snap["cycle_number"]))
             config = configs.get(snap["competition_id"])
-            at = db.execute("SELECT symbol, price_at_decision FROM decisions WHERE competition_id = ? AND cycle_number = ? "
-                            "AND price_at_decision IS NOT NULL LIMIT 1",
-                            (snap["competition_id"], snap["cycle_number"])).fetchone()
-            if config is None or at is None:
+            until = _utc(snap["timestamp"])
+            if not config or not at or until is None:  # nothing to work it out from
                 db.execute("DELETE FROM snapshots WHERE id = ?", (snap["id"],))
                 continue
-            # The fills' times are UTC ("Z"), the snapshots' were local.
-            until = datetime.fromisoformat(snap["timestamp"]).astimezone(timezone.utc).isoformat()
-            fills = [Fill(r["symbol"], r["side"], r["quantity"], r["price"], r["fee"]) for r in db.execute(
-                "SELECT * FROM fills WHERE competition_id = ? AND model_name = ? AND replace(timestamp,'Z','+00:00') <= ? "
-                "ORDER BY id", (snap["competition_id"], snap["model_name"], until))]
-            book = Book.of(capital_of(config, snap["model_name"]), fills)
-            prices = {at["symbol"]: at["price_at_decision"]}
-            value = book.value(prices)
+            entry = books.setdefault(who, [Book.of(capital_of(config, who[1]), []), 0])
+            book, rows = entry[0], fills.get(who, [])
+            while entry[1] < len(rows) and ((t := _utc(rows[entry[1]]["timestamp"])) is None or t <= until):
+                r = rows[entry[1]]
+                book.apply(Fill(r["symbol"], r["side"], r["quantity"], r["price"], r["fee"]))
+                entry[1] += 1
+            value = book.value(at)
             db.execute("UPDATE snapshots SET portfolio_value = ?, cash = ?, pnl = ?, return_pct = ?, positions_count = ?, "
                        "trades_count = ? WHERE id = ?",
                        (value, book.cash, value - book.initial_capital, (value / book.initial_capital - 1) * 100,
                         len(book.positions), book.trades, snap["id"]))
             db.execute("INSERT OR IGNORE INTO cycles VALUES (?,?,?,?)",
-                       (snap["competition_id"], snap["cycle_number"], json.dumps({"prices": prices}), snap["timestamp"]))
+                       (snap["competition_id"], snap["cycle_number"], json.dumps({"prices": at}), snap["timestamp"]))
 
     # ── Competitions ─────────────────────────────────────────────────────────
 
@@ -205,12 +225,14 @@ class Store:
     def competition(self, competition_id: str) -> dict | None:
         with self._db() as db:
             row = db.execute("SELECT * FROM competitions WHERE competition_id = ?", (competition_id,)).fetchone()
-        return {**dict(row), "config": json.loads(row["config"])} if row else None
+        config = read_config(row["config"]) if row else {}
+        return {**dict(row), "config": config} if config.get("models") else None
 
     def competitions(self, limit: int) -> list[dict]:
         with self._db() as db:
             rows = db.execute("SELECT * FROM competitions ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [{**dict(r), "config": json.loads(r["config"])} for r in rows]
+        found = [{**dict(r), "config": read_config(r["config"])} for r in rows]
+        return [c for c in found if c["config"].get("models")]
 
     def book(self, competition_id: str, config: dict, name: str) -> Book:
         with self._db() as db:
@@ -228,9 +250,9 @@ class Store:
                 db.execute("INSERT INTO decisions (competition_id, model_name, cycle_number, action, symbol, quantity, "
                            "confidence, reasoning, price_at_decision, trade_status, trade_pnl, timestamp, error, fill_price) "
                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                           (competition_id, d.model_name, number, d.action, d.symbol, d.quantity,
-                            d.confidence, d.reasoning,
-                            data.get("prices", {}).get(d.symbol), d.status, d.pnl, at, d.error or None, d.price))
+                           (competition_id, d.model_name, number, d.action, clean(d.symbol), d.quantity,
+                            d.confidence, clean(d.reasoning),
+                            data.get("prices", {}).get(d.symbol), d.status, d.pnl, at, clean(d.error) or None, d.price))
             for name, f in fills:
                 db.execute("INSERT INTO fills (competition_id, model_name, cycle_number, symbol, side, quantity, price, fee, "
                            "timestamp) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -242,6 +264,13 @@ class Store:
                             s["trades_count"], at))
             db.execute("UPDATE competitions SET status = 'running', cycle_count = ?, updated_at = ?, "
                        "start_time = COALESCE(start_time, ?) WHERE competition_id = ?", (number, at, at, competition_id))
+
+    def next_cycle(self, competition_id: str) -> int:
+        with self._db() as db:
+            return 1 + max(db.execute("SELECT COALESCE(MAX(cycle_count), 0) FROM competitions WHERE competition_id = ?",
+                                      (competition_id,)).fetchone()[0],
+                           db.execute("SELECT COALESCE(MAX(cycle_number), 0) FROM cycles WHERE competition_id = ?",
+                                      (competition_id,)).fetchone()[0])
 
     def last_cycle(self, competition_id: str) -> dict:
         with self._db() as db:
@@ -273,6 +302,22 @@ class Store:
             rows = db.execute("SELECT portfolio_value FROM snapshots WHERE competition_id = ? AND model_name = ? "
                               "ORDER BY cycle_number", (competition_id, model_name)).fetchall()
         return [r["portfolio_value"] for r in rows]
+
+
+def read_config(text: str) -> dict:
+    try:
+        config = json.loads(text)
+    except ValueError:
+        return {}
+    return config if isinstance(config, dict) else {}
+
+
+def _utc(timestamp: str) -> datetime | None:
+    """The fills' times were UTC ("Z"), the snapshots' local without saying so."""
+    try:
+        return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
 
 
 def capital_of(config: dict, name: str) -> float:

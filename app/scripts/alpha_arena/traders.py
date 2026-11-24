@@ -56,8 +56,8 @@ def crypto_system(mode: str, limits: Limits, extra: str) -> str:
     rules = [
         "You trade one cryptocurrency with paper money, against other AI models.",
         _MODES[mode],
-        f"One trade is at most {_percent(limits.max_trade)} of your portfolio's value, the position at most "
-        f"{_percent(limits.max_position)} of it, long or short. Every trade costs {_percent(FEE_RATE)}.",
+        f"A trade opens at most {_percent(limits.max_trade)} of your portfolio's value, the position is at most "
+        f"{_percent(limits.max_position)} of it, long or short; closing is not limited. Every trade costs {_percent(FEE_RATE)}.",
     ]
     if limits.min_confidence:
         rules.append(f"A trade with a confidence below {limits.min_confidence} is not carried out.")
@@ -84,7 +84,7 @@ def _portfolio_lines(book: Book, prices: dict[str, float]) -> list[str]:
 
 
 def crypto_prompt(q: Quote, technical: list[str], news: list[dict], book: Book, recent: list[dict], cycle: int) -> str:
-    lines = [f"Cycle {cycle}", "", "MARKET", f"{q.symbol} on {q.exchange}: {price_text(q.price)}",
+    lines = [f"Cycle {cycle}", "", "MARKET", f"{q.symbol} on {q.exchange}: last {price_text(q.price)}",
              f"Bid {price_text(q.bid)}, ask {price_text(q.ask)}"]
     if q.high_24h and q.low_24h:
         lines.append(f"24h range: {price_text(q.low_24h)} to {price_text(q.high_24h)}")
@@ -94,12 +94,12 @@ def crypto_prompt(q: Quote, technical: list[str], news: list[dict], book: Book, 
         lines += ["", "INDICATORS", *technical]
     if news:
         lines += ["", "HEADLINES (last two days)", *(f"- {n['title']} ({n['publisher']})" for n in news)]
-    lines += ["", "YOUR PORTFOLIO", *_portfolio_lines(book, {q.symbol: q.price})]
+    lines += ["", "YOUR PORTFOLIO", *_portfolio_lines(book, {q.symbol: q.mark})]
     pos = book.positions.get(q.symbol)
     if pos:
         side = "long" if pos.quantity > 0 else "short"
         lines.append(f"Position: {side} {abs(pos.quantity):.8g} {q.symbol.split('/')[0]}, entered at "
-                     f"{price_text(pos.entry_price)}, now {pos.unrealized(q.price):+,.2f} USD")
+                     f"{price_text(pos.entry_price)}, now {pos.unrealized(q.mark):+,.2f} USD")
     else:
         lines.append("Position: none")
     if recent:
@@ -112,8 +112,8 @@ def prediction_system(mode: str, limits: Limits, extra: str) -> str:
         "You trade prediction markets with paper money, against other AI models. A share pays $1 if its outcome "
         "happens and nothing if it does not; its price is what the market thinks the chance is.",
         _MODES[mode],
-        f"One trade is at most {_percent(limits.max_trade)} of your portfolio's value, one outcome at most "
-        f"{_percent(limits.max_position)} of it. Every trade costs {_percent(FEE_RATE)}.",
+        f"A trade opens at most {_percent(limits.max_trade)} of your portfolio's value, one outcome is at most "
+        f"{_percent(limits.max_position)} of it; closing is not limited. Every trade costs {_percent(FEE_RATE)}.",
     ]
     if limits.min_confidence:
         rules.append(f"A trade with a confidence below {limits.min_confidence} is not carried out.")
@@ -135,7 +135,7 @@ def prediction_prompt(markets: list[PredictionMarket], book: Book, prices: dict[
         lines.append(f"- id {m.id}: {m.question}")
         for i, name in enumerate(m.outcomes):
             bid, ask = m.bid_ask(i)
-            lines.append(f"    {name}: {m.prices[i]:.3f} (bid {bid:.3f}, ask {ask:.3f})")
+            lines.append(f"    {name}: {m.mark(i):.3f} (bid {bid:.3f}, ask {ask:.3f})")
         about = [f"ends {m.end_date}"] if m.end_date else []
         if m.liquidity:
             about.append(f"liquidity ${m.liquidity:,.0f}")
@@ -162,6 +162,22 @@ def _json_values(text: str) -> list:
         except ValueError:
             at += 1
     return out
+
+
+def _whole(text: str):
+    """The answer, when it is JSON and nothing else (but a fence)."""
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.strip("`").removeprefix("json")
+    try:
+        return json.loads(body)
+    except ValueError:
+        return None
+
+
+def clean(text: str) -> str:
+    """What can be stored and shown: a lone half of a surrogate pair can't be written."""
+    return text.encode("utf-8", "replace").decode("utf-8").replace("\0", "")
 
 
 def _number(v, low: float, high: float, what: str) -> float:
@@ -200,13 +216,19 @@ def read_crypto(name: str, symbol: str, text: str) -> Decision:
 def read_predictions(name: str, markets: list[PredictionMarket], text: str) -> list[Decision]:
     """One for every market it decided on; a market it left out is left alone."""
     by_id = {m.id: m for m in markets}
-    found: list = []
-    for v in _json_values(text):
-        rows = v if isinstance(v, list) else [v]
-        rows = [r for r in rows if isinstance(r, dict) and "market_id" in r and "action" in r]
-        found = rows or found
-    if not found and not any(v == [] for v in _json_values(text)):
-        raise NoDecision(f"its answer holds no decision: {' '.join(text.split())[:80]!r}")
+    values = _json_values(text)
+
+    def rows_of(v: list) -> list[dict]:
+        return [r for r in v if isinstance(r, dict) and "market_id" in r and "action" in r]
+
+    lists = [v for v in values if isinstance(v, list)]
+    lists += [x for v in values if isinstance(v, dict) for x in v.values() if isinstance(x, list)]
+    found = next((rows for v in reversed(lists) if (rows := rows_of(v))), None)
+    if found is None:
+        found = rows_of(values)  # objects one after another; all of them, or it was cut off
+        nothing = _whole(text) in ([], {"decisions": []})
+        if len(found) < text.count('"market_id"') or not (found or nothing):
+            raise NoDecision(f"its answer holds no decision: {' '.join(text.split())[:80]!r}")
     out = []
     for row in found:
         market = by_id.get(str(row["market_id"]))
@@ -268,12 +290,12 @@ class Grid:
 
     def decide(self, name: str, q: Quote, book: Book) -> Decision:
         units = round(book.held(q.symbol) / self.unit)
-        target = self.target(q.price, units)
-        value = book.value({q.symbol: q.price})
+        target = self.target(q.mark, units)
+        value = book.value({q.symbol: q.mark})
         where = f"{target} of {self.levels} units between {price_text(self.lower)} and {price_text(self.upper)}"
         if target == units or value <= 0:
             return Decision(name, q.symbol, "hold", reasoning=f"Holds {where}; no line was crossed.")
-        size = abs(target - units) * self.unit * q.price / value
+        size = abs(target - units) * self.unit * q.mark / value
         action = "buy" if target > units else "sell"
         return Decision(name, q.symbol, action, size=min(1.0, size), reasoning=f"Goes from {units} to {where}.")
 

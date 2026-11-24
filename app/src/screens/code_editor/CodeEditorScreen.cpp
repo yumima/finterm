@@ -327,7 +327,8 @@ void CellWidget::set_cell_data(const NotebookCell& cell) {
 
     editor_->blockSignals(true);
     editor_->setPlainText(cell.source);
-    editor_->document()->setModified(false);
+    given_ = cell.source;
+    given_shown_ = editor_->toPlainText();
     editor_->blockSignals(false);
 
     // Force document layout so height measurement is accurate
@@ -352,10 +353,9 @@ void CellWidget::set_cell_data(const NotebookCell& cell) {
     }
 }
 
-std::optional<QString> CellWidget::edited_source() const {
-    if (!editor_->document()->isModified())
-        return std::nullopt;
-    return editor_->toPlainText();
+QString CellWidget::source() const {
+    const QString shown = editor_->toPlainText();
+    return shown == given_shown_ ? given_ : shown;
 }
 
 void CellWidget::set_running(bool running) {
@@ -1508,8 +1508,7 @@ void CodeEditorScreen::on_save_notebook() {
 void CodeEditorScreen::sync_cells() {
     for (auto& cell : cells_)
         if (const auto* cw = find_cell_widget(cell.id))
-            if (const auto typed = cw->edited_source())
-                cell.source = *typed;
+            cell.source = cw->source();
 }
 
 void CodeEditorScreen::rebuild_cells() {

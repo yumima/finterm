@@ -48,6 +48,12 @@ class Quote:
     volume_24h: float | None = None  # in the coin
     at: float = 0.0
 
+    @property
+    def mark(self) -> float:
+        """What a position is worth: between the prices one can trade at. The last
+        trade may be outside them, and a trade then shows a profit at once."""
+        return (self.bid + self.ask) / 2
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -134,6 +140,11 @@ class PredictionMarket:
         if outcome == 1:
             bid, ask = (1 - ask if ask else 0.0), (1 - bid if bid else 0.0)
         return bid, (ask if ask < 1 else 0.0)
+
+    def mark(self, outcome: int) -> float:
+        """What a share is worth: see Quote.mark."""
+        bid, ask = self.bid_ask(outcome)
+        return (bid + ask) / 2 if self.open and 0 < bid <= ask else self.prices[outcome]
 
     def to_dict(self) -> dict:
         return asdict(self)

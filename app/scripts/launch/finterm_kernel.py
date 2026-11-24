@@ -27,8 +27,10 @@ import codecs
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from multiprocessing.connection import Client, Listener
 
@@ -45,13 +47,16 @@ class Stream:
     def __init__(self, pipe, name, kernel, mark):
         self.name = name
         self._pipe, self._kernel, self._mark = pipe, kernel, mark
-        self._reached = threading.Semaphore(0)
+        self._marks = threading.Condition()
+        self._asked = self._seen = 0
         self._thread = threading.Thread(target=self._pump, daemon=True)
         self._thread.start()
 
     def drained(self):
         """Once the cells' process has put its mark in the pipe: until it is read."""
-        self._reached.acquire(timeout=DRAIN_S)
+        with self._marks:
+            self._asked += 1
+            self._marks.wait_for(lambda: self._seen >= self._asked, DRAIN_S)
 
     def finish(self):
         """Once it is gone: until the pipe is empty."""
@@ -66,7 +71,9 @@ class Stream:
                 self._kernel.stream(self.name, decoder.decode(pending[:at], final=True))
                 decoder.reset()
                 pending = pending[at + len(mark):]
-                self._reached.release()
+                with self._marks:
+                    self._seen += 1
+                    self._marks.notify()
             # The start of a mark may be at the end: it waits for the rest.
             keep = next((k for k in range(min(len(mark) - 1, len(pending)), 0, -1) if pending.endswith(mark[:k])), 0)
             self._kernel.stream(self.name, decoder.decode(pending[:len(pending) - keep]))
@@ -80,7 +87,13 @@ class Kernel:
         self._lock = threading.Lock()
         self._id, self._sent = None, 0
         key, mark = secrets.token_bytes(32), b"\0" + secrets.token_hex(16).encode() + b"\0"
-        with Listener(authkey=key) as listener:
+        self._gone = threading.Event()
+        # A socket's path may have some 100 characters: not under a long TMPDIR.
+        folder, address = None, None
+        if os.name == "posix":
+            folder = tempfile.mkdtemp(prefix="finterm-", dir="/tmp" if len(tempfile.gettempdir()) > 60 else None)
+            address = os.path.join(folder, "cells")
+        with Listener(address, authkey=key) as listener:
             self._cells = subprocess.Popen(
                 [sys.executable, os.path.abspath(__file__), "cells"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), bufsize=0)
@@ -92,9 +105,12 @@ class Kernel:
             # One that dies before it connects must not be waited for.
             threading.Thread(target=self._watch, args=(listener.address, key), daemon=True).start()
             self._conn = listener.accept()
+        if folder:
+            shutil.rmtree(folder, ignore_errors=True)
 
     def _watch(self, address, key):
         self._cells.wait()
+        self._gone.set()
         try:
             Client(address, authkey=key).close()  # ends an accept() that still waits
         except OSError:
@@ -126,7 +142,7 @@ class Kernel:
                 msg = json.loads(line)
                 if msg.get("op") == "run":  # one at a time: the app waits for its "done"
                     self._id, self._sent = msg["id"], 0
-                self._conn.send(msg)
+                self._conn.send_bytes(json.dumps(msg).encode())
             except (ValueError, OSError):
                 pass
         self._end()
@@ -135,10 +151,16 @@ class Kernel:
         threading.Thread(target=self._read_app, daemon=True).start()
         while True:
             try:
-                event = self._conn.recv()
-            except (EOFError, OSError):
+                # Not by the connection's end alone: a process a cell forked has
+                # it open too, and may outlive the cells' own.
+                if not self._conn.poll(0.5):
+                    if self._gone.is_set() and not self._conn.poll(0):
+                        break
+                    continue
+                event = json.loads(self._conn.recv_bytes())
+            except (EOFError, OSError, ValueError):
                 break
-            if event["t"] in ("result", "error", "done"):
+            if event["t"] in ("ready", "result", "error", "done"):
                 for s in self._streams:  # what was printed before it goes before it
                     s.drained()
             self.send(**event)
@@ -213,10 +235,12 @@ def cells():
     def read():
         while True:
             try:
-                msg = conn.recv()
+                msg = json.loads(conn.recv_bytes())
             except (EOFError, OSError):
                 os._exit(0)
             if msg.get("op") == "run":
+                if state["interrupt"] == msg.get("id"):
+                    state["interrupt"] = None  # meant for its last run, and late
                 waiting.put(msg)
             elif msg.get("op") == "interrupt":
                 state["interrupt"] = msg.get("id")
@@ -238,7 +262,7 @@ def cells():
 
     def send(**event):
         drain()
-        conn.send(event)
+        conn.send_bytes(json.dumps(event).encode())  # plain: a cell's own str type must not go along
 
     def error(exc, name):
         state["in_cell"] = False
@@ -297,7 +321,7 @@ def cells():
     main.__builtins__ = __builtins__
     sys.modules["__main__"] = main
     threading.Thread(target=read, daemon=True).start()
-    conn.send({"t": "ready", "python": sys.version.split()[0]})
+    send(t="ready", python=sys.version.split()[0])
     while True:
         msg = waiting.get()
         state["id"] = msg["id"]

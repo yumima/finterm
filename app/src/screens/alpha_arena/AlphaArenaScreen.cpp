@@ -19,6 +19,7 @@
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QUrl>
+#include <QSet>
 #include <QSplitter>
 #include <QVBoxLayout>
 
@@ -692,11 +693,9 @@ QWidget* AlphaArenaScreen::create_status_bar() {
 
 // ── Engine ──────────────────────────────────────────────────────────────────
 
-QJsonArray AlphaArenaScreen::connections() const {
+QJsonArray AlphaArenaScreen::connections() {
     QJsonArray out;
-    for (const auto& e : model_entries_) {
-        if (e.provider == kGridProvider)
-            continue;
+    for (const auto& e : settings_entries()) {
         out.append(QJsonObject{{"key", e.key},
                                {"name", e.display_name},
                                {"provider", e.provider},
@@ -709,7 +708,7 @@ QJsonArray AlphaArenaScreen::connections() const {
 }
 
 void AlphaArenaScreen::run_action(const QString& action, const QJsonObject& params, Answer done,
-                                  std::function<void()> failed) {
+                                  std::function<void(const QString&)> failed) {
     QJsonObject payload{{"action", action}, {"params", params}};
     if (action == QLatin1String("create_competition") || action == QLatin1String("run_cycle"))
         payload["connections"] = connections();
@@ -723,8 +722,9 @@ void AlphaArenaScreen::run_action(const QString& action, const QJsonObject& para
                 return;
             }
             if (failed)
-                failed();
-            self->say(r.error, true);
+                failed(r.error);
+            if (self)
+                self->say(r.error, true);
         });
 }
 
@@ -778,10 +778,12 @@ void AlphaArenaScreen::on_create_competition() {
                [this](const QJsonObject& state) {
                    set_busy(false);
                    LOG_INFO("AlphaArena", "Competition created: " + state["competition_id"].toString());
+                   if (!competition_id_.isEmpty())
+                       return; // the reader has opened another meanwhile; it is in HISTORY
                    say("Created: run a cycle");
                    show_competition(state);
                },
-               [this]() { set_busy(false); });
+               [this](const QString&) { set_busy(false); });
 }
 
 void AlphaArenaScreen::on_run_cycle() {
@@ -804,7 +806,7 @@ void AlphaArenaScreen::on_run_cycle() {
                                        : notes.join("\n"),
                        !notes.isEmpty());
                },
-               [this, id]() {
+               [this, id](const QString&) {
                    set_busy(false);
                    if (id == competition_id_)
                        set_badge("CYCLE FAILED", colors::NEGATIVE());
@@ -833,6 +835,7 @@ void AlphaArenaScreen::on_toggle_auto_run() {
 void AlphaArenaScreen::on_reset() {
     set_auto_running(false);
     competition_id_.clear();
+    shown_id_.clear();
     competition_symbol_.clear();
     competition_exchange_.clear();
     set_badge("READY", colors::AMBER());
@@ -867,7 +870,7 @@ void AlphaArenaScreen::on_right_tab_changed(int tab) {
 void AlphaArenaScreen::on_competition_type_changed(int index) {
     crypto_fields_->setVisible(index == 0);
     market_fields_->setVisible(index == 1);
-    if (index == 1 && market_list_->count() == 0)
+    if (index == 1) // prices move and markets close
         load_markets();
     load_tab();
 }
@@ -887,8 +890,9 @@ void AlphaArenaScreen::open_competition(const QString& id) {
                    if (id == competition_id_)
                        show_competition(state);
                },
-               [this, id]() {
-                   if (id == competition_id_)
+               [this, id](const QString& error) {
+                   // Deleted: forgotten. Anything else may pass: it stays the open one.
+                   if (id == competition_id_ && error.startsWith("There is no competition"))
                        on_reset();
                });
 }
@@ -923,7 +927,8 @@ QString AlphaArenaScreen::current_symbol() const {
 }
 
 void AlphaArenaScreen::load_tab() {
-    if (!isVisible())
+    // A competition being opened: it is loaded once its symbol is known.
+    if (!isVisible() || shown_id_ != competition_id_)
         return;
     const int tab = right_stack_->currentIndex();
     if (tab == SentimentTab)
@@ -945,7 +950,7 @@ void AlphaArenaScreen::load_news() {
                    if (symbol == current_symbol())
                        show_news(answer["news"].toObject());
                },
-               [this, symbol]() {
+               [this, symbol](const QString&) {
                    if (symbol == current_symbol())
                        news_summary_->setText("Headlines could not be loaded (see the status bar).");
                });
@@ -993,7 +998,7 @@ void AlphaArenaScreen::load_quotes() {
                                     : QString("This competition trades at %1's: buys at the ask, sells at the bid, "
                                               "0.1% a trade.").arg(competition_exchange_)));
                },
-               [this, symbol]() {
+               [this, symbol](const QString&) {
                    if (symbol == current_symbol())
                        quotes_summary_->setText("The quotes could not be loaded (see the status bar).");
                });
@@ -1051,6 +1056,8 @@ void AlphaArenaScreen::show_competition(const QJsonObject& state) {
     if (state["news"].isObject()) // what the models were shown
         show_news(state["news"].toObject());
     set_busy(busy_);
+    if (std::exchange(shown_id_, competition_id_) != competition_id_)
+        load_tab();
     ScreenStateManager::instance().notify_changed(this);
 }
 
@@ -1240,6 +1247,28 @@ void AlphaArenaScreen::set_busy(bool busy) {
 
 // ── Model list population ────────────────────────────────────────────────────
 
+QVector<ArenaModelEntry> AlphaArenaScreen::settings_entries() {
+    QVector<ArenaModelEntry> out;
+    const auto profiles = LlmProfileRepository::instance().list_profiles();
+    if (profiles.is_ok()) {
+        for (const auto& p : profiles.value()) {
+            if (!p.provider.isEmpty() && !p.model_id.isEmpty())
+                out.append({p.id, p.name + " (" + p.provider + ")", p.provider, p.model_id, p.api_key, p.base_url,
+                            p.max_tokens});
+        }
+    }
+    const auto providers = LlmConfigRepository::instance().list_providers();
+    if (providers.is_ok()) {
+        const auto global = LlmConfigRepository::instance().get_global_settings();
+        for (const auto& c : providers.value()) {
+            if (!c.provider.isEmpty() && !c.model.isEmpty())
+                out.append({"provider:" + c.provider, c.model + " (" + c.provider + ")", c.provider, c.model, c.api_key,
+                            c.base_url, global.is_ok() ? global.value().max_tokens : 0});
+        }
+    }
+    return out;
+}
+
 void AlphaArenaScreen::populate_model_list() {
     // Preserve previously selected display names so we can restore selection
     QStringList previously_selected;
@@ -1263,50 +1292,13 @@ void AlphaArenaScreen::populate_model_list() {
         model_list_->addItem(name);
     };
 
-    // 1. Named profiles (highest fidelity — user configured them explicitly)
-    auto profiles_res = LlmProfileRepository::instance().list_profiles();
-    if (profiles_res.is_ok()) {
-        for (const auto& p : profiles_res.value()) {
-            if (p.provider.isEmpty() || p.model_id.isEmpty())
-                continue;
-            ArenaModelEntry entry;
-            entry.display_name = p.name + " (" + p.provider + ")";
-            entry.provider = p.provider;
-            entry.model_id = p.model_id;
-            entry.api_key = p.api_key;
-            entry.base_url = p.base_url;
-            entry.max_tokens = p.max_tokens;
-            entry.key = p.id;
-            add(entry);
-        }
-    }
-
-    // 2. Configured providers (one entry per provider using its active model)
-    auto providers_res = LlmConfigRepository::instance().list_providers();
-    if (providers_res.is_ok()) {
-        for (const auto& c : providers_res.value()) {
-            if (c.provider.isEmpty() || c.model.isEmpty())
-                continue;
-            // Avoid duplicating a provider already covered by a profile
-            bool already_added = false;
-            for (const auto& e : std::as_const(model_entries_)) {
-                if (e.provider == c.provider && e.model_id == c.model) {
-                    already_added = true;
-                    break;
-                }
-            }
-            if (already_added)
-                continue;
-
-            ArenaModelEntry entry;
-            entry.display_name = c.model + " (" + c.provider + ")";
-            entry.provider = c.provider;
-            entry.model_id = c.model;
-            entry.api_key = c.api_key;
-            entry.base_url = c.base_url;
-            entry.key = "provider:" + c.provider;
-            add(entry);
-        }
+    QSet<QString> listed; // a provider's active model that has a profile is not listed again
+    for (const auto& e : settings_entries()) {
+        const QString model = e.provider + '\n' + e.model_id;
+        if (e.key.startsWith("provider:") && listed.contains(model))
+            continue;
+        listed.insert(model);
+        add(e);
     }
 
     // 3. Fallback: show a hint if nothing is configured

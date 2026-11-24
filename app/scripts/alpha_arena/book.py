@@ -27,6 +27,7 @@ class Fill:
 class Position:
     quantity: float = 0.0  # below zero: short
     entry_price: float = 0.0
+    fees: float = 0.0  # paid to enter what is held
 
     def unrealized(self, price: float) -> float:
         return (price - self.entry_price) * self.quantity
@@ -59,11 +60,15 @@ class Book:
         if fill.side != "settle":
             self.trades += 1
 
-        realized = None
+        realized, opening_fee = None, fill.fee
         if pos.quantity * signed < 0:
             closing = min(abs(signed), abs(pos.quantity))
             gain = (fill.price - pos.entry_price) * closing * (1 if pos.quantity > 0 else -1)
-            realized = gain - fill.fee
+            # What it cost, both ways: its share of this fill's fee and of the fees paid to enter.
+            closing_fee, entry_fee = fill.fee * closing / abs(signed), pos.fees * closing / abs(pos.quantity)
+            realized = gain - closing_fee - entry_fee
+            pos.fees -= entry_fee
+            opening_fee = fill.fee - closing_fee
             self.closed.append(realized)
         left = pos.quantity + signed
         if abs(left) < _DUST:
@@ -75,6 +80,7 @@ class Book:
             if left * pos.quantity < 0:  # turned round
                 pos.entry_price = fill.price
             pos.quantity = left
+        pos.fees += opening_fee
         if pos.quantity == 0.0:
             del self.positions[fill.symbol]
         return realized
@@ -118,33 +124,29 @@ def order(book: Book, limits: Limits, symbol: str, action: str, size: float, bid
     a purchase at the ask, a sale at the bid, cut to what the rules allow.
 
     `buy` covers a short first, then opens; `sell` closes what is held; `short`
-    closes it too, then goes below zero.
+    closes it too, then goes below zero. The limits are for what is opened: a
+    position can always be closed, also one that has outgrown them.
     """
-    value = book.value(prices)
-    if value <= 0:
-        raise Rejected("the portfolio is worth nothing")
-    held = book.held(symbol)
+    value, held = book.value(prices), book.held(symbol)
     price = ask if action == "buy" else bid
     if not price > 0:
         raise Rejected("there is no price to trade at")
-    wanted = min(size, limits.max_trade) * value
-    if max_value is not None:
-        wanted = min(wanted, max_value)
-    quantity = wanted / price
-    most = limits.max_position * value / price  # units, either way
-
-    if action == "buy":
-        quantity = min(quantity, max(0.0, most - held) if held >= 0 else most - held)
-        quantity = min(quantity, max(0.0, book.cash) / (price * (1 + FEE_RATE)))
-        why = "the position limit is reached, or no cash is left"
-    elif action == "sell":
-        quantity = min(quantity, max(0.0, held))
-        why = "there is nothing to sell"
-    elif action == "short" and allow_short:
-        quantity = min(quantity, max(0.0, most + held) if held <= 0 else most + held)
-        why = "the position limit is reached"
-    else:
+    if action not in ("buy", "sell", "short") or (action == "short" and not allow_short):
         raise Rejected(f"{action} is not possible here")
+
+    against = max(0.0, -held) if action == "buy" else max(0.0, held)  # units there are to close
+    closing = min(against, size * max(value, against * price) / price)
+    opening = 0.0
+    if action != "sell" and closing >= against and value > 0:
+        most = limits.max_position * value / price - max(0.0, held if action == "buy" else -held)
+        opening = max(0.0, min(min(size, limits.max_trade) * value / price - closing, most))
+        if action == "buy":
+            opening = min(opening, max(0.0, book.cash / (price * (1 + FEE_RATE)) - closing))
+    quantity = closing + opening
+    if max_value is not None:
+        quantity = min(quantity, max_value / price)
     if quantity * price < 0.01:
-        raise Rejected(why)
+        raise Rejected("there is nothing to sell" if action == "sell" else "the portfolio is worth nothing" if value <= 0
+                       else "there is too little liquidity" if max_value is not None and max_value < 0.01
+                       else "the position limit is reached, or no cash is left")
     return Fill(symbol, "buy" if action == "buy" else "sell", quantity, price, quantity * price * FEE_RATE)

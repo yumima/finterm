@@ -54,7 +54,7 @@ def headlines(symbol: str, limit: int = 12) -> list[dict]:
         raise RuntimeError(str(answer.get("error") or "no news"))
     out = []
     for a in answer.get("data") or []:
-        title = str(a.get("title") or "").strip()
+        title = str(a.get("title") or "").encode("utf-8", "replace").decode("utf-8").strip()
         publisher = str(a.get("publisher") or "").strip()
         if publisher and title.endswith(" - " + publisher):  # as Google News writes it
             title = title[: -len(publisher) - 3]

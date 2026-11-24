@@ -74,9 +74,12 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
 
     /// Run an engine action; `done` gets its answer, an error goes to the status
     /// bar (`failed`, when given, as well).
-    void run_action(const QString& action, const QJsonObject& params, Answer done, std::function<void()> failed = {});
-    /// How each model is asked: from Settings as they are now, never saved with a competition.
-    QJsonArray connections() const;
+    void run_action(const QString& action, const QJsonObject& params, Answer done,
+                    std::function<void(const QString& error)> failed = {});
+    /// Every LLM profile and provider's active model in Settings now.
+    static QVector<ArenaModelEntry> settings_entries();
+    /// How each model is asked: never saved with a competition.
+    static QJsonArray connections();
     void open_competition(const QString& id);
     void show_competition(const QJsonObject& state);
     void show_leaderboard(const QJsonArray& rows);
@@ -99,6 +102,7 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
 
     // The open competition
     QString competition_id_;
+    QString shown_id_; // the one whose state is on the screen
     QString to_open_; // the last session's, opened when the screen is first shown
     QString competition_symbol_;
     QString competition_exchange_;

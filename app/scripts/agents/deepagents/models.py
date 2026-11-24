@@ -17,7 +17,7 @@ _LOCAL = {"hearth", "ollama"}
 def create_model(config: dict[str, Any]):
     """
     Config keys: llm_provider, llm_model, llm_api_key, llm_base_url,
-    llm_max_tokens. (Not the temperature: reasoning models refuse one.)
+    llm_max_tokens, llm_timeout_s, llm_max_retries. (Not the temperature: reasoning models refuse one.)
 
     Raises ValueError naming what the profile lacks.
     """
@@ -32,7 +32,11 @@ def create_model(config: dict[str, Any]):
         raise ValueError(f"The LLM profile has no API key for {provider}")
 
     limit = int(config.get("llm_max_tokens") or 0)
-    cap = {"max_tokens": limit} if limit > 0 else {}
+    cap: dict[str, Any] = {"max_tokens": limit} if limit > 0 else {}
+    if config.get("llm_timeout_s"):
+        cap["timeout"] = float(config["llm_timeout_s"])
+    if config.get("llm_max_retries") is not None:
+        cap["max_retries"] = int(config["llm_max_retries"])
 
     if provider in ("anthropic", "claude"):
         from langchain_anthropic import ChatAnthropic

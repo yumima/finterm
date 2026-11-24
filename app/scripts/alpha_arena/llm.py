@@ -57,28 +57,31 @@ def connection_for(model: dict, connections: list[dict]) -> dict:
     return {**found[0], "model_id": model["model_id"]}
 
 
-def ask(connection: dict, system: str, prompt: str) -> str:
-    """The model's text. Raises NoAnswer."""
+def ask(connection: dict, system: str, prompt: str, left_s: float = ANSWER_TIMEOUT_S) -> str:
+    """The model's text. Raises NoAnswer. `left_s`: what is left of the cycle."""
+    timeout = min(ANSWER_TIMEOUT_S, left_s)
+    if timeout < 5:
+        raise NoAnswer("there was no time left in this cycle")
     box: dict = {}
 
     def work():
         try:
-            box["text"] = _ask(connection, system, prompt)
+            box["text"] = _ask(connection, system, prompt, timeout)
         except BaseException as e:  # it is told to the caller, whatever it was
             box["error"] = e
 
     # Not a pool: a thread still waiting for a model must not keep the process.
     thread = threading.Thread(target=work, daemon=True)
     thread.start()
-    thread.join(ANSWER_TIMEOUT_S)
+    thread.join(timeout + 5)
     if thread.is_alive():
-        raise NoAnswer(f"no answer after {ANSWER_TIMEOUT_S} s")
+        raise NoAnswer(f"no answer after {timeout:.0f} s")
     if "error" in box:
         raise NoAnswer(_why(box["error"], connection)) from box["error"]
     return box["text"]
 
 
-def _ask(connection: dict, system: str, prompt: str) -> str:
+def _ask(connection: dict, system: str, prompt: str, timeout: float) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     models = _load("_arena_llm_models", "deepagents", "models.py")
@@ -86,6 +89,9 @@ def _ask(connection: dict, system: str, prompt: str) -> str:
         "llm_provider": connection.get("provider"), "llm_model": connection.get("model_id"),
         "llm_api_key": connection.get("api_key") or ("local" if is_local(connection) else ""), "llm_base_url": connection.get("base_url"),
         "llm_max_tokens": connection.get("max_tokens"),
+        # An engine on this machine goes on with a request nobody waits for until
+        # its connection is closed, and the next model waits for that.
+        "llm_timeout_s": timeout, "llm_max_retries": 0 if is_local(connection) else 2,
     })
     messages = [SystemMessage(content=system), HumanMessage(content=prompt)]
     answer = model.invoke(messages)
@@ -107,6 +113,8 @@ def _why(e: BaseException, connection: dict) -> str:
         text = f"{connection.get('provider')} refused the API key ({status})"
     elif status == 429:
         text = f"{connection.get('provider')}'s rate limit or quota is used up (429)"
+    elif any("Timeout" in c.__name__ for c in type(e).__mro__):
+        text = "no answer in time"
     elif any(c.__name__ in ("APIConnectionError", "ConnectError") for c in type(e).__mro__):
         where = connection.get("base_url") or connection.get("provider")
         text = f"{where} could not be reached"

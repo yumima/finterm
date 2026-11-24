@@ -53,12 +53,26 @@ check("a purchase takes its cost out of the cash", near(b.cash, 10000 - 3 * 2002
 check("...and the value changes by its fees only", near(b.value({"BTC/USD": 100000}), 10000 - 6))
 check("a position's gain is value", near(b.value({"BTC/USD": 110000}), 10000 - 6 + 600))
 r = b.apply(Fill("BTC/USD", "sell", 0.06, 110000, 6.6))
-check("a sale realizes it", near(r, 600 - 6.6) and near(b.cash, 10000 - 6 + 600 - 6.6) and not b.positions, (r, b))
+check("a sale realizes it, less what it cost both ways", near(r, 600 - 6.6 - 6) and near(b.cash, 10000 - 6 + 600 - 6.6) and not b.positions, (r, b))
 b = Book(1000.0, 1000.0)
 b.apply(Fill("X", "sell", 2, 100))
 check("a short is a liability", near(b.cash, 1200) and near(b.value({"X": 100}), 1000) and near(b.value({"X": 90}), 1020))
 check("buying more than it was covers and turns", near(b.apply(Fill("X", "buy", 3, 90)), 20) and near(b.held("X"), 1)
       and near(b.positions["X"].entry_price, 90))
+c = Book(1000.0, 1000.0)
+c.apply(Fill("X", "buy", 1, 100, 0.1))
+c.apply(Fill("X", "sell", 1, 100.15, 0.10015))
+check("a round trip that lost to fees is no win", c.cash < 1000 and c.win_rate() == 0.0, c)
+c = Book(10000.0, 10000.0)
+c.apply(Fill("X", "buy", 1, 100, 0.1))
+r = c.apply(Fill("X", "sell", 21, 101, 2.121))
+check("turning round, the close bears its own fee only", near(r, 1 - 0.101 - 0.1) and near(c.positions["X"].fees, 2.02), (r, c.positions))
+check("realized and unrealized add up to the value", near(c.value({"X": 101}) - 10000, r - c.positions["X"].fees))
+c = Book.of(10000.0, [Fill("X", "sell", 95, 100)])
+f = order(c, MODES["max_leverage"], "X", "buy", 1.0, 190, 190, {"X": 190.0})
+check("a short that outgrew the portfolio can be covered at once", near(f.quantity, 95), f)
+f = order(c, MODES["max_leverage"], "X", "buy", 0.5, 300, 300, {"X": 300.0})
+check("...also one that cost everything", f.quantity > 40, f)
 check("without a price, what it was entered at", near(b.value({}), b.cash + 90))
 b = Book.of(100.0, [Fill("pm:1:0", "buy", 100, 0.4), Fill("pm:1:0", "settle", 100, 1.0)])
 check("a settlement pays and is no trade", near(b.cash, 160) and b.trades == 1 and b.win_rate() == 1.0)
@@ -79,12 +93,8 @@ check("the position too", near(b.held("X") * 101, 0.5 * b.value({"X": 100.0}), 0
 check("...and then no more", raises(Rejected, lambda: place(b, "buy", 1.0, "baseline")))
 place(b, "sell", 0.25)
 check("a sale is at the bid, of what is held", b.held("X") > 0)
-for _ in range(9):
-    try:
-        place(b, "sell", 1.0)
-    except Rejected:
-        break
-check("it never goes short by selling", b.held("X") == 0.0)
+place(b, "sell", 1.0, "baseline")
+check("closing is not limited, and never goes short", b.held("X") == 0.0)
 check("nothing to sell is said", "nothing to sell" in (raises(Rejected, lambda: place(b, "sell", 1.0)) or ""))
 for _ in range(9):
     try:
@@ -117,6 +127,12 @@ check("a prediction market's decision", (ds[0].symbol, ds[0].action, ds[0].size)
 check("an empty list is a decision: none of them", traders.read_predictions("m", pm, "[]") == [])
 check("a market not in it", traders.read_predictions("m", pm, '[{"market_id":8,"action":"buy","outcome":"Yes","size_pct":1}]')[0].action == "none")
 check("an outcome it does not have", traders.read_predictions("m", pm, '[{"market_id":7,"action":"buy","outcome":"Maybe","size_pct":1}]')[0].action == "none")
+three = [f'{{"market_id":7,"outcome":"Yes","action":"buy","size_pct":{n}}}' for n in (1, 2, 3)]
+check("objects one after another all count", len(traders.read_predictions("m", pm, "\n".join(three))) == 3)
+check("a list with a stray comma too", len(traders.read_predictions("m", pm, "[" + ",".join(three) + ",]")) == 3)
+check("a list in an object", len(traders.read_predictions("m", pm, '{"decisions": [' + ",".join(three) + "]}")) == 3)
+check("one cut off is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "[" + three[0] + ',{"market_id":7,"outc')))
+check("an empty list in prose is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "My options: []")))
 check("prose is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "nothing today")))
 check("the second outcome's prices mirror the first's", [round(x, 9) for x in pm[0].bid_ask(1)] == [0.59, 0.61] and pm[0].bid_ask(0) == (0.39, 0.41))
 
@@ -203,7 +219,7 @@ news.headlines = lambda symbol, limit=12: [{"title": "Bitcoin rallies 4%", "publ
 ANSWERS, ASKED = {}, []
 
 
-def fake_ask(connection, system, prompt):
+def fake_ask(connection, system, prompt, left_s=300):
     ASKED.append((connection["name"], prompt))
     a = ANSWERS[connection["name"]]
     a = a.pop(0) if isinstance(a, list) else a
@@ -305,6 +321,23 @@ with tempfile.TemporaryDirectory() as folder:
     board = {r["model_name"]: r for r in s["leaderboard"]}
     check("a decided market pays out", s["over"] and near(board["a"]["portfolio_value"], 1000 - 410 * (1 + FEE_RATE) + 1000) and board["b"]["total_pnl"] < -99, board)
 
+    # A last trade outside bid and ask must not be a profit.
+    market.quote = lambda symbol, exchange: market.Quote(symbol, exchange, 5.888, 5.898, 5.899)
+    last = arena.create(store, {**params, "models": models}, conns)["competition_id"]
+    ANSWERS.update(a='{"action":"short","size_pct":25,"reasoning":"\\ud83d half a pair"}', b='{"action":"buy","size_pct":25}')
+    s = arena.run_cycle(store, last, conns)
+    check("a trade never shows a profit at once", all(r["total_pnl"] < 0 for r in s["leaderboard"]), s["leaderboard"])
+    check("half a surrogate pair does not lose the cycle", s["cycle_number"] == 1 and "half a pair" in json.dumps(s["decisions"]))
+    market.quote = lambda symbol, exchange: market.Quote(symbol, exchange, 100.0, 100.0, 100.0)
+    ruin = arena.create(store, {**params, "models": models, "mode": "max_leverage"}, conns)["competition_id"]
+    ANSWERS.update(a='{"action":"short","size_pct":100}', b='{"action":"hold"}')
+    for _ in range(2):
+        arena.run_cycle(store, ruin, conns)
+    market.quote = lambda symbol, exchange: market.Quote(symbol, exchange, 250.0, 250.0, 250.0)
+    s = arena.run_cycle(store, ruin, conns)
+    check("a short that cost everything is closed", any("Liquidated" in d["reasoning"] for d in s["decisions"])
+          and all(r["positions_count"] == 0 for r in s["leaderboard"]), s["decisions"])
+
 # ── Databases of before ──────────────────────────────────────────────────────
 KEY = "sk-must-not-be-saved"
 with tempfile.TemporaryDirectory() as folder:
@@ -338,6 +371,37 @@ with tempfile.TemporaryDirectory() as folder:
     check("...in its cycles' values too", store.values("c1", "a") == [9997.5], store.values("c1", "a"))
     by = {d["model_name"]: d for d in s["decisions"]}
     check("a HOLD nobody decided on is none", by["b"]["action"] == "none" and "timed out" in by["b"]["error"] and by["a"]["action"] == "buy", by)
+    for name, content in (("no database", b"not a database at all, but long enough to be read as one" * 40), ("an empty file", b"")):
+        with tempfile.TemporaryDirectory(prefix="odd #%41 ") as odd:
+            Path(odd, "paper_trading.db").write_bytes(content)
+            check(f"a paper_trading.db that is {name}", Store(Path(odd)).competitions(5) == [])
+    with tempfile.TemporaryDirectory(prefix="odd #%41 ") as odd:
+        import shutil
+        for f in ("paper_trading.db",):
+            shutil.copy(os.path.join(folder, f), odd)
+        db = sqlite3.connect(os.path.join(odd, "alpha_arena.db"))
+        db.executescript(store_module._SCHEMA)
+        db.execute("INSERT INTO competitions VALUES ('c1',?,'running',1,NULL,NULL,'2026-11-01','2026-11-01')", (json.dumps(config),))
+        db.execute("INSERT INTO competitions VALUES ('bad','{not json','running',1,NULL,NULL,'2026-11-01','2026-11-01')")
+        db.execute("INSERT INTO snapshots VALUES ('s9','c1','a',1,1,1,0,0,0,0,'yesterday')")
+        db.commit()
+        db.close()
+        busy = sqlite3.connect(os.path.join(odd, "paper_trading.db"), isolation_level=None)
+        busy.execute("BEGIN EXCLUSIVE")
+        real, store_module.sqlite3 = store_module.sqlite3, type("S", (), {**{k: getattr(sqlite3, k) for k in ("Row", "OperationalError", "DatabaseError", "Connection")},
+                                                                          "connect": staticmethod(lambda *a, **k: sqlite3.connect(*a, **{**k, "timeout": 0.2}))})
+        check("fills that can't be read now are not given up", raises(sqlite3.OperationalError, lambda: Store(Path(odd))))
+        busy.close()
+        store_module.sqlite3 = real
+        st = Store(Path(odd))
+        check("...but taken at the next start, in any folder", st.book("c1", config, "a").trades == 1)
+        check("a config and a time that can't be read stop nothing", [c["competition_id"] for c in st.competitions(5)] == ["c1"])
+    import subprocess
+    with tempfile.TemporaryDirectory() as fresh:
+        code = "import sys; sys.path.insert(0, sys.argv[1]); from pathlib import Path; from alpha_arena.store import Store; Store(Path(sys.argv[2])).competitions(1)"
+        ps = [subprocess.Popen([sys.executable, "-c", code, str(Path(store_module.__file__).parent.parent), fresh], stderr=subprocess.PIPE) for _ in range(8)]
+        errs = [p.communicate()[1] for p in ps]
+        check("eight processes at once on a new database", all(p.returncode == 0 for p in ps), errs)
     check("it is done once", arena.state(Store(Path(folder)), "c1")["leaderboard"] == s["leaderboard"])
 
 if FAILURES:

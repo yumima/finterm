@@ -146,6 +146,25 @@ time.sleep(0.3)
 busy.p.stdin.close()
 check("...in the middle of a cell too", busy.p.wait(timeout=10) == 0)
 
+r = k2 = None
+k2 = Kernel()
+r = k2.run("class S(str):\n    pass\nclass R:\n    def __repr__(self): return S('mine')\nR()")
+check("a value of the cell's own str type", [e["text"] for e in r if e["t"] == "result"] == ["mine"], r)
+r = k2.run("class E(Exception):\n    def __str__(self): return S('bad')\nraise E()")
+check("...and an error's", error(r)["evalue"] == "bad" and text(k2.run("print(1)")) == "1\n", r)
+k2.start("pass")
+k2.finish()
+k2.send(op="interrupt", id=f"c{k2.n}")
+time.sleep(0.2)
+k2.send(op="run", id=f"c{k2.n}", n=1, code="print('again')")
+check("a late interrupt does not stop the cell's next run", text(k2.finish()) == "again\n")
+if os.name == "posix":
+    k2.start("import multiprocessing as mp, os, signal, time\np = mp.get_context('fork').Process(target=time.sleep, args=(20,))\np.start()\nprint('up', flush=True)\nos.kill(os.getpid(), signal.SIGKILL)")
+    t0, events = time.time(), []
+    while not events or events[-1]["t"] != "ended":
+        events.append(k2.read())
+    check("a death with a forked child alive is told at once", time.time() - t0 < 12 and "up\n" in text(events), (time.time() - t0, events))
+
 crash = Kernel()
 crash.start("import os\nprint('last words', end='')\nos.write(2, b'free(): invalid pointer')\nos.abort()" if os.name == "posix"
             else "import os\nprint('last words', end='')\nos._exit(3)")

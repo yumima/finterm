@@ -8,7 +8,7 @@ import time
 import uuid
 
 from . import llm, market, news
-from .book import MODES, Book, Fill, Limits, Rejected, order
+from .book import FEE_RATE, MODES, Book, Fill, Limits, Rejected, order
 from .features import technical_lines
 from .store import Store
 from .traders import (GRID_PROVIDER, Decision, Grid, NoDecision, crypto_prompt, crypto_system, prediction_prompt,
@@ -22,6 +22,7 @@ class Refused(Exception):
 _DECISIONS_SHOWN = 100
 _RECENT = 5
 _REQUOTE_AFTER_S = 3
+_CYCLE_S = 50 * 60  # the app ends a job after an hour, and nothing of it would be saved
 
 
 def is_grid(model: dict) -> bool:
@@ -100,7 +101,7 @@ def run_cycle(store: Store, competition_id: str, connections: list[dict]) -> dic
         competition = store.competition(competition_id)
         if competition is None:
             raise Refused(f"There is no competition {competition_id}")
-        config, number = competition["config"], (competition["cycle_count"] or 0) + 1
+        config, number = competition["config"], store.next_cycle(competition_id)
         books = {m["name"]: store.book(competition_id, config, m["name"]) for m in config["models"]}
         run = _prediction_cycle if is_prediction(config) else _crypto_cycle
         data, decisions, fills = run(store, competition_id, config, number, books, connections)
@@ -149,11 +150,13 @@ def _crypto_cycle(store, competition_id, config, number, books, connections):
             notes.append(f"No trades: {e}")
     decisions, fills = [], []
     for m in config["models"]:
+        if gone := _liquidate(m["name"], books[m["name"]], symbol, bid, ask, {symbol: quote.mark}, fills):
+            decisions.append(gone)
         for d in decided[m["name"]]:
-            _carry_out(d, books[m["name"]], Limits(1, 1) if is_grid(m) else limits, bid, ask, {symbol: quote.price},
+            _carry_out(d, books[m["name"]], Limits(1, 1) if is_grid(m) else limits, bid, ask, {symbol: quote.mark},
                        fills, allow_short=not is_grid(m))
             decisions.append(d)
-    data = {"prices": {symbol: quote.price}, "quote": quote.to_dict(), "notes": notes,
+    data = {"prices": {symbol: quote.mark}, "quote": quote.to_dict(), "notes": notes,
             "news": {"symbol": symbol, "items": items, "error": news_error, "at": time.time()}}
     return data, decisions, fills
 
@@ -171,7 +174,7 @@ def _prediction_cycle(store, competition_id, config, number, books, connections)
                 note = f"{m['question']}: {e}"
                 if note not in notes:
                     notes.append(note)
-        prices.update({m.symbol(i): m.prices[i] for m in got for i in (0, 1)})
+        prices.update({m.symbol(i): m.mark(i) for m in got for i in (0, 1)})
         return got
 
     markets = fetch()
@@ -204,13 +207,27 @@ def _prediction_cycle(store, competition_id, config, number, books, connections)
                     d.status, d.error = "rejected", "the market closed, or could not be read again"
                 else:
                     bid, ask = current.bid_ask(d.outcome) if current else (0.0, 0.0)
-                    cap = 0.1 * current.liquidity if current and current.liquidity else None
+                    cap = 0.1 * current.liquidity if current and current.liquidity is not None else None
                     _carry_out(d, books[m["name"]], limits, bid, ask, prices, fills, allow_short=False, max_value=cap)
                 decisions.append(d)
     else:
         notes.append("Every market is closed" + ("" if all(m.settled for m in markets) else "; not all are decided yet"))
     data = {"prices": prices, "notes": notes, "over": len(markets) == len(config["markets"]) and all(m.settled for m in markets)}
     return data, decisions, fills
+
+
+def _liquidate(name: str, book: Book, symbol: str, bid: float, ask: float, prices: dict, fills: list) -> Decision | None:
+    """A short that has cost everything is closed: it could go on for ever."""
+    held = book.held(symbol)
+    price = ask if held < 0 else bid
+    if not held or book.value(prices) > 0 or not price > 0:
+        return None
+    fill = Fill(symbol, "buy" if held < 0 else "sell", abs(held), price, abs(held) * price * FEE_RATE)
+    d = Decision(name, symbol, fill.side, quantity=fill.quantity, price=price, status="executed",
+                 reasoning="Liquidated: the portfolio was worth nothing.")
+    d.pnl = book.apply(fill)
+    fills.append((name, fill))
+    return d
 
 
 def _carry_out(d: Decision, book: Book, limits: Limits, bid: float, ask: float, prices: dict, fills: list, **kw):
@@ -245,10 +262,12 @@ def _ask_all(asks: dict, system: str, read: dict, connections: list[dict], symbo
             continue
         queues.setdefault(str(c.get("base_url")) if llm.is_local(c) else name, []).append((name, c, prompt))
 
+    until = time.time() + _CYCLE_S
+
     def work(queue):
         for name, c, prompt in queue:
             try:
-                decided[name] = _decide(c, system, prompt, read[name])
+                decided[name] = _decide(c, system, prompt, read[name], until)
             except (llm.NoAnswer, NoDecision) as e:
                 decided[name] = [Decision(name, symbol, "none", error=str(e))]
             except Exception as e:  # ours, and still not a HOLD
@@ -263,10 +282,10 @@ def _ask_all(asks: dict, system: str, read: dict, connections: list[dict], symbo
     return decided
 
 
-def _decide(connection: dict, system: str, prompt: str, read) -> list[Decision]:
+def _decide(connection: dict, system: str, prompt: str, read, until: float) -> list[Decision]:
     asked = prompt
     for last in (False, True):
-        text = llm.ask(connection, system, asked)
+        text = llm.ask(connection, system, asked, until - time.time())
         try:
             found = read(text)
             break

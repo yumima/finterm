@@ -24,8 +24,6 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <optional>
-
 namespace finterm::screens {
 
 // -- Cell data ----------------------------------------------------------------
@@ -74,9 +72,9 @@ class CellWidget : public QWidget {
     explicit CellWidget(const NotebookCell& cell, int index, QWidget* parent = nullptr);
 
     void set_cell_data(const NotebookCell& cell);
-    /// What was typed, if anything was: text nobody changed stays as the file has
-    /// it (an editor turns a no-break space into a space).
-    std::optional<QString> edited_source() const;
+    /// The cell's text: what the editor shows, or, while that is what it was given,
+    /// the text itself (an editor turns a no-break space into a space).
+    QString source() const;
     void set_running(bool running);
     void set_outputs(const QVector<CellOutput>& outputs, int exec_count);
     void set_selected(bool selected);
@@ -112,6 +110,8 @@ class CellWidget : public QWidget {
     bool selected_ = false;
     bool output_collapsed_ = false;
     bool md_editing_ = false;
+    QString given_; // the text set_cell_data got, and what the editor made of it
+    QString given_shown_;
 
     // Gutter
     QWidget* gutter_ = nullptr;
