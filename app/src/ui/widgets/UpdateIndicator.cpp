@@ -93,7 +93,7 @@ void UpdateIndicator::refresh() {
     if (svc.has_offer()) {
         question_->hide();
         secondary_->hide();
-        const QString v = svc.offered_version();
+        const QString v = svc.offered_label();
         switch (svc.stage()) {
         case UpdateService::Stage::Downloading:
             primary_->setText(QStringLiteral("DOWNLOADING v%1…").arg(v));
@@ -115,7 +115,7 @@ void UpdateIndicator::refresh() {
         case UpdateService::Stage::Offered:
             primary_->setText(QStringLiteral("UPDATE v%1 AVAILABLE").arg(v));
             primary_->setToolTip(QStringLiteral("finterm %1 is out (you have %2). Click to see what's new and install.")
-                                     .arg(v, QCoreApplication::applicationVersion()));
+                                     .arg(v, svc.running_label()));
             break;
         }
         primary_->show();

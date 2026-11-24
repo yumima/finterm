@@ -1,5 +1,6 @@
 #include "screens/about/AboutScreen.h"
 
+#include "core/config/BuildInfo.h"
 #include "services/updater/UpdateService.h"
 #include "ui/theme/Theme.h"
 
@@ -122,6 +123,16 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
                                .arg(ui::colors::AMBER()));
         ver->setAlignment(Qt::AlignRight);
         right->addWidget(ver);
+
+        // Which build of the version: the download page names the same.
+        auto* build = new QLabel(build_info::label().isEmpty() ? QStringLiteral("development build")
+                                                               : QStringLiteral("build ") + build_info::label());
+        build->setStyleSheet(MUTED());
+        build->setAlignment(Qt::AlignRight);
+        build->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        build->setToolTip(QStringLiteral("The commit this finterm was built from. A version released again "
+                                         "has a newer one."));
+        right->addWidget(build);
 
         // Check-for-updates button — user-initiated, always shows a result dialog.
         auto* check_btn = new QPushButton(QStringLiteral("Check for Updates"));

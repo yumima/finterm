@@ -1,8 +1,10 @@
 #include "services/updater/UpdateInstaller.h"
 
 #include "core/config/AppPaths.h"
+#include "core/config/BuildInfo.h"
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
+#include "services/updater/UpdatePolicy.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -210,6 +212,10 @@ QProcessEnvironment clean_environment() {
     return env;
 }
 
+/// The running build, as the updater names releases.
+QString running_id() {
+    return update_policy::Release{QCoreApplication::applicationVersion(), build_info::commit(), {}}.id();
+}
 /// The profile this process runs ("" = the default) — the relaunch
 /// (finterm --profile NAME) and whose status / boot count a file is.
 QString running_profile() {
@@ -419,7 +425,7 @@ std::optional<QJsonObject> take_status() {
     // …from the version it left in place: an AppImage reopened while the
     // helper worked still runs the one before.
     const bool ok = s->value(QStringLiteral("ok")).toBool();
-    if (s->value(ok ? QStringLiteral("to") : QStringLiteral("from")).toString() != QCoreApplication::applicationVersion())
+    if (!update_policy::same_release(s->value(ok ? QStringLiteral("to") : QStringLiteral("from")).toString(), running_id()))
         return std::nullopt;
     QFile::remove(status_path());
     return s;
@@ -479,13 +485,13 @@ bool boot_check() {
     if (!pending || pending->value(QStringLiteral("profile")).toString() != running_profile() ||
         !same_path(pending->value(QStringLiteral("target")).toString(), own_location()))
         return false; // another profile's, or another copy's
-    const QString running = QCoreApplication::applicationVersion();
+    const QString running = running_id();
     const QString to = pending->value(QStringLiteral("to")).toString();
-    if (running == pending->value(QStringLiteral("from")).toString()) {
+    if (update_policy::same_release(running, pending->value(QStringLiteral("from")).toString())) {
         QFile::remove(pending_path()); // the update didn't happen (the status says why)
         return false;
     }
-    if (running != to)
+    if (!update_policy::same_release(running, to))
         return false; // another build (a dev tree): not the one to judge
     const int starts = pending->value(QStringLiteral("starts")).toInt() + 1;
     if (starts < 3) {
@@ -516,11 +522,11 @@ bool boot_check() {
 void confirm_boot() {
     auto pending = read_json(pending_path());
     // This copy's, under this profile: another that starts says nothing of it.
-    if (pending && pending->value(QStringLiteral("to")).toString() == QCoreApplication::applicationVersion() &&
+    if (pending && update_policy::same_release(pending->value(QStringLiteral("to")).toString(), running_id()) &&
         pending->value(QStringLiteral("profile")).toString() == running_profile() &&
         same_path(pending->value(QStringLiteral("target")).toString(), own_location())) {
         QFile::remove(pending_path());
-        LOG_INFO("UpdateInstaller", "Updated version confirmed: " + QCoreApplication::applicationVersion());
+        LOG_INFO("UpdateInstaller", "Updated version confirmed: " + running_id());
     }
 }
 

@@ -1,5 +1,6 @@
 #include "services/updater/UpdateService.h"
 
+#include "core/config/BuildInfo.h"
 #include "core/logging/Logger.h"
 
 #include <QAbstractButton>
@@ -37,23 +38,23 @@ constexpr const char* kLastCheckKey = "updates/last_check"; // ISO-8601 UTC of t
 // restart — or a second running profile, whose check isn't due — still shows
 // the badge. Absent when the last check found nothing newer.
 constexpr const char* kOfferKey = "updates/offer";
-// A version that failed to start and was rolled back: never staged by the
-// automatic schedule again (a check on request still offers it).
+// A release (Release::id) that failed to start and was rolled back: never staged
+// by the automatic schedule again (a check on request still offers it).
 constexpr const char* kBadVersionKey = "updates/rolled_back_version";
 
-// A version whose apply failed (not a rollback), and how many times: past two
+// A release whose apply failed (not a rollback), and how many times: past two
 // the automatic schedule stops staging it — it would fail at every quit.
 constexpr const char* kFailedVersionKey = "updates/failed_version";
 constexpr const char* kFailedCountKey = "updates/failed_count";
 
 /// Not staged automatically again (a check on request still offers it).
-bool auto_blocked(const QString& version) {
-    if (version.isEmpty())
+bool auto_blocked(const QString& id) {
+    if (id.isEmpty())
         return false;
     QSettings s;
-    if (s.value(kBadVersionKey).toString() == version)
+    if (s.value(kBadVersionKey).toString() == id)
         return true;
-    return s.value(kFailedVersionKey).toString() == version && s.value(kFailedCountKey).toInt() >= 2;
+    return s.value(kFailedVersionKey).toString() == id && s.value(kFailedCountKey).toInt() >= 2;
 }
 constexpr int kFirstLookDelayMs = 10 * 1000;
 constexpr int kScheduleTickMs = 60 * 60 * 1000;
@@ -74,7 +75,7 @@ UpdateService::UpdateService(QObject* parent) : QObject(parent) {
     in_place_ = target_;
     if (in_place_) {
         const auto saved = update_policy::offer_from_json(QSettings().value(kOfferKey).toByteArray());
-        const bool wanted = update_policy::is_newer(QApplication::applicationVersion(), saved.version);
+        const bool wanted = update_policy::supersedes(saved, running());
         update_install::sweep_stale(*in_place_, wanted ? update_install::staged_path(*in_place_, saved.version,
                                                                                     localized(saved).download_url)
                                                        : QString());
@@ -120,6 +121,21 @@ QString UpdateService::current_platform_key() {
 #endif
 }
 
+update_policy::Release UpdateService::running() {
+    return {QApplication::applicationVersion(), build_info::commit(), build_info::commit_time()};
+}
+
+QString UpdateService::label(const update_policy::Release& r) {
+    const bool same_version = r.version == QApplication::applicationVersion();
+    return same_version && !r.commit.isEmpty() ? QStringLiteral("%1 (build %2)").arg(r.version, r.commit.left(7))
+                                               : r.version;
+}
+
+QString UpdateService::running_label() const {
+    const auto mine = running();
+    return offer_.version == mine.version ? label(mine) : mine.version;
+}
+
 bool UpdateService::updates_supported() const {
     int maj = 0, min = 0, pat = 0;
     return update_policy::parse_version(QApplication::applicationVersion(), maj, min, pat) &&
@@ -160,7 +176,7 @@ void UpdateService::restore_saved_offer() {
         return; // this process's installer is out: keep what the user is finishing
     const auto saved = update_policy::offer_from_json(QSettings().value(kOfferKey).toByteArray());
     if (saved.version.isEmpty() ||
-        !update_policy::is_newer(QApplication::applicationVersion(), saved.version)) {
+        !update_policy::supersedes(saved, running())) {
         // Installed since, pulled from the manifest by another profile's
         // check, or unusable: nothing to show (set_offer drops the note too).
         set_offer({});
@@ -207,7 +223,7 @@ void UpdateService::check_for_updates(bool interactive) {
     if (downloading_) {
         if (interactive)
             QMessageBox::information(dialog_parent(), QStringLiteral("finterm"),
-                                     QStringLiteral("finterm %1 is already downloading.").arg(download_version_));
+                                     QStringLiteral("finterm %1 is already downloading.").arg(label(download_)));
         emit check_finished(true);
         return;
     }
@@ -322,19 +338,19 @@ void UpdateService::on_manifest_reply_finished() {
         return;
     }
     const QString local_version = QApplication::applicationVersion();
-    if (!update_policy::is_newer(local_version, entry.version)) {
+    if (!update_policy::supersedes(entry, running())) {
         LOG_INFO("UpdateService",
-                 QString("Already up to date — local=%1, remote=%2").arg(local_version, entry.version));
+                 QString("Already up to date — local=%1, remote=%2").arg(running().id(), entry.id()));
         set_offer({});
         if (interactive_) {
             QMessageBox::information(dialog_parent(), QStringLiteral("finterm"),
-                                     QStringLiteral("You're running the latest version (%1).").arg(local_version));
+                                     QStringLiteral("You're running the latest release (%1).").arg(label(running())));
         }
         finish_check(false);
         return;
     }
 
-    LOG_INFO("UpdateService", QString("Update available: %1 → %2").arg(local_version, entry.version));
+    LOG_INFO("UpdateService", QString("Update available: %1 → %2").arg(running().id(), entry.id()));
     set_offer(entry);
     const bool ask_now = interactive_;
     finish_check(true);
@@ -359,7 +375,7 @@ update_policy::Offer UpdateService::localized(update_policy::Offer offer) const 
 
 void UpdateService::set_offer(const update_policy::Offer& offer) {
     const update_policy::Offer here = localized(offer);
-    const bool changed = here.version != offer_.version || here.download_url != offer_.download_url ||
+    const bool changed = here.id() != offer_.id() || here.download_url != offer_.download_url ||
                          here.sha256 != offer_.sha256;
     offer_ = here;
     // A release without the package is the installer the user runs.
@@ -380,15 +396,15 @@ UpdateService::Stage UpdateService::stage() const {
         return Stage::Downloading;
     // The bytes too: a re-published release keeps its version, and the build
     // it replaced must not be the one that goes in.
-    if (has_offer() && ready_version_ == offer_.version && ready_sha256_ == offer_.sha256)
+    if (has_offer() && ready_.id() == offer_.id() && ready_sha256_ == offer_.sha256)
         return Stage::Ready;
-    if (has_offer() && handed_version_ == offer_.version)
+    if (has_offer() && handed_id_ == offer_.id())
         return Stage::Handed;
     return Stage::Offered;
 }
 
 bool UpdateService::may_stage_quietly() const {
-    if (!in_place_ || stage() != Stage::Offered || auto_blocked(offer_.version))
+    if (!in_place_ || stage() != Stage::Offered || auto_blocked(offer_.id()))
         return false;
     // What another finterm put in is here already: this session can't apply.
     if (replaced_by_another_instance())
@@ -420,7 +436,7 @@ void UpdateService::prompt_install() {
                                                              "when you restart or quit finterm.")
                                             : QStringLiteral("finterm %1 is downloading. Its installer opens when "
                                                              "the download is complete."))
-                                     .arg(download_version_));
+                                     .arg(label(download_)));
         return;
     }
     if (stage() == Stage::Ready) {
@@ -435,7 +451,7 @@ void UpdateService::prompt_install() {
         box.setIcon(QMessageBox::Information);
         box.setText(QStringLiteral("The finterm %1 installer was started:\n%2\n\n"
                                    "Finish it, then restart finterm.")
-                        .arg(offer_.version, QDir::toNativeSeparators(pending_local_path_)));
+                        .arg(label(offer_), QDir::toNativeSeparators(pending_local_path_)));
         QPushButton* again = box.addButton(QStringLiteral("Download Again"), QMessageBox::ActionRole);
         box.addButton(QMessageBox::Ok);
         prompt_open_ = true;
@@ -448,7 +464,7 @@ void UpdateService::prompt_install() {
             return;
         }
         prompt_pending_ = false; // the download it starts answers it
-        handed_version_.clear();
+        handed_id_.clear();
         start_download(offer_, /*quiet=*/false);
         return;
     }
@@ -465,9 +481,15 @@ void UpdateService::prompt_install() {
 
     // Include the changelog if present, and always offer the release notes
     // (open-url) so the user can read more before installing.
-    QString prompt = QStringLiteral("A new version of finterm is available.\n\n"
-                                    "Current version: %1\nLatest version:  %2\n\n")
-                         .arg(local_version, offer.version);
+    const bool again = offer.version == local_version;
+    QString prompt = (again ? QStringLiteral("finterm %3 has been released again, with changes.\n\n"
+                                             "Your build: %1\nNew build:  %2\n\n")
+                            : QStringLiteral("A new version of finterm is available.\n\n"
+                                             "Current version: %1\nLatest version:  %2\n\n"))
+                         .arg(again ? build_info::label() : local_version,
+                              again ? build_info::label(offer.commit, offer.committed) : offer.version);
+    if (again)
+        prompt = prompt.arg(local_version);
     if (!offer.changelog.isEmpty()) {
         QString snippet = offer.changelog;
         if (snippet.size() > 500)
@@ -521,7 +543,7 @@ void UpdateService::prompt_restart() {
     box.setText(QStringLiteral("finterm %1 is downloaded and verified.\n\n"
                                "Restart now to switch to it, or keep working — it installs when you quit "
                                "finterm. Your workspace and data stay as they are.")
-                    .arg(ready_version_));
+                    .arg(label(ready_)));
     QPushButton* now = box.addButton(QStringLiteral("Restart Now"), QMessageBox::AcceptRole);
     QPushButton* notes = offer_.open_url.isEmpty()
                              ? nullptr
@@ -555,7 +577,7 @@ bool UpdateService::staged_file_gone() {
     if (QFileInfo::exists(pending_local_path_))
         return false;
     LOG_WARN("UpdateService", "The staged update is gone: " + pending_local_path_);
-    ready_version_.clear();
+    ready_ = {};
     ready_sha256_.clear();
     emit stage_changed(); // offered again
     return true;
@@ -582,13 +604,13 @@ void UpdateService::restart_now() {
                                   "Close it first — the update would replace files under it."));
         return;
     }
-    if (!update_install::launch_helper(*in_place_, pending_local_path_, QApplication::applicationVersion(),
-                                       ready_version_, /*relaunch=*/true)) {
+    if (!update_install::launch_helper(*in_place_, pending_local_path_, running().id(), ready_.id(),
+                                       /*relaunch=*/true)) {
         show_error(QStringLiteral("The update could not be started. It will be tried again when you quit finterm."));
         return;
     }
     applied_ = true;
-    LOG_INFO("UpdateService", "Restarting into " + ready_version_);
+    LOG_INFO("UpdateService", "Restarting into " + ready_.id());
     // Every window saves its workspace as it closes; the app quits after the
     // last one and the helper takes over.
     QTimer::singleShot(0, qApp, []() {
@@ -612,8 +634,8 @@ void UpdateService::apply_on_quit() {
         LOG_INFO("UpdateService", "Update not applied at quit — another finterm is still running");
         return;
     }
-    applied_ = update_install::launch_helper(*in_place_, pending_local_path_, QApplication::applicationVersion(),
-                                             ready_version_, /*relaunch=*/false);
+    applied_ = update_install::launch_helper(*in_place_, pending_local_path_, running().id(), ready_.id(),
+                                             /*relaunch=*/false);
 }
 
 void UpdateService::report_last_update() {
@@ -641,11 +663,11 @@ void UpdateService::report_last_update() {
     }
     if (kind.endsWith(QLatin1String("-rollback")))
         last_result_ = ok ? QStringLiteral("finterm %1 failed to start twice — the previous version was restored.")
-                                .arg(status->value(QStringLiteral("from")).toString())
+                                .arg(update_policy::version_of(status->value(QStringLiteral("from")).toString()))
                           : QStringLiteral("Restoring the previous version failed: %1").arg(msg);
     else
-        last_result_ = ok ? QStringLiteral("Updated to finterm %1.").arg(to)
-                          : QStringLiteral("The update to %1 failed: %2").arg(to, msg);
+        last_result_ = ok ? QStringLiteral("Updated to finterm %1.").arg(update_policy::version_of(to))
+                          : QStringLiteral("The update to %1 failed: %2").arg(update_policy::version_of(to), msg);
     last_result_ok_ = ok && !kind.endsWith(QLatin1String("-rollback"));
     LOG_INFO("UpdateService", "Last update: " + last_result_);
     emit stage_changed();
@@ -667,7 +689,7 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
     if (downloading_)
         return;
     // Staged already (while the dialog asking for it was open).
-    if (in_place_ && !ready_version_.isEmpty() && ready_version_ == offer.version && ready_sha256_ == offer.sha256 &&
+    if (in_place_ && !ready_.version.isEmpty() && ready_.id() == offer.id() && ready_sha256_ == offer.sha256 &&
         stage() == Stage::Ready && QFileInfo::exists(pending_local_path_)) {
         if (!quiet)
             prompt_restart();
@@ -675,14 +697,14 @@ void UpdateService::start_download(const update_policy::Offer& offer, bool quiet
     }
     // What was staged goes: a newer release came out, or this one was
     // re-published.
-    if (in_place_ && !ready_version_.isEmpty()) {
+    if (in_place_ && !ready_.version.isEmpty()) {
         QFile::remove(pending_local_path_);
-        ready_version_.clear();
+        ready_ = {};
         ready_sha256_.clear();
     }
     // What this download is for: the offer may change while it runs.
     download_in_place_ = in_place_.has_value();
-    download_version_ = offer.version;
+    download_ = offer;
     download_quiet_ = quiet;
     pending_expected_sha256_ = offer.sha256;
     if (in_place_) {
@@ -879,10 +901,10 @@ void UpdateService::on_download_reply_finished() {
 
 void UpdateService::staged() {
     // It goes in when the app quits, or now on Restart Now.
-    ready_version_ = download_version_;
+    ready_ = download_;
     ready_sha256_ = pending_expected_sha256_;
     finish_download();
-    LOG_INFO("UpdateService", QString("finterm %1 staged at %2").arg(ready_version_, pending_local_path_));
+    LOG_INFO("UpdateService", QString("finterm %1 staged at %2").arg(ready_.id(), pending_local_path_));
     if (!download_quiet_)
         prompt_restart();
 }
@@ -931,7 +953,7 @@ void UpdateService::finish_check(bool update_found) {
 void UpdateService::finish_download(bool handed) {
     downloading_ = false;
     if (handed)
-        handed_version_ = download_version_;
+        handed_id_ = download_.id();
     emit stage_changed();
     // A scheduled look that fell during the download was skipped.
     QTimer::singleShot(kFirstLookDelayMs, this, &UpdateService::maybe_check_automatically);

@@ -58,7 +58,7 @@ bool helper_in_flight();
 /// a session that ended without quitting left to be used.
 void sweep_stale(const Target& t, const QString& keep);
 
-/// Start the helper detached. `relaunch`: start the new version once applied.
+/// Start the helper detached. `from`, `to`: update_policy::Release::id. `relaunch`: start the new version once applied.
 /// Records the pending boot (for the rollback) when it applies an update.
 bool launch_helper(const Target& t, const QString& staged, const QString& from, const QString& to, bool relaunch,
                    bool rollback = false);

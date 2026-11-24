@@ -6,6 +6,8 @@ Reads env vars:
     VERSION  Project version, no "v" prefix (e.g. "4.0.2").
     TAG      Git tag (e.g. "v4.0.2").
     REPO     "owner/name" (e.g. "yumima/finterm").
+    COMMIT   The commit the assets were built from, in full.
+    COMMITTED  When it was made, ISO 8601 (e.g. "2026-11-24T16:12:00Z").
 
 Writes the JSON manifest to stdout. Non-matching platforms are skipped
 with a "# ..." comment to stderr — output stays valid JSON on stdout.
@@ -26,6 +28,10 @@ def main() -> int:
         version = os.environ["VERSION"]
         tag = os.environ["TAG"]
         repo = os.environ["REPO"]
+        # What tells a version released again from the one it replaces: the
+        # updater compares them with its own build's (update_policy::supersedes).
+        commit = os.environ["COMMIT"]
+        committed = os.environ["COMMITTED"]
     except KeyError as e:
         print(f"error: missing env var {e}", file=sys.stderr)
         return 1
@@ -62,6 +68,8 @@ def main() -> int:
         url = f"https://github.com/{repo}/releases/download/{tag}/{match}"
         updates[key] = {
             "latest-version": version,
+            "commit": commit,
+            "committed": committed,
             "download-url": url,
             "sha256": sha,
             "open-url": release_url,

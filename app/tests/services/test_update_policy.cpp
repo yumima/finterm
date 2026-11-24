@@ -8,6 +8,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTimeZone>
 #include <QtTest/QtTest>
 
 using namespace finterm::services::update_policy;
@@ -43,6 +44,53 @@ class TestUpdatePolicy : public QObject {
         QVERIFY(!is_newer("4.0.10", "4.0.11-rc1"));
         QVERIFY(!is_newer("4.0.10", ""));
         QVERIFY(!is_newer("4.0.10", "v4.0.11"));
+    }
+
+    void a_version_released_again_supersedes_the_older_build() {
+        const auto t = [](int h) { return QDateTime(QDate(2026, 11, 24), QTime(h, 0), QTimeZone::UTC); };
+        const Release old_build{"4.1.0", "aaaaaaaaaaaaaaaa", t(5)};
+        const Release new_build{"4.1.0", "bbbbbbbbbbbbbbbb", t(16)};
+        QVERIFY(supersedes(new_build, old_build));
+        QVERIFY(!supersedes(old_build, new_build)); // never back to an older one
+        QVERIFY(!supersedes(old_build, old_build));
+        QVERIFY(!supersedes({"4.1.0", "bbbb", t(5)}, old_build)); // no later
+        QVERIFY(!supersedes({"4.1.0", {}, {}}, old_build));       // a manifest without commits
+        QVERIFY(!supersedes(new_build, {"4.1.0", {}, {}}));       // a build that can't say which it is
+        QVERIFY(!supersedes({"4.1.0", "bbbb", {}}, old_build));
+        QVERIFY(supersedes({"4.1.1", {}, {}}, new_build)); // a newer version needs no commit
+        QVERIFY(!supersedes({"4.0.9", "cccc", t(20)}, new_build));
+        QVERIFY(!supersedes({"4.1.0-dev", "bbbb", t(16)}, {"4.1.0-dev", "aaaa", t(5)}));
+    }
+
+    void releases_are_told_apart_by_id() {
+        const Release r{"4.1.0", "023279470ab1cdef0123", {}};
+        QCOMPARE(r.id(), QString("4.1.0+023279470ab1"));
+        QCOMPARE((Release{"4.1.0", {}, {}}).id(), QString("4.1.0"));
+        QCOMPARE(version_of(r.id()), QString("4.1.0"));
+        QCOMPARE(version_of("4.1.0"), QString("4.1.0"));
+        QVERIFY(same_release("4.1.0+aa", "4.1.0+aa"));
+        QVERIFY(!same_release("4.1.0+aa", "4.1.0+bb")); // an update and what it replaced
+        QVERIFY(same_release("4.1.1", "4.1.1+bb"));     // put in by an updater that knew no commits
+        QVERIFY(!same_release("4.1.0", "4.1.1+bb"));
+    }
+
+    void the_build_of_an_offer_is_read_and_kept() {
+        Offer o;
+        QCOMPARE(parse_manifest(manifest({{"latest-version", "4.1.0"},
+                                          {"download-url", "https://example.invalid/l.run"},
+                                          {"commit", "023279470AB1"},
+                                          {"committed", "2026-11-24T16:12:00Z"}}),
+                                "linux-x64", o),
+                 ManifestResult::Ok);
+        QCOMPARE(o.id(), QString("4.1.0+023279470ab1"));
+        QCOMPARE(o.committed, QDateTime(QDate(2026, 11, 24), QTime(16, 12), QTimeZone::UTC));
+        const Offer kept = offer_from_json(offer_to_json(o));
+        QCOMPARE(kept.id(), o.id());
+        QCOMPARE(kept.committed, o.committed);
+        // An offer stored, or a manifest written, before commits were in them.
+        const Offer before = offer_from_json("{\"version\":\"4.1.1\",\"download-url\":\"x\"}");
+        QCOMPARE(before.id(), QString("4.1.1"));
+        QVERIFY(!before.committed.isValid());
     }
 
     void manifest_entry_for_this_platform() {
@@ -90,7 +138,7 @@ class TestUpdatePolicy : public QObject {
     }
 
     void stored_offer_round_trips() {
-        Offer o{"4.0.11", "https://example.invalid/l.run", "34d8", "https://example.invalid/tag", "notes"};
+        Offer o{{"4.0.11", {}, {}}, "https://example.invalid/l.run", "34d8", "https://example.invalid/tag", "notes", {}, {}};
         const Offer back = offer_from_json(offer_to_json(o));
         QCOMPARE(back.version, o.version);
         QCOMPARE(back.download_url, o.download_url);

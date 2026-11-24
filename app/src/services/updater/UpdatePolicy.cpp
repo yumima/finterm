@@ -32,6 +32,38 @@ bool is_newer(const QString& local, const QString& remote) {
     return rpat > lpat;
 }
 
+QString Release::id() const {
+    return commit.isEmpty() ? version : version + QLatin1Char('+') + commit.left(12);
+}
+
+QString version_of(const QString& id) {
+    return id.section(QLatin1Char('+'), 0, 0);
+}
+
+bool same_release(const QString& a, const QString& b) {
+    if (a == b)
+        return true;
+    const bool both_exact = a.contains(QLatin1Char('+')) && b.contains(QLatin1Char('+'));
+    return !both_exact && version_of(a) == version_of(b);
+}
+
+bool supersedes(const Release& remote, const Release& local) {
+    if (is_newer(local.version, remote.version))
+        return true;
+    int a = 0, b = 0, c = 0;
+    return remote.version == local.version && parse_version(remote.version, a, b, c) && !remote.commit.isEmpty() &&
+           !local.commit.isEmpty() && remote.commit != local.commit && remote.committed.isValid() &&
+           local.committed.isValid() && remote.committed > local.committed;
+}
+
+namespace {
+/// Written by the release workflow / offer_to_json, in both the same.
+void read_build(const QJsonObject& e, Release& out) {
+    out.commit = e.value(QStringLiteral("commit")).toString().trimmed().toLower();
+    out.committed = QDateTime::fromString(e.value(QStringLiteral("committed")).toString().trimmed(), Qt::ISODate).toUTC();
+}
+} // namespace
+
 ManifestResult parse_manifest(const QByteArray& body, const QString& platform_key, Offer& out) {
     QJsonParseError err{};
     const QJsonDocument doc = QJsonDocument::fromJson(body, &err);
@@ -52,6 +84,7 @@ ManifestResult parse_manifest(const QByteArray& body, const QString& platform_ke
     o.changelog = e.value(QStringLiteral("changelog")).toString();
     o.inplace_url = e.value(QStringLiteral("inplace-url")).toString().trimmed();
     o.inplace_sha256 = e.value(QStringLiteral("inplace-sha256")).toString().trimmed().toLower();
+    read_build(e, o);
     if (o.version.isEmpty() || o.download_url.isEmpty())
         return ManifestResult::Incomplete;
     out = o;
@@ -60,6 +93,8 @@ ManifestResult parse_manifest(const QByteArray& body, const QString& platform_ke
 
 QByteArray offer_to_json(const Offer& o) {
     return QJsonDocument(QJsonObject{{"version", o.version},
+                                     {"commit", o.commit},
+                                     {"committed", o.committed.toString(Qt::ISODate)},
                                      {"download-url", o.download_url},
                                      {"sha256", o.sha256},
                                      {"open-url", o.open_url},
@@ -79,6 +114,7 @@ Offer offer_from_json(const QByteArray& json) {
     o.changelog = e.value(QStringLiteral("changelog")).toString();
     o.inplace_url = e.value(QStringLiteral("inplace-url")).toString();
     o.inplace_sha256 = e.value(QStringLiteral("inplace-sha256")).toString();
+    read_build(e, o);
     int a = 0, b = 0, c = 0;
     if (!parse_version(o.version, a, b, c) || o.download_url.isEmpty())
         return {};

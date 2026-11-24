@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`da59ae310`](https://github.com/yumima/finterm/commit/da59ae310) notebook: its cells run in one Python of their own; a restored tab no longer saves over its file
 - [`c62926437`](https://github.com/yumima/finterm/commit/c62926437) **chore(release):** update README download links and updates.json for v4.1.0
 - [`023279470`](https://github.com/yumima/finterm/commit/023279470) review: a resumed RD-Agent job does its work; a key goes to its own endpoint only; the panel says what is so
 - [`a959f384e`](https://github.com/yumima/finterm/commit/a959f384e) voice: the app opens the microphone; nothing is installed by hand

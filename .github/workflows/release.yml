@@ -1663,8 +1663,13 @@ jobs:
           echo "Downloading release assets to ${WORK}..."
           gh release download "${TAG}" --dir "${WORK}" --pattern "finterm-*setup*" --pattern "finterm-*-update.zip" || true
 
+          # What the assets were built from (GITHUB_SHA: the tag's commit).
+          COMMIT="${GITHUB_SHA}"
+          COMMITTED=$(gh api "repos/${REPO}/commits/${COMMIT}" --jq .commit.committer.date)
+          [ -n "${COMMITTED}" ] || { echo "::error::no date for commit ${COMMIT}"; exit 1; }
+
           # Export shell-side vars so the embedded python can read them via os.environ
-          export WORK VERSION TAG REPO
+          export WORK VERSION TAG REPO COMMIT COMMITTED
 
           # Delegate manifest generation to a standalone Python script to
           # keep this step free of YAML/Python indentation conflicts.
@@ -1692,9 +1697,9 @@ jobs:
             echo "::error::release ${TAG} lists no files"
             exit 1
           fi
-          jq -n --arg version "${TAG#v}" --arg released "${released}" --arg page "${RELEASE_URL}" \
+          jq -n --arg version "${TAG#v}" --arg released "${released}" --arg build "${GITHUB_SHA:0:7}" --arg page "${RELEASE_URL}" \
                 --arg linux "${LIN_URL}" --arg windows "${WIN_URL}" --arg macos "${MAC_URL}" \
-                '{version:$version, released:$released, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
+                '{version:$version, released:$released, build:$build, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
                 > site/_data/release.json
           cat site/_data/release.json
 

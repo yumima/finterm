@@ -69,7 +69,11 @@ class UpdateService : public QObject {
 
     /// The newer version found by the last check, if any.
     bool has_offer() const { return !offer_.version.isEmpty(); }
-    QString offered_version() const { return offer_.version; }
+    /// The offer by name: its version, and its build where the running one
+    /// has the same version.
+    QString offered_label() const { return label(offer_); }
+    /// The running build, named against the offer.
+    QString running_label() const;
 
     /// Where the offer stands: its download running; verified and staged to
     /// replace this build in place (applied when the app quits, or now on
@@ -128,6 +132,9 @@ class UpdateService : public QObject {
     /// Return the lookup key for the current runtime (e.g. "windows-x64").
     /// Returns empty string if the platform/arch combination isn't supported.
     static QString current_platform_key();
+    /// The running build as a release.
+    static update_policy::Release running();
+    static QString label(const update_policy::Release& r);
 
     /// The automatic schedule's tick: checks only when on, supported, idle
     /// and due.
@@ -172,10 +179,10 @@ class UpdateService : public QObject {
     QString manifest_url_ = DEFAULT_MANIFEST_URL;
     update_policy::Offer offer_;
     QString pending_local_path_; ///< where the verified download goes (staged / temp)
-    QString download_version_;   ///< the version being downloaded
-    QString handed_version_;     ///< the version whose installer was handed over this session
+    update_policy::Release download_; ///< the release being downloaded
+    QString handed_id_;               ///< the release whose installer was handed over this session
     QString pending_expected_sha256_;
-    QString ready_version_; ///< staged, verified, waiting to be applied in place
+    update_policy::Release ready_; ///< staged, verified, waiting to be applied in place
     QString ready_sha256_;  ///< of the staged bytes
     QString failed_sha256_; ///< a background download that failed, and its back-off
     QDateTime retry_at_;

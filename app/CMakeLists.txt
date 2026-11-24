@@ -596,6 +596,7 @@ endif()
 set(CORE_SOURCES
     src/core/config/AppConfig.cpp
     src/core/config/AppPaths.cpp
+    src/core/config/BuildInfo.cpp
     src/core/config/LayoutMigrations.cpp
     src/core/config/ProfileManager.cpp
     src/core/logging/Logger.cpp
@@ -2347,6 +2348,31 @@ if(FINTERM_RELEASE_BUILD)
     set(FINTERM_APP_VERSION "${CMAKE_PROJECT_VERSION}")
 else()
     set(FINTERM_APP_VERSION "${CMAKE_PROJECT_VERSION}-dev")
+endif()
+# Which build of the version a release is (core/config/BuildInfo): a version can
+# be released again from a newer commit, and the updater and About tell the two
+# apart by it. A release build that can't say would never be offered the next.
+if(FINTERM_RELEASE_BUILD)
+    if(NOT FINTERM_BUILD_COMMIT OR NOT FINTERM_BUILD_TIME)
+        find_package(Git QUIET)
+        if(GIT_FOUND)
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" -c "safe.directory=*" log -1 "--format=%H;%ct"
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                OUTPUT_VARIABLE _finterm_git OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        endif()
+        list(LENGTH _finterm_git _finterm_git_parts)
+        if(NOT _finterm_git_parts EQUAL 2)
+            message(FATAL_ERROR "A release build needs its commit: build from a git checkout, or set "
+                                "FINTERM_BUILD_COMMIT (hash) and FINTERM_BUILD_TIME (seconds since 1970)")
+        endif()
+        list(GET _finterm_git 0 FINTERM_BUILD_COMMIT)
+        list(GET _finterm_git 1 FINTERM_BUILD_TIME)
+    endif()
+    message(STATUS "finterm build: ${FINTERM_BUILD_COMMIT} (${FINTERM_BUILD_TIME})")
+    set_source_files_properties(src/core/config/BuildInfo.cpp PROPERTIES
+        SKIP_UNITY_BUILD_INCLUSION TRUE
+        COMPILE_DEFINITIONS "FINTERM_BUILD_COMMIT=\"${FINTERM_BUILD_COMMIT}\";FINTERM_BUILD_TIME=${FINTERM_BUILD_TIME}")
 endif()
 message(STATUS "finterm application version: ${FINTERM_APP_VERSION}")
 target_compile_definitions(finterm PRIVATE
