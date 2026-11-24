@@ -359,7 +359,7 @@ bool action_uses_terminal_tools(const QString& action) {
 
 // Attach the agent's finterm tools (filtered by its allow_tools, else a
 // bounded read-only default) plus a session-scoped bridge endpoint.
-void attach_terminal_tools(QJsonObject& config) {
+void attach_tools(QJsonObject& config) {
     if (config.contains(QStringLiteral("terminal_tools")))
         return; // caller supplied its own set
     QStringList globs;
@@ -468,6 +468,10 @@ QJsonObject model_for_profile_id(const QString& profile_id) {
 
 } // namespace
 
+void AgentService::attach_terminal_tools(QJsonObject& config) {
+    attach_tools(config);
+}
+
 QJsonObject AgentService::build_payload(const QString& action, const QJsonObject& params,
                                         const QJsonObject& config_in) const {
     QJsonObject config = action == QLatin1String("run") ? merge_agent_row(config_in) : config_in;
@@ -479,7 +483,7 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
             config["model"] = m;
     }
     if (action_uses_terminal_tools(action))
-        attach_terminal_tools(config);
+        attach_tools(config);
     QJsonObject payload;
     payload["action"] = action;
     payload["api_keys"] = build_api_keys();

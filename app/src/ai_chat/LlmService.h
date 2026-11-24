@@ -253,6 +253,10 @@ class LlmService : public QObject {
     // payloads (provider, model_id, api_key, base_url, temperature, max_tokens).
     static QJsonObject profile_to_json(const ResolvedLlmProfile& p);
 
+    /// The versioned API root ("…/v1") of a provider: its configured base, else
+    /// the provider's own. Empty for one without an OpenAI-shape API (Gemini).
+    static QString provider_api_root(const QString& provider, const QString& base_url);
+
     // Fetch available models for a provider (async — emits models_fetched)
     void fetch_models(const QString& provider, const QString& api_key, const QString& base_url = {});
 

@@ -1,151 +1,76 @@
 """
-models.py — LangChain model creation from finterm LLM config.
+models.py — the LangChain model for a finterm LLM profile.
 
-Single responsibility:
-  - Take a config dict with llm_provider/llm_api_key/llm_model/llm_base_url
-  - Return a BaseChatModel ready for deepagents / direct use
-  - extract_text() handles both plain str and block-list responses (extended thinking)
+The app resolves the endpoint (LlmService::api_root: the profile's own base, or
+the provider's), so here there are two native clients and one for every
+OpenAI-compatible endpoint: OpenAI, OpenRouter, Groq, DeepSeek, xAI, Kimi,
+MiniMax — and hearth or Ollama on this machine.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
-# Providers that support LangChain tool calling (bind_tools / tool_calls in AIMessage).
-# Only these can use the deepagents library path.
-TOOL_CALLING_PROVIDERS = {
-    "anthropic",
-    "openai",
-    "google",
-    "groq",
-    "deepseek",
-    "openrouter",
-    "azure",
-    "mistral",
-    "cohere",
-    "fireworks",
-    "together",
-}
-
-# OpenAI-compatible providers (use ChatOpenAI with custom base_url)
-_OPENAI_COMPAT = {
-    "deepseek":   "https://api.deepseek.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
-    "fireworks":  "https://api.fireworks.ai/inference/v1",
-    "together":   "https://api.together.xyz/v1",
-    "mistral":    "https://api.mistral.ai/v1",
-    "azure":      None,  # base_url must be supplied by caller
-}
+_LOCAL = {"hearth", "ollama"}
 
 
 def create_model(config: dict[str, Any]):
     """
-    Create a LangChain BaseChatModel from a finterm LLM config dict.
+    Config keys: llm_provider, llm_model, llm_api_key, llm_base_url.
 
-    Config keys:
-        llm_provider  : str   — provider name (anthropic, openai, google, ...)
-        llm_api_key   : str   — API key
-        llm_model     : str   — model name/id
-        llm_base_url  : str   — optional custom base URL
-
-    Returns:
-        BaseChatModel instance.
-
-    Raises:
-        ValueError  if provider is unknown or required packages are missing.
-        ImportError if the required langchain-* package is not installed.
+    Raises ValueError naming what the profile lacks.
     """
-    provider = config.get("llm_provider", "").lower().strip()
-    api_key  = config.get("llm_api_key", "")
-    model    = config.get("llm_model", "")
-    base_url = config.get("llm_base_url") or None
+    provider = str(config.get("llm_provider") or "").lower().strip()
+    model = str(config.get("llm_model") or "").strip()
+    api_key = str(config.get("llm_api_key") or "").strip()
+    base_url = str(config.get("llm_base_url") or "").strip()
 
-    if not provider:
-        raise ValueError("llm_provider is required in config")
+    if not provider or not model:
+        raise ValueError("No LLM profile: choose one, or set one up in Settings > LLM Config")
+    if not api_key and provider not in _LOCAL:
+        raise ValueError(f"The LLM profile has no API key for {provider}")
 
-    if provider == "anthropic":
+    if provider in ("anthropic", "claude"):
         from langchain_anthropic import ChatAnthropic
-        kwargs: dict[str, Any] = {
-            "api_key":    api_key,
-            "model_name": model or "claude-sonnet-4-5-20250514",
-        }
+        kwargs: dict[str, Any] = {"api_key": api_key, "model_name": model}
         if base_url:
-            kwargs["anthropic_api_url"] = base_url
+            kwargs["base_url"] = base_url.rstrip("/").removesuffix("/v1")  # the SDK adds it
         return ChatAnthropic(**kwargs)
 
-    if provider == "openai":
-        from langchain_openai import ChatOpenAI
-        kwargs = {"api_key": api_key, "model": model or "gpt-4o-mini"}
-        if base_url:
-            kwargs["base_url"] = base_url
-        return ChatOpenAI(**kwargs)
-
-    if provider == "google":
+    if provider in ("google", "gemini"):
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(
-            google_api_key=api_key,
-            model=model or "gemini-2.0-flash",
-        )
+        return ChatGoogleGenerativeAI(google_api_key=api_key, model=model)
 
-    if provider == "groq":
-        from langchain_groq import ChatGroq
-        return ChatGroq(
-            api_key=api_key,
-            model_name=model or "llama-3.3-70b-versatile",
-        )
+    if not base_url:
+        raise ValueError(f"The LLM profile for {provider} has no base URL")
+    from langchain_openai import ChatOpenAI
 
-    if provider == "cohere":
-        from langchain_cohere import ChatCohere
-        return ChatCohere(
-            cohere_api_key=api_key,
-            model=model or "command-r-plus",
-        )
+    class PlainTextChat(ChatOpenAI):
+        def _get_request_payload(self, *args: Any, **kwargs: Any) -> dict:
+            payload = super()._get_request_payload(*args, **kwargs)
+            payload["messages"] = [_plain(m) for m in payload.get("messages", [])]
+            return payload
 
-    if provider in _OPENAI_COMPAT:
-        from langchain_openai import ChatOpenAI
-        url = base_url or _OPENAI_COMPAT[provider]
-        if url is None:
-            raise ValueError(f"llm_base_url is required for provider '{provider}'")
-        return ChatOpenAI(
-            api_key=api_key,
-            model=model or "default",
-            base_url=url,
-        )
-
-    raise ValueError(
-        f"Unknown llm_provider '{provider}'. "
-        f"Supported: {sorted(TOOL_CALLING_PROVIDERS)}"
-    )
+    # Chat completions: the one API every compatible server has.
+    return PlainTextChat(api_key=api_key or "local", model=model, base_url=base_url, use_responses_api=False)
 
 
-def supports_tool_calling(config: dict[str, Any]) -> bool:
-    """Return True if the configured provider supports LangChain tool calling."""
-    provider = config.get("llm_provider", "").lower().strip()
-    return provider in TOOL_CALLING_PROVIDERS
+def _plain(message: dict[str, Any]) -> dict[str, Any]:
+    """A message of text blocks as one string. deepagents writes its system
+    prompt as blocks, and local servers take only a string there (hearth's
+    Ollama answered 500)."""
+    content = message.get("content")
+    if not isinstance(content, list) or not all(isinstance(b, dict) and b.get("type") == "text" for b in content):
+        return message
+    return {**message, "content": "\n\n".join(b.get("text", "") for b in content)}
 
 
 def extract_text(content: Any) -> str:
-    """
-    Extract plain text from a model response content value.
-
-    Handles:
-      - str                  — returned as-is
-      - list of content blocks — extracts text from {"type": "text", "text": "..."} blocks,
-                                 ignores thinking/redacted_thinking/tool_use blocks
-      - anything else        — str() fallback
-    """
+    """The text of a model's message: a string, or a list of content blocks
+    (whose thinking and tool-use blocks are not text)."""
     if isinstance(content, str):
         return content
-
     if isinstance(content, list):
-        parts = [
-            block["text"]
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        ]
-        return " ".join(parts)
-
-    return str(content)
+        return " ".join(b if isinstance(b, str) else b.get("text", "") for b in content
+                        if isinstance(b, str) or (isinstance(b, dict) and b.get("type") == "text"))
+    return "" if content is None else str(content)

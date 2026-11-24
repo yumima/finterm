@@ -362,6 +362,11 @@ QString api_root(const QString& p, const QString& cfg_base) {
 }
 } // namespace
 
+// static
+QString LlmService::provider_api_root(const QString& provider, const QString& base_url) {
+    return api_root(provider.trimmed().toLower(), base_url);
+}
+
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     // The read-aloud voice, "model:id" (TtsService::set_engine_voice). Read
     // before taking mutex_: the settings store has its own locking.

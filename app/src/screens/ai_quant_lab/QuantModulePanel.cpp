@@ -263,19 +263,7 @@ QJsonObject QuantModulePanel::llm_config_from_combo(QComboBox* combo) const {
     if (profile_id.isEmpty())
         return {};
 
-    auto resolved = LlmProfileRepository::instance().resolve_for_context("ai_quant_lab", profile_id);
-    // resolve_for_context uses context_id as a profile_id hint — use get_profile directly
-    auto result = LlmProfileRepository::instance().get_profile(profile_id);
-    if (!result.is_ok())
-        return {};
-
-    const auto& p = result.value();
-    QJsonObject cfg;
-    cfg["llm_provider"] = p.provider;
-    cfg["llm_api_key"] = p.api_key;
-    cfg["llm_model"] = p.model_id;
-    cfg["llm_base_url"] = p.base_url;
-    return cfg;
+    return AIQuantLabService::llm_config(profile_id);
 }
 
 // ── Constructor ──────────────────────────────────────────────────────────────

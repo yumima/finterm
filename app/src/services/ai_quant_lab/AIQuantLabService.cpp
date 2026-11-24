@@ -1,13 +1,17 @@
 // src/services/ai_quant_lab/AIQuantLabService.cpp
 #include "services/ai_quant_lab/AIQuantLabService.h"
 
+#include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/agents/AgentService.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/repositories/LlmProfileRepository.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
+#include <QSet>
 
 namespace finterm::services::quant {
 
@@ -49,10 +53,22 @@ static QString aiq_failure_message(const python::PythonResult& result) {
         msg = QString("Script failed (exit code %1)").arg(result.exit_code);
     return msg;
 }
+// What takes minutes goes in a job's slot; the rest is asked for by a reader
+// who is waiting, and must not queue behind a training.
+static bool is_long_job(const QString& command) {
+    static const QSet<QString> k = {
+        QStringLiteral("train"),        QStringLiteral("train_model"),          QStringLiteral("retrain"),
+        QStringLiteral("evaluate"),     QStringLiteral("run_backtest"),         QStringLiteral("backtest"),
+        QStringLiteral("execute_task"), QStringLiteral("optimize_portfolio"),   QStringLiteral("run_selection"),
+        QStringLiteral("predict"),      QStringLiteral("tune_hyperparameters"), QStringLiteral("create_ensemble"),
+    };
+    return k.contains(command);
+}
+
 void AIQuantLabService::run_python(const QString& script, const QStringList& args, const QString& module_id,
                                    const QString& command) {
     QPointer<AIQuantLabService> self = this;
-    python::PythonRunner::instance().run(script, args, [self, module_id, command](python::PythonResult result) {
+    auto done = [self, module_id, command](python::PythonResult result) {
         if (!self)
             return;
         if (!result.success) {
@@ -76,7 +92,12 @@ void AIQuantLabService::run_python(const QString& script, const QStringList& arg
         }
         LOG_INFO("AIQuantLab", QString("[%1/%2] Result ready").arg(module_id, command));
         emit self->result_ready(module_id, command, doc.object());
-    });
+    };
+    auto& runner = python::PythonRunner::instance();
+    if (is_long_job(command))
+        runner.run_job(script, args, std::move(done));
+    else
+        runner.run(script, args, std::move(done));
 }
 
 void AIQuantLabService::run_python_cached(const QString& script, const QStringList& args, const QString& module_id,
@@ -126,6 +147,13 @@ void AIQuantLabService::run_python_cached(const QString& script, const QStringLi
 
 // ── Generic module execution ─────────────────────────────────────────────────
 void AIQuantLabService::run_module(const QString& module_id, const QString& command, const QJsonObject& params) {
+    // The Deep Agent module is two programs: its script is RD-Agent's.
+    if (module_id == QLatin1String("deep_agent") && command == QLatin1String("execute_task")) {
+        QJsonObject p = params;
+        p.remove("config"); // asked for by an agent: the model is the app's to choose
+        run_deep_agent(p);
+        return;
+    }
     auto it = script_map_.find(module_id);
     if (it == script_map_.end()) {
         emit error_occurred(module_id, "Unknown module: " + module_id);
@@ -234,7 +262,7 @@ void AIQuantLabService::train_rl_agent(const QJsonObject& params) {
         }
     };
 
-    python::PythonRunner::instance().run("ai_quant_lab/qlib_rl.py", {"train", json}, on_finished, on_line);
+    python::PythonRunner::instance().run_job("ai_quant_lab/qlib_rl.py", {"train", json}, on_finished, on_line);
 }
 
 // ── GS Quant ─────────────────────────────────────────────────────────────────
@@ -386,7 +414,7 @@ void AIQuantLabService::rolling_execute_retrain(const QJsonObject& params) {
     // We parse each line individually and emit result_ready per event.
     auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
     QPointer<AIQuantLabService> self = this;
-    python::PythonRunner::instance().run("ai_quant_lab/qlib_rolling_retraining.py", {"retrain", json},
+    python::PythonRunner::instance().run_job("ai_quant_lab/qlib_rolling_retraining.py", {"retrain", json},
                                          [self](python::PythonResult result) {
                                              if (!self)
                                                  return;
@@ -418,15 +446,42 @@ void AIQuantLabService::rolling_delete_schedule(const QJsonObject& params) {
 }
 
 // ── Deep Agent (LangGraph multi-agent) ───────────────────────────────────────
+QJsonObject AIQuantLabService::llm_config(const QString& profile_id) {
+    QString provider, model, key, base;
+    if (profile_id.isEmpty()) {
+        const ResolvedLlmProfile p = LlmProfileRepository::instance().resolve_for_context("agent");
+        provider = p.provider, model = p.model_id, key = p.api_key, base = p.base_url;
+    } else if (const auto r = LlmProfileRepository::instance().get_profile(profile_id); r.is_ok()) {
+        const LlmProfile& p = r.value();
+        provider = p.provider, model = p.model_id, key = p.api_key, base = p.base_url;
+    }
+    if (provider.isEmpty() || model.isEmpty())
+        return {};
+    return {{"llm_provider", provider},
+            {"llm_model", model},
+            {"llm_api_key", key},
+            {"llm_base_url", ai_chat::LlmService::provider_api_root(provider, base)}};
+}
+
 void AIQuantLabService::run_deep_agent(const QJsonObject& params) {
-    // Build the CLI payload: execute_task with task, agent_type, thread_id
-    QJsonObject payload;
-    payload["task"] = params["task"];
-    payload["agent_type"] = params.contains("agent_type") ? params["agent_type"] : QJsonValue("general");
+    QJsonObject config = params["config"].toObject();
+    if (!config.contains("llm_provider"))
+        config = llm_config();
+    if (config.isEmpty()) {
+        emit error_occurred("deep_agent", "No LLM profile: set one up in Settings > LLM Config");
+        return;
+    }
+    QJsonObject payload{{"task", params["task"]}};
+    payload["agent_type"] = params["agent_type"].toString(QStringLiteral("general"));
     if (params.contains("thread_id"))
         payload["thread_id"] = params["thread_id"];
-
-    auto json = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+    QJsonObject clean{{"llm_provider", config["llm_provider"]},
+                      {"llm_model", config["llm_model"]},
+                      {"llm_api_key", config["llm_api_key"]},
+                      {"llm_base_url", config["llm_base_url"]}};
+    AgentService::attach_terminal_tools(clean);
+    payload["config"] = clean;
+    const auto json = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     run_python("agents/deepagents/cli.py", {"execute_task", json}, "deep_agent", "execute_task");
 }
 

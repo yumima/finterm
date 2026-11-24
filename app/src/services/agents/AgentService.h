@@ -24,6 +24,10 @@ class AgentService : public QObject, public finterm::datahub::Producer {
     int max_requests_per_sec() const override;
     void ensure_registered_with_hub();
 
+    /// Give an agent's config finterm's read-only tools: the definitions and a
+    /// bridge endpoint that authorises those and no others.
+    static void attach_terminal_tools(QJsonObject& config);
+
     // ── Agent discovery & listing ────────────────────────────────────────────
     void discover_agents();
     void list_tools();

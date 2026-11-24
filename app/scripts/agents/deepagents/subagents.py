@@ -19,17 +19,6 @@ from __future__ import annotations
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# interrupt_on config — pause before destructive/sensitive tool calls
-# Applied to subagents that may write files or execute shell commands
-# ---------------------------------------------------------------------------
-
-_SAFE_INTERRUPT: dict[str, bool] = {
-    "write_file": True,
-    "edit_file":  True,
-    "execute":    True,
-}
-
-# ---------------------------------------------------------------------------
 # SubAgent definitions
 # ---------------------------------------------------------------------------
 
@@ -74,7 +63,6 @@ DATA_ANALYST_AGENT: dict[str, Any] = {
 }
 
 TRADING_AGENT: dict[str, Any] = {
-    "interrupt_on": _SAFE_INTERRUPT,
     "name": "trading",
     "description": (
         "Develops trading strategies, generates signals, and evaluates entry/exit logic. "
@@ -135,7 +123,6 @@ PORTFOLIO_OPTIMIZER_AGENT: dict[str, Any] = {
 }
 
 BACKTESTER_AGENT: dict[str, Any] = {
-    "interrupt_on": _SAFE_INTERRUPT,
     "name": "backtester",
     "description": (
         "Validates strategies through historical simulation and performance attribution. "
@@ -156,7 +143,6 @@ BACKTESTER_AGENT: dict[str, Any] = {
 }
 
 REPORTER_AGENT: dict[str, Any] = {
-    "interrupt_on": _SAFE_INTERRUPT,
     "name": "reporter",
     "description": (
         "Synthesizes findings from multiple specialists into a cohesive final report. "

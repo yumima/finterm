@@ -71,6 +71,8 @@ anthropic>=0.71.0,<1.0
 google-generativeai>=0.8.5,<1.0
 langchain>=0.1.0
 langchain-community>=0.0.1
+# Deep Agents: every OpenAI-compatible endpoint (scripts/agents/deepagents/models.py)
+langchain-openai>=1.0,<2.0
 tiktoken>=0.5.0
 # Note: litellm removed
 

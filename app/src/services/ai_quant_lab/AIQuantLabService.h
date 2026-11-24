@@ -43,6 +43,9 @@ class AIQuantLabService : public QObject {
 
     // ── Deep Agent (LangGraph multi-agent) ──────────────────────────────────
     void run_deep_agent(const QJsonObject& params);
+    /// What the agents' scripts build their model from; empty when there is no
+    /// such profile. No id: the profile agents use by default.
+    static QJsonObject llm_config(const QString& profile_id = {});
 
     // ── RD-Agent (autonomous factor/model research) ──────────────────────────
     void rd_agent_check_status();
