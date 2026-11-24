@@ -579,7 +579,7 @@ void AgentService::run_python_stdin(const QString& action, const QJsonObject& pa
     // PythonRunner so every finagent spawn sees the same FINTERM_DATA_DIR,
     // FINAGENT_DATA_DIR, and PYTHONPATH.
     proc->setProcessEnvironment(py.build_python_env());
-    proc->setWorkingDirectory(python::PythonRunner::work_dir());
+    proc->setWorkingDirectory(python::PythonRunner::work_dir(python::PythonRunner::WorkDir::Cells));
 #ifdef _WIN32
     proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
         cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
@@ -958,7 +958,7 @@ QString AgentService::run_agent_streaming(const QString& query, const QJsonObjec
     // PythonRunner so every finagent spawn sees the same FINTERM_DATA_DIR,
     // FINAGENT_DATA_DIR, and PYTHONPATH.
     proc->setProcessEnvironment(py.build_python_env());
-    proc->setWorkingDirectory(python::PythonRunner::work_dir());
+    proc->setWorkingDirectory(python::PythonRunner::work_dir(python::PythonRunner::WorkDir::Cells));
 #ifdef _WIN32
     proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
         cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
@@ -1186,7 +1186,7 @@ QString AgentService::run_team(const QString& query, const QJsonObject& team_con
     // PythonRunner so every finagent spawn sees the same FINTERM_DATA_DIR,
     // FINAGENT_DATA_DIR, and PYTHONPATH.
     proc->setProcessEnvironment(py.build_python_env());
-    proc->setWorkingDirectory(python::PythonRunner::work_dir());
+    proc->setWorkingDirectory(python::PythonRunner::work_dir(python::PythonRunner::WorkDir::Cells));
 #ifdef _WIN32
     proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
         cpa->flags |= 0x08000000; // CREATE_NO_WINDOW

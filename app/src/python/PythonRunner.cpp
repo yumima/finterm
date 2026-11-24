@@ -130,8 +130,9 @@ void PythonRunner::insert_data_dirs(QProcessEnvironment& env) {
     env.insert("FINTERM_CACHE_DIR", finterm::AppPaths::cache());
 }
 
-QString PythonRunner::work_dir() {
-    const QString dir = finterm::AppPaths::features() + QStringLiteral("/work");
+QString PythonRunner::work_dir(WorkDir which) {
+    const QString dir = finterm::AppPaths::features() +
+                        (which == WorkDir::Cells ? QStringLiteral("/work/cells") : QStringLiteral("/work/scripts"));
     QDir().mkpath(dir);
     return dir;
 }
@@ -505,7 +506,7 @@ void PythonRunner::start_next() {
         // share a top-level name with a local package.
 
         proc->setProcessEnvironment(env);
-        proc->setWorkingDirectory(work_dir());
+        proc->setWorkingDirectory(work_dir(is_code ? WorkDir::Cells : WorkDir::Scripts));
 
 #ifdef _WIN32
         proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {

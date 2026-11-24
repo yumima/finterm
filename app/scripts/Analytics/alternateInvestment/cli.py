@@ -6,9 +6,13 @@ Unified command-line interface for alternative investment analytics.
 import sys
 import json
 import argparse
+from pathlib import Path
 from decimal import Decimal
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
+
+# The app runs this as a module: the siblings' folder is not on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import AssetClass, HedgeFundStrategy, CommoditySector, RealEstateType, AssetParameters, MarketData
 from digital_assets import DigitalAssetAnalyzer

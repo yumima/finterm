@@ -660,6 +660,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_user_files_location.py
     )
     set_tests_properties(user_files_location PROPERTIES TIMEOUT 60)
+    # Scripts started as modules find their siblings.
+    add_test(
+        NAME module_scripts
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_module_scripts.py
+    )
+    set_tests_properties(module_scripts PROPERTIES TIMEOUT 60)
 endif()
 
 # ── Earnings release + webcast links ─────────────────────────────────────────

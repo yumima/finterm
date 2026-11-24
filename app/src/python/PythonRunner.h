@@ -81,9 +81,12 @@ class PythonRunner : public QObject {
     /// finterm_paths resolves the active profile's from it. No keyring read.
     static void insert_data_dirs(QProcessEnvironment& env);
 
-    /// The folder every Python process runs in: what a library writes to "here"
-    /// is the user's, and the scripts' folder is replaced by an update.
-    static QString work_dir();
+    /// The folder a Python process runs in: what a library writes to "here" is
+    /// the user's, and the scripts' folder is replaced by an update. Scripts
+    /// start in Scripts; code the user or an agent writes runs in Cells, apart:
+    /// a "pandas.py" saved there must not be what `python -m` finds first.
+    enum class WorkDir { Scripts, Cells };
+    static QString work_dir(WorkDir which = WorkDir::Scripts);
 
     /// Check if python is available
     bool is_available() const;
