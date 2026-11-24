@@ -779,6 +779,7 @@ void NewsScreen::on_analyze_requested(const QString& url) {
         return;
     }
     analyzing_url_ = url;
+    detail_panel_->analysis_begins(url);
     QPointer<NewsScreen> self = this;
     services::NewsService::instance().analyze_article(url, [self, url](bool ok, services::NewsAnalysis analysis) {
         if (!self)

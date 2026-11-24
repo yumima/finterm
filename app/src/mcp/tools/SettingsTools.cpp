@@ -11,6 +11,8 @@
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
+#include <QCoreApplication>
+#include <QThread>
 #include <QVariantMap>
 
 namespace finterm::mcp::tools {
@@ -166,30 +168,36 @@ std::vector<ToolDef> get_settings_tools() {
             if (provider.isEmpty())
                 return ToolResult::fail("Missing 'provider'");
 
-            // hearth is the user's to connect, by their own hand.
-            if (ai_chat::is_hearth_provider(provider) && HearthService::instance().link() != engine::Link::Connected)
-                return ToolResult::fail("hearth is not connected; the user can connect it in Settings › AI Config");
-            if (ai_chat::is_hearth_provider(provider)) {
-                // As Settings does it: what the chat had before is remembered,
-                // for when hearth is disconnected.
-                if (auto r = EngineLinkRepository::instance().connect(true); r.is_err())
-                    return ToolResult::fail("Failed to set active LLM: " + QString::fromStdString(r.error()));
-                provider = EngineLinkRepository::instance().chat_provider();
-            } else {
+            // On the GUI thread, where the user's own clicks are: what is checked
+            // there stays so while it is done.
+            QString error;
+            const auto choose = [&provider, &error]() {
+                // hearth is the user's to connect, by their own hand.
+                if (ai_chat::is_hearth_provider(provider)) {
+                    error = HearthService::instance().use_for_chat();
+                    if (error.isEmpty())
+                        provider = EngineLinkRepository::instance().chat_provider();
+                    return;
+                }
                 QString row;
                 if (auto rows = LlmConfigRepository::instance().list_providers(); rows.is_ok())
                     for (const auto& p : rows.value())
                         if (p.provider.compare(provider, Qt::CaseInsensitive) == 0)
                             row = p.provider;
-                if (row.isEmpty())
-                    return ToolResult::fail("No provider '" + provider + "' is set up in Settings › AI Config");
-                if (auto r = LlmConfigRepository::instance().set_active(row); r.is_err())
-                    return ToolResult::fail("Failed to set active LLM: " + QString::fromStdString(r.error()));
-                provider = row;
-            }
+                error = row.isEmpty() ? "No provider '" + provider + "' is set up in Settings › AI Config"
+                                      : HearthService::instance().use_another_for_chat(row);
+                if (error.isEmpty()) {
+                    provider = row;
+                    ai_chat::LlmService::instance().reload_config();
+                }
+            };
+            if (QThread::currentThread() == qApp->thread())
+                choose();
+            else
+                QMetaObject::invokeMethod(qApp, choose, Qt::BlockingQueuedConnection);
+            if (!error.isEmpty())
+                return ToolResult::fail("Failed to set active LLM: " + error);
             // (The chat that called this goes on with the provider it started with.)
-            ai_chat::LlmService::instance().reload_config();
-
             EventBus::instance().publish("llm.provider_changed", QVariantMap{{"provider", provider}});
 
             return ToolResult::ok("Active LLM set to: " + provider);

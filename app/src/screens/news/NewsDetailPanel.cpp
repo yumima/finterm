@@ -834,6 +834,10 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
             // <p style="text-indent:…"> CSS we emit actually applies.
             self->body_label_->setHtml(format_article_html(text));
         });
+    if (analyses_.contains(article.link)) {
+        const services::NewsAnalysis kept = analyses_.value(article.link);
+        show_analysis(current_article_.link, kept);
+    }
 }
 
 void NewsDetailPanel::show_analysis_error(const QString& url, const QString& message) {
@@ -858,7 +862,15 @@ void NewsDetailPanel::show_analysis_error(const QString& url, const QString& mes
     reveal_article_section(analysis_section_);
 }
 
+void NewsDetailPanel::analysis_begins(const QString& url) {
+    if (has_article_ && current_article_.link == url && !analyze_btn_->isEnabled())
+        analyze_timeout_->start();
+}
+
 void NewsDetailPanel::show_analysis(const QString& url, const services::NewsAnalysis& analysis) {
+    if (analyses_.size() >= 100 && !analyses_.contains(url))
+        analyses_.clear();
+    analyses_.insert(url, analysis);
     if (!has_article_ || current_article_.link != url)
         return;
     analyze_btn_->setText("ANALYZE");

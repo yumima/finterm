@@ -329,7 +329,7 @@ class LlmService : public QObject {
     // Quota-fallback walk shared by chat() and the streaming path. Stamps
     // provider_used / model_used / fell_back on the response.
     LlmResponse request_with_fallback(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                      bool use_tools, const PersonaScope& scope);
+                                      bool use_tools, const PersonaScope& persona);
     PersonaScope pinned(PersonaScope p) const;
 
     // Request builders → QJsonObject

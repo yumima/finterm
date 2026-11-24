@@ -5,6 +5,7 @@
 #include "core/logging/Logger.h"
 #include "core/util/ChildEnvironment.h"
 #include "storage/repositories/EngineLinkRepository.h"
+#include "storage/repositories/LlmConfigRepository.h"
 #include "storage/sqlite/Database.h"
 
 #include <QByteArray>
@@ -222,6 +223,21 @@ QString HearthService::connect_engine(bool for_chat) {
     return {};
 }
 
+QString HearthService::use_for_chat() {
+    if (link() != engine::Link::Connected)
+        return QStringLiteral("hearth is not connected; the user can connect it in Settings › AI Config");
+    return connect_engine(true);
+}
+
+QString HearthService::use_another_for_chat(const QString& provider) {
+    auto r = LlmConfigRepository::instance().set_active(provider);
+    if (r.is_err())
+        return QString::fromStdString(r.error());
+    if (connect_after_)
+        connect_after_ = false; // still to be connected, no longer for the chat
+    return {};
+}
+
 QString HearthService::disconnect_engine() {
     auto r = EngineLinkRepository::instance().disconnect();
     if (r.is_err())
@@ -236,6 +252,7 @@ QString HearthService::decline_engine() {
     auto r = EngineLinkRepository::instance().decline();
     if (r.is_err())
         return QString::fromStdString(r.error());
+    connect_after_.reset();
     link_was_changed();
     return {};
 }

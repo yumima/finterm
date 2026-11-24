@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`add66765a`](https://github.com/yumima/finterm/commit/add66765a) hearth in finterm, news: what the second review found
 - [`b963a56e2`](https://github.com/yumima/finterm/commit/b963a56e2) hearth in finterm: one walk over a config's models, tested
 - [`59b5441da`](https://github.com/yumima/finterm/commit/59b5441da) hearth in finterm: what the review found
 - [`9da8360f9`](https://github.com/yumima/finterm/commit/9da8360f9) Get hearth: run hearth's own installer, the one this finterm knows

@@ -700,12 +700,16 @@ void LlmConfigSection::show_default_badge(const QString& provider, const QString
 }
 
 void LlmConfigSection::refresh_provider_labels() {
-    if (!provider_list_->currentItem()) { // nothing is being typed
-        load_providers();
+    const bool none = !provider_list_->currentItem();
+    const QString selected = none ? QString() : provider_list_->currentItem()->data(Qt::UserRole).toString();
+    const QString active = fill_provider_list();
+    if (none && provider_edit_->text().trimmed().isEmpty()) {
+        // The form is empty: the new row goes into it.
+        for (int i = 0; i < provider_list_->count(); ++i)
+            if (provider_list_->item(i)->data(Qt::UserRole).toString() == active)
+                provider_list_->setCurrentRow(i);
         return;
     }
-    const QString selected = provider_list_->currentItem()->data(Qt::UserRole).toString();
-    const QString active = fill_provider_list();
     const QSignalBlocker block(provider_list_);
     for (int i = 0; i < provider_list_->count(); ++i)
         if (provider_list_->item(i)->data(Qt::UserRole).toString() == selected)
@@ -825,8 +829,7 @@ QString LlmConfigSection::make_default(const QString& provider) {
     // Choosing hearth for the chat is saying yes to it.
     if (ai_chat::is_hearth_provider(provider))
         return HearthService::instance().connect_engine(/*for_chat=*/true);
-    auto r = LlmConfigRepository::instance().set_active(provider);
-    return r.is_err() ? QString::fromStdString(r.error()) : QString();
+    return HearthService::instance().use_another_for_chat(provider);
 }
 
 void LlmConfigSection::on_save_provider() {

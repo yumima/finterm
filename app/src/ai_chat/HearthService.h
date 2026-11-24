@@ -64,6 +64,11 @@ class HearthService : public QObject {
     /// The user's answers. Each reloads the chat's configuration and emits
     /// link_changed(). Empty on success, else what went wrong.
     QString connect_engine(bool for_chat);
+    /// Connected already, or it is an error: never the answer to a question
+    /// nobody asked the user. (GUI thread, as all of these.)
+    QString use_for_chat();
+    /// Another provider for the chat, also over a start that is waited for.
+    QString use_another_for_chat(const QString& provider);
     QString disconnect_engine();
     QString decline_engine();
 

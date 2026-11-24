@@ -39,9 +39,15 @@ HearthInstaller::HearthInstaller(QObject* parent)
     // (Waited for, or the script alone is killed first and what it runs goes on.)
     connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
         const QPointer<QProcess> p = proc_;
+        const qint64 pid = p ? p->processId() : 0;
         cancel();
-        if (p)
-            p->waitForFinished(5000);
+        if (!p || pid <= 0)
+            return;
+        p->waitForFinished(5000);
+#if !defined(Q_OS_WIN)
+        if (p && p->state() != QProcess::NotRunning)
+            ::kill(-static_cast<pid_t>(pid), SIGKILL);
+#endif
     });
 }
 

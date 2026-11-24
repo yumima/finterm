@@ -4,6 +4,7 @@
 #include "services/news/NewsNlpService.h"
 #include "services/news/NewsService.h"
 
+#include <QHash>
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -30,6 +31,8 @@ class NewsDetailPanel : public QWidget {
     void show_article(const services::NewsArticle& article);
     /// Of the article at `url`: not shown under another one.
     void show_analysis(const QString& url, const services::NewsAnalysis& analysis);
+    /// The analysis of `url` begins now: it may have waited for another.
+    void analysis_begins(const QString& url);
     void show_analysis_error(const QString& url, const QString& message);
     void show_related(const QVector<services::NewsArticle>& related);
     void show_monitor_matches(const QVector<QPair<services::NewsMonitor, QStringList>>& matches);
@@ -204,6 +207,7 @@ class NewsDetailPanel : public QWidget {
     QStackedWidget* stack_ = nullptr;
     services::NewsArticle current_article_;
     bool has_article_ = false;
+    QHash<QString, services::NewsAnalysis> analyses_; // by URL: for the article one comes back to
     ui::ReadAloudToggle* listen_toggle_ = nullptr; ///< article LISTEN ↔ TtsService
 
     // Read-aloud for the TL;DR, on the ARTICLE DETAIL header bar. Synthesised

@@ -2396,7 +2396,8 @@ void LlmService::fetch_models(const QString& provider, const QString& api_key, c
 // ============================================================================
 
 LlmResponse LlmService::chat(const QString& user_message, const std::vector<ConversationMessage>& history,
-                             bool use_tools, const PersonaScope& persona) {
+                             bool use_tools, const PersonaScope& scope) {
+    PersonaScope persona;
     // Hold the mutex across the entire do_request call to prevent
     // member-config tearing under concurrent callers.
     //
@@ -2430,6 +2431,7 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
         ensure_config();
         if (provider_.isEmpty())
             return LlmResponse{.content = {}, .error = no_endpoint_error({})};
+        persona = pinned(scope);
     }
     // Release mutex_ before the blocking round-trip so a long call (e.g. a slow
     // local news analysis on a QtConcurrent thread) can't freeze the UI thread,
@@ -2453,8 +2455,7 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
 // another meanwhile — in Settings, or a tool it calls — is for the next one, not
 // for its next round, which would take the new model to the old address.
 PersonaScope LlmService::pinned(PersonaScope p) const {
-    QMutexLocker lock(&mutex_);
-    ensure_config();
+    // Called with mutex_ held
     if (p.model.isEmpty())
         p.model = model_;
     if (p.provider.isEmpty()) {
@@ -2467,8 +2468,7 @@ PersonaScope LlmService::pinned(PersonaScope p) const {
 
 LlmResponse LlmService::request_with_fallback(const QString& user_message,
                                               const std::vector<ConversationMessage>& history, bool use_tools,
-                                              const PersonaScope& scope) {
-    const PersonaScope persona = pinned(scope);
+                                              const PersonaScope& persona) {
     PersonaScope target = persona;
     const QString requested_model = eff_model(persona);
     EvidenceScope evidence; // tool results of every attempt below
@@ -2566,26 +2566,26 @@ void LlmService::ground_reply(LlmResponse& resp, const QString& user_message,
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                StreamCallback on_chunk, bool use_tools, const PersonaScope& persona,
+                                StreamCallback on_chunk, bool use_tools, const PersonaScope& scope,
                                 CompletionCallback on_done) {
-    // Load config and fail fast when no provider is set. The worker then reads
-    // the config members unlocked, exactly as the chat() path does — see the
-    // ACCEPTED-design block in chat(): the fix for a reload_config() racing a
-    // request mid-flight is the RequestConfig refactor (~70 member reads), and
-    // the old per-call "snapshot and re-apply" here neither prevented that race
-    // (members could still be rewritten after the apply) nor was itself safe
-    // (two concurrent streams re-applied over each other). One documented
-    // policy, not two half-policies.
-    QString p;
+    // Load config and fail fast when no provider is set. Which provider, model,
+    // key and address the request uses is decided here (pinned); the worker
+    // reads the rest of the config (limits, tools) unlocked, as chat() does —
+    // see the ACCEPTED-design block there.
+    QString error;
+    PersonaScope persona;
     {
         QMutexLocker lock(&mutex_);
         ensure_config();
-        p = provider_;
+        if (provider_.isEmpty())
+            error = no_endpoint_error({});
+        else
+            persona = pinned(scope);
     }
 
-    if (p.isEmpty()) {
+    if (!error.isEmpty()) {
         on_chunk("", true);
-        LlmResponse err{.content = {}, .error = no_endpoint_error({})};
+        LlmResponse err{.content = {}, .error = error};
         // Per-call delivery when provided (scoped to the caller); else the
         // legacy broadcast signal. We're on the caller's (UI) thread here.
         if (on_done)

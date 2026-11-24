@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
 </head>
 <body>
+  {% if site.hearth_url %}<nav class="projects" aria-label="Projects"><a href="/">yumima</a><a href="{{ '/' | relative_url }}" aria-current="page">finterm</a><a href="{{ site.hearth_url }}">hearth</a><a href="{{ site.hearth_url }}#mantel">mantel</a></nav>{% endif %}
   <header class="top">
     <a class="brand" href="{{ '/' | relative_url }}">finterm</a>
     <nav>
