@@ -117,6 +117,10 @@ pypme==0.6.2
 fortitudo.tech==1.2
 quantstats>=0.0.62
 
+# Voice input (scripts/voice; the app opens the microphone)
+faster-whisper>=1.1,<2.0
+webrtcvad-wheels>=2.0.14
+
 # Quant libraries
 pyqlib==0.9.7
 rdagent==0.8.0
@@ -173,5 +177,5 @@ mplfinance>=0.12.0
 
 # Not here: PyAudio (microphone input). It has wheels for Windows only; on Linux
 # and macOS it builds from source against PortAudio, and one package that fails
-# to install brings first-time setup back at every start. Voice input's other
-# packages are installed by hand too (see scripts/voice).
+# to install brings first-time setup back at every start. The app opens the
+# microphone itself (SpeechService).

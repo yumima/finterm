@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-deepgram_stt.py — Microphone → Deepgram live WebSocket STT → JSON stdout.
+deepgram_stt.py — sound on stdin → Deepgram live transcription → JSON stdout.
 
-Matches the same JSON-lines protocol as speech_to_text.py so SpeechService can
-parse either transparently:
-    {"status": "calibrating"}          — adjusting for ambient noise (no-op here)
-    {"status": "listening"}            — ready, waiting for speech
-    {"text": "hello world"}            — finalized transcription
-    {"error": "..."}                   — recoverable error (keeps listening)
-    {"fatal": "..."}                   — unrecoverable error (process exits)
+The app opens the microphone and writes it here: 16 kHz, mono, 16-bit PCM.
+Same JSON lines as whisper_stt.py, so SpeechService reads either:
+    {"status": "calibrating"}   — connecting
+    {"status": "listening"}     — ready for sound
+    {"text": "hello world"}     — finalized transcription
+    {"error": "..."}            — recoverable error (keeps listening)
+    {"fatal": "..."}            — unrecoverable error (process exits)
 
 Environment variables (injected by DeepgramSttProvider in C++):
     DEEPGRAM_API_KEY       — required
@@ -16,17 +16,20 @@ Environment variables (injected by DeepgramSttProvider in C++):
     FINTERM_STT_LANGUAGE   — default "en"
     FINTERM_STT_KEYTERMS   — comma-separated boosted terms (optional)
 
-The process runs until stdin is closed, a fatal error occurs, or it receives
-SIGTERM (Windows: QProcess::kill sends taskkill which terminates anyway).
+The process runs until stdin is closed or the connection ends. Deepgram's
+WebSocket is plain enough to need no SDK (its SDK changes its API every major
+version, and opens the microphone with PyAudio).
 """
 
 import json
 import os
-import signal
 import sys
 import threading
+from urllib.parse import urlencode
 
-from install_hint import install_hint  # beside this script
+URL = os.environ.get("FINTERM_DEEPGRAM_URL", "wss://api.deepgram.com/v1/listen")  # (tests point it at their own)
+CHUNK = 3200  # 100 ms
+KEEPALIVE_S = 5.0  # Deepgram closes a connection it hears nothing on for 10 s
 
 
 def emit(obj: dict) -> None:
@@ -35,154 +38,93 @@ def emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def listen_url(model: str, language: str, keyterms: list[str]) -> str:
+    query = [("model", model), ("language", language), ("encoding", "linear16"), ("sample_rate", "16000"),
+             ("channels", "1"), ("punctuate", "true"), ("smart_format", "true"), ("interim_results", "false"),
+             ("endpointing", "300")]
+    # Nova-3 uses `keyterm` (no weights); older models `keywords`.
+    query += [("keyterm" if model.startswith("nova-3") else "keywords", k) for k in keyterms]
+    return f"{URL}?{urlencode(query)}"
+
+
+def transcript(message: object) -> str:
+    """The text of a finalized result, else "". Interim ones are not asked for;
+    a long utterance comes as several final pieces, each to be passed on."""
+    if not isinstance(message, dict) or message.get("type") != "Results" or not message.get("is_final"):
+        return ""
+    alternatives = (message.get("channel") or {}).get("alternatives") or [{}]
+    return (alternatives[0].get("transcript") or "").strip()
+
+
 def main() -> None:
     api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
     if not api_key:
         emit({"fatal": "DEEPGRAM_API_KEY not set — configure it in Settings → Voice"})
         sys.exit(1)
-
     model = os.environ.get("FINTERM_STT_MODEL", "nova-3").strip() or "nova-3"
     language = os.environ.get("FINTERM_STT_LANGUAGE", "en").strip() or "en"
-    keyterms_raw = os.environ.get("FINTERM_STT_KEYTERMS", "").strip()
-    keyterms = [t.strip() for t in keyterms_raw.split(",") if t.strip()]
+    keyterms = [t.strip() for t in os.environ.get("FINTERM_STT_KEYTERMS", "").split(",") if t.strip()]
 
-    # Required deps — fail fast with clear install hints
     try:
-        from deepgram import (
-            DeepgramClient,
-            DeepgramClientOptions,
-            LiveOptions,
-            LiveTranscriptionEvents,
-            Microphone,
-        )
+        from websockets.exceptions import ConnectionClosed, InvalidStatus
+        from websockets.sync.client import connect
     except ImportError as e:
-        emit({"fatal": f"deepgram-sdk 3 or 4 not installed — {install_hint('deepgram-sdk>=3.5,<5')} ({e})"})
+        emit({"fatal": f"Voice input's packages are not installed ({e}): restart finterm to let it finish its Python setup"})
         sys.exit(1)
-
-    try:
-        import pyaudio  # noqa: F401  — required by Microphone helper
-    except ImportError:
-        emit({"fatal": f"PyAudio not installed — {install_hint('PyAudio')}"})
-        sys.exit(1)
-
-    # Graceful shutdown flag
-    stop_flag = threading.Event()
-
-    def on_signal(signum, frame):
-        stop_flag.set()
-
-    if hasattr(signal, "SIGTERM"):
-        try:
-            signal.signal(signal.SIGTERM, on_signal)
-        except (ValueError, OSError):
-            pass  # Not on main thread / not supported
-
-    # Build Deepgram client — quiet the SDK's own stdout/stderr spam, which
-    # would otherwise pollute our JSON-lines protocol.
-    config = DeepgramClientOptions(options={"keepalive": "true"})
-    client = DeepgramClient(api_key, config)
-    dg_conn = client.listen.websocket.v("1")
-
-    def on_open(_self, _open, **_kw):
-        emit({"status": "listening"})
-
-    def on_message(_self, result, **_kw):
-        try:
-            alt = result.channel.alternatives[0]
-            transcript = (alt.transcript or "").strip()
-            if not transcript:
-                return
-            # Only emit finalized utterances — interim partials would flood the
-            # consumer which expects completed commands.
-            is_final = bool(getattr(result, "is_final", False))
-            speech_final = bool(getattr(result, "speech_final", False))
-            if is_final and speech_final:
-                emit({"text": transcript})
-        except Exception as ex:
-            emit({"error": f"Transcript parse failed: {ex}"})
-
-    def on_error(_self, err, **_kw):
-        emit({"error": f"Deepgram error: {err}"})
-
-    def on_close(_self, _close, **_kw):
-        stop_flag.set()
-
-    def on_unhandled(_self, _unhandled, **_kw):
-        # Deepgram emits several event types we don't care about (Metadata,
-        # SpeechStarted, UtteranceEnd). Swallow them silently.
-        pass
-
-    dg_conn.on(LiveTranscriptionEvents.Open, on_open)
-    dg_conn.on(LiveTranscriptionEvents.Transcript, on_message)
-    dg_conn.on(LiveTranscriptionEvents.Error, on_error)
-    dg_conn.on(LiveTranscriptionEvents.Close, on_close)
-    dg_conn.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
-
-    live_opts = LiveOptions(
-        model=model,
-        language=language,
-        encoding="linear16",
-        sample_rate=16000,
-        channels=1,
-        punctuate=True,
-        smart_format=True,
-        interim_results=False,
-        endpointing=300,
-        vad_events=True,
-        utterance_end_ms="1000",
-    )
-
-    # Keyword boosting — API surface depends on model.
-    # Nova-3 uses `keyterm` (no weights, English-only).
-    # Older models use `keywords` with optional weight.
-    if keyterms:
-        try:
-            if model.startswith("nova-3"):
-                live_opts.keyterm = keyterms
-            else:
-                live_opts.keywords = keyterms
-        except Exception as ex:  # non-fatal — continue without boosting
-            emit({"error": f"Keyterm setup failed: {ex}"})
 
     emit({"status": "calibrating"})
-    if not dg_conn.start(live_opts):
-        emit({"fatal": "Failed to open Deepgram WebSocket connection"})
-        sys.exit(1)
-
-    # Start microphone → feeds binary audio to dg_conn
     try:
-        microphone = Microphone(dg_conn.send)
-    except Exception as ex:
-        dg_conn.finish()
-        emit({"fatal": f"No microphone available: {ex}"})
+        ws = connect(listen_url(model, language, keyterms), additional_headers={"Authorization": f"Token {api_key}"})
+    except InvalidStatus as e:
+        why = {401: "the API key was refused", 402: "the account has no credit left",
+               400: "the model, language or key terms were refused"}.get(e.response.status_code, "")
+        emit({"fatal": f"Deepgram: HTTP {e.response.status_code}" + (f" — {why}" if why else "")})
         sys.exit(1)
-
-    if not microphone.start():
-        dg_conn.finish()
-        emit({"fatal": "Failed to start microphone"})
+    except Exception as e:  # noqa: BLE001 — DNS, TLS, timeout
+        emit({"fatal": f"Could not reach Deepgram: {e}"})
         sys.exit(1)
+    emit({"status": "listening"})
 
-    # Block until signalled or parent closes stdin
+    ended = threading.Event()
+
+    def send_sound() -> None:
+        while not ended.is_set():
+            data = sys.stdin.buffer.read1(CHUNK)
+            try:
+                if not data:  # the app closed the microphone
+                    ws.send(json.dumps({"type": "CloseStream"}))
+                    return
+                ws.send(data)
+            except ConnectionClosed:
+                return
+
+    def keep_alive() -> None:
+        while not ended.wait(KEEPALIVE_S):
+            try:
+                ws.send(json.dumps({"type": "KeepAlive"}))
+            except ConnectionClosed:
+                return
+
+    for f in (send_sound, keep_alive):
+        threading.Thread(target=f, daemon=True).start()
+
     try:
-        while not stop_flag.is_set():
-            # Wake up periodically to check the flag; also exit if stdin is
-            # closed (parent QProcess was killed).
-            if stop_flag.wait(timeout=0.5):
-                break
-            if sys.stdin.closed:
-                break
-    except KeyboardInterrupt:
-        pass
+        for raw in ws:
+            try:
+                message = json.loads(raw)
+            except ValueError:
+                continue
+            text = transcript(message)
+            if text:
+                emit({"text": text})
+            elif isinstance(message, dict) and message.get("type") == "Error":
+                emit({"error": f"Deepgram: {message.get('description') or message.get('message')}"})
+    except ConnectionClosed as e:
+        emit({"fatal": f"Deepgram ended the connection: {e.rcvd.reason if e.rcvd else e}"})
+        sys.exit(1)
     finally:
-        try:
-            microphone.finish()
-        except Exception:
-            pass
-        try:
-            dg_conn.finish()
-        except Exception:
-            pass
-        emit({"status": "stopped"})
+        ended.set()
+    emit({"status": "stopped"})
 
 
 if __name__ == "__main__":

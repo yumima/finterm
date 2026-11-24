@@ -958,6 +958,7 @@ jobs:
             <key>CFBundleVersion</key><string>${FT_VERSION}</string>
             <key>LSMinimumSystemVersion</key><string>13.0</string>
             <key>NSHighResolutionCapable</key><true/>
+            <key>NSMicrophoneUsageDescription</key><string>To dictate to the AI chat. finterm listens only while its microphone button is on.</string>
           </dict></plist>
           PLIST
           fi
@@ -1281,6 +1282,18 @@ jobs:
 
           echo "Signature OK:"
           codesign --display --verbose=2 "${APP_BUNDLE}" 2>&1 | head -20
+
+      # Dictation: macOS ends an app that opens the microphone without saying
+      # why, and Qt answers "denied" when its permission plugin is not linked.
+      - name: Check the microphone's permission is in the bundle
+        working-directory: app
+        run: |
+          set -euo pipefail
+          B="build/${{ env.APP_NAME }}.app"
+          plutil -extract NSMicrophoneUsageDescription raw "$B/Contents/Info.plist"
+          # grep without -q: it would close the pipe early and fail the step.
+          strings -a "$B/Contents/MacOS/finterm" | grep "DarwinMicrophonePermission" >/dev/null \
+            || { echo "::error::Qt's microphone permission plugin is not linked"; exit 1; }
 
       # ── Copy signed bundle to dist/ ───────────────────────────────────────
       - name: Finalize dist

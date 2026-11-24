@@ -212,6 +212,13 @@ target_link_libraries(test_skill_store PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_skill_store PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME skill_store COMMAND test_skill_store)
 
+# ── Microphone samples for speech recognition ───────────────────────────────
+add_executable(test_pcm_16k_mono services/test_pcm_16k_mono.cpp)
+target_include_directories(test_pcm_16k_mono PRIVATE ../src)
+target_link_libraries(test_pcm_16k_mono PRIVATE Qt6::Core Qt6::Multimedia Qt6::Test)
+set_target_properties(test_pcm_16k_mono PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME pcm_16k_mono COMMAND test_pcm_16k_mono)
+
 # ── In-place update helper ───────────────────────────────────────────────────
 # apply-update.sh swaps an AppImage / a macOS bundle for the staged update,
 # keeps the previous version, rolls back, waits for the app, reports a status.
@@ -1142,6 +1149,11 @@ if(Python3_Interpreter_FOUND)
     add_test(
         NAME agent_skills
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_agent_skills.py
+    )
+    # Voice input's scripts take their sound from the app.
+    add_test(
+        NAME voice
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_voice.py
     )
     # The contact identity declared to SEC / FINRA / OSM: only a plain,
     # header-safe address is sent (SEC 403s an undeclared client).

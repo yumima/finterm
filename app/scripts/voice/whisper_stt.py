@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-whisper_stt.py — Microphone → faster-whisper (local) → JSON stdout.
+whisper_stt.py — sound on stdin → faster-whisper (local) → JSON stdout.
+
+The app opens the microphone and writes it here: 16 kHz, mono, 16-bit PCM.
 
 Matches the same JSON-lines protocol as deepgram_stt.py so SpeechService can
 parse either transparently:
@@ -23,18 +25,13 @@ Environment variables (injected by WhisperSttProvider in C++):
 First run downloads the model into ~/.cache/huggingface/hub (medium ≈ 1.5 GB,
 large-v3 ≈ 3 GB).  Subsequent runs are offline.
 
-The process runs until stdin is closed, a fatal error occurs, or it receives
-SIGTERM (Windows: QProcess::kill sends taskkill which terminates anyway).
+The process runs until stdin is closed or a fatal error occurs.
 """
 
 import json
 import os
-import signal
 import sys
-import threading
 from collections import deque
-
-from install_hint import install_hint  # beside this script
 
 
 def emit(obj: dict) -> None:
@@ -43,32 +40,14 @@ def emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
-def _require(import_path: str, install_hint: str):
-    """Import a module or emit a fatal install hint and exit."""
-    try:
-        return __import__(import_path)
-    except ImportError as e:  # noqa: BLE001
-        emit({"fatal": f"{import_path} not installed — {install_hint} ({e})"})
-        sys.exit(1)
-
-
 def main() -> None:
-    # Dependencies — fail fast with clear install hints so the UI can surface them.
-    _require("numpy", install_hint("numpy"))
-    _require("pyaudio", install_hint("PyAudio"))
-    _require("webrtcvad", install_hint("webrtcvad-wheels"))
-
-    # faster-whisper is a Python package whose top-level module name has a dash
-    # replaced with an underscore — guard with the direct import here.
     try:
+        import numpy as np
+        import webrtcvad
         from faster_whisper import WhisperModel
-    except ImportError as e:  # noqa: BLE001
-        emit({"fatal": f"faster-whisper not installed — {install_hint('faster-whisper')} ({e})"})
+    except ImportError as e:
+        emit({"fatal": f"Voice input's packages are not installed ({e}): restart finterm to let it finish its Python setup"})
         sys.exit(1)
-
-    import numpy as np
-    import pyaudio
-    import webrtcvad
 
     model_name = os.environ.get("FINTERM_STT_MODEL", "medium").strip() or "medium"
     language = os.environ.get("FINTERM_STT_LANGUAGE", "en").strip() or None
@@ -79,17 +58,6 @@ def main() -> None:
     except ValueError:
         vad_aggr = 2
     vad_aggr = max(0, min(3, vad_aggr))
-
-    # Graceful shutdown on SIGTERM (Windows lacks it but QProcess::kill works).
-    stop_event = threading.Event()
-
-    def on_signal(_signum, _frame):
-        stop_event.set()
-
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, on_signal)
-    if hasattr(signal, "SIGINT"):
-        signal.signal(signal.SIGINT, on_signal)
 
     emit({"status": "calibrating"})
 
@@ -108,20 +76,6 @@ def main() -> None:
     frame_samples = sample_rate * frame_ms // 1000  # 480 samples
     frame_bytes = frame_samples * 2  # int16
 
-    pa = pyaudio.PyAudio()
-    try:
-        stream = pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=sample_rate,
-            input=True,
-            frames_per_buffer=frame_samples,
-        )
-    except Exception as e:  # noqa: BLE001
-        emit({"fatal": f"could not open microphone: {e}"})
-        pa.terminate()
-        sys.exit(1)
-
     vad = webrtcvad.Vad(vad_aggr)
 
     # Speech-segment buffer: collect frames while VAD reports speech, plus a
@@ -136,47 +90,37 @@ def main() -> None:
 
     emit({"status": "listening"})
 
-    try:
-        while not stop_event.is_set():
-            try:
-                frame = stream.read(frame_samples, exception_on_overflow=False)
-            except OSError as e:
-                emit({"error": f"audio read failed: {e}"})
-                continue
-            if len(frame) < frame_bytes:
-                continue
+    while True:
+        # EOF, or less than a frame: the app closed the microphone.
+        frame = sys.stdin.buffer.read(frame_bytes)
+        if len(frame) < frame_bytes:
+            break
 
-            try:
-                is_speech = vad.is_speech(frame, sample_rate)
-            except Exception:  # noqa: BLE001
-                is_speech = False
-
-            if is_speech:
-                if not in_speech:
-                    in_speech = True
-                    speech_frames = list(lead_in) + [frame]
-                else:
-                    speech_frames.append(frame)
-                silence_frames = 0
-            else:
-                lead_in.append(frame)
-                if in_speech:
-                    speech_frames.append(frame)
-                    silence_frames += 1
-                    if silence_frames >= silence_finalize_frames:
-                        if len(speech_frames) >= min_speech_frames:
-                            _transcribe_and_emit(
-                                speech_frames, model, language, sample_rate, np
-                            )
-                        in_speech = False
-                        speech_frames = []
-                        silence_frames = 0
-    finally:
         try:
-            stream.stop_stream()
-            stream.close()
-        finally:
-            pa.terminate()
+            is_speech = vad.is_speech(frame, sample_rate)
+        except Exception:  # noqa: BLE001
+            is_speech = False
+
+        if is_speech:
+            if not in_speech:
+                in_speech = True
+                speech_frames = list(lead_in) + [frame]
+            else:
+                speech_frames.append(frame)
+            silence_frames = 0
+        else:
+            lead_in.append(frame)
+            if in_speech:
+                speech_frames.append(frame)
+                silence_frames += 1
+                if silence_frames >= silence_finalize_frames:
+                    if len(speech_frames) >= min_speech_frames:
+                        _transcribe_and_emit(
+                            speech_frames, model, language, sample_rate, np
+                        )
+                    in_speech = False
+                    speech_frames = []
+                    silence_frames = 0
 
     emit({"status": "stopped"})
 

@@ -1963,7 +1963,10 @@ endif()
 
 # ── macOS bundle properties ───────────────────────────────────────────────────
 if(APPLE)
+    # CMake's own template plus the microphone's purpose: without one macOS ends
+    # an app that opens it.
     set_target_properties(finterm PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST        "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/Info.plist.in"
         MACOSX_BUNDLE_GUI_IDENTIFIER    "io.github.yumima.finterm"
         MACOSX_BUNDLE_BUNDLE_NAME       "finterm"
         MACOSX_BUNDLE_BUNDLE_VERSION    "${CMAKE_PROJECT_VERSION}"
@@ -1971,6 +1974,12 @@ if(APPLE)
         MACOSX_BUNDLE_ICON_FILE         "finterm.icns"
         MACOSX_BUNDLE_COPYRIGHT         "Copyright © 2024-2026 finterm contributors"
     )
+    # The plugin is a static library in every Qt; qt_add_executable() would link
+    # it. The release checks that it is there.
+    if(TARGET Qt6::QDarwinMicrophonePermissionPlugin)
+        target_link_libraries(finterm PRIVATE Qt6::QDarwinMicrophonePermissionPlugin)
+        target_compile_definitions(finterm PRIVATE FINTERM_IMPORT_MICROPHONE_PERMISSION)
+    endif()
     # Copy .icns into the bundle Resources folder at build time
     set(_FINTERM_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.icns")
     if(EXISTS "${_FINTERM_ICNS}")

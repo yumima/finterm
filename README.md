@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`4ae5fa611`](https://github.com/yumima/finterm/commit/4ae5fa611) agents: their skills' text reaches them; a local model that only thinks is asked not to
 - [`5083d9593`](https://github.com/yumima/finterm/commit/5083d9593) rd-agent: jobs run in a process the app keeps; the MCP server serves finterm's own tools
 - [`3191ad542`](https://github.com/yumima/finterm/commit/3191ad542) deep agent: it runs, with the chosen model and finterm's own read-only tools
 - [`29bad85d1`](https://github.com/yumima/finterm/commit/29bad85d1) python: a script's arguments never reach the command line; long jobs have slots of their own

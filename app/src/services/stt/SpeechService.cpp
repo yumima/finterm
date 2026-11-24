@@ -7,6 +7,10 @@
 //           │     ├── WhisperSttProvider  → scripts/voice/whisper_stt.py
 //           │     └── DeepgramSttProvider → scripts/voice/deepgram_stt.py
 //
+// The microphone is opened here (Qt Multimedia, part of the app) and its sound
+// written to the script's stdin, 16 kHz mono 16-bit: in Python it took PyAudio,
+// which has no Linux or macOS wheels and had to be installed by hand.
+//
 // Both providers share the same JSON-lines stdout protocol:
 //   {"status": "calibrating"|"listening"|"stopped"}
 //   {"text": "..."}        → transcription
@@ -17,14 +21,26 @@
 
 #include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
+#include "core/util/AppLifecycle.h"
 #include "python/PythonRunner.h"
 #include "python/PythonSetupManager.h"
+#include "services/stt/Pcm16kMono.h"
 #include "storage/secure/SecureStorage.h"
 
+#include <QAudioDevice>
+#include <QAudioSource>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMediaDevices>
+#include <QPermissions>
 #include <QProcessEnvironment>
+
+#ifdef FINTERM_IMPORT_MICROPHONE_PERMISSION
+#    include <QtPlugin>
+Q_IMPORT_PLUGIN(QDarwinMicrophonePermissionPlugin) // macOS: asks the user
+#endif
 
 namespace finterm::services {
 
@@ -63,6 +79,7 @@ class PythonSttProvider : public SttProvider {
         }
 
         process_ = new QProcess(this);
+        lifecycle::bind_to_app(process_);
 
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert("PYTHONIOENCODING", "utf-8");
@@ -114,6 +131,7 @@ class PythonSttProvider : public SttProvider {
             return;
 
         disconnect(process_, nullptr, this, nullptr);
+        close_microphone();
 
         if (process_->state() != QProcess::NotRunning) {
             process_->kill();
@@ -188,10 +206,76 @@ class PythonSttProvider : public SttProvider {
         } else if (obj.contains("status")) {
             const QString status = obj["status"].toString();
             LOG_DEBUG(TAG, QString("STT status: %1").arg(status));
+            // Only now: before, it is loading its model and reads nothing.
+            if (status == QLatin1String("listening"))
+                open_microphone();
         }
     }
 
+    void fail(const QString& msg) {
+        LOG_ERROR(TAG, msg);
+        emit fatal_error(msg);
+        stop();
+    }
+
+    void open_microphone() {
+        if (mic_ || !process_)
+            return;
+        QMicrophonePermission permission;
+        switch (qApp->checkPermission(permission)) {
+            case Qt::PermissionStatus::Undetermined:
+                qApp->requestPermission(permission, this, [this](const QPermission&) { open_microphone(); });
+                return;
+            case Qt::PermissionStatus::Denied:
+                fail(QStringLiteral("finterm may not use the microphone — allow it in the system's privacy settings"));
+                return;
+            case Qt::PermissionStatus::Granted:
+                break;
+        }
+        const QAudioDevice device = QMediaDevices::defaultAudioInput();
+        if (device.isNull()) {
+            fail(QStringLiteral("No microphone found"));
+            return;
+        }
+        QAudioFormat format = Pcm16kMono::format();
+        if (!device.isFormatSupported(format))
+            format = device.preferredFormat();
+        convert_ = std::make_unique<Pcm16kMono>(format);
+        mic_ = std::make_unique<QAudioSource>(device, format);
+        QIODevice* sound = mic_->start();
+        if (!sound || mic_->error() != QtAudio::NoError) {
+            fail(QStringLiteral("Could not open the microphone (%1)").arg(device.description()));
+            return;
+        }
+        LOG_INFO(TAG, QString("Microphone: %1, %2 Hz, %3 channel(s)")
+                          .arg(device.description())
+                          .arg(format.sampleRate())
+                          .arg(format.channelCount()));
+        connect(sound, &QIODevice::readyRead, this, [this, sound]() {
+            const QByteArray pcm = convert_->convert(sound->readAll());
+            // It stops reading while it transcribes; when it is a minute
+            // behind it is too slow for the talk, and what comes is dropped.
+            if (process_ && process_->bytesToWrite() < kMaxUnread)
+                process_->write(pcm);
+        });
+        connect(mic_.get(), &QAudioSource::stateChanged, this, [this](QtAudio::State state) {
+            if (state == QtAudio::StoppedState && mic_ && mic_->error() != QtAudio::NoError)
+                QMetaObject::invokeMethod(
+                    this, [this]() { fail(QStringLiteral("The microphone stopped")); }, Qt::QueuedConnection);
+        });
+    }
+
+    void close_microphone() {
+        if (!mic_)
+            return;
+        mic_->disconnect(this);
+        mic_->stop();
+        mic_.reset();
+        convert_.reset();
+    }
+
     void on_process_finished(int exit_code, QProcess::ExitStatus status) {
+        close_microphone();
         LOG_INFO(TAG, QString("Voice provider '%1' process exited (code=%2, status=%3)")
                           .arg(name())
                           .arg(exit_code)
@@ -211,7 +295,11 @@ class PythonSttProvider : public SttProvider {
         }
     }
 
+    static constexpr qint64 kMaxUnread = 60 * Pcm16kMono::kRate * 2; // a minute
+
     QProcess* process_ = nullptr;
+    std::unique_ptr<QAudioSource> mic_;
+    std::unique_ptr<Pcm16kMono> convert_;
     QByteArray stdout_buffer_;
     std::atomic<bool> active_{false};
 };
@@ -245,7 +333,7 @@ class WhisperSttProvider final : public PythonSttProvider {
 
 // ── DeepgramSttProvider ──────────────────────────────────────────────────────
 //
-// Deepgram live WebSocket STT via Python `deepgram-sdk`. Reads API key from
+// Deepgram live WebSocket STT (scripts/voice/deepgram_stt.py). API key from
 // SecureStorage (key "voice.deepgram.api_key"). Model/language/keyterms come
 // from AppConfig.
 
