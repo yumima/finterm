@@ -272,6 +272,10 @@ inline QVector<Num> extract(const QString& text, int current_year, bool lenient 
             sc = 1.0;
             is_scale = false;
         }
+        // Too large for a double: not a figure but part of an id or hash
+        // ("6795e478" in a transaction id).
+        if (!std::isfinite(v * sc) || !std::isfinite(unit * sc))
+            continue;
         n.scaled = is_scale;
         n.percent = m.captured(5).contains(u'%') || m.captured(5).contains(QLatin1String("percent"));
         n.value = std::fabs(v) * sc;

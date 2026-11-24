@@ -145,6 +145,11 @@ class TestNumberGrounding : public QObject {
     void a_stray_digit_does_not_ground_a_scaled_amount() {
         QCOMPARE(run("3 directors bought", "Revenue was $3 billion.").removed, QStringList{"$3 billion"});
     }
+    void an_id_that_reads_as_a_huge_exponent_is_not_a_figure() {
+        const QString ids = "6795e478 0e931 1e400 9e300T " + QString(400, u'9');
+        QCOMPARE(extract(ids, kYear, true).size(), 0);
+        QCOMPARE(run(ids + "; close 142.37", "Closed at $142.37, target $185.00.").removed, QStringList{"$185.00"});
+    }
     void the_directive_carries_no_figures() {
         // It is part of every request's evidence; a digit in it would ground
         // that digit in every reply.

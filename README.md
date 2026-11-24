@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`ac7003051`](https://github.com/yumima/finterm/commit/ac7003051) site: the download page says when the files went up, next to the version
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -129,6 +129,14 @@ def test_a_stray_digit_does_not_ground_a_scaled_amount():
     assert run("3 directors bought", "Revenue was $3 billion.").removed == ["$3 billion"]
 
 
+def test_an_id_that_reads_as_a_huge_exponent_is_not_a_figure():
+    # Transaction ids are hex: "6795e478" and "0e931" once overflowed here and
+    # failed the whole portfolio analysis.
+    ev = "ids 6795e478-11aa, a0e931ff, 1e400, 9e300T, " + "9" * 400 + "; close 142.37"
+    assert [n.value for n in ng.extract("6795e478 0e931 1e400 9e300T " + "9" * 400, YEAR, lenient=True)] == []
+    assert run(ev, "Closed at $142.37, target $185.00.").removed == ["$185.00"]
+
+
 def test_the_directive_carries_no_figures():
     assert ng.extract(ng.DIRECTIVE, YEAR, lenient=True) == []
 

@@ -162,17 +162,21 @@ def extract(text: str, current_year: int, lenient: bool = False) -> List[Num]:
                 continue
         try:
             v = float(whole.replace(",", "") + frac + exp)
-        except ValueError:
+            unit = 10.0 ** -(len(frac) - 1 if frac else 0)
+            if exp:
+                unit *= 10.0 ** float(exp[1:])
+        except (ValueError, OverflowError):
+            # Too large for a double: not a figure but part of an id or hash
+            # ("6795e478" in a transaction id).
             continue
-        unit = 10.0 ** -(len(frac) - 1 if frac else 0)
-        if exp:
-            unit *= 10.0 ** float(exp[1:])
         sc, is_scale = _scale((m.group(6) or "").strip())
         if lower_len:
             sc, is_scale = lower_scale, True
         is_date = within(dates, ds)
         if is_date:
             sc, is_scale = 1.0, False
+        if not (math.isfinite(v * sc) and math.isfinite(unit * sc)):
+            continue
         g5 = m.group(5) or ""
         n = Num(
             value=abs(v) * sc,
