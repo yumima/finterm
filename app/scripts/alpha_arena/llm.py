@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import threading
+import time
 from pathlib import Path
 
 ANSWER_TIMEOUT_S = 300
@@ -85,25 +86,31 @@ def _ask(connection: dict, system: str, prompt: str, timeout: float) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
 
     models = _load("_arena_llm_models", "deepagents", "models.py")
-    model = models.create_model({
-        "llm_provider": connection.get("provider"), "llm_model": connection.get("model_id"),
-        "llm_api_key": connection.get("api_key") or ("local" if is_local(connection) else ""), "llm_base_url": connection.get("base_url"),
-        "llm_max_tokens": connection.get("max_tokens"),
-        # An engine on this machine goes on with a request nobody waits for until
-        # its connection is closed, and the next model waits for that.
-        "llm_timeout_s": timeout, "llm_max_retries": 0 if is_local(connection) else 2,
-    })
-    if is_local(connection) and not connection.get("api_key"):
-        # hearth adds a web search of its own to a chat that does not say no (as
-        # LlmService does): one competitor would have what the others were not given.
-        model = model.bind(extra_body={"web_search": False})
-    messages = [SystemMessage(content=system), HumanMessage(content=prompt)]
-    answer = model.invoke(messages)
+    until, local = time.monotonic() + timeout, is_local(connection)
+
+    def invoke(**more):
+        model = models.create_model({
+            "llm_provider": connection.get("provider"), "llm_model": connection.get("model_id"),
+            "llm_api_key": connection.get("api_key") or ("local" if local else ""),
+            "llm_base_url": connection.get("base_url"), "llm_max_tokens": connection.get("max_tokens"),
+            # What is left for both calls: an engine on this machine goes on with a request
+            # nobody waits for until its connection is closed, and the next model waits for that.
+            "llm_timeout_s": max(1.0, until - time.monotonic()), "llm_max_retries": 0 if local else 2,
+        })
+        if local and not connection.get("api_key"):
+            # hearth adds a web search of its own to a chat that does not say no (as
+            # LlmService does): one competitor would have what the others were not given.
+            more["extra_body"] = {"web_search": False}
+        return (model.bind(**more) if more else model).invoke([SystemMessage(content=system), HumanMessage(content=prompt)])
+
+    answer = invoke()
     text = models.extract_text(answer.content).strip()
-    if not text and (answer.response_metadata or {}).get("finish_reason") == "length":
+    cut_off = (answer.response_metadata or {}).get("finish_reason") == "length"
+    if not text and cut_off and local and until - time.monotonic() > 5:
         # It spent its answer thinking; asked once more not to (Ollama's /v1 and hearth honour this).
-        answer = model.bind(reasoning_effort="none").invoke(messages)
-        text = models.extract_text(answer.content).strip()
+        text = models.extract_text(invoke(reasoning_effort="none").content).strip()
+    if not text and cut_off:
+        raise NoAnswer("its answer was cut off: raise the profile's max tokens")
     if not text:
         raise NoAnswer("the model ended without an answer")
     return text

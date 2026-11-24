@@ -121,6 +121,9 @@ for name, text in {"an empty answer": "", "prose": "I would buy.", "no JSON afte
                    "a size that is none": '{"action":"buy","size_pct":"lots"}', "a size out of range": '{"action":"buy","size_pct":900}',
                    "NaN": '{"action":"buy","size_pct":NaN}', "a confidence out of range": '{"action":"hold","confidence":85}'}.items():
     check(f"no decision: {name}", raises(traders.NoDecision, lambda t=text: traders.read_crypto("m", "s", t)), text)
+draft = 'Draft: {"action":"buy","size_pct":10}\nFinal: '
+for name, final in {"cut off": '{"action":"sell","size_pct":5,"reaso', "in a list": '[{"action":"sell","size_pct":5}]', "wrapped up": '{"decision": {"action":"sell","size_pct":5}}'}.items():
+    check(f"a draft is not carried out when the final decision is {name}", raises(traders.NoDecision, lambda f=final: traders.read_crypto("m", "s", draft + f)))
 pm = [market.PredictionMarket("7", "Rain?", ["Yes", "No"], [0.4, 0.6], 0.39, 0.41, 5000.0, 1.0, "", True, False)]
 ds = traders.read_predictions("m", pm, '[{"market_id":7,"outcome":"no","action":"buy","size_pct":10}]')
 check("a prediction market's decision", (ds[0].symbol, ds[0].action, ds[0].size) == ("pm:7:1", "buy", 0.1), ds)
@@ -132,6 +135,8 @@ check("objects one after another all count", len(traders.read_predictions("m", p
 check("a list with a stray comma too", len(traders.read_predictions("m", pm, "[" + ",".join(three) + ",]")) == 3)
 check("a list in an object", len(traders.read_predictions("m", pm, '{"decisions": [' + ",".join(three) + "]}")) == 3)
 check("one cut off is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "[" + three[0] + ',{"market_id":7,"outc')))
+check("a draft before a list that is cut off is not it", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "Draft [" + three[0] + "] Final: [" + three[1] + ',{"market_id":7,"outc')))
+check("a draft before the final list is replaced", traders.read_predictions("m", pm, "[" + three[0] + "] no: [" + three[1] + "," + three[2] + "]")[0].size == 0.02)
 check("an empty list in prose is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "My options: []")))
 check("prose is none", raises(traders.NoDecision, lambda: traders.read_predictions("m", pm, "nothing today")))
 check("the second outcome's prices mirror the first's", [round(x, 9) for x in pm[0].bid_ask(1)] == [0.59, 0.61] and pm[0].bid_ask(0) == (0.39, 0.41))
@@ -151,6 +156,35 @@ for price in [100, 99, 98, 97, 98, 99, 100, 101, 102, 101, 100, 99, 98, 99, 100]
     fills = []
     arena._carry_out(dec, book, Limits(1, 1), price, price, {"X": price}, fills, allow_short=False)
 check("a price that comes back leaves it a profit", book.value({"X": 100.0}) > 10000, book.value({"X": 100.0}))
+
+# ── What an exchange may answer
+import http.client  # noqa: E402
+real_open = market.urllib.request.urlopen
+
+
+class Answers:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def read(self):
+        if isinstance(self.body, Exception):
+            raise self.body
+        return self.body
+
+
+for name, body in {"cut short": http.client.IncompleteRead(b"{"), "without a price": b'{"error":[],"result":{"X":{"b":["1"]}}}',
+                   "a list": b"[]", "null": b"null", "not JSON": b"<html>"}.items():
+    market.urllib.request.urlopen = lambda *_a, b=body, **_k: Answers(b)
+    for f, args in ((market.quote, ("BTC/USD", "kraken")), (market.quote, ("BTC/USD", "coinbase")), (market.hourly_closes, ("BTC/USD", "kraken")), (market.prediction_market, ("1",))):
+        check(f"an answer {name} is a market error ({f.__name__})", raises(market.MarketError, lambda: f(*args)) or (f is market.hourly_closes), f)
+market.urllib.request.urlopen = real_open
+check("little liquidity is said, not nothing to sell", "liquidity" in raises(Rejected, lambda: order(Book.of(1000.0, [Fill("X", "buy", 500, 0.4)]), Limits(), "X", "sell", 1.0, 0.4, 0.5, {}, max_value=0.005)))
 
 # ── Indicators, headlines ────────────────────────────────────────────────────
 xs = [100 + 5 * math.sin(i / 3) + 0.2 * i for i in range(200)]

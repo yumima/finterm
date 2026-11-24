@@ -367,6 +367,16 @@ void CellWidget::set_outputs(const QVector<CellOutput>& outputs, int exec_count)
     execution_count_ = exec_count;
     update_gutter();
 
+    // A running cell adds to its output many times a second: what is shown stays,
+    // scrolled, selected or collapsed as the reader has it.
+    if (!outputs.isEmpty() && extend_outputs(outputs)) {
+        if (!output_collapsed_)
+            output_toggle_->setText(QString("OUT [%1]").arg(exec_count));
+        return;
+    }
+    shown_.clear();
+    shown_views_.clear();
+
     // Clear old output content
     while (output_content_layout_->count() > 0) {
         auto* item = output_content_layout_->takeAt(0);
@@ -388,74 +398,112 @@ void CellWidget::set_outputs(const QVector<CellOutput>& outputs, int exec_count)
     output_collapsed_ = false;
     output_content_->setVisible(true);
 
-    for (const auto& out : outputs) {
-        if (out.type == "stream" || out.type == "execute_result") {
-            // Use QTextEdit in read-only mode for proper scrolling of long output
-            auto* output_view = new QTextEdit(output_content_);
-            output_view->setReadOnly(true);
-            output_view->setPlainText(out.text);
-            output_view->setLineWrapMode(QTextEdit::WidgetWidth);
-            output_view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            output_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    for (const auto& out : outputs)
+        add_output(out);
+}
 
-            QString fg = (out.name == "stderr") ? colors::WARNING : colors::TEXT_PRIMARY;
-            output_view->setStyleSheet(
+namespace {
+// Size to content, max 300px then scroll
+void fit_output(QTextEdit* view, qsizetype lines) {
+    const int line_h = QFontMetrics(view->font()).lineSpacing();
+    view->setFixedHeight(qBound(30, int(qMin<qsizetype>(lines, 1000)) * line_h + 10, 300));
+}
+} // namespace
+
+bool CellWidget::extend_outputs(const QVector<CellOutput>& outputs) {
+    if (shown_.isEmpty() || outputs.size() < shown_.size())
+        return false;
+    for (int i = 0; i < shown_.size(); ++i) {
+        const CellOutput &was = shown_[i], &is = outputs[i];
+        if (is.type != was.type || is.name != was.name || is.traceback != was.traceback ||
+            !is.text.startsWith(was.text) || (!shown_views_[i] && is.text != was.text))
+            return false;
+    }
+    for (int i = 0; i < shown_.size(); ++i) {
+        const QString added = outputs[i].text.mid(shown_[i].text.size());
+        if (added.isEmpty())
+            continue;
+        auto* view = shown_views_[i];
+        auto* bar = view->verticalScrollBar();
+        const bool at_end = bar->value() == bar->maximum();
+        QTextCursor end(view->document());
+        end.movePosition(QTextCursor::End);
+        end.insertText(added);
+        fit_output(view, view->document()->blockCount());
+        if (at_end)
+            bar->setValue(bar->maximum());
+        shown_[i].text = outputs[i].text;
+    }
+    for (qsizetype i = shown_.size(); i < outputs.size(); ++i)
+        add_output(outputs[i]);
+    return true;
+}
+
+void CellWidget::add_output(const CellOutput& out) {
+    QTextEdit* view = nullptr;
+    if (out.type == "stream" || out.type == "execute_result") {
+        // Use QTextEdit in read-only mode for proper scrolling of long output
+        auto* output_view = new QTextEdit(output_content_);
+        output_view->setReadOnly(true);
+        output_view->setPlainText(out.text);
+        output_view->setLineWrapMode(QTextEdit::WidgetWidth);
+        output_view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        output_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+        QString fg = (out.name == "stderr") ? colors::WARNING : colors::TEXT_PRIMARY;
+        output_view->setStyleSheet(
+            QString("QTextEdit { background:transparent; color:%1; border:none;"
+                    " font-family:%2; font-size:%3px; padding:2px 0; }"
+                    "QScrollBar:vertical { background:transparent; width:4px; }"
+                    "QScrollBar::handle:vertical { background:%4; }"
+                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+                .arg(fg, fonts::DATA_FAMILY)
+                .arg(fonts::DATA)
+                .arg(colors::BORDER_BRIGHT()));
+
+        fit_output(output_view, out.text.count('\n') + 1);
+        view = output_view;
+        output_content_layout_->addWidget(output_view);
+
+    } else if (out.type == "error") {
+        auto* err_widget = new QWidget(output_content_);
+        err_widget->setStyleSheet(QString("background:#1a0808; border-left:2px solid %1;").arg(colors::NEGATIVE()));
+        auto* err_layout = new QVBoxLayout(err_widget);
+        err_layout->setContentsMargins(10, 6, 10, 6);
+        err_layout->setSpacing(4);
+
+        auto* err_header = new QLabel(QString("%1: %2").arg(out.error_name, out.error_value), err_widget);
+        err_header->setWordWrap(true);
+        err_header->setStyleSheet(QString("color:%1; font-family:%2; font-size:%3px; font-weight:700;")
+                                      .arg(colors::NEGATIVE(), fonts::DATA_FAMILY)
+                                      .arg(fonts::DATA));
+        err_layout->addWidget(err_header);
+
+        if (!out.traceback.isEmpty()) {
+            auto* tb_view = new QTextEdit(err_widget);
+            tb_view->setReadOnly(true);
+            tb_view->setPlainText(out.traceback.join("\n"));
+            tb_view->setLineWrapMode(QTextEdit::WidgetWidth);
+            tb_view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            tb_view->setStyleSheet(
                 QString("QTextEdit { background:transparent; color:%1; border:none;"
-                        " font-family:%2; font-size:%3px; padding:2px 0; }"
+                        " font-family:%2; font-size:%3px; }"
                         "QScrollBar:vertical { background:transparent; width:4px; }"
                         "QScrollBar::handle:vertical { background:%4; }"
                         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-                    .arg(fg, fonts::DATA_FAMILY)
-                    .arg(fonts::DATA)
+                    .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
+                    .arg(fonts::TINY)
                     .arg(colors::BORDER_BRIGHT()));
 
-            // Size to content, max 300px then scroll
-            int lines = out.text.count('\n') + 1;
-            int line_h = QFontMetrics(output_view->font()).lineSpacing();
-            int content_h = lines * line_h + 10;
-            int clamped = qBound(30, content_h, 300);
-            output_view->setFixedHeight(clamped);
-
-            output_content_layout_->addWidget(output_view);
-
-        } else if (out.type == "error") {
-            auto* err_widget = new QWidget(output_content_);
-            err_widget->setStyleSheet(QString("background:#1a0808; border-left:2px solid %1;").arg(colors::NEGATIVE()));
-            auto* err_layout = new QVBoxLayout(err_widget);
-            err_layout->setContentsMargins(10, 6, 10, 6);
-            err_layout->setSpacing(4);
-
-            auto* err_header = new QLabel(QString("%1: %2").arg(out.error_name, out.error_value), err_widget);
-            err_header->setWordWrap(true);
-            err_header->setStyleSheet(QString("color:%1; font-family:%2; font-size:%3px; font-weight:700;")
-                                          .arg(colors::NEGATIVE(), fonts::DATA_FAMILY)
-                                          .arg(fonts::DATA));
-            err_layout->addWidget(err_header);
-
-            if (!out.traceback.isEmpty()) {
-                auto* tb_view = new QTextEdit(err_widget);
-                tb_view->setReadOnly(true);
-                tb_view->setPlainText(out.traceback.join("\n"));
-                tb_view->setLineWrapMode(QTextEdit::WidgetWidth);
-                tb_view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-                tb_view->setStyleSheet(
-                    QString("QTextEdit { background:transparent; color:%1; border:none;"
-                            " font-family:%2; font-size:%3px; }"
-                            "QScrollBar:vertical { background:transparent; width:4px; }"
-                            "QScrollBar::handle:vertical { background:%4; }"
-                            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-                        .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
-                        .arg(fonts::TINY)
-                        .arg(colors::BORDER_BRIGHT()));
-
-                int tb_lines = out.traceback.join("\n").count('\n') + 1;
-                int tb_h = qBound(40, tb_lines * 16 + 10, 200);
-                tb_view->setFixedHeight(tb_h);
-                err_layout->addWidget(tb_view);
-            }
-            output_content_layout_->addWidget(err_widget);
+            int tb_lines = out.traceback.join("\n").count('\n') + 1;
+            int tb_h = qBound(40, tb_lines * 16 + 10, 200);
+            tb_view->setFixedHeight(tb_h);
+            err_layout->addWidget(tb_view);
         }
+        output_content_layout_->addWidget(err_widget);
     }
+    shown_.append(out);
+    shown_views_.append(view);
 }
 
 void CellWidget::set_selected(bool selected) {
@@ -1156,7 +1204,8 @@ void CodeEditorScreen::on_rename_cell(const QString& cell_id) {
 void CodeEditorScreen::on_clear_outputs() {
     for (auto& cell : cells_) {
         cell.outputs.clear();
-        cell.execution_count = 0;
+        if (!cell.running) // it is this run's number
+            cell.execution_count = 0;
     }
     rebuild_cells();
     update_status();
@@ -1249,8 +1298,8 @@ void CodeEditorScreen::on_kernel_output(const QString& cell_id, const services::
         outputs.append(o);
     }
     dirty_outputs_.insert(cell_id);
-    if (!output_timer_->isActive()) // long output is dearer to show: less often
-        output_timer_->start(outputs.last().text.size() > 100'000 ? 1000 : 120);
+    if (!output_timer_->isActive())
+        output_timer_->start(120);
 }
 
 void CodeEditorScreen::show_outputs() {

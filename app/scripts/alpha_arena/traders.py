@@ -152,14 +152,14 @@ def prediction_prompt(markets: list[PredictionMarket], book: Book, prices: dict[
 
 # ── The answers ──────────────────────────────────────────────────────────────
 
-def _json_values(text: str) -> list:
-    """Every top-level JSON object or array in the text, in order."""
+def _json_values(text: str) -> list[tuple]:
+    """Every top-level JSON object or array in the text, in order, and where it ends."""
     out, at, decoder = [], 0, json.JSONDecoder()
     while (at := min((i for i in (text.find("{", at), text.find("[", at)) if i >= 0), default=-1)) >= 0:
         try:
             value, at = decoder.raw_decode(text, at)
-            out.append(value)
-        except ValueError:
+            out.append((value, at))
+        except (ValueError, RecursionError):
             at += 1
     return out
 
@@ -207,10 +207,13 @@ def _read(d: dict, actions: tuple[str, ...]) -> dict:
 
 
 def read_crypto(name: str, symbol: str, text: str) -> Decision:
-    found = [v for v in _json_values(text) if isinstance(v, dict) and "action" in v]
+    found = [(v, end) for v, end in _json_values(text) if isinstance(v, dict) and "action" in v]
     if not found:
         raise NoDecision(f"its answer holds no decision: {' '.join(text.split())[:80]!r}")
-    return Decision(name, symbol, **_read(found[-1], ("buy", "sell", "short", "hold")))
+    value, end = found[-1]
+    if '"action"' in text[end:]:  # a draft, and then one that is cut off or wrapped up
+        raise NoDecision("what comes last in its answer can't be read as a decision")
+    return Decision(name, symbol, **_read(value, ("buy", "sell", "short", "hold")))
 
 
 def read_predictions(name: str, markets: list[PredictionMarket], text: str) -> list[Decision]:
@@ -221,14 +224,17 @@ def read_predictions(name: str, markets: list[PredictionMarket], text: str) -> l
     def rows_of(v: list) -> list[dict]:
         return [r for r in v if isinstance(r, dict) and "market_id" in r and "action" in r]
 
-    lists = [v for v in values if isinstance(v, list)]
-    lists += [x for v in values if isinstance(v, dict) for x in v.values() if isinstance(x, list)]
-    found = next((rows for v in reversed(lists) if (rows := rows_of(v))), None)
+    found, after = None, 0
+    for v, end in values:
+        for rows in (v, *v.values()) if isinstance(v, dict) else (v,):
+            if isinstance(rows, list) and rows_of(rows):
+                found, after = rows_of(rows), end
     if found is None:
-        found = rows_of(values)  # objects one after another; all of them, or it was cut off
-        nothing = _whole(text) in ([], {"decisions": []})
-        if len(found) < text.count('"market_id"') or not (found or nothing):
+        found = rows_of([v for v, _ in values])  # objects one after another: all of them, or it was cut off
+        if len(found) < text.count('"market_id"') or not (found or _whole(text) in ([], {"decisions": []})):
             raise NoDecision(f"its answer holds no decision: {' '.join(text.split())[:80]!r}")
+    elif '"market_id"' in text[after:]:
+        raise NoDecision("what comes last in its answer can't be read as decisions")
     out = []
     for row in found:
         market = by_id.get(str(row["market_id"]))

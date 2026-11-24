@@ -1,3 +1,4 @@
+#include "python/PythonRunner.h"
 #include "services/workflow/WorkflowService.h"
 
 #include "core/logging/Logger.h"
@@ -131,8 +132,10 @@ void WorkflowService::execute_from_node(const WorkflowDef& wf, const QString& st
 }
 
 void WorkflowService::stop_execution() {
-    if (executor_)
-        executor_->stop();
+    if (!executor_)
+        return;
+    executor_->stop();
+    python::PythonRunner::instance().cancel_user_code(); // a code node could run on for an hour
 }
 
 bool WorkflowService::is_executing() const {

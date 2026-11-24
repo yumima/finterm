@@ -85,8 +85,11 @@ class PythonRunner : public QObject {
     /// called at once when it cannot start.
     /// finterm's own snippet: in the ordinary slots, with their deadline.
     void run_code(const QString& code, Callback cb);
-    /// The user's (a workflow's code node): takes what it takes, as a job.
+    /// The user's (a workflow's code node): takes what it takes, in slots of its
+    /// own, so it neither waits for the jobs nor holds them up.
     void run_user_code(const QString& code, Callback cb);
+    /// End all of it, running or waiting; each is answered with an error.
+    void cancel_user_code();
 
     /// A script that is spoken to over stdin (the notebook's kernel): not
     /// started, its stdin left open, in the Cells folder. Holds no slot and has
@@ -165,10 +168,14 @@ class PythonRunner : public QObject {
     // run_job() requests: these many at a time, beside all of the above.
     static constexpr int kJobLanes = 2;
     int job_active_ = 0;
+    // run_user_code() requests.
+    static constexpr int kCodeLanes = 2;
+    int code_active_ = 0;
 
     QQueue<QueuedRequest> queue_;
     QQueue<QueuedRequest> interactive_queue_;
     QQueue<QueuedRequest> job_queue_;
+    QQueue<QueuedRequest> code_queue_;
 
     // Incremental output buffering per process
     struct ProcessBuffers {
@@ -177,6 +184,7 @@ class PythonRunner : public QObject {
         int stdout_streamed = 0; // offset into stdout_buf already streamed
         int stderr_streamed = 0;
         StreamCallback on_line;
+        bool user_code = false;
         qint64 start_ms = 0;             // spawn timestamp for duration diagnostics
         QTimer* timeout_timer = nullptr; // killed + nulled in finished/error handlers
     };

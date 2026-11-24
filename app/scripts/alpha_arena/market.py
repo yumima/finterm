@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+import http.client
 import json
 import time
 import urllib.error
@@ -24,8 +26,19 @@ def _get(url: str, who: str):
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         raise MarketError(f"{who} answered {e.code}") from e
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
         raise MarketError(f"{who} could not be reached: {getattr(e, 'reason', e)}") from e
+
+
+def _readable(f):
+    """An answer of another shape than expected is a MarketError too."""
+    @functools.wraps(f)
+    def wrapped(*args):
+        try:
+            return f(*args)
+        except (KeyError, IndexError, TypeError, AttributeError, ValueError) as e:
+            raise MarketError(f"{args[-1] if args else 'Polymarket'}: an answer that can't be read ({type(e).__name__})") from e
+    return wrapped
 
 
 def _num(v) -> float | None:
@@ -104,12 +117,14 @@ def _coinbase_closes(symbol: str) -> list[float]:
 EXCHANGES = {"kraken": (_kraken_quote, _kraken_closes), "coinbase": (_coinbase_quote, _coinbase_closes)}
 
 
+@_readable
 def quote(symbol: str, exchange: str) -> Quote:
     if exchange not in EXCHANGES:
         raise MarketError(f"{exchange} is not one of {', '.join(EXCHANGES)}")
     return EXCHANGES[exchange][0](symbol)
 
 
+@_readable
 def hourly_closes(symbol: str, exchange: str) -> list[float]:
     """Oldest first; the last hour is the one still running."""
     return EXCHANGES[exchange][1](symbol)
@@ -174,6 +189,7 @@ def _prediction_market(d: dict) -> PredictionMarket | None:
         settled=closed and d.get("umaResolutionStatus") == "resolved")
 
 
+@_readable
 def prediction_market(market_id: str) -> PredictionMarket:
     d = _get(f"{GAMMA}/markets/{urllib.parse.quote(str(market_id))}", "Polymarket")
     m = _prediction_market(d if isinstance(d, dict) else {})
@@ -182,6 +198,7 @@ def prediction_market(market_id: str) -> PredictionMarket:
     return m
 
 
+@_readable
 def active_prediction_markets(limit: int = 40) -> list[PredictionMarket]:
     """The most traded today that are still undecided."""
     rows = _get(f"{GAMMA}/markets?closed=false&active=true&order=volume24hr&ascending=false&limit=100", "Polymarket")

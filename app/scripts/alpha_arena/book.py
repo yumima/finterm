@@ -146,7 +146,9 @@ def order(book: Book, limits: Limits, symbol: str, action: str, size: float, bid
     if max_value is not None:
         quantity = min(quantity, max_value / price)
     if quantity * price < 0.01:
-        raise Rejected("there is nothing to sell" if action == "sell" else "the portfolio is worth nothing" if value <= 0
+        raise Rejected("there is nothing to sell" if action == "sell" and held <= 0
                        else "there is too little liquidity" if max_value is not None and max_value < 0.01
+                       else "its size is too small" if action == "sell"
+                       else "the portfolio is worth nothing" if value <= 0
                        else "the position limit is reached, or no cash is left")
     return Fill(symbol, "buy" if action == "buy" else "sell", quantity, price, quantity * price * FEE_RATE)

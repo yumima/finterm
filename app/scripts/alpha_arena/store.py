@@ -146,6 +146,10 @@ class Store:
                            "confidence = NULL WHERE action = 'hold' AND reasoning LIKE ?", (pattern,))
             configs = {r["competition_id"]: read_config(r["config"])
                        for r in db.execute("SELECT competition_id, config FROM competitions")}
+            for r in db.execute("SELECT competition_id, created_at FROM competitions").fetchall():
+                if at := _utc(r["created_at"]):  # it was local time without saying so
+                    db.execute("UPDATE competitions SET created_at = ? WHERE competition_id = ?",
+                               (at.isoformat(timespec="seconds"), r["competition_id"]))
             self._import_fills(db, configs)
             self._rebuild_snapshots(db, configs)
             db.execute("PRAGMA user_version = 2")

@@ -27,6 +27,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <utility>
 
 namespace finterm::python {
 
@@ -379,7 +380,19 @@ void PythonRunner::run_code(const QString& code, Callback cb) {
 }
 
 void PythonRunner::run_user_code(const QString& code, Callback cb) {
-    queue_code(code, std::move(cb), job_queue_, kJobTimeoutMs);
+    queue_code(code, std::move(cb), code_queue_, kJobTimeoutMs);
+}
+
+void PythonRunner::cancel_user_code() {
+    const auto waiting = std::exchange(code_queue_, {});
+    for (auto it = proc_buffers_.cbegin(); it != proc_buffers_.cend(); ++it) {
+        if (it->user_code)
+            it.key()->kill(); // finished() answers, later
+    }
+    for (const QueuedRequest& req : waiting) {
+        QFile::remove(req.script.mid(9)); // "__code__:<file>"
+        req.cb({false, {}, "Stopped", -1});
+    }
 }
 
 void PythonRunner::queue_code(const QString& code, Callback cb, QQueue<QueuedRequest>& queue, int timeout_ms) {
@@ -581,6 +594,9 @@ void PythonRunner::start_next() {
         } else if (!job_queue_.isEmpty() && job_active_ < kJobLanes) {
             req = job_queue_.dequeue();
             slots_held = &job_active_;
+        } else if (!code_queue_.isEmpty() && code_active_ < kCodeLanes) {
+            req = code_queue_.dequeue();
+            slots_held = &code_active_;
         } else {
             break;
         }
@@ -601,6 +617,7 @@ void PythonRunner::start_next() {
         // Initialize incremental output buffers (carry stream callback from the request)
         proc_buffers_[proc] = {};
         proc_buffers_[proc].on_line = req.on_line;
+        proc_buffers_[proc].user_code = slots_held == &code_active_;
         proc_buffers_[proc].start_ms = QDateTime::currentMSecsSinceEpoch();
 
         // Helper: drain complete \n-terminated lines from a buffer starting at `offset`,
@@ -735,12 +752,14 @@ void PythonRunner::start_next() {
                 });
 
         const bool in_job = slots_held == &job_active_;
+        const bool in_code = slots_held == &code_active_;
         const bool in_lane = slots_held == &interactive_active_;
         LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued%4): %5 %6")
                                .arg(*slots_held)
-                               .arg(in_job ? kJobLanes : in_lane ? kInteractiveLanes : max_concurrent_)
-                               .arg((in_job ? job_queue_ : in_lane ? interactive_queue_ : queue_).size())
+                               .arg(in_job ? kJobLanes : in_code ? kCodeLanes : in_lane ? kInteractiveLanes : max_concurrent_)
+                               .arg((in_job ? job_queue_ : in_code ? code_queue_ : in_lane ? interactive_queue_ : queue_).size())
                                .arg(in_job    ? QStringLiteral(", job lane")
+                                    : in_code ? QStringLiteral(", user code")
                                     : in_lane ? QStringLiteral(", interactive lane")
                                               : QString(),
                                     proc->program(), script_name));

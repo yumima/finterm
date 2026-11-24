@@ -774,12 +774,15 @@ void AlphaArenaScreen::on_create_competition() {
 
     set_busy(true);
     say("Creating the competition…");
+    const QString open_then = competition_id_;
     run_action("create_competition", params,
-               [this](const QJsonObject& state) {
+               [this, open_then](const QJsonObject& state) {
                    set_busy(false);
                    LOG_INFO("AlphaArena", "Competition created: " + state["competition_id"].toString());
-                   if (!competition_id_.isEmpty())
-                       return; // the reader has opened another meanwhile; it is in HISTORY
+                   if (competition_id_ != open_then) { // the reader has opened another meanwhile
+                       say("The new competition is in HISTORY");
+                       return;
+                   }
                    say("Created: run a cycle");
                    show_competition(state);
                },
@@ -905,11 +908,10 @@ void AlphaArenaScreen::load_past_competitions() {
             QStringList models;
             for (const auto& m : c["models"].toArray())
                 models << m.toString();
+            const QDateTime created = QDateTime::fromString(c["created_at"].toString(), Qt::ISODate).toLocalTime();
             auto* item = new QListWidgetItem(QString("%1 — %2 cycles — %3 — %4")
-                                                 .arg(c["name"].toString())
-                                                 .arg(c["cycle_count"].toInt())
-                                                 .arg(c["created_at"].toString().left(16).replace('T', ' '),
-                                                      models.join(", ")));
+                                                 .arg(c["name"].toString(), QString::number(c["cycle_count"].toInt()),
+                                                      created.toString("yyyy-MM-dd HH:mm"), models.join(", ")));
             item->setData(Qt::UserRole, c["competition_id"].toString());
             past_list_->addItem(item);
         }

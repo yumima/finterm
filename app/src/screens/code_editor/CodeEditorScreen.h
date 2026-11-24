@@ -101,6 +101,9 @@ class CellWidget : public QWidget {
     void update_gutter();
     void adjust_editor_height();
     void render_markdown();
+    void add_output(const CellOutput& out);
+    /// Add what `outputs` has more than what is shown; false when it is not that.
+    bool extend_outputs(const QVector<CellOutput>& outputs);
 
     QString cell_id_;
     QString cell_type_;
@@ -131,6 +134,8 @@ class CellWidget : public QWidget {
     QPushButton* output_toggle_ = nullptr;
     QWidget* output_content_ = nullptr;
     QVBoxLayout* output_content_layout_ = nullptr;
+    QVector<CellOutput> shown_;        // what output_content_ holds…
+    QVector<QTextEdit*> shown_views_;  // …and the view of each (null for an error)
 
     // Insert hint
     QWidget* insert_hint_ = nullptr;
