@@ -1215,12 +1215,12 @@ QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user
 // ============================================================================
 
 LlmService::HttpResult LlmService::blocking_post(const QString& url, const QJsonObject& body,
-                                                 const QMap<QString, QString>& headers, int timeout_ms) {
+                                                 const QMap<QString, QString>& headers) {
     // Delegate to eventloop_request which works reliably on background threads.
     // The old waitForReadyRead() approach failed for Cloudflare-protected endpoints
     // because QNetworkAccessManager requires an event loop for TLS/SSL negotiation.
     QByteArray json_data = QJsonDocument(body).toJson(QJsonDocument::Compact);
-    return eventloop_request("POST", url, json_data, headers, timeout_ms);
+    return eventloop_request("POST", url, json_data, headers, chat_timeout_ms(url));
 }
 
 // ============================================================================
@@ -1275,7 +1275,11 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
         if (!reply->isFinished()) {
             reply->abort();
             reply->deleteLater();
-            result.error = "Request timed out";
+            result.error = is_loopback_url(url)
+                               ? QStringLiteral("The engine on this computer did not answer in %1 minutes — it may be busy "
+                                                "with another program's request")
+                                     .arg(timeout_ms / 60000)
+                               : QStringLiteral("Request timed out");
             return result;
         }
 

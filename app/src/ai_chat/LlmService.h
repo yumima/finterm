@@ -488,8 +488,7 @@ class LlmService : public QObject {
         QByteArray body;
         QString error;
     };
-    static HttpResult blocking_post(const QString& url, const QJsonObject& body, const QMap<QString, QString>& headers,
-                                    int timeout_ms = 120000);
+    static HttpResult blocking_post(const QString& url, const QJsonObject& body, const QMap<QString, QString>& headers);
 
     // QEventLoop-based HTTP for Cloudflare-protected endpoints
     static HttpResult eventloop_request(const QString& method, const QString& url, const QByteArray& body,

@@ -968,6 +968,13 @@ target_link_libraries(test_number_grounding PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_number_grounding PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME number_grounding COMMAND test_number_grounding)
 
+# ── Engine addresses, and how long a request to one may take ─────────────────
+add_executable(test_llm_url ai_chat/test_llm_url.cpp)
+target_include_directories(test_llm_url PRIVATE ../src)
+target_link_libraries(test_llm_url PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+set_target_properties(test_llm_url PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME llm_url COMMAND test_llm_url)
+
 # ── hearth: its states, and what finterm offers for each ─────────────────────
 add_executable(test_engine_state ai_chat/test_engine_state.cpp)
 target_include_directories(test_engine_state PRIVATE ../src)

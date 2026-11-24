@@ -2,6 +2,7 @@
 
 #include "services/tts/SpeechText.h"
 
+#include "ai_chat/HearthService.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -71,7 +72,9 @@ QString resolve_model_path() {
     if (!configured.isEmpty() && QFileInfo::exists(configured))
         return configured;
     const QString home = QDir::homePath();
-    for (const QString& d : {home + "/.local/share/finterm/piper", home + "/.hearth/voices"}) {
+    // hearth's own folder, then where earlier versions of it put them.
+    for (const QString& d :
+         {HearthService::install_dir() + "/voices/piper", home + "/.local/share/finterm/piper", home + "/.hearth/voices"}) {
         const QStringList found = QDir(d).entryList(QStringList{"*.onnx"}, QDir::Files, QDir::Name);
         if (!found.isEmpty())
             return QDir(d).filePath(found.first());

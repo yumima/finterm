@@ -39,13 +39,15 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 - [x] 2.6 One panel for first-run setup and Settings; current users migrate as connected
 
 **3. One repository, reliable engine**
-- [ ] 3.1 Bring in mantel with its history
-- [ ] 3.2 One lock file, two environments
+- [x] 3.1 Bring in mantel with its history
+- [x] 3.2 One lock file, two environments
 - [ ] 3.3 Process handling for all three systems, then CI on all three
-- [ ] 3.4 Retire hearth's chat page and window; `hearth client` opens mantel
-- [ ] 3.5 Restart Ollama when it dies; keep its log
-- [ ] 3.6 Test finterm and mantel sharing the GPU; a queue only if that fails
-- [ ] 3.7 Voices out of finterm's folder
+- [x] 3.4 Retire hearth's chat page and window; `hearth client` opens mantel
+- [x] 3.5 Restart Ollama when it dies; keep its log
+- [x] 3.6 Sharing the GPU: Ollama answers in order; a short request waited 85 s behind a
+      1500-token one. No queue of ours changes that (nothing pre-empts a running answer);
+      finterm gives an engine on this computer 5 minutes and says it may be busy
+- [x] 3.7 Voices out of finterm's folder
 - [ ] 3.8 Switch the developer machine over (asks first)
 
 **4. Linux install**
