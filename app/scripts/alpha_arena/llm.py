@@ -93,6 +93,10 @@ def _ask(connection: dict, system: str, prompt: str, timeout: float) -> str:
         # its connection is closed, and the next model waits for that.
         "llm_timeout_s": timeout, "llm_max_retries": 0 if is_local(connection) else 2,
     })
+    if is_local(connection) and not connection.get("api_key"):
+        # hearth adds a web search of its own to a chat that does not say no (as
+        # LlmService does): one competitor would have what the others were not given.
+        model = model.bind(extra_body={"web_search": False})
     messages = [SystemMessage(content=system), HumanMessage(content=prompt)]
     answer = model.invoke(messages)
     text = models.extract_text(answer.content).strip()

@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`1f0c6dcde`](https://github.com/yumima/finterm/commit/1f0c6dcde) alpha arena, notebook: what the review found
 - [`18807b311`](https://github.com/yumima/finterm/commit/18807b311) alpha arena: portfolios come from the fills; no answer is no decision; the tabs show what there is
 - [`307e860ab`](https://github.com/yumima/finterm/commit/307e860ab) updater: a version released again is offered; About and the download page name the build
 - [`da59ae310`](https://github.com/yumima/finterm/commit/da59ae310) notebook: its cells run in one Python of their own; a restored tab no longer saves over its file

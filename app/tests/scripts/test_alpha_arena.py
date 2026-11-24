@@ -207,6 +207,9 @@ if HAVE_CLIENT:
             "base_url": f"http://127.0.0.1:{server.server_port}/proxy/v1", "max_tokens": 500}
     check("the profile's base URL is used", llm.ask(conn, "s", "p") == '{"action":"hold"}' and SEEN[-1][:2] == ("/proxy/v1/chat/completions", "Bearer sk-mine"), SEEN)
     check("a model that only thought is asked not to", llm.ask({**conn, "model_id": "thinker"}, "s", "p") and SEEN[-1][2].get("reasoning_effort") == "none")
+    llm.ask({**conn, "provider": "hearth", "api_key": ""}, "s", "p")
+    check("a local engine is told not to search the web", SEEN[-1][2].get("web_search") is False)
+    check("...another endpoint is not asked what it does not know", "web_search" not in SEEN[0][2])
     check("a refused key is said", "refused the API key" in (raises(llm.NoAnswer, lambda: llm.ask({**conn, "model_id": "denied"}, "s", "p")) or ""))
     check("an engine that is not there is said", "could not be reached" in (raises(llm.NoAnswer, lambda: llm.ask({**conn, "base_url": "http://127.0.0.1:9/v1"}, "s", "p")) or ""))
     server.shutdown()
