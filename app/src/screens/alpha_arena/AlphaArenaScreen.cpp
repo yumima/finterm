@@ -674,7 +674,7 @@ void AlphaArenaScreen::on_create_competition() {
 }
 
 void AlphaArenaScreen::on_run_cycle() {
-    if (loading_ || competition_id_.isEmpty())
+    if (loading_ || cycle_running_ || competition_id_.isEmpty())
         return;
 
     set_loading(true);
@@ -806,16 +806,25 @@ void AlphaArenaScreen::run_python_action(const QString& action, const QJsonObjec
     QJsonObject payload;
     payload["action"] = action;
     payload["params"] = params;
-    if (action == QLatin1String("run_cycle"))
+    const bool is_cycle = action == QLatin1String("run_cycle");
+    if (is_cycle) {
         payload["api_keys"] = api_keys(); // a saved competition holds none
+        cycle_running_ = true;            // minutes: no other action's answer ends it
+    }
+    const QString asked_for = params["competition_id"].toString();
 
     QPointer<AlphaArenaScreen> self = this;
 
     services::alpha_arena::AlphaArenaService::instance().run_action(
-        payload, [self, action](const services::alpha_arena::ActionResult& r) {
+        payload, [self, action, is_cycle, asked_for](const services::alpha_arena::ActionResult& r) {
             if (!self)
                 return;
-            self->set_loading(false);
+            if (is_cycle)
+                self->cycle_running_ = false;
+            if (!self->cycle_running_)
+                self->set_loading(false);
+            if (!asked_for.isEmpty() && asked_for != self->competition_id_)
+                return; // the reader has moved to another competition
 
             if (!r.success) {
                 self->status_info_->setText("Error: " + r.error.left(60));

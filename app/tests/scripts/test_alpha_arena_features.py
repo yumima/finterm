@@ -66,6 +66,11 @@ with tempfile.TemporaryDirectory() as d:
     for m in old["models"]:
         m["api_key"] = KEY  # as 4.1.0 and before saved it
     con.execute("UPDATE competitions SET config = ?", (json.dumps(old),))
+    con.execute("INSERT INTO competitions SELECT 'c2', config, status, cycle_count, start_time, end_time, created_at, "
+                "updated_at FROM competitions")
+    con.commit()
+    con.execute("DELETE FROM competitions WHERE competition_id = 'c2'")  # its page stays in the file
+    con.execute("PRAGMA user_version = 0")
     con.commit()
     con.close()
     db = AlphaArenaDatabase(path)

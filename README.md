@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`3191ad542`](https://github.com/yumima/finterm/commit/3191ad542) deep agent: it runs, with the chosen model and finterm's own read-only tools
 - [`29bad85d1`](https://github.com/yumima/finterm/commit/29bad85d1) python: a script's arguments never reach the command line; long jobs have slots of their own
 - [`cfba7bb81`](https://github.com/yumima/finterm/commit/cfba7bb81) ai: an id that reads as a huge exponent no longer fails the whole answer
 - [`ac7003051`](https://github.com/yumima/finterm/commit/ac7003051) site: the download page says when the files went up, next to the version

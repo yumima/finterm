@@ -25,8 +25,10 @@ class AgentService : public QObject, public finterm::datahub::Producer {
     void ensure_registered_with_hub();
 
     /// Give an agent's config finterm's read-only tools: the definitions and a
-    /// bridge endpoint that authorises those and no others.
-    static void attach_terminal_tools(QJsonObject& config);
+    /// bridge endpoint that authorises those and no others — for a few hours,
+    /// or (`lasting`) until released.
+    static void attach_terminal_tools(QJsonObject& config, bool lasting = false);
+    static void release_terminal_tools(const QJsonObject& config);
 
     // ── Agent discovery & listing ────────────────────────────────────────────
     void discover_agents();

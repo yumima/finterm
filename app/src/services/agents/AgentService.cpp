@@ -212,25 +212,32 @@ class TerminalToolBridge {
     }
 
     /// Authorise `wire_names` for one dispatch; returns the session token.
-    QString open_session(const QSet<QString>& wire_names) {
+    QString open_session(const QSet<QString>& wire_names, bool lasting) {
         const QString token =
             QUuid::createUuid().toString(QUuid::Id128) + QString::number(QRandomGenerator::system()->generate64(), 16);
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker lock(&mutex_);
         for (auto it = sessions_.begin(); it != sessions_.end();) {
-            if (now - it->created_ms > kBridgeTokenTtlMs)
+            if (it->expired(now))
                 it = sessions_.erase(it);
             else
                 ++it;
         }
-        sessions_.insert(token, Session{wire_names, now});
+        sessions_.insert(token, Session{wire_names, now, lasting});
         return token;
+    }
+
+    void close_session(const QString& token) {
+        QMutexLocker lock(&mutex_);
+        sessions_.remove(token);
     }
 
   private:
     struct Session {
         QSet<QString> allowed;
         qint64 created_ms = 0;
+        bool lasting = false; // until closed
+        bool expired(qint64 now) const { return !lasting && now - created_ms > kBridgeTokenTtlMs; }
     };
 
     void start() {
@@ -305,8 +312,7 @@ class TerminalToolBridge {
         {
             QMutexLocker lock(&mutex_);
             auto it = sessions_.constFind(parts[1]);
-            if (it == sessions_.constEnd() ||
-                QDateTime::currentMSecsSinceEpoch() - it->created_ms > kBridgeTokenTtlMs) {
+            if (it == sessions_.constEnd() || it->expired(QDateTime::currentMSecsSinceEpoch())) {
                 lock.unlock();
                 reply(sock, 403, {{"success", false}, {"error", "unknown or expired agent tool session"}});
                 return;
@@ -359,7 +365,7 @@ bool action_uses_terminal_tools(const QString& action) {
 
 // Attach the agent's finterm tools (filtered by its allow_tools, else a
 // bounded read-only default) plus a session-scoped bridge endpoint.
-void attach_tools(QJsonObject& config) {
+void attach_tools(QJsonObject& config, bool lasting = false) {
     if (config.contains(QStringLiteral("terminal_tools")))
         return; // caller supplied its own set
     QStringList globs;
@@ -406,7 +412,7 @@ void attach_tools(QJsonObject& config) {
         LOG_WARN("AgentService", "terminal tool bridge unavailable — agent runs without finterm tools");
         return;
     }
-    const QString token = TerminalToolBridge::instance().open_session(wire_names);
+    const QString token = TerminalToolBridge::instance().open_session(wire_names, lasting);
     config[QStringLiteral("terminal_mcp_endpoint")] = base + QStringLiteral("/s/") + token;
     config[QStringLiteral("terminal_tools")] = defs;
 }
@@ -468,8 +474,12 @@ QJsonObject model_for_profile_id(const QString& profile_id) {
 
 } // namespace
 
-void AgentService::attach_terminal_tools(QJsonObject& config) {
-    attach_tools(config);
+void AgentService::attach_terminal_tools(QJsonObject& config, bool lasting) {
+    attach_tools(config, lasting);
+}
+
+void AgentService::release_terminal_tools(const QJsonObject& config) {
+    TerminalToolBridge::instance().close_session(config["terminal_mcp_endpoint"].toString().section('/', -1));
 }
 
 QJsonObject AgentService::build_payload(const QString& action, const QJsonObject& params,

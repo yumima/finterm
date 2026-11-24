@@ -1133,6 +1133,11 @@ if(Python3_Interpreter_FOUND)
         NAME deep_agent
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_deep_agent.py
     )
+    # RD-Agent jobs: started, recorded, stopped, interrupted.
+    add_test(
+        NAME rd_jobs
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_rd_jobs.py
+    )
     # The contact identity declared to SEC / FINRA / OSM: only a plain,
     # header-safe address is sent (SEC 403s an undeclared client).
     add_test(

@@ -3,6 +3,8 @@
 #include "services/ai_quant_lab/AIQuantLabTypes.h"
 
 #include <QHash>
+#include <QJsonObject>
+#include <QMap>
 #include <QObject>
 
 #include <functional>
@@ -53,11 +55,14 @@ class AIQuantLabService : public QObject {
     void rd_agent_start_model_optimization(const QJsonObject& params);
     void rd_agent_start_quant_research(const QJsonObject& params);
     void rd_agent_get_discovered_factors(const QString& task_id);
+    void rd_agent_get_optimized_model(const QString& task_id);
     void rd_agent_list_tasks(const QString& status_filter = {});
     void rd_agent_stop_task(const QString& task_id);
     void rd_agent_resume_task(const QString& task_id, const QJsonObject& config = {});
     void rd_agent_start_ui();
-    void rd_agent_start_mcp_server(int port = 18765);
+    void rd_agent_start_mcp_server(int port = kMcpPort);
+    void rd_agent_stop_mcp_server();
+    void rd_agent_mcp_status();
 
     // ── Advanced ────────────────────────────────────────────────────────────
     void train_advanced_model(const QJsonObject& params);
@@ -140,6 +145,8 @@ class AIQuantLabService : public QObject {
     /// Emitted during a streaming training run (currently: rl_trading/train).
     void training_progress(QString module_id, int step, int total, double reward_mean, double loss);
     void training_log(QString module_id, QString line, bool is_stderr);
+    /// A server of ours (by the command that started it) has ended.
+    void service_stopped(QString command);
 
   private:
     explicit AIQuantLabService(QObject* parent = nullptr);
@@ -149,7 +156,19 @@ class AIQuantLabService : public QObject {
     void run_python_cached(const QString& script, const QStringList& args, const QString& module_id,
                            const QString& command, int ttl_sec);
 
+    void start_rd_job(const QString& command, const QString& type, QJsonObject params);
+    void start_service(const QString& command, const QString& script, const QStringList& args,
+                       std::function<void()> on_stopped);
+
     static constexpr int kListTtlSec = 5 * 60;
+    static constexpr int kMcpPort = 18765;
+
+    struct Service {
+        quint64 handle = 0;
+        QJsonObject answer; // what it said when it was ready
+    };
+    QMap<QString, quint64> rd_jobs_;    // task id -> its process
+    QHash<QString, Service> services_;  // by the command that starts it
 
     // Module ID → script mapping
     QHash<QString, QString> script_map_;

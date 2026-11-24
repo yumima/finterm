@@ -30,12 +30,10 @@ def check(name, ok, detail=""):
 
 # RD-Agent's task folders
 sys.path.insert(0, str(SCRIPTS / "agents" / "rdagents"))
-import task_manager  # noqa: E402
+import jobs  # noqa: E402
 check("rdagents workspaces are with the user's data",
-      task_manager.workspace_base() == TMP / "user" / "features" / "rdagents" / "workspaces", task_manager.workspace_base())
-tm = task_manager.TaskManager()
-tm.create("t1", "factor_mining", {})
-check("a task's folder is one of them", tm.get("t1")["workspace"].startswith(str(TMP)), tm.get("t1")["workspace"])
+      jobs.workspace_base() == TMP / "user" / "features" / "rdagents" / "workspaces", jobs.workspace_base())
+check("a task's folder is one of them", str(jobs.folder("t1")).startswith(str(TMP)), jobs.folder("t1"))
 
 # Exchange market lists (ccxt is not needed for the path)
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))

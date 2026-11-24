@@ -71,6 +71,16 @@ class PythonRunner : public QObject {
     void run_job(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line = {},
                  int timeout_ms = kJobTimeoutMs);
 
+    /// Start a script that runs until it ends by itself or is stopped: a
+    /// server, a job of hours. Holds no slot and has no deadline; it ends with
+    /// the app. `on_exit` is called once, with what it wrote to stderr last.
+    /// Its environment carries none of the stored credentials — such a script
+    /// may run code a model wrote. Returns 0 when it cannot be started (then
+    /// `on_exit` has been called), else a handle for stop_background().
+    quint64 start_background(const QString& script, const QStringList& args, StreamCallback on_line, Callback on_exit);
+    /// Ask it to end, and make it when it has not after ten seconds.
+    void stop_background(quint64 handle);
+
     /// Run arbitrary Python code (for notebook/colab cells).
     /// Creates a temp file, executes it, returns stdout/stderr.
     void run_code(const QString& code, Callback cb);
@@ -114,6 +124,9 @@ class PythonRunner : public QObject {
     QString find_python_sync() const;
     void find_python_async();
     void start_next();
+    /// The process for a script: program, launcher arguments, folder, and its
+    /// arguments written to stdin once it runs. Not started.
+    QProcess* make_process(const QString& script, const QStringList& args, const QProcessEnvironment& env);
 
     QString python_path_;
     QString scripts_dir_;
@@ -153,6 +166,9 @@ class PythonRunner : public QObject {
         QTimer* timeout_timer = nullptr; // killed + nulled in finished/error handlers
     };
     QHash<QProcess*, ProcessBuffers> proc_buffers_;
+
+    quint64 next_background_ = 1;
+    QHash<quint64, QProcess*> background_;
 };
 
 /// Extract last JSON line/block from Python output

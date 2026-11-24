@@ -15,6 +15,10 @@
 
 namespace finterm::services::quant {
 
+static QString compact(const QJsonObject& o) {
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+
 // ── Singleton ────────────────────────────────────────────────────────────────
 AIQuantLabService& AIQuantLabService::instance() {
     static AIQuantLabService inst;
@@ -55,14 +59,18 @@ static QString aiq_failure_message(const python::PythonResult& result) {
 }
 // What takes minutes goes in a job's slot; the rest is asked for by a reader
 // who is waiting, and must not queue behind a training.
-static bool is_long_job(const QString& command) {
-    static const QSet<QString> k = {
-        QStringLiteral("train"),        QStringLiteral("train_model"),          QStringLiteral("retrain"),
-        QStringLiteral("evaluate"),     QStringLiteral("run_backtest"),         QStringLiteral("backtest"),
-        QStringLiteral("execute_task"), QStringLiteral("optimize_portfolio"),   QStringLiteral("run_selection"),
-        QStringLiteral("predict"),      QStringLiteral("tune_hyperparameters"), QStringLiteral("create_ensemble"),
+static bool is_long_job(const QString& module_id, const QString& command) {
+    static const QSet<QString> commands = {
+        QStringLiteral("train"),        QStringLiteral("train_model"),        QStringLiteral("retrain"),
+        QStringLiteral("run_backtest"), QStringLiteral("backtest"),           QStringLiteral("optimize_portfolio"),
+        QStringLiteral("execute_task"), QStringLiteral("run_selection"),      QStringLiteral("tune_hyperparameters"),
+        QStringLiteral("create_ensemble"), QStringLiteral("generate_evaluation_report"),
     };
-    return k.contains(command);
+    if (command == QLatin1String("evaluate"))
+        return module_id == QLatin1String("rl_trading"); // plays whole episodes
+    // Forecasting wrappers fit a model to answer ("forecast", "forecast_deepar").
+    return commands.contains(command) || command.startsWith(QLatin1String("forecast")) ||
+           (module_id == QLatin1String("gluonts") && !command.contains(QLatin1String("status")));
 }
 
 void AIQuantLabService::run_python(const QString& script, const QStringList& args, const QString& module_id,
@@ -94,7 +102,7 @@ void AIQuantLabService::run_python(const QString& script, const QStringList& arg
         emit self->result_ready(module_id, command, doc.object());
     };
     auto& runner = python::PythonRunner::instance();
-    if (is_long_job(command))
+    if (is_long_job(module_id, command))
         runner.run_job(script, args, std::move(done));
     else
         runner.run(script, args, std::move(done));
@@ -148,11 +156,29 @@ void AIQuantLabService::run_python_cached(const QString& script, const QStringLi
 // ── Generic module execution ─────────────────────────────────────────────────
 void AIQuantLabService::run_module(const QString& module_id, const QString& command, const QJsonObject& params) {
     // The Deep Agent module is two programs: its script is RD-Agent's.
-    if (module_id == QLatin1String("deep_agent") && command == QLatin1String("execute_task")) {
+    // Its script's commands only read; the rest are processes this service keeps.
+    if (module_id == QLatin1String("deep_agent")) {
         QJsonObject p = params;
         p.remove("config"); // asked for by an agent: the model is the app's to choose
-        run_deep_agent(p);
-        return;
+        const QString task = p["task_id"].toString();
+        if (command == QLatin1String("execute_task"))
+            return run_deep_agent(p);
+        if (command == QLatin1String("start_factor_mining"))
+            return rd_agent_start_factor_mining(p);
+        if (command == QLatin1String("start_model_optimization"))
+            return rd_agent_start_model_optimization(p);
+        if (command == QLatin1String("start_quant_research"))
+            return rd_agent_start_quant_research(p);
+        if (command == QLatin1String("resume_task"))
+            return rd_agent_resume_task(task);
+        if (command == QLatin1String("stop_task"))
+            return rd_agent_stop_task(task);
+        if (command == QLatin1String("start_ui"))
+            return rd_agent_start_ui();
+        if (command == QLatin1String("start_mcp_server"))
+            return rd_agent_start_mcp_server(p["port"].toInt(kMcpPort));
+        if (command == QLatin1String("mcp_status"))
+            return rd_agent_mcp_status();
     }
     auto it = script_map_.find(module_id);
     if (it == script_map_.end()) {
@@ -414,26 +440,21 @@ void AIQuantLabService::rolling_execute_retrain(const QJsonObject& params) {
     // We parse each line individually and emit result_ready per event.
     auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
     QPointer<AIQuantLabService> self = this;
-    python::PythonRunner::instance().run_job("ai_quant_lab/qlib_rolling_retraining.py", {"retrain", json},
-                                         [self](python::PythonResult result) {
-                                             if (!self)
-                                                 return;
-                                             if (!result.success && result.output.isEmpty()) {
-                                                 emit self->error_occurred("rolling_retraining", result.error);
-                                                 return;
-                                             }
-                                             // Parse each JSON line and emit separately
-                                             const auto lines = result.output.split('\n', Qt::SkipEmptyParts);
-                                             for (const auto& line : lines) {
-                                                 const auto trimmed = line.trimmed();
-                                                 if (!trimmed.startsWith('{'))
-                                                     continue;
-                                                 auto doc = QJsonDocument::fromJson(trimmed.toUtf8());
-                                                 if (doc.isNull())
-                                                     continue;
-                                                 emit self->result_ready("rolling_retraining", "retrain", doc.object());
-                                             }
-                                         });
+    auto done = [self](const python::PythonResult& result) {
+        if (!self)
+            return;
+        // Every event it got to, then — when it did not end well — why.
+        for (const auto& line : result.output.split('\n', Qt::SkipEmptyParts)) {
+            const auto doc = QJsonDocument::fromJson(line.trimmed().toUtf8());
+            if (doc.isObject())
+                emit self->result_ready("rolling_retraining", "retrain", doc.object());
+        }
+        if (!result.success)
+            emit self->error_occurred("rolling_retraining", result.error.trimmed().isEmpty()
+                                                                ? QStringLiteral("The retrain ended without a result")
+                                                                : result.error.trimmed());
+    };
+    python::PythonRunner::instance().run_job("ai_quant_lab/qlib_rolling_retraining.py", {"retrain", json}, done);
 }
 void AIQuantLabService::rolling_list_schedules() {
     run_python_cached("ai_quant_lab/qlib_rolling_retraining.py", {"list"}, "rolling_retraining", "list", kListTtlSec);
@@ -448,19 +469,21 @@ void AIQuantLabService::rolling_delete_schedule(const QJsonObject& params) {
 // ── Deep Agent (LangGraph multi-agent) ───────────────────────────────────────
 QJsonObject AIQuantLabService::llm_config(const QString& profile_id) {
     QString provider, model, key, base;
-    if (profile_id.isEmpty()) {
-        const ResolvedLlmProfile p = LlmProfileRepository::instance().resolve_for_context("agent");
-        provider = p.provider, model = p.model_id, key = p.api_key, base = p.base_url;
-    } else if (const auto r = LlmProfileRepository::instance().get_profile(profile_id); r.is_ok()) {
-        const LlmProfile& p = r.value();
-        provider = p.provider, model = p.model_id, key = p.api_key, base = p.base_url;
-    }
+    int max_tokens = 0;
+    const auto take = [&](const auto& p) {
+        provider = p.provider, model = p.model_id, key = p.api_key, base = p.base_url, max_tokens = p.max_tokens;
+    };
+    if (profile_id.isEmpty())
+        take(LlmProfileRepository::instance().resolve_for_context("agent"));
+    else if (const auto r = LlmProfileRepository::instance().get_profile(profile_id); r.is_ok())
+        take(r.value());
     if (provider.isEmpty() || model.isEmpty())
         return {};
     return {{"llm_provider", provider},
             {"llm_model", model},
             {"llm_api_key", key},
-            {"llm_base_url", ai_chat::LlmService::provider_api_root(provider, base)}};
+            {"llm_base_url", ai_chat::LlmService::provider_api_root(provider, base)},
+            {"llm_max_tokens", max_tokens}};
 }
 
 void AIQuantLabService::run_deep_agent(const QJsonObject& params) {
@@ -478,7 +501,8 @@ void AIQuantLabService::run_deep_agent(const QJsonObject& params) {
     QJsonObject clean{{"llm_provider", config["llm_provider"]},
                       {"llm_model", config["llm_model"]},
                       {"llm_api_key", config["llm_api_key"]},
-                      {"llm_base_url", config["llm_base_url"]}};
+                      {"llm_base_url", config["llm_base_url"]},
+                      {"llm_max_tokens", config["llm_max_tokens"]}};
     AgentService::attach_terminal_tools(clean);
     payload["config"] = clean;
     const auto json = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
@@ -491,51 +515,169 @@ void AIQuantLabService::rd_agent_check_status() {
 }
 
 void AIQuantLabService::rd_agent_start_factor_mining(const QJsonObject& params) {
-    auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("agents/rdagents/cli.py", {"start_factor_mining", json}, "deep_agent", "start_factor_mining");
+    start_rd_job("start_factor_mining", "factor_mining", params);
 }
 
 void AIQuantLabService::rd_agent_start_model_optimization(const QJsonObject& params) {
-    auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("agents/rdagents/cli.py", {"start_model_optimization", json}, "deep_agent", "start_model_optimization");
+    start_rd_job("start_model_optimization", "model_optimization", params);
 }
 
 void AIQuantLabService::rd_agent_start_quant_research(const QJsonObject& params) {
-    auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("agents/rdagents/cli.py", {"start_quant_research", json}, "deep_agent", "start_quant_research");
+    start_rd_job("start_quant_research", "quant_research", params);
 }
 
 void AIQuantLabService::rd_agent_get_discovered_factors(const QString& task_id) {
-    auto json = QString("{\"task_id\":\"%1\"}").arg(task_id);
-    run_python("agents/rdagents/cli.py", {"get_discovered_factors", json}, "deep_agent", "get_discovered_factors");
+    run_python("agents/rdagents/cli.py", {"get_discovered_factors", compact({{"task_id", task_id}})}, "deep_agent",
+               "get_discovered_factors");
+}
+
+void AIQuantLabService::rd_agent_get_optimized_model(const QString& task_id) {
+    run_python("agents/rdagents/cli.py", {"get_optimized_model", compact({{"task_id", task_id}})}, "deep_agent",
+               "get_optimized_model");
 }
 
 void AIQuantLabService::rd_agent_list_tasks(const QString& status_filter) {
-    QString json = status_filter.isEmpty() ? QStringLiteral("{}") : QString("{\"status\":\"%1\"}").arg(status_filter);
-    run_python("agents/rdagents/cli.py", {"list_tasks", json}, "deep_agent", "list_tasks");
+    run_python("agents/rdagents/cli.py",
+               {"list_tasks", status_filter.isEmpty() ? QStringLiteral("{}") : compact({{"status", status_filter}})},
+               "deep_agent", "list_tasks");
 }
 
 void AIQuantLabService::rd_agent_stop_task(const QString& task_id) {
-    auto json = QString("{\"task_id\":\"%1\"}").arg(task_id);
-    run_python("agents/rdagents/cli.py", {"stop_task", json}, "deep_agent", "stop_task");
+    const quint64 handle = rd_jobs_.value(task_id);
+    if (handle == 0) {
+        emit error_occurred("deep_agent", QString("%1 is not running").arg(task_id));
+        return;
+    }
+    python::PythonRunner::instance().stop_background(handle);
+    emit result_ready("deep_agent", "stop_task",
+                      {{"success", true}, {"task_id", task_id}, {"message", QString("Stopping %1").arg(task_id)}});
 }
 
 void AIQuantLabService::rd_agent_resume_task(const QString& task_id, const QJsonObject& config) {
-    QJsonObject params;
-    params["task_id"] = task_id;
-    if (!config.isEmpty())
-        params["config"] = config;
-    auto json = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("agents/rdagents/cli.py", {"resume_task", json}, "deep_agent", "resume_task");
+    start_rd_job("resume_task", {}, {{"task_id", task_id}, {"config", config}});
+}
+
+// A job is a process of its own, kept here until it ends (worker.py). Its first
+// line says whether it started.
+void AIQuantLabService::start_rd_job(const QString& command, const QString& type, QJsonObject params) {
+    if (!rd_jobs_.isEmpty()) { // each wants the machine: LLM, Docker, hours
+        emit error_occurred("deep_agent", QString("%1 is running: one RD-Agent job at a time").arg(rd_jobs_.firstKey()));
+        return;
+    }
+    if (params["config"].toObject().isEmpty())
+        params["config"] = llm_config();
+    if (!type.isEmpty())
+        params["type"] = type;
+    // Until it has a name, it holds the place under the command's.
+    struct State {
+        QString key;
+        quint64 handle = 0;
+        bool answered = false;
+    };
+    auto state = std::make_shared<State>();
+    state->key = command;
+    rd_jobs_.insert(command, 0);
+    QPointer<AIQuantLabService> self = this;
+    auto on_line = [self, state, command](const QString& line, bool is_stderr) {
+        if (!self || is_stderr || state->answered)
+            return;
+        const QJsonObject o = QJsonDocument::fromJson(line.toUtf8()).object();
+        if (!o.contains("success"))
+            return;
+        state->answered = true;
+        if (!o["success"].toBool()) {
+            emit self->error_occurred("deep_agent", o["error"].toString());
+            return;
+        }
+        self->rd_jobs_.remove(state->key);
+        state->key = o["task_id"].toString();
+        self->rd_jobs_.insert(state->key, state->handle);
+        emit self->result_ready("deep_agent", command, o);
+    };
+    auto on_exit = [self, state](const python::PythonResult& r) {
+        if (!self)
+            return;
+        self->rd_jobs_.remove(state->key);
+        if (!state->answered)
+            emit self->error_occurred("deep_agent", r.error.trimmed().isEmpty() ? QStringLiteral("RD-Agent did not start")
+                                                                                : r.error.trimmed().right(500));
+        else
+            self->rd_agent_list_tasks(); // how it ended
+    };
+    const quint64 handle = python::PythonRunner::instance().start_background(
+        "agents/rdagents/worker.py", {type.isEmpty() ? "resume" : "start", compact(params)}, on_line, on_exit);
+    state->handle = handle;
 }
 
 void AIQuantLabService::rd_agent_start_ui() {
-    run_python("agents/rdagents/cli.py", {"start_ui"}, "deep_agent", "start_ui");
+    start_service("start_ui", "agents/rdagents/log_viewer.py", {}, {});
 }
 
 void AIQuantLabService::rd_agent_start_mcp_server(int port) {
-    auto json = QString("{\"port\":%1}").arg(port);
-    run_python("agents/rdagents/cli.py", {"start_mcp_server", json}, "deep_agent", "start_mcp_server");
+    if (services_.contains("start_mcp_server")) {
+        emit result_ready("deep_agent", "start_mcp_server", services_["start_mcp_server"].answer);
+        return;
+    }
+    QJsonObject params{{"port", port}};
+    AgentService::attach_terminal_tools(params, /*lasting=*/true);
+    const QJsonObject tools = params;
+    start_service("start_mcp_server", "agents/rdagents/mcp_server.py", {compact(params)},
+                  [tools]() { AgentService::release_terminal_tools(tools); });
+}
+
+void AIQuantLabService::rd_agent_stop_mcp_server() {
+    if (services_.contains("start_mcp_server"))
+        python::PythonRunner::instance().stop_background(services_["start_mcp_server"].handle);
+}
+
+void AIQuantLabService::rd_agent_mcp_status() {
+    const bool on = services_.contains("start_mcp_server");
+    QJsonObject o = on ? services_["start_mcp_server"].answer : QJsonObject();
+    o["success"] = true;
+    o["running"] = on;
+    emit result_ready("deep_agent", "mcp_status", o);
+}
+
+// A server of ours: one of each, its answer (the address) kept while it runs.
+void AIQuantLabService::start_service(const QString& command, const QString& script, const QStringList& args,
+                                      std::function<void()> on_stopped) {
+    if (services_.contains(command)) {
+        if (!services_[command].answer.isEmpty())
+            emit result_ready("deep_agent", command, services_[command].answer);
+        return; // else it is starting, and will answer
+    }
+    services_.insert(command, {});
+    QPointer<AIQuantLabService> self = this;
+    auto answered = std::make_shared<bool>(false);
+    auto on_line = [self, command, answered](const QString& line, bool is_stderr) {
+        if (!self || is_stderr || *answered)
+            return;
+        const QJsonObject o = QJsonDocument::fromJson(line.toUtf8()).object();
+        if (!o.contains("success"))
+            return;
+        *answered = true;
+        if (!o["success"].toBool()) {
+            emit self->error_occurred("deep_agent", o["error"].toString());
+            return;
+        }
+        if (self->services_.contains(command))
+            self->services_[command].answer = o;
+        emit self->result_ready("deep_agent", command, o);
+    };
+    auto on_exit = [self, command, answered, on_stopped](const python::PythonResult& r) {
+        if (on_stopped)
+            on_stopped();
+        if (!self)
+            return;
+        self->services_.remove(command);
+        if (!*answered)
+            emit self->error_occurred("deep_agent", r.error.trimmed().isEmpty() ? command + " ended at once"
+                                                                                : r.error.trimmed().right(500));
+        emit self->service_stopped(command);
+    };
+    const quint64 handle = python::PythonRunner::instance().start_background(script, args, on_line, on_exit);
+    if (services_.contains(command))
+        services_[command].handle = handle;
 }
 
 // ── Feature Engineering ──────────────────────────────────────────────────────

@@ -409,6 +409,132 @@ static QStringList well_formed(const QStringList& args) {
     return out;
 }
 
+QProcess* PythonRunner::make_process(const QString& script, const QStringList& args, const QProcessEnvironment& env) {
+    const bool is_code = script.startsWith("__code__:");
+    // The right venv for the script; notebook code always runs in venv-numpy2.
+    QString python_exe = python_path_;
+    const QString venv_py =
+        PythonSetupManager::instance().python_path(is_code ? "venv-numpy2" : select_venv_for_script(script));
+    if (QFileInfo::exists(venv_py))
+        python_exe = venv_py;
+
+    auto* proc = new QProcess(this);
+    // A script can run for an hour (the 13F sync): it ends with the app,
+    // however the app ends, rather than writing on as an orphan.
+    lifecycle::bind_to_app(proc);
+    // The arguments go over stdin, never on the command line, which every
+    // account on the machine can read: they carry API keys, a wallet's
+    // private key, the user's positions. finterm_run.py takes them from
+    // there and runs the script as if they had been its argv.
+    QByteArray input;
+    proc->setProgram(python_exe);
+    if (is_code) {
+        proc->setArguments({script.mid(9)});
+    } else {
+        proc->setArguments({scripts_dir_ + "/launch/finterm_run.py", script});
+        input = QJsonDocument(QJsonArray::fromStringList(well_formed(args))).toJson(QJsonDocument::Compact) + '\n';
+    }
+    connect(proc, &QProcess::started, proc, [proc, input]() {
+        if (!input.isEmpty())
+            proc->write(input);
+        proc->closeWriteChannel(); // nothing more will come: a script that reads on gets EOF
+    });
+
+    // NOTE: scripts_dir_ is on PYTHONPATH (build_python_env). Never add a
+    // script's own parent folder to it: a sub-package sharing a library's name
+    // would hide the library ("edgar" once did, for every SEC tool).
+    proc->setProcessEnvironment(env);
+    proc->setWorkingDirectory(work_dir(is_code ? WorkDir::Cells : WorkDir::Scripts));
+
+#ifdef _WIN32
+    proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
+        cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
+    });
+#endif
+    return proc;
+}
+
+quint64 PythonRunner::start_background(const QString& script, const QStringList& args, StreamCallback on_line,
+                                       Callback on_exit) {
+    if (python_path_.isEmpty()) {
+        on_exit({false, {}, "Python not available — run first-time setup from the app", -1});
+        return 0;
+    }
+    if (!QFileInfo::exists(scripts_dir_ + "/" + script)) {
+        on_exit({false, {}, "Script not found: " + scripts_dir_ + "/" + script, -1});
+        return 0;
+    }
+
+    QProcessEnvironment env = build_python_env();
+    for (const QString& key : managed_credential_keys())
+        env.remove(key);
+
+    auto* proc = make_process(script, args, env);
+    const quint64 handle = next_background_++;
+    background_.insert(handle, proc);
+
+    // Whole lines as they come; of stderr, the end for the exit's report.
+    auto out = std::make_shared<QByteArray>();
+    auto err = std::make_shared<QByteArray>();
+    auto on_line_shared = std::make_shared<StreamCallback>(std::move(on_line));
+    auto drain = [on_line_shared](QByteArray& buf, bool is_stderr) {
+        for (int nl; (nl = buf.indexOf('\n')) >= 0;) {
+            const QString line = QString::fromUtf8(buf.left(nl)).trimmed();
+            buf.remove(0, nl + 1);
+            if (*on_line_shared && !line.isEmpty())
+                (*on_line_shared)(line, is_stderr);
+        }
+    };
+    connect(proc, &QProcess::readyReadStandardOutput, this, [proc, out, drain]() {
+        out->append(proc->readAllStandardOutput());
+        drain(*out, false);
+    });
+    connect(proc, &QProcess::readyReadStandardError, this, [proc, err]() {
+        err->append(proc->readAllStandardError());
+        *err = err->right(8192);
+    });
+    auto exit_shared = std::make_shared<Callback>(std::move(on_exit));
+    auto done = std::make_shared<bool>(false);
+    auto finish = [this, handle, proc, exit_shared, done](PythonResult r) {
+        if (*done)
+            return;
+        *done = true;
+        background_.remove(handle);
+        proc->deleteLater();
+        if (*exit_shared)
+            (*exit_shared)(std::move(r));
+    };
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [proc, out, err, drain, finish](int code, QProcess::ExitStatus status) {
+                out->append(proc->readAllStandardOutput() + '\n');
+                drain(*out, false);
+                err->append(proc->readAllStandardError());
+                finish({status == QProcess::NormalExit && code == 0, {}, QString::fromUtf8(err->right(8192)), code});
+            });
+    connect(proc, &QProcess::errorOccurred, this, [proc, finish](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart)
+            finish({false, {}, "Process error: " + proc->errorString(), -1});
+    });
+    LOG_INFO("Python", "Starting in the background: " + script);
+    proc->start();
+    return handle;
+}
+
+void PythonRunner::stop_background(quint64 handle) {
+    QPointer<QProcess> proc = background_.value(handle);
+    if (!proc)
+        return;
+#ifdef Q_OS_WIN
+    proc->kill(); // a console process has no window to ask
+#else
+    proc->terminate();
+    QTimer::singleShot(10'000, this, [proc]() {
+        if (proc && proc->state() != QProcess::NotRunning)
+            proc->kill();
+    });
+#endif
+}
+
 void PythonRunner::start_next() {
     // Don't start if Python detection is still in progress
     if (!python_init_done_)
@@ -441,77 +567,10 @@ void PythonRunner::start_next() {
 
         ++*slots_held;
 
-        // Determine if this is inline code or a script file
-        bool is_code = req.script.startsWith("__code__:");
-        QString script_path;
-        QString python_exe = python_path_;
-        QString temp_file;
-
-        if (is_code) {
-            // Inline code execution (notebook cells)
-            temp_file = req.script.mid(9); // strip "__code__:" prefix
-            script_path = temp_file;
-            // Always use venv-numpy2 for notebook code
-            QString venv2 = PythonSetupManager::instance().python_path("venv-numpy2");
-            if (QFileInfo::exists(venv2))
-                python_exe = venv2;
-        } else {
-            script_path = scripts_dir_ + "/" + req.script;
-            // Route to correct venv based on script name
-            QString venv_name = select_venv_for_script(req.script);
-            QString venv_py = PythonSetupManager::instance().python_path(venv_name);
-            if (QFileInfo::exists(venv_py))
-                python_exe = venv_py;
-        }
-
-        auto* proc = new QProcess(this);
-        // A script can run for an hour (the 13F sync): it ends with the app,
-        // however the app ends, rather than writing on as an orphan.
-        lifecycle::bind_to_app(proc);
-        // The arguments go over stdin, never on the command line, which every
-        // account on the machine can read: they carry API keys, a wallet's
-        // private key, the user's positions. finterm_run.py takes them from
-        // there and runs the script as if they had been its argv.
-        QStringList full_args;
-        QByteArray input;
-        if (is_code) {
-            full_args << script_path;
-        } else {
-            full_args << scripts_dir_ + "/launch/finterm_run.py" << req.script;
-            input = QJsonDocument(QJsonArray::fromStringList(well_formed(req.args))).toJson(QJsonDocument::Compact) + '\n';
-        }
-        connect(proc, &QProcess::started, proc, [proc, input]() {
-            if (!input.isEmpty())
-                proc->write(input);
-            proc->closeWriteChannel(); // nothing more will come: a script that reads on gets EOF
-        });
-
-        // Start from the shared base env (encoding pins, FINTERM_DATA_DIR,
-        // FINAGENT_DATA_DIR, base PYTHONPATH = scripts_dir_).
-        QProcessEnvironment env = build_python_env();
-
-        // NOTE: do NOT prepend parent-of-pkg (e.g. <scripts>/agents) to PYTHONPATH
-        // for sub-package scripts. scripts_dir_ is already on PYTHONPATH (see
-        // build_python_env line 141), so `python -m sec_edgar.main` resolves
-        // both the package itself AND its relative imports correctly.
-        //
-        // Adding parent-of-pkg used to *shadow* third-party libraries: if a
-        // local sub-package shares a name with a venv package (e.g. our old
-        // `<scripts>/mcp/edgar/` vs the `edgartools` PyPI library which
-        // exports module `edgar`), Python's `from edgar import Company` would
-        // resolve to the local empty package and fail with `ImportError:
-        // cannot import name 'Company' from 'edgar'`. Removing this block
-        // fixes the SEC EDGAR tools — and any other tool whose Python deps
-        // share a top-level name with a local package.
-
-        proc->setProcessEnvironment(env);
-        proc->setWorkingDirectory(work_dir(is_code ? WorkDir::Cells : WorkDir::Scripts));
-
-#ifdef _WIN32
-        proc->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
-            cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
-        });
-#endif
+        // Determine if this is inline code (a notebook cell) or a script file
+        const bool is_code = req.script.startsWith("__code__:");
+        const QString temp_file = is_code ? req.script.mid(9) : QString(); // strip "__code__:" prefix
+        auto* proc = make_process(req.script, req.args, build_python_env());
 
         // Initialize incremental output buffers (carry stream callback from the request)
         proc_buffers_[proc] = {};
@@ -557,7 +616,7 @@ void PythonRunner::start_next() {
         // errorOccurred first). `done`: the callback is called once.
         auto shared_cb = std::make_shared<Callback>(std::move(req.cb));
         auto done = std::make_shared<bool>(false);
-        auto script_name = std::move(req.script);
+        const QString script_name = req.script;
 
         connect(
             proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
@@ -658,8 +717,8 @@ void PythonRunner::start_next() {
                                .arg(in_job    ? QStringLiteral(", job lane")
                                     : in_lane ? QStringLiteral(", interactive lane")
                                               : QString(),
-                                    python_exe, script_path));
-        proc->start(python_exe, full_args);
+                                    proc->program(), script_name));
+        proc->start();
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency
         // slot forever (slow network calls, yf.download on bad tickers).

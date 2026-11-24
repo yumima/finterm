@@ -49,11 +49,16 @@ for word in ("LocalShellBackend", "FilesystemBackend", "CompositeBackend", "back
 check("no tools offered, none built", agent.build_tools({}, agent.ToolLog()) == [])
 
 # The answer.
-state = {"messages": [NS(type="human", content="q"), NS(type="ai", content="The answer."), NS(type="ai", content="")],
-         "files": {"/r.md": {"content": ["# Report", "body"]}, "/same.md": "The answer."}}
+ai = lambda text, calls=(): NS(type="ai", content=text, tool_calls=list(calls))  # noqa: E731
+state = {"messages": [NS(type="human", content="q"), ai("See r.md."), ],
+         "files": {"/r.md": {"content": ["# Report", "body"]}, "/notes.md": "a sub-agent's",
+                   "/large_tool_results/r.md": "DUMP", "/conversation_history/r.md": "HISTORY"}}
 text = cli.answer_text(state)
-check("the last message with text", text.startswith("The answer."), text)
-check("and a file it does not contain", "# Report\nbody" in text and "same.md" not in text, text)
+check("the last message, and the file it names", text.startswith("See r.md.") and "# Report\nbody" in text, text)
+check("not the library's files nor another's", not any(w in text for w in ("DUMP", "HISTORY", "sub-agent")), text)
+check("a plan to use a tool is no answer",
+      cli.answer_text({"messages": [ai("Let me fetch.", ["c"]), NS(type="tool", content="x"), ai("")]}) == ""
+      and cli.answer_text({"messages": [ai("Let me fetch.", ["c"])]}) == "")
 
 for bad in ("../x", "a/b", ".hidden", "x" * 65):
     r = cli.cmd_execute_task({"task": "t", "thread_id": bad})

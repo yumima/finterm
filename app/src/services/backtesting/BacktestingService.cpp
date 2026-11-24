@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QPointer>
+#include <QSet>
 
 static constexpr int kStrategiesTtlSec = 10 * 60;
 static constexpr int kOptionsTtlSec = 10 * 60;
@@ -41,8 +42,7 @@ void BacktestingService::execute(const QString& provider, const QString& command
     QPointer<BacktestingService> self = this;
     auto ctx = QString("%1/%2").arg(provider, command);
 
-    python::PythonRunner::instance().run_job(
-        script, {py_command, json_str}, [self, provider, command, ctx](python::PythonResult result) {
+    auto done = [self, provider, command, ctx](python::PythonResult result) {
             if (!self)
                 return;
             if (!result.success) {
@@ -72,7 +72,15 @@ void BacktestingService::execute(const QString& provider, const QString& command
             }
             LOG_INFO("Backtesting", QString("[%1] Result ready").arg(ctx));
             emit self->result_ready(provider, command, obj);
-        });
+        };
+    // What walks the whole history, perhaps many times; the rest is quick and
+    // must not queue behind it.
+    static const QSet<QString> kLong = {"backtest", "optimize", "walk_forward"};
+    auto& runner = python::PythonRunner::instance();
+    if (kLong.contains(command))
+        runner.run_job(script, {py_command, json_str}, std::move(done));
+    else
+        runner.run(script, {py_command, json_str}, std::move(done));
 }
 
 void BacktestingService::load_strategies(const QString& provider) {

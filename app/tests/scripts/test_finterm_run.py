@@ -92,8 +92,12 @@ with tempfile.TemporaryDirectory() as d:
 check("the launcher is not a top-level script", not (APP / "scripts" / "finterm_run.py").exists())
 # The rule itself: in PythonRunner a request's arguments reach nothing but the JSON line.
 src = (APP / "src" / "python" / "PythonRunner.cpp").read_text(encoding="utf-8")
-uses = re.findall(r"[^\n]*\breq\.args\b[^\n]*", src)
-check("PythonRunner writes the arguments to stdin only", len(uses) == 1 and "well_formed(req.args)" in uses[0], uses)
+make = src[src.index("QProcess* PythonRunner::make_process("):]
+make = make[:make.index("\n}\n")]
+uses = [l for l in make.splitlines()[1:] if re.search(r"\bargs\b", l)]
+check("PythonRunner writes the arguments to stdin only", len(uses) == 1 and "well_formed(args)" in uses[0], uses)
+check("...and starts scripts in no other way",
+      src.count("new QProcess") == 2 and not re.search(r"setArguments\((?!\{script\.mid|\{scripts_dir_)", src), src.count("new QProcess"))
 
 print("finterm_run:", "ok" if not fails else f"{fails} failed")
 sys.exit(1 if fails else 0)

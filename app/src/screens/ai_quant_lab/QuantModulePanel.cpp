@@ -1479,7 +1479,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     auto* mcp_btn = new QPushButton("MCP TOOLS", status_bar);
     mcp_btn->setCursor(Qt::PointingHandCursor);
     mcp_btn->setCheckable(true);
-    mcp_btn->setToolTip("Start or stop the finterm MCP tool server");
+    mcp_btn->setToolTip("Serve finterm's read-only tools to an MCP client on this computer");
     mcp_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                                    "font-family:%2; font-size:%3px; padding:2px 8px; border-radius:2px; }"
                                    "QPushButton:checked { background:%4; color:%5; border-color:%4; }"
@@ -1489,15 +1489,27 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
                                .arg(ui::fonts::TINY)
                                .arg(module_.color.name())
                                .arg(ui::colors::BG_BASE()));
-    connect(mcp_btn, &QPushButton::toggled, this, [mcp_btn, status_txt](bool checked) {
-        if (checked) {
-            status_txt->setText("Starting MCP tool server...");
+    connect(mcp_btn, &QPushButton::toggled, this, [status_txt](bool checked) {
+        status_txt->setText(checked ? "Starting MCP tool server..." : "Stopping MCP tool server...");
+        if (checked)
             AIQuantLabService::instance().rd_agent_start_mcp_server();
-        } else {
-            status_txt->setText("MCP tool server stopped");
-            mcp_btn->setText("MCP TOOLS");
-        }
+        else
+            AIQuantLabService::instance().rd_agent_stop_mcp_server();
     });
+    // It may end by itself, or never start: the button says what is so.
+    connect(&AIQuantLabService::instance(), &AIQuantLabService::service_stopped, mcp_btn,
+            [mcp_btn, status_txt](const QString& command) {
+                if (command != QLatin1String("start_mcp_server"))
+                    return;
+                const QSignalBlocker block(mcp_btn);
+                mcp_btn->setChecked(false);
+                status_txt->setText("MCP tool server stopped");
+            });
+    connect(&AIQuantLabService::instance(), &AIQuantLabService::result_ready, status_txt,
+            [status_txt](const QString& module, const QString& command, const QJsonObject& o) {
+                if (module == QLatin1String("deep_agent") && command == QLatin1String("start_mcp_server"))
+                    status_txt->setText(QString("MCP tool server on port %1").arg(o["port"].toInt()));
+            });
     sbl->addWidget(mcp_btn);
     vl->addWidget(status_bar);
 
@@ -1507,8 +1519,9 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     fm_vl->setContentsMargins(14, 14, 14, 14);
     fm_vl->setSpacing(10);
 
-    auto* fm_desc = new QLabel("Autonomous alpha factor discovery via FactorRDLoop. The agent proposes, codes, runs "
-                               "and evaluates factors iteratively until the target IC is reached.",
+    auto* fm_desc = new QLabel("Microsoft's RD-Agent proposes, codes, backtests and judges factors, one iteration "
+                               "after another. It works on China's CSI 300 (data it downloads), needs Docker, and runs "
+                               "the code the model writes on this computer. Linux and macOS.",
                                fm_w);
     fm_desc->setWordWrap(true);
     fm_desc->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
@@ -1519,15 +1532,11 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
 
     auto* fm_task = new QTextEdit(fm_w);
     fm_task->setPlaceholderText(
-        "Describe the factor hypothesis...\ne.g. \"Discover momentum-based alpha factors for US equities\"");
+        "Describe the factor hypothesis...\ne.g. \"Discover momentum factors that hold up after costs\"");
     fm_task->setFixedHeight(70);
     fm_task->setStyleSheet(input_ss());
     fm_vl->addWidget(build_input_row("Task Description", fm_task, fm_w));
 
-    auto* fm_market = new QComboBox(fm_w);
-    fm_market->addItems({"US", "CN", "EU", "IN", "JP", "HK", "GLOBAL"});
-    fm_market->setStyleSheet(combo_ss());
-    fm_vl->addWidget(build_input_row("Target Market", fm_market, fm_w));
 
     auto* fm_iter = new QSpinBox(fm_w);
     fm_iter->setRange(1, 100);
@@ -1539,7 +1548,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     fm_vl->addWidget(build_input_row("Target IC", fm_ic, fm_w));
 
     auto* fm_run = make_run_button("START FACTOR MINING", fm_w);
-    connect(fm_run, &QPushButton::clicked, this, [this, fm_task, fm_market, fm_iter, fm_ic, status_txt, llm_combo]() {
+    connect(fm_run, &QPushButton::clicked, this, [this, fm_task, fm_iter, fm_ic, status_txt, llm_combo]() {
         auto desc_text = fm_task->toPlainText().trimmed();
         if (desc_text.isEmpty()) {
             display_error("Enter a task description.");
@@ -1554,7 +1563,6 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
         status_txt->setText("Factor mining started...");
         QJsonObject params;
         params["task_description"] = desc_text;
-        params["target_market"] = fm_market->currentText();
         params["max_iterations"] = fm_iter->value();
         params["target_ic"] = fm_ic->value();
         params["config"] = cfg;
@@ -1570,8 +1578,9 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     mo_vl->setContentsMargins(14, 14, 14, 14);
     mo_vl->setSpacing(10);
 
-    auto* mo_desc = new QLabel("ML model hyperparameter optimization via ModelRDLoop. Supports LightGBM, XGBoost, "
-                               "LSTM, GRU, Transformer and TCN. Optimizes for Sharpe, IC, max drawdown, or win rate.",
+    auto* mo_desc = new QLabel("RD-Agent designs, codes and backtests models, one iteration after another. The model "
+                               "type and the aim go to it as your request. It works on China's CSI 300, needs Docker, "
+                               "and runs the code the model writes on this computer. Linux and macOS.",
                                mo_w);
     mo_desc->setWordWrap(true);
     mo_desc->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
@@ -1622,8 +1631,9 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     qr_vl->setContentsMargins(14, 14, 14, 14);
     qr_vl->setSpacing(10);
 
-    auto* qr_desc = new QLabel("Combined factor discovery + model optimization via QuantRDLoop. Runs the full "
-                               "research pipeline end-to-end: propose factors, code them, backtest, refine.",
+    auto* qr_desc = new QLabel("Factors and models together: RD-Agent chooses which to work on at each iteration. It "
+                               "works on China's CSI 300, needs Docker, and runs the code the model writes on this "
+                               "computer. Linux and macOS.",
                                qr_w);
     qr_desc->setWordWrap(true);
     qr_desc->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
@@ -1634,15 +1644,11 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
 
     auto* qr_goal = new QTextEdit(qr_w);
     qr_goal->setPlaceholderText(
-        "Research goal...\ne.g. \"Build a quantitative equity strategy for mid-cap US stocks\"");
+        "Research goal...\ne.g. \"Combine value and momentum factors with a tree model\"");
     qr_goal->setFixedHeight(70);
     qr_goal->setStyleSheet(input_ss());
     qr_vl->addWidget(build_input_row("Research Goal", qr_goal, qr_w));
 
-    auto* qr_market = new QComboBox(qr_w);
-    qr_market->addItems({"US", "CN", "EU", "IN", "JP", "HK", "GLOBAL"});
-    qr_market->setStyleSheet(combo_ss());
-    qr_vl->addWidget(build_input_row("Target Market", qr_market, qr_w));
 
     auto* qr_iter = new QSpinBox(qr_w);
     qr_iter->setRange(1, 100);
@@ -1651,7 +1657,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     qr_vl->addWidget(build_input_row("Max Iterations", qr_iter, qr_w));
 
     auto* qr_run = make_run_button("START QUANT RESEARCH", qr_w);
-    connect(qr_run, &QPushButton::clicked, this, [this, qr_goal, qr_market, qr_iter, status_txt, llm_combo]() {
+    connect(qr_run, &QPushButton::clicked, this, [this, qr_goal, qr_iter, status_txt, llm_combo]() {
         auto goal = qr_goal->toPlainText().trimmed();
         if (goal.isEmpty()) {
             display_error("Enter a research goal.");
@@ -1666,7 +1672,6 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
         status_txt->setText("Quant research started...");
         QJsonObject params;
         params["research_goal"] = goal;
-        params["target_market"] = qr_market->currentText();
         params["max_iterations"] = qr_iter->value();
         params["config"] = cfg;
         AIQuantLabService::instance().rd_agent_start_quant_research(params);
@@ -1688,7 +1693,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     tm_hl->setSpacing(6);
 
     auto* filter_combo = new QComboBox(tm_toolbar);
-    filter_combo->addItems({"All", "running", "completed", "stopped", "failed"});
+    filter_combo->addItems({"All", "running", "completed", "stopped", "failed", "interrupted"});
     filter_combo->setFixedWidth(120);
     filter_combo->setStyleSheet(combo_ss());
     tm_hl->addWidget(filter_combo);
@@ -1787,7 +1792,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
         AIQuantLabService::instance().rd_agent_stop_task(tid);
     });
 
-    connect(resume_btn, &QPushButton::clicked, this, [this, task_id_input]() {
+    connect(resume_btn, &QPushButton::clicked, this, [this, task_id_input, llm_combo]() {
         auto tid = task_id_input->text().trimmed();
         if (tid.isEmpty() && rd_task_table_->currentRow() >= 0)
             tid = rd_task_table_->item(rd_task_table_->currentRow(), 0)->text();
@@ -1795,7 +1800,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
             display_error("Select or enter a task ID.");
             return;
         }
-        AIQuantLabService::instance().rd_agent_resume_task(tid);
+        AIQuantLabService::instance().rd_agent_resume_task(tid, llm_config_from_combo(llm_combo));
     });
 
     connect(factors_btn, &QPushButton::clicked, this, [this, task_id_input]() {
@@ -2595,14 +2600,17 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
     }
 
     // ── RD-Agent: check_status ────────────────────────────────────────────────
-    if (command == "check_status") {
-        auto ver = payload["rdagent_version"].toString("?");
-        auto avail = payload["availability"].toObject();
-        QStringList flags;
-        for (auto it = avail.begin(); it != avail.end(); ++it)
-            if (it.value().toBool())
-                flags << it.key();
-        status_label_->setText(QString("rdagent %1 — %2").arg(ver, flags.join(", ")));
+    if (command == "check_status" && module_id == "deep_agent") {
+        QStringList lacks;
+        for (const auto& m : payload["missing"].toArray())
+            lacks << m.toString();
+        const QString text =
+            payload["ready"].toBool() ? QStringLiteral("Ready") : QString("Not ready: %1").arg(lacks.join("; "));
+        status_label_->setText(QString("rdagent %1").arg(payload["rdagent_version"].toString("not installed")));
+        if (auto* t = findChild<QLabel*>("rdStatusTxt"))
+            t->setText(text);
+        if (rd_agent_output_)
+            rd_agent_output_->setPlainText(text);
         return;
     }
 
@@ -2614,12 +2622,13 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             return;
         }
         auto task_id = payload["task_id"].toString();
-        auto est = payload["estimated_time"].toString();
         status_label_->setText(QString("Task %1 started").arg(task_id));
         if (rd_agent_output_)
             rd_agent_output_->setPlainText(
-                QString("Task started: %1\nEstimated time: %2\n\nUse Task Monitor → REFRESH to track progress.")
-                    .arg(task_id, est));
+                QString("Task started: %1\n\nUse Task Monitor → REFRESH to track progress.\nLog: %2")
+                    .arg(task_id, payload["log"].toString()));
+        if (auto* t = findChild<QLabel*>("rdStatusTxt"))
+            t->setText(QString("%1 is running").arg(task_id));
         return;
     }
 
@@ -2639,7 +2648,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 status_item->setForeground(QColor("" + QString(ui::colors::WARNING()) + ""));
             else if (status_str == "completed")
                 status_item->setForeground(QColor("" + QString(ui::colors::POSITIVE()) + ""));
-            else if (status_str == "failed" || status_str == "stopped")
+            else if (status_str == "failed" || status_str == "stopped" || status_str == "interrupted")
                 status_item->setForeground(QColor("" + QString(ui::colors::NEGATIVE()) + ""));
             rd_task_table_->setItem(row, 2, status_item);
             rd_task_table_->setItem(row, 3, new QTableWidgetItem(num_txt(jnum(obj["progress"]) * 100, 0, "%")));
@@ -2688,11 +2697,12 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         int idx = 1;
         for (const auto& f : factors) {
             auto obj = f.toObject();
-            out += QString("[%1] %2\n  IC: %3  Sharpe: %4\n  %5\n\n")
+            out += QString("[%1] %2%3\n  Iteration %4's backtest — IC: %5  Information ratio: %6\n  %7\n\n")
                        .arg(idx++)
-                       .arg(jstr_txt(obj["name"]))
+                       .arg(jstr_txt(obj["name"]), obj["accepted"].toBool() ? "" : "  (not kept)")
+                       .arg(obj["iteration"].toInt())
                        .arg(jnum_txt(obj["ic"], 4))
-                       .arg(jnum_txt(obj["sharpe"], 3))
+                       .arg(jnum_txt(obj["information_ratio"], 3))
                        .arg(obj["description"].toString());
         }
         rd_agent_output_->setPlainText(out);
@@ -2711,11 +2721,13 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         int idx = 1;
         for (const auto& m : models) {
             auto obj = m.toObject();
-            out += QString("[%1] %2\n  Sharpe: %3  IC: %4\n")
+            out += QString("[%1] %2%3\n  Iteration %4's backtest — IC: %5  Information ratio: %6\n  %7\n\n")
                        .arg(idx++)
-                       .arg(obj["model_id"].toString("Model"))
-                       .arg(jnum_txt(obj["sharpe"], 3))
-                       .arg(jnum_txt(obj["ic"], 4));
+                       .arg(jstr_txt(obj["name"]), obj["accepted"].toBool() ? "" : "  (not kept)")
+                       .arg(obj["iteration"].toInt())
+                       .arg(jnum_txt(obj["ic"], 4))
+                       .arg(jnum_txt(obj["information_ratio"], 3))
+                       .arg(obj["description"].toString());
         }
         rd_agent_output_->setPlainText(out);
         return;
@@ -2749,47 +2761,23 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
     // ── RD-Agent: start_mcp_server ────────────────────────────────────────────
     if (command == "start_mcp_server") {
-        if (!payload["success"].toBool()) {
-            status_label_->setText("MCP server failed");
-            if (rd_agent_output_)
-                rd_agent_output_->setPlainText(
-                    QString("MCP server failed to start:\n%1\n\nInstall: %2")
-                        .arg(payload["error"].toString())
-                        .arg(payload["install"].toString("pip install 'mcp[cli]' 'pydantic-ai[mcp]' yfinance")));
-            return;
-        }
-        auto url = payload["url"].toString();
-        auto port = payload["port"].toInt();
-        auto tools = payload["tools"].toArray();
-        QStringList tool_names;
-        for (const auto& t : tools)
-            tool_names << t.toString();
-        status_label_->setText(QString("MCP ready on port %1").arg(port));
+        QStringList names;
+        for (const auto& t : payload["tools"].toArray())
+            names << t.toString();
+        status_label_->setText(QString("MCP ready on port %1").arg(payload["port"].toInt()));
         if (rd_agent_output_)
-            rd_agent_output_->setPlainText(QString("MCP tool server running at %1\n\nAvailable tools:\n  %2\n\n"
-                                                   "Enable 'enable_mcp: true' in factor/model/quant research params\n"
-                                                   "to give RD-Agent loops access to these tools.")
-                                               .arg(url, tool_names.join("\n  ")));
+            rd_agent_output_->setPlainText(
+                QString("finterm's read-only tools, for an MCP client on this computer:\n\n  %1\n\nThe address is the "
+                        "key: whoever has it can read what the tools read, your portfolios included. It changes at every "
+                        "start.\n\nTools:\n  %2")
+                    .arg(payload["url"].toString(), names.join("\n  ")));
         return;
     }
 
     // ── RD-Agent: mcp_status ─────────────────────────────────────────────────
     if (command == "mcp_status") {
-        auto avail = payload["mcp_server_available"].toBool();
-        auto pai_mcp = payload["pydantic_ai_mcp"].toBool();
-        auto ports = payload["running_ports"].toArray();
-        QString info = QString("MCP server available: %1\npydantic-ai MCP: %2\nRunning ports: %3")
-                           .arg(avail ? "yes" : "no")
-                           .arg(pai_mcp ? "yes" : "no")
-                           .arg(ports.isEmpty() ? "none" : [&]() {
-                               QStringList ps;
-                               for (const auto& p : ports)
-                                   ps << QString::number(p.toInt());
-                               return ps.join(", ");
-                           }());
-        status_label_->setText(avail ? "MCP available" : "MCP not installed");
-        if (rd_agent_output_)
-            rd_agent_output_->setPlainText(info);
+        status_label_->setText(payload["running"].toBool() ? QString("MCP on port %1").arg(payload["port"].toInt())
+                                                           : QStringLiteral("MCP server not running"));
         return;
     }
 

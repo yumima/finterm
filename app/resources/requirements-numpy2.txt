@@ -121,6 +121,8 @@ quantstats>=0.0.62
 pyqlib==0.9.7
 rdagent==0.8.0
 deepagents==0.4.12
+# scripts/agents/rdagents/mcp_server.py (came only with other packages before)
+mcp>=1.20,<2.0
 gs-quant==1.4.67
 
 # Prediction Markets — Polymarket + Kalshi trading (Phase 6/7)

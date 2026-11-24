@@ -151,23 +151,31 @@ class AlphaArenaDatabase:
                 ON snapshots(competition_id, model_name, cycle_number)
             """)
 
-            self._drop_saved_keys(cursor)
             logger.info(f"Database initialized at {self.db_path}")
+        self._drop_saved_keys()
 
-    @staticmethod
-    def _drop_saved_keys(cursor):
-        """Configs were saved with their models' API keys until 4.1.0: take
-        them out, and the freed pages with them."""
-        cursor.execute("SELECT competition_id, config FROM competitions WHERE config LIKE '%\"api_key\": \"%'")
-        rows = cursor.fetchall()
-        if not rows:
-            return
-        cursor.execute("PRAGMA secure_delete = ON")
-        for competition_id, config in [(r[0], json.loads(r[1])) for r in rows]:
-            for model in config.get("models", []):
-                model.pop("api_key", None)
-            cursor.execute("UPDATE competitions SET config = ? WHERE competition_id = ?",
-                           (json.dumps(config), competition_id))
+    def _drop_saved_keys(self):
+        """Configs were saved with their models' API keys until 4.1.0. Once per
+        database: take them out, then rewrite the file, for what deleted and
+        replaced rows left in its free pages."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+                return
+            for competition_id, text in conn.execute("SELECT competition_id, config FROM competitions").fetchall():
+                config = json.loads(text)
+                for model in config.get("models", []):
+                    model.pop("api_key", None)
+                conn.execute("UPDATE competitions SET config = ? WHERE competition_id = ?",
+                             (json.dumps(config), competition_id))
+            conn.commit()
+            conn.execute("VACUUM")
+            conn.execute("PRAGMA user_version = 1")
+            conn.commit()
+        except (sqlite3.Error, ValueError) as e:
+            logger.warning(f"Saved API keys not removed, will try again: {e}")
+        finally:
+            conn.close()
 
     # ==================== Competition Methods ====================
 

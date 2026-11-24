@@ -16,7 +16,8 @@ _LOCAL = {"hearth", "ollama"}
 
 def create_model(config: dict[str, Any]):
     """
-    Config keys: llm_provider, llm_model, llm_api_key, llm_base_url.
+    Config keys: llm_provider, llm_model, llm_api_key, llm_base_url,
+    llm_max_tokens. (Not the temperature: reasoning models refuse one.)
 
     Raises ValueError naming what the profile lacks.
     """
@@ -30,16 +31,19 @@ def create_model(config: dict[str, Any]):
     if not api_key and provider not in _LOCAL:
         raise ValueError(f"The LLM profile has no API key for {provider}")
 
+    limit = int(config.get("llm_max_tokens") or 0)
+    cap = {"max_tokens": limit} if limit > 0 else {}
+
     if provider in ("anthropic", "claude"):
         from langchain_anthropic import ChatAnthropic
-        kwargs: dict[str, Any] = {"api_key": api_key, "model_name": model}
+        kwargs: dict[str, Any] = {"api_key": api_key, "model_name": model, **cap}
         if base_url:
             kwargs["base_url"] = base_url.rstrip("/").removesuffix("/v1")  # the SDK adds it
         return ChatAnthropic(**kwargs)
 
     if provider in ("google", "gemini"):
         from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(google_api_key=api_key, model=model)
+        return ChatGoogleGenerativeAI(google_api_key=api_key, model=model, **cap)
 
     if not base_url:
         raise ValueError(f"The LLM profile for {provider} has no base URL")
@@ -52,7 +56,7 @@ def create_model(config: dict[str, Any]):
             return payload
 
     # Chat completions: the one API every compatible server has.
-    return PlainTextChat(api_key=api_key or "local", model=model, base_url=base_url, use_responses_api=False)
+    return PlainTextChat(api_key=api_key or "local", model=model, base_url=base_url, use_responses_api=False, **cap)
 
 
 def _plain(message: dict[str, Any]) -> dict[str, Any]:

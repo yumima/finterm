@@ -57,10 +57,12 @@ def _load_thread(thread_id: str) -> list[list[str]]:
         return []
 
 
-def _save_thread(thread_id: str, turns: list[list[str]]) -> None:
+def _add_to_thread(thread_id: str, turn: list[str]) -> None:
+    """Add a turn to the thread as it is now: another task may have added its own."""
     path = _thread_file(thread_id)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(turns[-_KEEP_TURNS:], ensure_ascii=False), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+    tmp.write_text(json.dumps([*_load_thread(thread_id), turn][-_KEEP_TURNS:], ensure_ascii=False), encoding="utf-8")
     tmp.replace(path)
 
 
@@ -107,23 +109,35 @@ def cmd_execute_task(params: dict[str, Any]) -> dict[str, Any]:
     # what it was given — the tools' answers, the task, and the thread so far
     # (checked when it was written). What sub-agents wrote is no evidence.
     result = grounding.ground(text, task, [list(t) for t in turns], list(log))
-    _save_thread(thread_id, turns + [[task, result]])
+    try:
+        _add_to_thread(thread_id, [task, result])
+    except OSError as exc:  # the answer is there all the same
+        logger.warning("thread %s was not saved: %s", thread_id, exc)
     return {"success": True, "result": result, "thread_id": thread_id, "tool_calls": len(log), "error": None}
 
 
 def answer_text(state: dict[str, Any]) -> str:
-    """The last message, and any file the agent wrote that it does not contain."""
-    text = ""
-    for msg in reversed(state.get("messages") or []):
-        if getattr(msg, "type", "") == "ai" and extract_text(msg.content).strip():
-            text = extract_text(msg.content).strip()
-            break
+    """The run's last message, if it is an answer, with the files it refers to.
+
+    The library keeps its own files in the state (a long tool answer, history
+    it summarised), and sub-agents leave theirs: only what the answer names.
+    """
+    messages = state.get("messages") or []
+    last = messages[-1] if messages else None
+    if getattr(last, "type", "") != "ai" or getattr(last, "tool_calls", None):
+        return ""
+    text = extract_text(last.content).strip()
+    if not text:
+        return ""
+    named = text
     for name, data in sorted((state.get("files") or {}).items()):
+        if name.startswith(("/large_tool_results/", "/conversation_history/")) or name.rsplit("/", 1)[-1] not in named:
+            continue
         content = data.get("content") if isinstance(data, dict) else data
         body = ("\n".join(content) if isinstance(content, list) else str(content or "")).strip()
         if body and body not in text:
             text += f"\n\n── {name} ──\n{body}"
-    return text.strip()
+    return text
 
 
 _COMMANDS = {"check_status": cmd_check_status, "execute_task": cmd_execute_task}

@@ -88,6 +88,7 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
     int cycle_count_ = 0;
     bool is_auto_running_ = false;
     bool loading_ = false;
+    bool cycle_running_ = false;
 
     // Model entries sourced from LlmConfigRepository / LlmProfileRepository.
     // Index matches model_list_ row order.
