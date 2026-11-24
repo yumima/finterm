@@ -62,7 +62,9 @@ def missing(config: dict[str, Any]) -> list[str]:
     except ImportError:
         out.append("The docker package is not installed (Settings > Python Env)")
     except Exception as e:  # noqa: BLE001 — docker raises many kinds
-        out.append(f"Docker is not running, or not yours to use: RD-Agent backtests in a container ({str(e)[:160]})")
+        why = "this account may not use it" if "Permission" in str(e) else "it is not installed or not running"
+        out.append(f"RD-Agent backtests in a Docker container, and Docker does not answer: {why}")
+        print(f"docker: {e}", file=sys.stderr)
     return out
 
 
@@ -196,9 +198,10 @@ def run(job: dict[str, Any]) -> None:
         loop = make_loop(job)
         recorder = Recorder(task_id, loop)
         recorder.start()
-        left = job["max_iterations"] - len(loop.trace.hist)
-        if left > 0:
-            asyncio.run(loop.run(loop_n=left))
+        if len(loop.trace.hist) < job["max_iterations"]:
+            # All of them, also when resuming: rdagent goes over the finished
+            # loops again, skipping their work, and counts each.
+            asyncio.run(loop.run(loop_n=job["max_iterations"]))
         status = "completed"
     except (SystemExit, KeyboardInterrupt):
         status = "stopped"
@@ -210,6 +213,7 @@ def run(job: dict[str, Any]) -> None:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)  # let this be written
         if recorder:
             recorder.done.set()
+            recorder.join()  # or it could write an older state after the last
             try:
                 recorder.record()
             except Exception as e:  # noqa: BLE001

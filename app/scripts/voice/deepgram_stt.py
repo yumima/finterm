@@ -89,7 +89,9 @@ def main() -> None:
 
     def send_sound() -> None:
         while not ended.is_set():
-            data = sys.stdin.buffer.read1(CHUNK)
+            # Not sys.stdin: a read of it still waiting when the script ends
+            # (Deepgram closed first) makes Python abort.
+            data = os.read(0, CHUNK)
             try:
                 if not data:  # the app closed the microphone
                     ws.send(json.dumps({"type": "CloseStream"}))

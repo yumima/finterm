@@ -157,6 +157,7 @@ class AIQuantLabService : public QObject {
                            const QString& command, int ttl_sec);
 
     void start_rd_job(const QString& command, const QString& type, QJsonObject params);
+    bool running_service(const QString& command);
     void start_service(const QString& command, const QString& script, const QStringList& args,
                        std::function<void()> on_stopped);
 
@@ -166,6 +167,7 @@ class AIQuantLabService : public QObject {
     struct Service {
         quint64 handle = 0;
         QJsonObject answer; // what it said when it was ready
+        bool stopping = false;
     };
     QMap<QString, quint64> rd_jobs_;    // task id -> its process
     QHash<QString, Service> services_;  // by the command that starts it

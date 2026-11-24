@@ -31,7 +31,10 @@ def check(name, ok, got=""):
 
 # The model: an endpoint of litellm's own, or any OpenAI-compatible one.
 L = lambda **k: {f"llm_{a}": b for a, b in k.items()}  # noqa: E731
-check("anthropic", llm.resolve(L(provider="anthropic", model="m", api_key="k", base_url="https://api.anthropic.com/v1"))[0::2] == ("anthropic/m", ""))
+for prov, m in (("anthropic", "anthropic/m"), ("gemini", "openai/m")):
+    got = llm.resolve(L(provider=prov, model="m", api_key="k", base_url="https://proxy.corp/v1"))
+    check(f"{prov}: the key goes to the profile's own endpoint only", got[0] == m and "proxy.corp" in got[2], got)
+check("gemini's own", llm.resolve(L(provider="gemini", model="m", api_key="k")) == ("gemini/m", "k", ""))
 check("groq", llm.resolve(L(provider="groq", model="m", api_key="k", base_url="https://g/v1")) == ("openai/m", "k", "https://g/v1"))
 check("a local one needs no key", llm.resolve(L(provider="hearth", model="m", base_url="http://h/v1"))[1] == "local")
 for c in ({}, L(provider="openai", model="m"), L(provider="groq", model="m", api_key="k")):
@@ -113,6 +116,14 @@ if os.name != "nt":
     check("...and nothing else", subprocess.run([str(conda), "create", "-y"], capture_output=True).returncode != 0)
 r = cli.cmd_get_discovered_factors({"task_id": a["task_id"]})
 check("its factors are read back", [f["name"] for f in r["factors"]] == ["f0", "f1"] and r["best_ic"] == 0.02, r)
+
+# Probing must not be what makes a job look running, nor stop one from starting.
+one, two = jobs.Lock(a["task_id"]), jobs.Lock(a["task_id"])
+if os.name != "nt":
+    check("two probes at once", one.acquire(probe=True) and two.acquire(probe=True) and not jobs.is_running(a["task_id"]))
+one.release()
+two.release()
+check("the loop is given all its iterations, also when resuming", "loop_n=job[\"max_iterations\"]" in (RD / "worker.py").read_text())
 
 p, a = start("fail")
 p.communicate(timeout=60)

@@ -520,15 +520,16 @@ quint64 PythonRunner::start_background(const QString& script, const QStringList&
     return handle;
 }
 
-void PythonRunner::stop_background(quint64 handle) {
+void PythonRunner::stop_background(quint64 handle, int grace_ms) {
     QPointer<QProcess> proc = background_.value(handle);
     if (!proc)
         return;
 #ifdef Q_OS_WIN
+    Q_UNUSED(grace_ms);
     proc->kill(); // a console process has no window to ask
 #else
     proc->terminate();
-    QTimer::singleShot(10'000, this, [proc]() {
+    QTimer::singleShot(grace_ms, this, [proc]() {
         if (proc && proc->state() != QProcess::NotRunning)
             proc->kill();
     });

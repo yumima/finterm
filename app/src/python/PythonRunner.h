@@ -78,8 +78,8 @@ class PythonRunner : public QObject {
     /// may run code a model wrote. Returns 0 when it cannot be started (then
     /// `on_exit` has been called), else a handle for stop_background().
     quint64 start_background(const QString& script, const QStringList& args, StreamCallback on_line, Callback on_exit);
-    /// Ask it to end, and make it when it has not after ten seconds.
-    void stop_background(quint64 handle);
+    /// Ask it to end, and make it when it has not after `grace_ms`.
+    void stop_background(quint64 handle, int grace_ms = 10'000);
 
     /// Run arbitrary Python code (for notebook/colab cells).
     /// Creates a temp file, executes it, returns stdout/stderr.

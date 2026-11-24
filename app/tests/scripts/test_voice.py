@@ -20,7 +20,7 @@ def check(name, ok, got=""):
 for f in ("whisper_stt.py", "deepgram_stt.py"):
     src = (VOICE / f).read_text(encoding="utf-8")
     check(f"{f} opens no microphone", "import pyaudio" not in src and "Microphone" not in src)
-    check(f"{f} reads stdin", "sys.stdin.buffer.read" in src)
+    check(f"{f} reads stdin", "sys.stdin.buffer.read" in src or "os.read(0" in src)
 
 sys.path.insert(0, str(VOICE))
 import deepgram_stt as dg  # noqa: E402

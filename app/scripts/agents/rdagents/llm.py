@@ -12,7 +12,6 @@ import os
 from typing import Any
 
 _LOCAL = {"hearth", "ollama"}
-_PREFIX = {"anthropic": "anthropic/", "claude": "anthropic/", "google": "gemini/", "gemini": "gemini/"}
 
 
 def resolve(config: dict[str, Any]) -> tuple[str, str, str]:
@@ -25,9 +24,12 @@ def resolve(config: dict[str, Any]) -> tuple[str, str, str]:
         raise ValueError("No LLM profile: choose one, or set one up in Settings > LLM Config")
     if not key and provider not in _LOCAL:
         raise ValueError(f"The LLM profile has no API key for {provider}")
-    prefix = _PREFIX.get(provider)
-    if prefix:
-        return prefix + model, key, ""  # litellm's own endpoint for it
+    # A base is the profile's own endpoint, often a proxy with its own key: the
+    # key must go nowhere else.
+    if provider in ("anthropic", "claude"):
+        return "anthropic/" + model, key, base.rstrip("/").removesuffix("/v1")  # litellm adds it
+    if provider in ("google", "gemini") and not base:
+        return "gemini/" + model, key, ""
     if not base:
         raise ValueError(f"The LLM profile for {provider} has no base URL")
     return "openai/" + model, key or "local", base  # any OpenAI-compatible endpoint
@@ -39,7 +41,7 @@ def embedding_model(config: dict[str, Any]) -> str:
     provider = str(config.get("llm_provider") or "").lower().strip()
     if provider == "openai":
         return "openai/text-embedding-3-small"
-    if provider in ("google", "gemini"):
+    if provider in ("google", "gemini") and not config.get("llm_base_url"):
         return "gemini/text-embedding-004"
     if provider in _LOCAL:
         return "openai/nomic-embed-text"

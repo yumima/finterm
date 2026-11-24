@@ -117,10 +117,11 @@ def cmd_execute_task(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def answer_text(state: dict[str, Any]) -> str:
-    """The run's last message, if it is an answer, with the files it refers to.
+    """The run's last message, if it is an answer, with the files that go with it.
 
-    The library keeps its own files in the state (a long tool answer, history
-    it summarised), and sub-agents leave theirs: only what the answer names.
+    Those the agent itself wrote, or names. The library keeps its own files in
+    the state (a long tool answer, history it summarised), and sub-agents leave
+    theirs.
     """
     messages = state.get("messages") or []
     last = messages[-1] if messages else None
@@ -129,9 +130,13 @@ def answer_text(state: dict[str, Any]) -> str:
     text = extract_text(last.content).strip()
     if not text:
         return ""
-    named = text
+    said = text
+    wrote = {str((c.get("args") or {}).get("file_path") or "") for m in messages
+             for c in (getattr(m, "tool_calls", None) or []) if isinstance(c, dict) and c.get("name") == "write_file"}
     for name, data in sorted((state.get("files") or {}).items()):
-        if name.startswith(("/large_tool_results/", "/conversation_history/")) or name.rsplit("/", 1)[-1] not in named:
+        if name.startswith(("/large_tool_results/", "/conversation_history/")):
+            continue
+        if name not in wrote and name.lstrip("/") not in wrote and name.rsplit("/", 1)[-1] not in said:
             continue
         content = data.get("content") if isinstance(data, dict) else data
         body = ("\n".join(content) if isinstance(content, list) else str(content or "")).strip()

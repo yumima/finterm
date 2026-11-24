@@ -56,6 +56,9 @@ state = {"messages": [NS(type="human", content="q"), ai("See r.md."), ],
 text = cli.answer_text(state)
 check("the last message, and the file it names", text.startswith("See r.md.") and "# Report\nbody" in text, text)
 check("not the library's files nor another's", not any(w in text for w in ("DUMP", "HISTORY", "sub-agent")), text)
+wrote = NS(type="ai", content="", tool_calls=[{"name": "write_file", "args": {"file_path": "/final_report.md"}}])
+text = cli.answer_text({"messages": [wrote, ai("The full report is saved.")], "files": {"/final_report.md": "THE REPORT", "/notes.md": "other"}})
+check("the report it wrote, though it does not name it", "THE REPORT" in text and "other" not in text, text)
 check("a plan to use a tool is no answer",
       cli.answer_text({"messages": [ai("Let me fetch.", ["c"]), NS(type="tool", content="x"), ai("")]}) == ""
       and cli.answer_text({"messages": [ai("Let me fetch.", ["c"])]}) == "")

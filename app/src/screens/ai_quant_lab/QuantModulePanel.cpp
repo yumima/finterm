@@ -233,7 +233,13 @@ QWidget* QuantModulePanel::build_llm_picker(QWidget* parent, QComboBox** out_com
     auto* combo = new QComboBox(parent);
     combo->setStyleSheet(combo_ss());
 
-    // Populate from saved profiles
+    // First the model agents use by default, which needs no profile (a local
+    // engine found at start has none); then the saved profiles.
+    const QJsonObject def = AIQuantLabService::llm_config();
+    if (!def.isEmpty())
+        combo->addItem(
+            QString("Default  [%1 / %2]").arg(def["llm_provider"].toString(), def["llm_model"].toString()),
+            QStringLiteral("default"));
     auto profiles_result = LlmProfileRepository::instance().list_profiles();
     if (profiles_result.is_ok()) {
         for (const auto& p : profiles_result.value()) {
@@ -263,7 +269,7 @@ QJsonObject QuantModulePanel::llm_config_from_combo(QComboBox* combo) const {
     if (profile_id.isEmpty())
         return {};
 
-    return AIQuantLabService::llm_config(profile_id);
+    return AIQuantLabService::llm_config(profile_id == QLatin1String("default") ? QString() : profile_id);
 }
 
 // ── Constructor ──────────────────────────────────────────────────────────────
@@ -1439,8 +1445,9 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     auto* status_dot = new QLabel("●", status_bar);
     status_dot->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
     sbl->addWidget(status_dot);
-    auto* status_txt = new QLabel("RD-Agent ready", status_bar);
+    auto* status_txt = new QLabel("RD-Agent — press CHECK STATUS", status_bar);
     status_txt->setObjectName("rdStatusTxt");
+    status_txt->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); // a long one must not widen the panel
     status_txt->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
                                   .arg(ui::colors::TEXT_SECONDARY())
                                   .arg(ui::fonts::TINY)
@@ -2608,7 +2615,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             payload["ready"].toBool() ? QStringLiteral("Ready") : QString("Not ready: %1").arg(lacks.join("; "));
         status_label_->setText(QString("rdagent %1").arg(payload["rdagent_version"].toString("not installed")));
         if (auto* t = findChild<QLabel*>("rdStatusTxt"))
-            t->setText(text);
+            t->setText(text), t->setToolTip(text);
         if (rd_agent_output_)
             rd_agent_output_->setPlainText(text);
         return;
@@ -3713,6 +3720,12 @@ void QuantModulePanel::on_error(const QString& module_id, const QString& message
         rl_train_button_->setEnabled(true);
     }
     display_error(message);
+    if (auto* t = findChild<QLabel*>("rdStatusTxt")) { // the RD-Agent tab does not show the above
+        t->setText(message);
+        t->setToolTip(message);
+    }
+    if (rd_agent_output_)
+        rd_agent_output_->setPlainText(message);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

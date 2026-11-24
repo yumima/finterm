@@ -477,6 +477,11 @@ QJsonObject AIQuantLabService::llm_config(const QString& profile_id) {
         take(LlmProfileRepository::instance().resolve_for_context("agent"));
     else if (const auto r = LlmProfileRepository::instance().get_profile(profile_id); r.is_ok())
         take(r.value());
+    // No profile anywhere: what the chat uses, as other agents do.
+    if (auto& llm = ai_chat::LlmService::instance(); profile_id.isEmpty() && provider.isEmpty() && llm.is_configured()) {
+        provider = llm.active_provider(), model = llm.active_model(), key = llm.active_api_key();
+        base = llm.active_base_url(), max_tokens = llm.active_max_tokens();
+    }
     if (provider.isEmpty() || model.isEmpty())
         return {};
     return {{"llm_provider", provider},
@@ -548,7 +553,8 @@ void AIQuantLabService::rd_agent_stop_task(const QString& task_id) {
         emit error_occurred("deep_agent", QString("%1 is not running").arg(task_id));
         return;
     }
-    python::PythonRunner::instance().stop_background(handle);
+    // A backtest's container is given ten seconds to end, and is then removed.
+    python::PythonRunner::instance().stop_background(handle, 60'000);
     emit result_ready("deep_agent", "stop_task",
                       {{"success", true}, {"task_id", task_id}, {"message", QString("Stopping %1").arg(task_id)}});
 }
@@ -573,6 +579,7 @@ void AIQuantLabService::start_rd_job(const QString& command, const QString& type
         QString key;
         quint64 handle = 0;
         bool answered = false;
+        bool started = false;
     };
     auto state = std::make_shared<State>();
     state->key = command;
@@ -589,6 +596,7 @@ void AIQuantLabService::start_rd_job(const QString& command, const QString& type
             emit self->error_occurred("deep_agent", o["error"].toString());
             return;
         }
+        state->started = true;
         self->rd_jobs_.remove(state->key);
         state->key = o["task_id"].toString();
         self->rd_jobs_.insert(state->key, state->handle);
@@ -601,7 +609,7 @@ void AIQuantLabService::start_rd_job(const QString& command, const QString& type
         if (!state->answered)
             emit self->error_occurred("deep_agent", r.error.trimmed().isEmpty() ? QStringLiteral("RD-Agent did not start")
                                                                                 : r.error.trimmed().right(500));
-        else
+        else if (state->started)
             self->rd_agent_list_tasks(); // how it ended
     };
     const quint64 handle = python::PythonRunner::instance().start_background(
@@ -614,10 +622,8 @@ void AIQuantLabService::rd_agent_start_ui() {
 }
 
 void AIQuantLabService::rd_agent_start_mcp_server(int port) {
-    if (services_.contains("start_mcp_server")) {
-        emit result_ready("deep_agent", "start_mcp_server", services_["start_mcp_server"].answer);
+    if (running_service("start_mcp_server"))
         return;
-    }
     QJsonObject params{{"port", port}};
     AgentService::attach_terminal_tools(params, /*lasting=*/true);
     const QJsonObject tools = params;
@@ -626,26 +632,40 @@ void AIQuantLabService::rd_agent_start_mcp_server(int port) {
 }
 
 void AIQuantLabService::rd_agent_stop_mcp_server() {
-    if (services_.contains("start_mcp_server"))
-        python::PythonRunner::instance().stop_background(services_["start_mcp_server"].handle);
+    auto it = services_.find("start_mcp_server");
+    if (it == services_.end())
+        return;
+    it->stopping = true;
+    python::PythonRunner::instance().stop_background(it->handle);
 }
 
 void AIQuantLabService::rd_agent_mcp_status() {
-    const bool on = services_.contains("start_mcp_server");
-    QJsonObject o = on ? services_["start_mcp_server"].answer : QJsonObject();
+    const Service s = services_.value("start_mcp_server");
+    const bool on = !s.answer.isEmpty() && !s.stopping;
+    QJsonObject o = on ? s.answer : QJsonObject();
     o["success"] = true;
     o["running"] = on;
     emit result_ready("deep_agent", "mcp_status", o);
 }
 
+// Whether there is one, having answered for it: where it is, or that it is
+// ending. One that is starting answers when it has.
+bool AIQuantLabService::running_service(const QString& command) {
+    const auto it = services_.constFind(command);
+    if (it == services_.constEnd())
+        return false;
+    if (it->stopping)
+        emit error_occurred("deep_agent", "Still stopping: try again in a moment");
+    else if (!it->answer.isEmpty())
+        emit result_ready("deep_agent", command, it->answer);
+    return true;
+}
+
 // A server of ours: one of each, its answer (the address) kept while it runs.
 void AIQuantLabService::start_service(const QString& command, const QString& script, const QStringList& args,
                                       std::function<void()> on_stopped) {
-    if (services_.contains(command)) {
-        if (!services_[command].answer.isEmpty())
-            emit result_ready("deep_agent", command, services_[command].answer);
-        return; // else it is starting, and will answer
-    }
+    if (running_service(command))
+        return;
     services_.insert(command, {});
     QPointer<AIQuantLabService> self = this;
     auto answered = std::make_shared<bool>(false);

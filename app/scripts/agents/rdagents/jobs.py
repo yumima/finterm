@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -67,20 +68,25 @@ class Lock:
         self.path = folder(task_id) / "worker.lock"
         self.fd: int | None = None
 
-    def acquire(self) -> bool:
+    def acquire(self, probe: bool = False) -> bool:
+        """Take it, as a worker does; or (`probe`) see whether it could be. A
+        probe shares it with other probes, and a worker waits one out."""
         self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return True
-        except OSError:
-            os.close(self.fd)
-            self.fd = None
-            return False
+        for _ in range(1 if probe else 20):
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self.fd, (fcntl.LOCK_SH if probe else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+                return True
+            except OSError:
+                if not probe:
+                    time.sleep(0.1)
+        os.close(self.fd)
+        self.fd = None
+        return False
 
     def release(self) -> None:
         if self.fd is not None:
@@ -92,7 +98,7 @@ def is_running(task_id: str) -> bool:
     if not (folder(task_id) / "worker.lock").exists():
         return False
     lock = Lock(task_id)
-    if lock.acquire():
+    if lock.acquire(probe=True):
         lock.release()
         return False
     return True

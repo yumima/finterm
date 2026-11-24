@@ -41,7 +41,7 @@ def create_model(config: dict[str, Any]):
             kwargs["base_url"] = base_url.rstrip("/").removesuffix("/v1")  # the SDK adds it
         return ChatAnthropic(**kwargs)
 
-    if provider in ("google", "gemini"):
+    if provider in ("google", "gemini") and not base_url:
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(google_api_key=api_key, model=model, **cap)
 
@@ -53,6 +53,9 @@ def create_model(config: dict[str, Any]):
         def _get_request_payload(self, *args: Any, **kwargs: Any) -> dict:
             payload = super()._get_request_payload(*args, **kwargs)
             payload["messages"] = [_plain(m) for m in payload.get("messages", [])]
+            # Only these know the new name (LlmService::set_openai_max_tokens).
+            if "max_completion_tokens" in payload and provider not in ("openai", "xai"):
+                payload["max_tokens"] = payload.pop("max_completion_tokens")
             return payload
 
     # Chat completions: the one API every compatible server has.
