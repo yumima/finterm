@@ -2,48 +2,10 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-23)
+## Today's commits (2026-11-24)
 
 Latest first.
 
-- [`d84103b35`](https://github.com/yumima/finterm/commit/d84103b35) release: the old release is deleted only once the site is out; the site deploy tries again
-- [`997a3b6b2`](https://github.com/yumima/finterm/commit/997a3b6b2) **chore(release):** update README download links and updates.json for v4.1.0
-- [`d58530310`](https://github.com/yumima/finterm/commit/d58530310) rd-agent: jobs say they can't run instead of "started"; scripts/mcp no longer hides the MCP library
-- [`e40744486`](https://github.com/yumima/finterm/commit/e40744486) python: RD-Agent, Deep Agents and Alternative Investments start again; cells run apart from scripts
-- [`8e1455d45`](https://github.com/yumima/finterm/commit/8e1455d45) user files: Python runs in the user's folder
-- [`c1f602fe7`](https://github.com/yumima/finterm/commit/c1f602fe7) user files: nothing the user makes is kept inside the program's folder
-- [`41a2ed174`](https://github.com/yumima/finterm/commit/41a2ed174) updater: the Windows helper's flush never fails an update; a previous version in use says so
-- [`0949970f5`](https://github.com/yumima/finterm/commit/0949970f5) updater: the Windows swap, finished — installer's lists kept, the gap covered, leftovers never block
-- [`558363557`](https://github.com/yumima/finterm/commit/558363557) updater: Windows replaces itself by a folder rename, not an uninstall and reinstall
-- [`c2ac36ce3`](https://github.com/yumima/finterm/commit/c2ac36ce3) updater: an interrupted Windows update is undone at the next logon; review fixes
-- [`52726e0e1`](https://github.com/yumima/finterm/commit/52726e0e1) updater: hardened for release — rollback copy kept, one helper at a time, no retry loop, the Windows rules tested
-- [`66a994d3f`](https://github.com/yumima/finterm/commit/66a994d3f) **docs:** 4.1.0 install and update facts — Windows per user, the self-test path, opt-in in-place updates
-- [`d2d0d4147`](https://github.com/yumima/finterm/commit/d2d0d4147) release 4.1.0: Windows installs per user; the silent Windows update can't hang
-- [`5f240470b`](https://github.com/yumima/finterm/commit/5f240470b) toolbar: no "FIN TERM | PROFESSIONAL RESEARCH DESK" — the row is for what changes
-- [`ec9aba233`](https://github.com/yumima/finterm/commit/ec9aba233) window title: "finterm@<host> ver: <version>" — no screen names, no duplicated brand
-- [`64ab10847`](https://github.com/yumima/finterm/commit/64ab10847) toolbar: the market's clock beside LIVE — New York time, the session, the countdown to the bell; the local clock labelled
-- [`c395d6a42`](https://github.com/yumima/finterm/commit/c395d6a42) updater: in-place updates — download in the background, apply on quit or Restart Now, roll back a version that won't start
-- [`c7d457325`](https://github.com/yumima/finterm/commit/c7d457325) agents: the local engine runs without an OpenAI key; disabled agents aren't offered
-- [`03912c4e3`](https://github.com/yumima/finterm/commit/03912c4e3) portfolio: a detail view after FFN shows the detail view
-- [`b8fe92ab5`](https://github.com/yumima/finterm/commit/b8fe92ab5) banner: the market tape is on every screen, under the menu; the dashboard's header joins its tab row
-- [`29a107165`](https://github.com/yumima/finterm/commit/29a107165) theme: the window title bar is the terminal's colour, not Qt's light default
-- [`7e646095c`](https://github.com/yumima/finterm/commit/7e646095c) markets: a correlation pair is marked in both triangles
-- [`7bb2b4daa`](https://github.com/yumima/finterm/commit/7bb2b4daa) updater: only a release build checks — every other build is "<version>-dev"
-- [`c0912fdbe`](https://github.com/yumima/finterm/commit/c0912fdbe) futures: each group's default is the desk's own arrangement — all ten re-taken
-- [`fc62eb065`](https://github.com/yumima/finterm/commit/fc62eb065) markets: the correlation cell the chart draws is marked like a charted row
-- [`5908b91cd`](https://github.com/yumima/finterm/commit/5908b91cd) updater: a found version survives a restart; review fixes
-- [`70d29f8eb`](https://github.com/yumima/finterm/commit/70d29f8eb) updater: opt-in daily check; a found version is a status-bar badge, not a dialog
-- [`5e134e35c`](https://github.com/yumima/finterm/commit/5e134e35c) markets: MY VIEW's default is the desk's new arrangement; condition widgets' note says what stands in for CDS / DX / UC
-- [`5aea6bc76`](https://github.com/yumima/finterm/commit/5aea6bc76) workspace/dock: a session resume never picks the screen; a tab opens in the main window
-- [`fda86588d`](https://github.com/yumima/finterm/commit/fda86588d) tabs: a view is the splitter tree it was left as; redirects keep the view
-- [`2f79f05f9`](https://github.com/yumima/finterm/commit/2f79f05f9) tabs: a tab is a view — ER beside Portfolio stays Portfolio's; MARKETS opens on MY VIEW
-- [`61ad68b96`](https://github.com/yumima/finterm/commit/61ad68b96) markets: MY VIEW first, WORLD with the market pages; pages keep their rows; the charted row is marked
-- [`b0470e92c`](https://github.com/yumima/finterm/commit/b0470e92c) dock: a split is forgotten once one of its panes goes full screen
-- [`1c4b935f9`](https://github.com/yumima/finterm/commit/1c4b935f9) **chore(release):** update README download links and updates.json for v4.0.10
-- [`265976316`](https://github.com/yumima/finterm/commit/265976316) **build:** Windows' near/far macros, an unused lambda capture (clang -Werror)
-- [`9de1c9c23`](https://github.com/yumima/finterm/commit/9de1c9c23) release: 4.0.10
-- [`1fec7304f`](https://github.com/yumima/finterm/commit/1fec7304f) news: WEEKLY BRIEF joins What's On — topics, detail, platforms, post now; the SOCIAL tab goes
-- [`92f2afc62`](https://github.com/yumima/finterm/commit/92f2afc62) markets: one header row of widget pages — OVERVIEW screens, FUTURES groups, WORLD; futures as widgets
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

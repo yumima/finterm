@@ -11,7 +11,7 @@ permalink: /download/
   <a class="button" href="{{ r.macos }}">macOS · disk image</a>
 </p>
 
-Version {{ r.version }} · [release notes]({{ r.page }}) · [all releases]({{ site.repo_url }}/releases)
+Version {{ r.version }}{% if r.released %} · released <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y, %H:%M" }} UTC</time>{% endif %} · [release notes]({{ r.page }}) · [all releases]({{ site.repo_url }}/releases)
 {% else %}
 <p><a class="button" href="{{ site.repo_url }}/releases/latest">Get the latest release</a></p>
 {% endif %}

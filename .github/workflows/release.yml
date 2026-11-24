@@ -1664,15 +1664,24 @@ jobs:
       - name: Write site/_data/release.json
         env:
           TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # A URL that fell back to the release page is not a download.
           for u in "${WIN_URL}" "${LIN_URL}" "${MAC_URL}"; do
             case "$u" in */releases/download/*) ;; *) echo "::warning::no direct asset URL; site keeps its old links"; exit 0 ;; esac
           done
-          jq -n --arg version "${TAG#v}" --arg page "${RELEASE_URL}" \
+          # When the files went up, not when the release was first published: a
+          # release replaced under the same version keeps its publication time,
+          # and this is what tells the new files from the old.
+          released=$(gh release view "${TAG}" --json assets --jq '[.assets[].updatedAt] | max // empty')
+          if [ -z "${released}" ]; then
+            echo "::error::release ${TAG} lists no files"
+            exit 1
+          fi
+          jq -n --arg version "${TAG#v}" --arg released "${released}" --arg page "${RELEASE_URL}" \
                 --arg linux "${LIN_URL}" --arg windows "${WIN_URL}" --arg macos "${MAC_URL}" \
-                '{version:$version, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
+                '{version:$version, released:$released, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
                 > site/_data/release.json
           cat site/_data/release.json
 
