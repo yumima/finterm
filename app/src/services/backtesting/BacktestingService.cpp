@@ -41,7 +41,7 @@ void BacktestingService::execute(const QString& provider, const QString& command
     QPointer<BacktestingService> self = this;
     auto ctx = QString("%1/%2").arg(provider, command);
 
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run_job(
         script, {py_command, json_str}, [self, provider, command, ctx](python::PythonResult result) {
             if (!self)
                 return;

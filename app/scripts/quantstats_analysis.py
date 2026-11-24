@@ -1,7 +1,6 @@
 """
 QuantStats Analysis — Comprehensive quantitative statistics for a portfolio.
-Input: JSON as the first argv argument (PythonRunner passes it there; an
-"@/path" argument names a spill file holding the JSON), stdin as fallback:
+Input: JSON as the first argv argument, stdin as fallback:
   {"symbols": ["AAPL","MSFT"],
    "weights_by_symbol": {"AAPL": 0.5, "MSFT": 0.5},   # preferred
    "weights": [0.5, 0.5],                             # legacy positional

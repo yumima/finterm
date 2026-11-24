@@ -1,6 +1,6 @@
 """
 QuantStats Monte Carlo Simulation
-Input (JSON as argv[1] or "@/path" spill file; stdin fallback): {"symbols": ["AAPL","MSFT"], "weights": [0.6, 0.4], "num_simulations": 1000}
+Input (JSON as argv[1]; stdin fallback): {"symbols": ["AAPL","MSFT"], "weights": [0.6, 0.4], "num_simulations": 1000}
 Output (stdout JSON): {
     "median_return": float (%),
     "percentile_5": float (%),

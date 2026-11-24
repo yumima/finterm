@@ -44,6 +44,36 @@ for field in ("sma_20", "sma_50", "ema_12", "ema_26", "rsi_14", "macd", "bolling
     check(f"technical feature {field} filled", getattr(tech, field, None) is not None, getattr(tech, field, None))
 check("SMA-20 is the mean of the last 20", abs(tech.sma_20 - sum(prices[-20:]) / 20) < 1e-9, tech.sma_20)
 
+# API keys: never in what is saved or returned, and taken out of what was.
+import json  # noqa: E402
+import sqlite3  # noqa: E402
+import tempfile  # noqa: E402
+
+from alpha_arena.core.database import AlphaArenaDatabase  # noqa: E402
+from alpha_arena.types.models import CompetitionConfig, CompetitionModel, CompetitionStatus  # noqa: E402
+
+KEY = "sk-must-not-be-saved"
+cfg = CompetitionConfig(competition_id="c1", competition_name="t", symbols=["BTC/USD"], models=[
+    CompetitionModel(name=n, provider="openai", model_id="m", api_key=KEY) for n in ("a", "b")])
+check("the model itself holds its key", cfg.models[0].api_key == KEY)
+check("a dump does not", KEY not in json.dumps(cfg.model_dump(), default=str))
+check("nor its repr", KEY not in repr(cfg))
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, "a.db")
+    AlphaArenaDatabase(path).save_competition(cfg, CompetitionStatus.CREATED)
+    con = sqlite3.connect(path)
+    old = json.loads(con.execute("SELECT config FROM competitions").fetchone()[0])
+    for m in old["models"]:
+        m["api_key"] = KEY  # as 4.1.0 and before saved it
+    con.execute("UPDATE competitions SET config = ?", (json.dumps(old),))
+    con.commit()
+    con.close()
+    db = AlphaArenaDatabase(path)
+    with open(path, "rb") as f:
+        check("a key saved earlier is gone from the file", KEY.encode() not in f.read())
+    check("...and the competition is still there", len(db.get_competition("c1")["config"]["models"]) == 2)
+
+
 if FAILURES:
     print(f"\n{len(FAILURES)} failure(s)")
     sys.exit(1)

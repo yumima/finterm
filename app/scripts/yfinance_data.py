@@ -4908,35 +4908,16 @@ def main(args=None):
 
     elif command == "batch_all":
         # Unified hub-refresh endpoint: payload is a single JSON blob on argv[1]
-        # (or @tempfile via PythonRunner's arg-spill) describing quotes + sparklines
+        # describing quotes + sparklines
         # + histories to fetch. One process, one yfinance warm-up, three family
         # results. See MarketDataService::refresh().
         if len(args) < 2:
             result = {"error": "Usage: python yfinance_data.py batch_all <json_payload>"}
         else:
-            raw = args[1]
-            # Handle PythonRunner arg-spill: args > ~8KB land as "@/tmp/…" and
-            # must be read back. Payloads for large symbol lists easily exceed
-            # that threshold on Windows (32KB cmdline limit).
-            if raw.startswith("@"):
-                path = raw[1:]
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        raw = f.read()
-                    try:
-                        import os as _os
-                        _os.remove(path)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    result = {"error": f"batch_all: failed to read spill file: {e}"}
-                    raw = None
-            if raw is not None:
-                try:
-                    payload = json.loads(raw)
-                    result = get_batch_all(payload)
-                except json.JSONDecodeError as e:
-                    result = {"error": f"batch_all: invalid JSON payload: {e}"}
+            try:
+                result = get_batch_all(json.loads(args[1]))
+            except json.JSONDecodeError as e:
+                result = {"error": f"batch_all: invalid JSON payload: {e}"}
 
     elif command == "historical_price":
         # Get closing price for a specific date

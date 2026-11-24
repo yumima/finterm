@@ -38,8 +38,15 @@ class PythonRunner : public QObject {
     // rather than loading forever. Override per call via run(..., timeout_ms).
     static constexpr int kProcessTimeoutMs = 30'000;
 
+    /// The same for run_job(): an hour, then it is taken to hang.
+    static constexpr int kJobTimeoutMs = 3'600'000;
+
     static PythonRunner& instance();
 
+    /// `args` become the script's sys.argv. They reach it over stdin
+    /// (launch/finterm_run.py), never on the command line, so they may be secret and
+    /// of any length.
+    ///
     /// Run a script asynchronously. Callback invoked on Qt event loop.
     /// Requests are queued if max concurrency is reached.
     /// Optional `on_line` delivers each complete stdout/stderr line as it arrives.
@@ -57,6 +64,12 @@ class PythonRunner : public QObject {
     /// anything slow: a long job here would block the next click instead.
     void run_interactive(const QString& script, const QStringList& args, Callback cb,
                          int timeout_ms = kProcessTimeoutMs);
+
+    /// Same as run(), for what takes minutes: training a model, an agent's
+    /// research. Jobs have slots of their own: in the ordinary ones they would
+    /// be killed at the default timeout, or hold up every screen's data.
+    void run_job(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line = {},
+                 int timeout_ms = kJobTimeoutMs);
 
     /// Run arbitrary Python code (for notebook/colab cells).
     /// Creates a temp file, executes it, returns stdout/stderr.
@@ -114,6 +127,9 @@ class PythonRunner : public QObject {
     // the ordinary queue and may use this many slots beyond max_concurrent_.
     static constexpr int kInteractiveLanes = 1;
     int interactive_active_ = 0;
+    // run_job() requests: these many at a time, beside all of the above.
+    static constexpr int kJobLanes = 2;
+    int job_active_ = 0;
 
     struct QueuedRequest {
         QString script;
@@ -124,6 +140,7 @@ class PythonRunner : public QObject {
     };
     QQueue<QueuedRequest> queue_;
     QQueue<QueuedRequest> interactive_queue_;
+    QQueue<QueuedRequest> job_queue_;
 
     // Incremental output buffering per process
     struct ProcessBuffers {

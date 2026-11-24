@@ -1,7 +1,6 @@
 """
 FFN (Financial Functions) Analysis — Deep analytics per symbol.
-Input:  JSON as the first argv argument (PythonRunner's convention; "@/path"
-        names a spill file holding the JSON), stdin as fallback:
+Input:  JSON as the first argv argument, stdin as fallback:
         {"symbols": ["AAPL","MSFT"], "weights": {"AAPL": 0.6, "MSFT": 0.4},
          "risk_free": 0.042}   # annual decimal; null = unknown
 Output: JSON to stdout with per-symbol stats, rebased series, drawdown series,

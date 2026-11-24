@@ -344,24 +344,6 @@ def cluster_semantic(headlines_json):
     }
 
 
-def resolve_arg(arg):
-    """If arg starts with '@', read content from that file path and delete it."""
-    if arg and arg.startswith("@"):
-        path = arg[1:]
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = f.read()
-            try:
-                import os
-                os.remove(path)
-            except Exception:
-                pass
-            return data
-        except Exception as e:
-            return arg  # fallback: return as-is
-    return arg
-
-
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -371,7 +353,7 @@ def main(args=None):
         return
 
     command = args[0]
-    data = resolve_arg(args[1])
+    data = args[1]
 
     if command == "extract_entities":
         result = extract_entities(data)

@@ -118,24 +118,6 @@ def extract_and_geocode(articles_json):
     }
 
 
-def resolve_arg(arg):
-    """If arg starts with '@', read content from that file path and delete it."""
-    if arg and arg.startswith("@"):
-        path = arg[1:]
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = f.read()
-            try:
-                import os
-                os.remove(path)
-            except Exception:
-                pass
-            return data
-        except Exception:
-            return arg  # fallback: return as-is
-    return arg
-
-
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -147,7 +129,7 @@ def main(args=None):
     command = args[0]
 
     if command == "extract_and_geocode":
-        result = extract_and_geocode(resolve_arg(args[1]))
+        result = extract_and_geocode(args[1])
     else:
         result = {"success": False, "error": f"Unknown command: {command}"}
 

@@ -40,17 +40,6 @@ from alpha_arena.core.grid_agent import (
     GridConfig,
     GridState,
 )
-from alpha_arena.core.hitl import (
-    HITLManager,
-    ApprovalRequest,
-    ApprovalStatus,
-    RiskLevel,
-    get_hitl_manager,
-    check_decision_approval,
-    approve_decision,
-    reject_decision,
-    get_pending_approvals,
-)
 from alpha_arena.core.research_agent import (
     ResearchAgent,
     ResearchReport,
@@ -114,16 +103,6 @@ __all__ = [
     "GridStrategyAgent",
     "GridConfig",
     "GridState",
-    # HITL
-    "HITLManager",
-    "ApprovalRequest",
-    "ApprovalStatus",
-    "RiskLevel",
-    "get_hitl_manager",
-    "check_decision_approval",
-    "approve_decision",
-    "reject_decision",
-    "get_pending_approvals",
     # Research
     "ResearchAgent",
     "ResearchReport",

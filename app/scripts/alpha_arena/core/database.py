@@ -151,7 +151,23 @@ class AlphaArenaDatabase:
                 ON snapshots(competition_id, model_name, cycle_number)
             """)
 
+            self._drop_saved_keys(cursor)
             logger.info(f"Database initialized at {self.db_path}")
+
+    @staticmethod
+    def _drop_saved_keys(cursor):
+        """Configs were saved with their models' API keys until 4.1.0: take
+        them out, and the freed pages with them."""
+        cursor.execute("SELECT competition_id, config FROM competitions WHERE config LIKE '%\"api_key\": \"%'")
+        rows = cursor.fetchall()
+        if not rows:
+            return
+        cursor.execute("PRAGMA secure_delete = ON")
+        for competition_id, config in [(r[0], json.loads(r[1])) for r in rows]:
+            for model in config.get("models", []):
+                model.pop("api_key", None)
+            cursor.execute("UPDATE competitions SET config = ? WHERE competition_id = ?",
+                           (json.dumps(config), competition_id))
 
     # ==================== Competition Methods ====================
 

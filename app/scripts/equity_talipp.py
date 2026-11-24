@@ -18,9 +18,7 @@ Arguments:
                   id EquityTalippTab stores per indicator (sma, bb, williams,
                   supertrend, zigzag, ...).
     ohlcv_json    JSON array of bars {timestamp, open, high, low, close,
-                  volume} — or "@<path>" naming a file holding that JSON
-                  (argv caps one argument at 128 KiB on Linux; a long
-                  history must ride in a file).
+                  volume}
     params_json   Optional JSON object of the tab's parameter spinboxes.
 
 Output (stdout):
@@ -115,13 +113,6 @@ def main() -> None:
 
     indicator = sys.argv[1].lower()
     ohlcv_raw = sys.argv[2]
-    if ohlcv_raw.startswith("@"):
-        try:
-            with open(ohlcv_raw[1:], "r", encoding="utf-8") as fh:
-                ohlcv_raw = fh.read()
-        except OSError as e:
-            die(f"cannot read OHLCV payload file: {e}")
-            return
     try:
         rows = json.loads(ohlcv_raw)
         raw_params = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}

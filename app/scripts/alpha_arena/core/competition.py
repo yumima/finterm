@@ -178,7 +178,8 @@ class AlphaArenaCompetition:
                     logger.info(f"Using model config: {provider}/{model_id}")
 
                 # Get API key - try model-specific first, then provider-level
-                api_key = model.api_key or api_keys.get(provider) or api_keys.get(provider.lower())
+                api_key = (model.api_key or api_keys.get(f"model:{model.name}")
+                           or api_keys.get(provider) or api_keys.get(provider.lower()))
 
                 if not api_key:
                     logger.warning(f"No API key found for provider '{provider}' - agent will use mock mode")

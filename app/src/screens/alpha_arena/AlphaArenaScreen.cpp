@@ -484,7 +484,7 @@ QWidget* AlphaArenaScreen::create_right_panel() {
     tbl->setContentsMargins(4, 0, 4, 0);
     tbl->setSpacing(0);
 
-    const QStringList tabs = {"DECISIONS", "HITL", "SENTIMENT", "METRICS", "GRID", "RESEARCH", "BROKER"};
+    const QStringList tabs = {"DECISIONS", "SENTIMENT", "METRICS", "GRID", "RESEARCH", "BROKER"};
     for (int i = 0; i < tabs.size(); ++i) {
         auto* btn = new QPushButton(tabs[i]);
         btn->setObjectName("aaRightTabBtn");
@@ -504,21 +504,14 @@ QWidget* AlphaArenaScreen::create_right_panel() {
     decisions_list_->setObjectName("aaDecisionList");
     right_stack_->addWidget(decisions_list_);
 
-    // 1: HITL
-    hitl_content_ = new QTextEdit;
-    hitl_content_->setReadOnly(true);
-    hitl_content_->setPlaceholderText("Human-in-the-loop approvals will appear here.\n"
-                                      "High-risk trades require manual approval before execution.");
-    right_stack_->addWidget(hitl_content_);
-
-    // 2: Sentiment
+    // 1: Sentiment
     sentiment_content_ = new QTextEdit;
     sentiment_content_->setReadOnly(true);
     sentiment_content_->setPlaceholderText("Market sentiment analysis will appear here.\n"
                                            "Mood: RISK_ON / RISK_OFF / MIXED");
     right_stack_->addWidget(sentiment_content_);
 
-    // 3: Metrics
+    // 2: Metrics
     metrics_table_ = new QTableWidget;
     metrics_table_->setColumnCount(2);
     metrics_table_->setHorizontalHeaderLabels({"METRIC", "VALUE"});
@@ -527,21 +520,21 @@ QWidget* AlphaArenaScreen::create_right_panel() {
     metrics_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     right_stack_->addWidget(metrics_table_);
 
-    // 4: Grid
+    // 3: Grid
     grid_content_ = new QTextEdit;
     grid_content_->setReadOnly(true);
     grid_content_->setPlaceholderText("Grid trading strategy configuration.\n"
                                       "Place buy/sell orders at regular price intervals.");
     right_stack_->addWidget(grid_content_);
 
-    // 5: Research
+    // 4: Research
     research_content_ = new QTextEdit;
     research_content_->setReadOnly(true);
     research_content_->setPlaceholderText("SEC filings and company research.\n"
                                           "Search by ticker to load 10-K, 10-Q, 8-K filings.");
     right_stack_->addWidget(research_content_);
 
-    // 6: Broker
+    // 5: Broker
     broker_content_ = new QTextEdit;
     broker_content_->setReadOnly(true);
     broker_content_->setPlaceholderText("Broker selection and configuration.\n"
@@ -621,7 +614,6 @@ void AlphaArenaScreen::on_create_competition() {
     set_loading(true);
 
     QJsonArray models;
-    QJsonObject api_keys; // collected per-provider for top-level payload field
     for (auto* item : selected) {
         int row = model_list_->row(item);
         if (row >= 0 && row < model_entries_.size()) {
@@ -635,9 +627,6 @@ void AlphaArenaScreen::on_create_competition() {
             if (!entry.profile_id.isEmpty())
                 m["profile_id"] = entry.profile_id;
             models.append(m);
-            // Populate top-level api_keys map expected by Python
-            if (!entry.provider.isEmpty() && !entry.api_key.isEmpty())
-                api_keys[entry.provider] = entry.api_key;
         }
     }
 
@@ -653,7 +642,7 @@ void AlphaArenaScreen::on_create_competition() {
     QJsonObject payload;
     payload["action"] = "create_competition";
     payload["params"] = params;
-    payload["api_keys"] = api_keys;
+    payload["api_keys"] = api_keys();
 
     QPointer<AlphaArenaScreen> self = this;
     services::alpha_arena::AlphaArenaService::instance().run_action(
@@ -799,10 +788,26 @@ void AlphaArenaScreen::on_past_competition_clicked(QListWidgetItem* item) {
 
 // ── Python integration ──────────────────────────────────────────────────────
 
+// Each model's own key under "model:<name>", and one per provider for a model
+// since renamed.
+QJsonObject AlphaArenaScreen::api_keys() const {
+    QJsonObject keys;
+    for (const auto& e : model_entries_) {
+        if (e.api_key.isEmpty())
+            continue;
+        keys.insert(QStringLiteral("model:") + e.display_name, e.api_key);
+        if (!e.provider.isEmpty() && !keys.contains(e.provider))
+            keys.insert(e.provider, e.api_key);
+    }
+    return keys;
+}
+
 void AlphaArenaScreen::run_python_action(const QString& action, const QJsonObject& params) {
     QJsonObject payload;
     payload["action"] = action;
     payload["params"] = params;
+    if (action == QLatin1String("run_cycle"))
+        payload["api_keys"] = api_keys(); // a saved competition holds none
 
     QPointer<AlphaArenaScreen> self = this;
 
@@ -1062,13 +1067,14 @@ void AlphaArenaScreen::populate_model_list() {
 
 QVariantMap AlphaArenaScreen::save_state() const {
     return {
-        {"right_tab", right_stack_ ? right_stack_->currentIndex() : 0},
+        {"right_view", right_stack_ ? right_stack_->currentIndex() : 0},
     };
 }
 
 void AlphaArenaScreen::restore_state(const QVariantMap& state) {
-    const int tab = state.value("right_tab", 0).toInt();
-    if (tab > 0)
+    // "right_tab" is of the time the HITL tab was second.
+    const int tab = state.value("right_view", 0).toInt();
+    if (tab > 0 && tab < right_stack_->count())
         on_right_tab_changed(tab);
 }
 

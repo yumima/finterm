@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1String>
@@ -22,8 +23,8 @@
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTemporaryFile>
 #include <QTimer>
-#include <QUuid>
 
 #include <memory>
 
@@ -280,6 +281,7 @@ void PythonRunner::find_python_async() {
         proc->deleteLater();
         LOG_WARN("Python", "No Python interpreter found (process error)");
         python_init_done_ = true;
+        start_next(); // answers what was queued meanwhile: there is no Python
     });
 
     proc->start(sys_python, {"--version"});
@@ -358,6 +360,20 @@ void PythonRunner::run_interactive(const QString& script, const QStringList& arg
     start_next();
 }
 
+void PythonRunner::run_job(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line,
+                           int timeout_ms) {
+    if (python_init_done_ && python_path_.isEmpty()) {
+        cb({false, {}, "Python not available — run first-time setup from the app", -1});
+        return;
+    }
+    if (!QFileInfo::exists(scripts_dir_ + "/" + script)) {
+        cb({false, {}, "Script not found: " + scripts_dir_ + "/" + script, -1});
+        return;
+    }
+    job_queue_.enqueue({script, args, std::move(cb), std::move(on_line), timeout_ms});
+    start_next();
+}
+
 /// Run arbitrary Python code (for notebook/colab cells).
 /// Creates a temp file, executes it, returns output.
 void PythonRunner::run_code(const QString& code, Callback cb) {
@@ -366,21 +382,31 @@ void PythonRunner::run_code(const QString& code, Callback cb) {
         return;
     }
 
-    // Write code to a temp file
-    QString temp_dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    QString temp_path = temp_dir + "/finterm_cell_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".py";
-
-    QFile file(temp_path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        cb({false, {}, "Failed to create temp script file", -1});
-        return;
+    // The user's code, so a file only they can read, under a name nothing else
+    // takes (the old one, the time in ms, was shared by two cells run together).
+    QString temp_path;
+    {
+        QTemporaryFile file(QDir::tempPath() + "/finterm_cell_XXXXXX.py");
+        file.setAutoRemove(false); // removed when the cell ends
+        if (!file.open() || file.write(code.toUtf8()) < 0 || !file.flush()) {
+            cb({false, {}, "Failed to create temp script file", -1});
+            return;
+        }
+        temp_path = file.fileName();
     }
-    file.write(code.toUtf8());
-    file.close();
 
     // Queue as a special request — use the temp file path directly
     queue_.enqueue({"__code__:" + temp_path, {}, std::move(cb), {}});
     start_next();
+}
+
+// JSON would carry half a surrogate pair (a headline cut inside an emoji) as it
+// is, and Python then fails to encode it: it becomes a replacement character.
+static QStringList well_formed(const QStringList& args) {
+    QStringList out;
+    for (const QString& a : args)
+        out << QString::fromUtf8(a.toUtf8());
+    return out;
 }
 
 void PythonRunner::start_next() {
@@ -390,16 +416,19 @@ void PythonRunner::start_next() {
 
     for (;;) {
         // Interactive requests first: their own lane, else any free ordinary
-        // slot. `lane` records which pool the process holds so it releases
-        // the same one.
+        // slot. Jobs have a lane of their own and only that.
         QueuedRequest req;
-        bool lane = false;
+        int* slots_held = &active_count_; // the pool the process holds a slot of, and gives it back to
         if (!interactive_queue_.isEmpty() &&
             (interactive_active_ < kInteractiveLanes || active_count_ < max_concurrent_)) {
             req = interactive_queue_.dequeue();
-            lane = interactive_active_ < kInteractiveLanes;
+            if (interactive_active_ < kInteractiveLanes)
+                slots_held = &interactive_active_;
         } else if (!queue_.isEmpty() && active_count_ < max_concurrent_) {
             req = queue_.dequeue();
+        } else if (!job_queue_.isEmpty() && job_active_ < kJobLanes) {
+            req = job_queue_.dequeue();
+            slots_held = &job_active_;
         } else {
             break;
         }
@@ -410,10 +439,7 @@ void PythonRunner::start_next() {
             continue;
         }
 
-        if (lane)
-            ++interactive_active_;
-        else
-            ++active_count_;
+        ++*slots_held;
 
         // Determine if this is inline code or a script file
         bool is_code = req.script.startsWith("__code__:");
@@ -442,50 +468,23 @@ void PythonRunner::start_next() {
         // A script can run for an hour (the 13F sync): it ends with the app,
         // however the app ends, rather than writing on as an orphan.
         lifecycle::bind_to_app(proc);
+        // The arguments go over stdin, never on the command line, which every
+        // account on the machine can read: they carry API keys, a wallet's
+        // private key, the user's positions. finterm_run.py takes them from
+        // there and runs the script as if they had been its argv.
         QStringList full_args;
-
-        // If the script is inside a sub-package (contains '/'), use -m <module>
-        // so Python can resolve relative imports (from .core import ...).
-        if (!is_code && req.script.contains('/')) {
-            QString module = req.script;
-            module.remove(".py");
-            module.replace('/', '.');
-            full_args << "-m" << module;
-        } else {
+        QByteArray input;
+        if (is_code) {
             full_args << script_path;
+        } else {
+            full_args << scripts_dir_ + "/launch/finterm_run.py" << req.script;
+            input = QJsonDocument(QJsonArray::fromStringList(well_formed(req.args))).toJson(QJsonDocument::Compact) + '\n';
         }
-        if (!is_code) {
-            // Spill large args to temp files to avoid Windows 32KB command-line limit.
-            // Python scripts support "@/path/to/file" — they read and delete the file.
-            static constexpr int kArgSpillThreshold = 8192; // 8 KB
-            QStringList spilled_files;
-            QStringList safe_args;
-            for (const QString& arg : req.args) {
-                if (arg.size() > kArgSpillThreshold) {
-                    QString temp_dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-                    QString temp_path =
-                        temp_dir + "/finterm_arg_" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
-                    QFile tf(temp_path);
-                    if (tf.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                        tf.write(arg.toUtf8());
-                        tf.close();
-                        safe_args << ("@" + temp_path);
-                        spilled_files << temp_path;
-                    } else {
-                        safe_args << arg; // fallback: pass as-is (may fail, but don't crash)
-                    }
-                } else {
-                    safe_args << arg;
-                }
-            }
-            full_args.append(safe_args);
-            // Store spilled paths so we can clean them up if the process errors out
-            // (Python scripts clean them up on success via resolve_arg)
-            if (!spilled_files.isEmpty()) {
-                // Attach to process via dynamic property for cleanup in error handler
-                proc->setProperty("spilled_files", QVariant::fromValue(spilled_files));
-            }
-        }
+        connect(proc, &QProcess::started, proc, [proc, input]() {
+            if (!input.isEmpty())
+                proc->write(input);
+            proc->closeWriteChannel(); // nothing more will come: a script that reads on gets EOF
+        });
 
         // Start from the shared base env (encoding pins, FINTERM_DATA_DIR,
         // FINAGENT_DATA_DIR, base PYTHONPATH = scripts_dir_).
@@ -553,21 +552,20 @@ void PythonRunner::start_next() {
             drain_lines(true);
         });
 
-        // Share cb and a done-flag across both signal handlers so only the FIRST
-        // signal to fire claims the callback. When kill() is called, Qt emits
-        // errorOccurred(Crashed) AND finished in sequence. The old code moved cb
-        // into the finished lambda, leaving errorOccurred with a moved-from empty
-        // std::function; calling it threw std::bad_function_call and crashed.
+        // finished() answers, with whatever was printed; errorOccurred only for a
+        // process that never started (a killed or crashed one gets both signals,
+        // errorOccurred first). `done`: the callback is called once.
         auto shared_cb = std::make_shared<Callback>(std::move(req.cb));
         auto done = std::make_shared<bool>(false);
         auto script_name = std::move(req.script);
 
         connect(
             proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [this, proc, shared_cb, done, script_name, is_code, temp_file, lane](int exit_code, QProcess::ExitStatus) {
+            [this, proc, shared_cb, done, script_name, is_code, temp_file, slots_held](int exit_code, QProcess::ExitStatus status) {
                 if (*done)
-                    return; // errorOccurred already handled this — skip
+                    return; // it never started: errorOccurred answered
                 *done = true;
+                const int timed_out_s = proc->property("timed_out_s").toInt();
 
                 // Collect any remaining buffered data
                 auto& bufs = proc_buffers_[proc];
@@ -595,15 +593,23 @@ void PythonRunner::start_next() {
                 result.exit_code = exit_code;
 
                 if (is_code) {
-                    result.success = (exit_code == 0);
+                    result.success = (exit_code == 0 && status == QProcess::NormalExit);
                     result.output = std::move(stdout_str);
                     result.error = std::move(stderr_str);
                 } else {
                     QString json_out = extract_json(stdout_str);
-                    result.success = (exit_code == 0 && !json_out.isEmpty());
+                    result.success = (exit_code == 0 && status == QProcess::NormalExit && !json_out.isEmpty());
                     result.output = json_out.isEmpty() ? std::move(stdout_str) : std::move(json_out);
                     result.error = std::move(stderr_str);
                 }
+
+                // What ended it goes first; what it had printed is still there.
+                const QString ended_by = timed_out_s > 0 ? QString("No answer after %1 s").arg(timed_out_s)
+                                         : status != QProcess::NormalExit
+                                             ? QStringLiteral("Process error: %1").arg(proc->errorString())
+                                             : QString();
+                if (!ended_by.isEmpty())
+                    result.error = result.error.isEmpty() ? ended_by : ended_by + '\n' + result.error;
 
                 if (!result.success && !is_code) {
                     LOG_ERROR("Python", QString("Script %1 failed in %2ms (exit=%3): %4")
@@ -616,47 +622,43 @@ void PythonRunner::start_next() {
                 }
 
                 (*shared_cb)(std::move(result));
-                if (lane)
-                    --interactive_active_;
-                else
-                    --active_count_;
+                --*slots_held;
                 start_next();
             });
 
         connect(proc, &QProcess::errorOccurred, this,
-                [this, proc, shared_cb, done, is_code, temp_file, lane](QProcess::ProcessError) {
+                [this, proc, shared_cb, done, is_code, temp_file, slots_held](QProcess::ProcessError error) {
                     if (*done)
                         return; // finished() already handled this — skip
+                    if (error != QProcess::FailedToStart)
+                        return; // finished() follows, and has what it printed
                     *done = true;
 
-                    QString error_msg = proc->errorString();
+                    const QString error_msg = proc->errorString();
                     if (proc_buffers_.contains(proc) && proc_buffers_[proc].timeout_timer) {
                         proc_buffers_[proc].timeout_timer->stop();
                         proc_buffers_[proc].timeout_timer->deleteLater();
                     }
                     proc_buffers_.remove(proc);
-                    auto spilled = proc->property("spilled_files").toStringList();
-                    for (const QString& f : spilled)
-                        QFile::remove(f);
                     proc->deleteLater();
                     if (is_code && !temp_file.isEmpty())
                         QFile::remove(temp_file);
 
                     (*shared_cb)({false, {}, "Process error: " + error_msg, -1});
-                    if (lane)
-                        --interactive_active_;
-                    else
-                        --active_count_;
+                    --*slots_held;
                     start_next();
                 });
 
-        LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued%6): %4 %5")
-                               .arg(active_count_)
-                               .arg(max_concurrent_)
-                               .arg(queue_.size())
-                               .arg(python_exe)
-                               .arg(script_path)
-                               .arg(lane ? QStringLiteral(", interactive lane") : QString()));
+        const bool in_job = slots_held == &job_active_;
+        const bool in_lane = slots_held == &interactive_active_;
+        LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued%4): %5 %6")
+                               .arg(*slots_held)
+                               .arg(in_job ? kJobLanes : in_lane ? kInteractiveLanes : max_concurrent_)
+                               .arg((in_job ? job_queue_ : in_lane ? interactive_queue_ : queue_).size())
+                               .arg(in_job    ? QStringLiteral(", job lane")
+                                    : in_lane ? QStringLiteral(", interactive lane")
+                                              : QString(),
+                                    python_exe, script_path));
         proc->start(python_exe, full_args);
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency
@@ -678,6 +680,7 @@ void PythonRunner::start_next() {
                 LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
                                        .arg(script_name)
                                        .arg(static_cast<double>(timeout_ms) / 1000.0, 0, 'f', 0));
+                proc_guard->setProperty("timed_out_s", timeout_ms / 1000);
                 proc_guard->kill(); // triggers finished(), which calls cb + start_next()
             });
             proc_buffers_[proc].timeout_timer = tmr;

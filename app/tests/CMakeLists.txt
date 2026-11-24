@@ -1123,6 +1123,16 @@ add_test(NAME palette_contrast COMMAND test_palette_contrast)
 # path. The rest pin the rule that a field absent from the filing stays absent
 # from the output instead of defaulting to a confident zero.
 if(Python3_Interpreter_FOUND)
+    # Scripts get their arguments over stdin, never on the command line.
+    add_test(
+        NAME finterm_run
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_finterm_run.py
+    )
+    # Deep Agents: no disk, no shell; figures traced to the tools; threads.
+    add_test(
+        NAME deep_agent
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_deep_agent.py
+    )
     # The contact identity declared to SEC / FINRA / OSM: only a plain,
     # header-safe address is sent (SEC 403s an undeclared client).
     add_test(

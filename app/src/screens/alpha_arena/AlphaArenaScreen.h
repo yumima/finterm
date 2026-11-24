@@ -34,7 +34,7 @@ struct ArenaModelEntry {
 /// Alpha Arena — AI trading competition platform.
 /// Pits multiple LLM agents against each other in crypto or prediction markets.
 /// Features: competition creation, leaderboard, performance charts, AI decisions,
-/// HITL approval, sentiment analysis, portfolio metrics, grid strategies, research.
+/// sentiment analysis, portfolio metrics, grid strategies, research.
 class AlphaArenaScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
@@ -71,6 +71,7 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
     QWidget* create_past_competitions_panel();
     QWidget* create_status_bar();
 
+    QJsonObject api_keys() const;
     void run_python_action(const QString& action, const QJsonObject& params);
     void update_leaderboard(const QJsonArray& entries);
     void update_decisions(const QJsonArray& decisions);
@@ -132,7 +133,6 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
     QTableWidget* metrics_table_ = nullptr;
 
     // Right tab: other content
-    QTextEdit* hitl_content_ = nullptr;
     QTextEdit* sentiment_content_ = nullptr;
     QTextEdit* grid_content_ = nullptr;
     QTextEdit* research_content_ = nullptr;

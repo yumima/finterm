@@ -23,10 +23,8 @@ void TotpService::generate(const QString& secret, TotpCallback cb) {
         return;
     }
 
-    const QString script = finterm::python::PythonRunner::instance().scripts_dir() + "/exchange/totp_gen.py";
-
     finterm::python::PythonRunner::instance().run(
-        script, {secret}, [cb = std::move(cb)](const finterm::python::PythonResult& result) {
+        QStringLiteral("exchange/totp_gen.py"), {secret}, [cb = std::move(cb)](const finterm::python::PythonResult& result) {
             TotpResult out;
             if (!result.success) {
                 out.error = result.output.isEmpty() ? QStringLiteral("totp_gen failed") : result.output;

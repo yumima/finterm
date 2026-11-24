@@ -115,25 +115,6 @@ async def handle_action(action: str, params: Dict, api_keys: Dict) -> Dict[str, 
         elif action == "get_evaluation":
             return await get_evaluation_handler(params)
 
-        # HITL (Human-in-the-Loop) actions
-        elif action == "check_approval":
-            return await check_approval_handler(params)
-
-        elif action == "approve_decision":
-            return await approve_decision_handler(params)
-
-        elif action == "reject_decision":
-            return await reject_decision_handler(params)
-
-        elif action == "get_pending_approvals":
-            return await get_pending_approvals_handler(params)
-
-        elif action == "get_hitl_status":
-            return await get_hitl_status_handler(params)
-
-        elif action == "update_hitl_rule":
-            return await update_hitl_rule_handler(params)
-
         # Portfolio metrics actions
         elif action == "get_portfolio_metrics":
             return await get_portfolio_metrics_handler(params)
@@ -771,7 +752,6 @@ def get_system_info() -> Dict[str, Any]:
             "evaluation_metrics",
             "guardrails",
             "database_persistence",
-            "hitl_approval",
             "portfolio_metrics",
             "grid_trading",
             "research_agent",
@@ -791,133 +771,6 @@ def get_system_info() -> Dict[str, Any]:
         "trading_styles": styles,
         "default_exchange": "kraken",
     }
-
-
-# =============================================================================
-# HITL (Human-in-the-Loop) Handlers
-# =============================================================================
-
-async def check_approval_handler(params: Dict) -> Dict[str, Any]:
-    """Check if a trading decision requires approval."""
-    try:
-        from alpha_arena.core.hitl import check_decision_approval
-
-        decision_dict = params.get("decision", {})
-        context = params.get("context", {})
-
-        if not decision_dict:
-            return {"success": False, "error": "Missing decision data"}
-
-        result = check_decision_approval(decision_dict, context)
-        return {
-            "success": True,
-            **result,
-        }
-    except Exception as e:
-        logger.exception(f"Error checking approval: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def approve_decision_handler(params: Dict) -> Dict[str, Any]:
-    """Approve a pending decision."""
-    try:
-        from alpha_arena.core.hitl import approve_decision
-
-        request_id = params.get("request_id")
-        approved_by = params.get("approved_by", "user")
-        notes = params.get("notes", "")
-
-        if not request_id:
-            return {"success": False, "error": "Missing request_id"}
-
-        result = approve_decision(request_id, approved_by, notes)
-        return {
-            "success": True,
-            **result,
-        }
-    except Exception as e:
-        logger.exception(f"Error approving decision: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def reject_decision_handler(params: Dict) -> Dict[str, Any]:
-    """Reject a pending decision."""
-    try:
-        from alpha_arena.core.hitl import reject_decision
-
-        request_id = params.get("request_id")
-        rejected_by = params.get("rejected_by", "user")
-        notes = params.get("notes", "")
-
-        if not request_id:
-            return {"success": False, "error": "Missing request_id"}
-
-        result = reject_decision(request_id, rejected_by, notes)
-        return {
-            "success": True,
-            **result,
-        }
-    except Exception as e:
-        logger.exception(f"Error rejecting decision: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def get_pending_approvals_handler(params: Dict) -> Dict[str, Any]:
-    """Get all pending approval requests."""
-    try:
-        from alpha_arena.core.hitl import get_pending_approvals
-
-        pending = get_pending_approvals()
-        return {
-            "success": True,
-            "pending_approvals": pending,
-            "count": len(pending),
-        }
-    except Exception as e:
-        logger.exception(f"Error getting pending approvals: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def get_hitl_status_handler(params: Dict) -> Dict[str, Any]:
-    """Get HITL manager status and configuration."""
-    try:
-        from alpha_arena.core.hitl import get_hitl_manager
-
-        manager = get_hitl_manager()
-        return {
-            "success": True,
-            "status": manager.to_dict(),
-        }
-    except Exception as e:
-        logger.exception(f"Error getting HITL status: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def update_hitl_rule_handler(params: Dict) -> Dict[str, Any]:
-    """Update a HITL rule configuration."""
-    try:
-        from alpha_arena.core.hitl import get_hitl_manager
-
-        rule_name = params.get("rule_name")
-        enabled = params.get("enabled")
-
-        if not rule_name:
-            return {"success": False, "error": "Missing rule_name"}
-
-        if enabled is None:
-            return {"success": False, "error": "Missing enabled flag"}
-
-        manager = get_hitl_manager()
-        manager.set_rule_enabled(rule_name, enabled)
-
-        return {
-            "success": True,
-            "rule_name": rule_name,
-            "enabled": enabled,
-        }
-    except Exception as e:
-        logger.exception(f"Error updating HITL rule: {e}")
-        return {"success": False, "error": str(e)}
 
 
 # =============================================================================

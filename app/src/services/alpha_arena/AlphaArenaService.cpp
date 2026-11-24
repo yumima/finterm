@@ -17,9 +17,7 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
     const QString json_arg = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     const QString action = payload.value("action").toString();
 
-    finterm::python::PythonRunner::instance().run(
-        QStringLiteral("alpha_arena/main.py"), {json_arg},
-        [cb = std::move(cb), action](const finterm::python::PythonResult& result) {
+    auto done = [cb = std::move(cb), action](const finterm::python::PythonResult& result) {
             ActionResult out;
             if (!result.success) {
                 out.error = result.error.isEmpty() ? QStringLiteral("Engine call failed") : result.error;
@@ -58,7 +56,15 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
             out.data = obj;
             if (cb)
                 cb(out);
-        });
+        };
+
+    auto& runner = finterm::python::PythonRunner::instance();
+    const QString script = QStringLiteral("alpha_arena/main.py");
+    if (action == QLatin1String("run_cycle"))
+        runner.run_job(script, {json_arg}, std::move(done)); // asks several models in turn: minutes
+    else // creating one waits up to a minute for its models
+        runner.run(script, {json_arg}, std::move(done), {},
+                   action == QLatin1String("create_competition") ? 90'000 : finterm::python::PythonRunner::kProcessTimeoutMs);
 }
 
 } // namespace finterm::services::alpha_arena

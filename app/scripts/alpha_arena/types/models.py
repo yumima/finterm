@@ -68,7 +68,7 @@ class AgentConfig(BaseModel):
     name: str = Field(..., description="Display name for the agent")
     provider: ModelProvider = Field(..., description="LLM provider")
     model_id: str = Field(..., description="Model identifier")
-    api_key: Optional[str] = Field(None, description="API key (optional, can use env)")
+    api_key: Optional[str] = Field(None, exclude=True, repr=False, description="API key (optional, can use env); never dumped")
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: Optional[int] = Field(None, description="Max tokens for response")
 
@@ -114,7 +114,9 @@ class CompetitionModel(BaseModel):
     name: str = Field(..., description="Display name for the model")
     provider: str = Field(..., description="LLM provider name")
     model_id: str = Field(..., description="Model identifier")
-    api_key: Optional[str] = Field(None, description="API key for this model")
+    # Never dumped: configs are saved to the database and returned to the screen.
+    # Whoever runs a cycle passes the keys (see competition.initialize).
+    api_key: Optional[str] = Field(None, exclude=True, repr=False, description="API key for this model")
     initial_capital: float = Field(10000.0, gt=0, description="Starting capital")
 
     # Trading style (allows using same provider with different behaviors)
