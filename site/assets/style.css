@@ -11,6 +11,7 @@ nav{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
 nav a{color:var(--fg);text-decoration:none;font-size:15px}
 nav a:hover{color:var(--accent)}
 nav a.cta{background:var(--accent);color:var(--accent-fg);padding:4px 12px;border-radius:6px;font-weight:600}
+.counter{color:var(--muted,inherit);font-size:15px;opacity:.85}
 nav.projects{padding:6px 16px;border-bottom:1px solid var(--line)}
 nav.projects a[aria-current]{color:var(--accent);font-weight:600}
 h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:32px 0 12px}

@@ -1,0 +1,21 @@
+{% assign r = site.data.release %}{% assign d = site.data.downloads %}{% assign earlier = 0 %}{% for e in d.earlier_releases %}{% assign earlier = earlier | plus: e[1] %}{% endfor %}{% assign base = d.clones | plus: earlier %}
+<p class="counter">
+  {% unless include.short %}Version {{ r.version }}{% if r.released %} · <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y" }}</time>{% endif %} ·{% endunless %}
+  <span id="count" data-base="{{ base }}" title="{{ d.clones }} clones of the source that GitHub counted from {{ d.clones_from | date: "%-d %B" }} to {{ d.clones_to | date: "%-d %B %Y" }}, automated ones included, and the downloads of every installer">{{ base }}</span> clones and downloads
+</p>
+<script>
+(function () {
+  var el = document.getElementById("count"), base = +el.dataset.base;
+  function show(n) { el.textContent = n.toLocaleString("en"); }
+  show(base);
+  fetch("https://api.github.com/repos/yumima/finterm/releases?per_page=100")
+    .then(function (x) { return x.ok ? x.json() : []; })
+    .then(function (releases) {
+      var n = 0;
+      releases.forEach(function (rel) {
+        rel.assets.forEach(function (a) { if (/-setup\.(run|exe|dmg)$/.test(a.name)) n += a.download_count; });
+      });
+      show(base + n);
+    }).catch(function () {});
+})();
+</script>

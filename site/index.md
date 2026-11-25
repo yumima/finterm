@@ -15,6 +15,7 @@ permalink: /
     <a class="button" href="{{ site.download_url }}">Download for free</a>
     <a class="button ghost" href="{{ '/insider-cluster-buys/' | relative_url }}">See this week's insider buying</a>
   </p>
+  {% include counter.html %}
 </section>
 
 {% assign shots = site.static_files | where_exp: "f", "f.path contains '/assets/screens/'" | sort: "path" %}

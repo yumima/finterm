@@ -1702,6 +1702,15 @@ jobs:
                 '{version:$version, released:$released, build:$build, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
                 > site/_data/release.json
           cat site/_data/release.json
+          # The releases the purge below deletes take their download counts with
+          # them: kept for the site's counter (site/_includes/counter.html).
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s --arg tag "${TAG}" \
+            'map(select(.tag_name != $tag and (.draft | not))
+                 | {key: .tag_name, value: ([.assets[] | select(.name | test("-setup\\.(run|exe|dmg)$")) | .download_count] | add // 0)})
+             | from_entries' > /tmp/leaving.json
+          jq --slurpfile l /tmp/leaving.json '.earlier_releases += $l[0]' site/_data/downloads.json > /tmp/downloads.json
+          mv /tmp/downloads.json site/_data/downloads.json
+          cat site/_data/downloads.json
 
       # ── Single atomic commit + push ───────────────────────────────────────
       # Both files in one commit → one push → no race with anything. If
@@ -1721,7 +1730,7 @@ jobs:
           git diff --quiet README.md    || README_CHANGED=1
           git diff --quiet updates.json || MANIFEST_CHANGED=1
           # May be a brand-new file, which `git diff` does not see.
-          [ -z "$(git status --porcelain -- site/_data/release.json)" ] || SITE_CHANGED=1
+          [ -z "$(git status --porcelain -- site/_data/release.json site/_data/downloads.json)" ] || SITE_CHANGED=1
 
           if [ "${README_CHANGED}" -eq 0 ] && [ "${MANIFEST_CHANGED}" -eq 0 ] && [ "${SITE_CHANGED}" -eq 0 ]; then
             echo "Nothing changed — nothing to commit"
@@ -1732,7 +1741,7 @@ jobs:
           # stray artefact from an earlier step would sneak into main.
           [ "${README_CHANGED}"   -eq 1 ] && git add README.md
           [ "${MANIFEST_CHANGED}" -eq 1 ] && git add updates.json
-          [ "${SITE_CHANGED}"     -eq 1 ] && git add site/_data/release.json
+          [ "${SITE_CHANGED}"     -eq 1 ] && git add site/_data/release.json site/_data/downloads.json
 
           git commit -m "chore(release): update README download links and updates.json for ${TAG}
 
