@@ -48,8 +48,8 @@ ISSUE_DISCLAIMER = (
     "output of fixed rules, the same for every reader: not advice fitted to anyone's circumstances, not a "
     "recommendation of any security, not an offer. finterm and its authors are not registered investment advisers or "
     "broker-dealers and receive no compensation from any company listed. Backtests are hypothetical; past results do "
-    "not predict future returns. Data may contain errors: verify against the filings. Sources: SEC EDGAR (Forms 4 and "
-    "13F); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
+    "not predict future returns. Data may contain errors: verify against the filings. Sources: SEC EDGAR (Forms 4, 13F, "
+    "S-1, F-1 and 424B); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
     "ForexFactory calendar; the market stance, screens and breadth computed by finterm from S&P 500, VIX, TradingView "
     "and Yahoo Finance data, none of which is reproduced."
 )
@@ -87,7 +87,7 @@ def md_escape(s):
 WINDOW_DAYS = 7
 
 
-def clusters_data(scan):
+def clusters_data(scan, progress=None, waiting=None):
     """This week's cluster rows, coverage notes, and whether the data is complete.
 
     Complete means every past business day in the window was read to the end
@@ -99,7 +99,7 @@ def clusters_data(scan):
     notes, complete = [], True
     if scan:
         try:
-            res = f4.scan(days=WINDOW_DAYS)
+            res = f4.scan(days=WINDOW_DAYS, progress=progress, wait_s=3600, waiting=waiting)
         except Exception as e:
             res = {"error": f"{type(e).__name__}: {e}"}
         if res.get("error"):
@@ -357,37 +357,86 @@ def _et_instant(row):
         return None
 
 
-def fetch_macro_rows(timeout=20, retry_wait=300):
-    """Both weekly files (Sunday–Saturday weeks) from the calendar feed.
+CALENDAR_FRESH_S = 3 * 3600        # a rebuild within it asks the feed nothing
+CALENDAR_USABLE_S = 3 * 24 * 3600  # when the feed refuses
+
+
+def _calendar_cache(name):
+    from finterm_paths import cache_dir
+
+    return os.path.join(str(cache_dir("calendar")), f"brief_{name}")
+
+
+def _calendar_cached(path, within):
+    import json
+    import time
+
+    try:
+        if time.time() - os.path.getmtime(path) <= within:
+            with open(path, encoding="utf-8") as fh:
+                return [r for r in json.load(fh) if isinstance(r, dict)]
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def fetch_macro_rows(week, timeout=20, retry_wait=300, say=None):
+    """Both weekly files (Sunday–Saturday weeks) from the calendar feed, which
+    allows a few requests a quarter of an hour. Answers are kept: used again
+    for three hours, and for three days when the feed refuses — both only when
+    what is kept covers @week (mon, fri). @say(text): told of a wait.
     Returns (rows, failures). Next week's file is published only part of the
     week — on a Saturday it is a 404 — so a 404 is "not published", not a
     failure; whether the rows cover the week ahead is macro_coverage()'s call."""
     import json
+    import time
     import urllib.error
     import urllib.request
 
-    import time
+    names = [url.rsplit("/", 1)[-1] for url in FF_FEEDS]
+    paths = [_calendar_cache(n) for n in names]
+    covers = lambda rows: macro_coverage(rows, *week) is None
 
-    def get(url):
+    def kept(within):
+        files = [_calendar_cached(p, within) for p in paths]
+        return files, [r for f in files if f for r in f]
+
+    files, rows = kept(CALENDAR_FRESH_S)
+    if files[0] is not None and covers(rows):
+        return rows, []
+
+    def get(url, path):
         req = urllib.request.Request(url, headers={"User-Agent": "finterm-weekly-brief"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         if not isinstance(data, list):
             raise ValueError("not a list")
-        return [r for r in data if isinstance(r, dict)]
+        data = [r for r in data if isinstance(r, dict)]
+        if data:  # an empty answer is not kept over a good one
+            try:
+                tmp = f"{path}.{os.getpid()}.tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh)
+                os.replace(tmp, path)
+            except OSError:
+                pass
+        return data
 
     rows, failed = [], []
-    for url in FF_FEEDS:
-        name = url.rsplit("/", 1)[-1]
+    for url, name, path in zip(FF_FEEDS, names, paths):
         for attempt in (1, 2):
             try:
-                rows += get(url)
+                rows += get(url, path)
                 break
             except urllib.error.HTTPError as e:
                 if e.code == 404:
                     break
-                # The feed rate-limits (429): one patient retry, not a lost week.
-                if e.code == 429 and attempt == 1 and retry_wait:
+                # The feed rate-limits (429): what is kept, if it has the week;
+                # else one patient retry, not a lost week.
+                _, old = kept(CALENDAR_USABLE_S)
+                if e.code == 429 and attempt == 1 and retry_wait and not covers(rows + old):
+                    if say:
+                        say(f"rate-limited; trying again in {retry_wait // 60} min")
                     time.sleep(retry_wait)
                     continue
                 failed.append(f"{name}: HTTP {e.code}")
@@ -395,6 +444,13 @@ def fetch_macro_rows(timeout=20, retry_wait=300):
             except Exception as e:  # noqa: BLE001 — any failure is reported, not hidden
                 failed.append(f"{name}: {type(e).__name__}")
                 break
+    if failed and covers(rows):
+        return rows, []  # the week is in the file that answered; the other's old copy may hold it otherwise
+    if failed:  # what is kept of the files that did not answer, and only of them
+        files, _ = kept(CALENDAR_USABLE_S)
+        old = [r for name, f in zip(names, files) if f and any(x.startswith(name) for x in failed) for r in f]
+        if covers(rows + old):
+            return rows + old, []
     return rows, failed
 
 
@@ -898,27 +954,86 @@ def week_ahead_section(events, mon, fri, error=None):
     return out + [""]
 
 
-def stocks_section(topics, detail, doc, scr_err, rows, notes, flows):
+PENDING = ["_Working…_", ""]
+
+
+def stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending=frozenset()):
     n = BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"])
     out = []
     if "insider" in topics:
-        out += insider_part(rows, notes, n)
+        # While filings are read: what is known of them so far.
+        out += (insider_part(rows, notes, n) if rows or "rows" not in pending else []) + (PENDING if "rows" in pending else [])
     if "funds" in topics:
-        out += funds_part(flows, n)
+        out += PENDING if "flows" in pending else funds_part(flows, n)
     if "screens" in topics:
-        out += screens_part(doc, scr_err, BRIEF_PICKS.get(detail, BRIEF_PICKS["standard"]),
+        out += PENDING if "doc" in pending else screens_part(doc, scr_err, BRIEF_PICKS.get(detail, BRIEF_PICKS["standard"]),
                             rows if "insider" in topics else (), flows if "funds" in topics else None)
     return ["## Stocks", ""] + out if out else []
 
 
-def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events, mon, fri, macro_err, today):
+IPO_DAYS = 7
+
+
+def ipo_part(ipo, max_rows=5):
+    """IPOs expected to price and lock-ups ending in the next seven days, every
+    figure from the companies' SEC filings (sec_ipo)."""
+    if not ipo or ipo.get("error"):
+        return [f"_IPOs and lock-ups: {md_escape((ipo or {}).get('error') or 'not read')}._", ""]
+    out = []
+    deals, ends = ipo.get("ahead") or [], ipo.get("lockups") or []
+    if deals:
+        price = lambda r: "—" if not r else f"${r[0]:,.2f}" if r[0] == r[1] else f"${r[0]:,.2f}–{r[1]:,.2f}"
+        out += ["| IPO | Company | Price | Latest step (SEC) |", "|---|---|---:|---|"]
+        out += [f"| {md_escape(d['ticker']) or '—'} | {md_escape(d['company'])}{' (SPAC)' if d['spac'] else ''} | "
+                f"{price(d['range'])} | {d['step']}, {date.fromisoformat(d['filed']):%b %-d} |" for d in deals[:max_rows]]
+        out.append("")
+    if ends:
+        out += ["| Lock-up ends | Company | Date | Term |", "|---|---|---:|---:|"]
+        out += [f"| {md_escape(e['ticker']) or '—'} | {md_escape(e['company'])} | {e['ends']:%a %b %-d} | {e['days']} days |"
+                for e in ends[:max_rows]]
+        out.append("")
+    say = []
+    # "None" only when everything was read.
+    part = bool(ipo.get("partial"))
+    if not deals and not ipo.get("ahead_unread") and not part:
+        say.append("No IPO is expected to price in the next 7 days.")
+    elif len(deals) > max_rows:
+        say.append(f"{len(deals) - max_rows} more IPOs.")
+    if not ends and not part:
+        say.append("No lock-up is known to end in the next 7 days.")
+    elif len(ends) > max_rows:
+        say.append(f"{len(ends) - max_rows} more lock-ups.")
+    if ipo.get("ahead_unread"):
+        n = ipo["ahead_unread"]
+        say.append(f"{n} IPO{'' if n == 1 else 's'} whose filings could not be read {'is' if n == 1 else 'are'} left out.")
+    if part:
+        say.append("The calendar was only partly read: there may be more.")
+    if ipo.get("unread"):
+        n = ipo["unread"]
+        say.append(f"{n} lock-up{'' if n == 1 else 's'} not confirmed by the prospectus {'is' if n == 1 else 'are'} left out.")
+    if deals or ends:
+        say.append("From the registration and the final prospectus; pricing can slip, and early releases are not modelled.")
+    return out + [" ".join(say), ""]
+
+
+def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events, mon, fri, macro_err, today,
+               pending=frozenset(), ipo=None):
     """The issue's sections, one page at the standard detail: the market at a
-    glance (the call, past week, next week), markets and economy, the week
-    ahead, and stocks (insiders, funds, the screens)."""
+    glance (the call, past week, week ahead), markets and economy, the week
+    ahead, and stocks (insiders, funds, the screens).
+
+    @pending: inputs still being read (series, doc, rows, flows, events), for a
+    page shown while it is built — a part that needs one says so."""
     out = []
     if "summary" in topics:
-        out += glance_section(series, (doc or {}).get("market"), events, macro_err, today, asof=(doc or {}).get("asof"))
+        out += (["## At a glance", ""] + PENDING if pending & {"series", "doc", "events"}
+                else glance_section(series, (doc or {}).get("market"), events, macro_err, today, asof=(doc or {}).get("asof")))
     if "macro" in topics:
-        out += economy_section(series)
-        out += week_ahead_section(events, mon, fri, macro_err)
-    return out + stocks_section(topics, detail, doc, scr_err, rows, notes, flows)
+        out += ["## Markets and economy", ""] + PENDING if "series" in pending else economy_section(series)
+    if "macro" in topics:
+        out += ["## Week ahead", ""] + PENDING if "events" in pending else week_ahead_section(events, mon, fri, macro_err)
+    elif "ipo" in topics:
+        out += ["## Week ahead", ""]
+    if "ipo" in topics:
+        out += PENDING if "ipo" in pending else ipo_part(ipo, BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"]))
+    return out + stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending)

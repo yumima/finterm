@@ -213,6 +213,66 @@ def checks():
     check("coverage: the failed days are reported missing", flaky in missing and refused in missing, str(missing))
     check("coverage: today is never expected", today.isoformat() not in missing)
 
+    # ── one scan at a time, in filing order, and no trade counted twice ────
+    import threading
+    import time
+    order = []
+
+    def slow(url, **_):
+        time.sleep(0.02 if url.endswith("0.txt") else 0.0)  # answers out of order
+        order.append(url)
+        return Ok(), 200
+    m.sec_http.get = slow
+    paths = [(f"acc-{i}", f"a/{i}.txt") for i in range(30)]
+    got = list(m._read_all(paths))
+    check("read_all: every filing, in the order asked", [g[0] for g in got] == [p[0] for p in paths])
+    walk = m._read_all(paths)
+    next(walk)
+    walk.close()  # a walk that stops leaves the rest unread
+    n = len(order)
+    time.sleep(0.1)
+    check("read_all: a walk that stops reads no further", len(order) == n and n < 30 + 12, str(n))
+    m.day_index = lambda dd: {}
+    with m._ScanLock() as mine:
+        check("scan lock: the first has it", mine)
+        res = m.scan(days=2)
+        check("scan lock: a second gives way, softly", "locked by another scan" in res.get("error", ""), str(res))
+        told = []
+        t = threading.Thread(target=lambda: told.append(m.scan(days=2, wait_s=20, waiting=lambda: told.append("waits"))))
+        t.start()
+        time.sleep(0.3)
+        check("scan lock: one that waits says so", told == ["waits"], str(told))
+    t.join(10)
+    check("scan lock: ...and then scans", len(told) == 2 and "error" not in told[1], str(told))
+    fresh_day = next(x for x in m.business_days(30) if x.isoformat() not in rec and x < today and x.isoformat() not in
+                     (flaky, refused))
+    m.day_index = lambda dd: {f"{dd}-{i}": f"a/{dd}-{i}.txt" for i in range(40)} if dd == fresh_day else {}
+    m.sec_http.get = lambda url, **_: (time.sleep(0.05) or (Ok(), 200))
+    res = m.scan(days=30, deadline_s=0.2)
+    con = m.connect()
+    part = con.execute("SELECT COUNT(*) FROM seen WHERE filed=?", (fresh_day.isoformat(),)).fetchone()[0]
+    done = con.execute("SELECT 1 FROM scanned_days WHERE filed=?", (fresh_day.isoformat(),)).fetchone()
+    check("scan: a deadline keeps what was read and leaves the day open", 0 < part < 40 and not done, f"{part} {res}")
+    # a filing another process stored while this one was reading it
+    real_xml, real_parse = m._extract_xml, m.parse_form4
+    m._extract_xml = lambda text: "<x/>"
+    m.parse_form4 = lambda xml, url: [{"date": fresh_day.isoformat(), "symbol": "DUP", "shares": 1, "price": 1, "value": 1}]
+    left = [f"{fresh_day}-{i}" for i in range(40)]
+
+    def stolen(url, **_):
+        other = m.connect()
+        for a in left:
+            other.execute("INSERT OR IGNORE INTO seen VALUES (?,?)", (a, fresh_day.isoformat()))
+        other.commit()
+        other.close()
+        return Ok(), 200
+    m.sec_http.get = stolen
+    m.scan(days=30)
+    check("scan: a filing stored by another meanwhile is not counted again",
+          con.execute("SELECT COUNT(*) FROM tx WHERE symbol='DUP'").fetchone()[0] == 0)
+    con.close()
+    m._extract_xml, m.parse_form4 = real_xml, real_parse
+
     # day_index itself: 404 = no filings that day; anything else = unknown.
     real = __import__("importlib").reload(m)
     real.sec_http.get = lambda url, **_: (None, 404)

@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`6d94aa910`](https://github.com/yumima/finterm/commit/6d94aa910) What's On: the weekly brief is not only insider buying
 - [`427226961`](https://github.com/yumima/finterm/commit/427226961) Weekly brief: Generate, Review and Post on demand
 - [`90fdf22de`](https://github.com/yumima/finterm/commit/90fdf22de) Screener: Buffett Value; the weekly brief is one page
 - [`c20815439`](https://github.com/yumima/finterm/commit/c20815439) site: what the review found

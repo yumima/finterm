@@ -1,5 +1,7 @@
 #include "screens/news/WeeklyBriefPanel.h"
 
+#include "screens/social/BuildProgress.h"
+
 #include "services/social/SocialBackend.h"
 #include "ui/theme/Theme.h"
 
@@ -37,8 +39,7 @@ const Opt kTopics[] = {
     {"insider", "Insider buying", "Companies where two or more insiders bought on the open market (SEC Form 4)"},
     {"funds", "Fund moves", "What institutions added and trimmed, net by stock (SEC 13F)"},
     {"screens", "Screen leaders", "The first names of each of finterm's screens, with each screen's own record"},
-    {"ipo_private", "IPO calendar (private)",
-     "The coming IPOs from Nasdaq's calendar — in your draft only; never published or posted"},
+    {"ipo", "IPOs and lock-ups", "IPOs expected to price and lock-ups ending in the next 7 days, from SEC filings"},
 };
 const Opt kPlatforms[] = {
     {"x", "X", "Posted as the account connected for X"},
@@ -97,6 +98,10 @@ WeeklyBriefPanel::WeeklyBriefPanel(QWidget* parent) : QWidget(parent) {
     actions->addWidget(post_btn_);
     actions->addStretch(1);
     v->addLayout(actions);
+    build_ = new BuildProgressView;
+    connect(build_, &BuildProgressView::cancel, this, &WeeklyBriefPanel::cancel_build);
+    connect(&BuildWatch::instance(), &BuildWatch::finished, this, &WeeklyBriefPanel::refresh);
+    v->addWidget(build_);
     status_ = new QLabel;
     status_->setWordWrap(true);
     status_->setTextFormat(Qt::RichText);
@@ -215,8 +220,10 @@ void WeeklyBriefPanel::refresh() {
         if (!self)
             return;
         self->refresh_inflight_ = false;
-        if (err.isEmpty())
+        if (err.isEmpty()) {
             self->drafts_ = o;
+            self->follow_build();
+        }
         self->render();
     });
 }
@@ -318,13 +325,25 @@ void WeeklyBriefPanel::render() {
     }
     issue_->setText(lines.join(QStringLiteral("<br>")));
 
-    // The actions are always on: a click does it, or says what it needs.
-    if (st == QLatin1String("building")) {
+    // Generate and Post are on unless something is running; a click that
+    // cannot act says what it needs. Review stays on: the build shows there.
+    const bool building = st == QLatin1String("building");
+    build_->setVisible(building);
+    if (building) {
+        if (!building_)
+            built_before_ = d.value("built_at").toString(); // cancelled or failed, it is still this
         building_ = true;
     } else if (building_) { // seen running, and now it is not
         building_ = false;
-        say(st == QLatin1String("ready") ? QStringLiteral("Built.") : QString());
+        const QString built = d.value("built_at").toString();
+        const bool fresh = st == QLatin1String("ready") && built != built_before_;
+        say(fresh ? QStringLiteral("Built.") : QString());
+        if (fresh && isVisible()) // the finished brief, to read and correct
+            QTimer::singleShot(0, this, [this]() {
+                emit open_beside(QStringLiteral("social"), {{QStringLiteral("tab"), QStringLiteral("briefs")}});
+            });
     }
+    render_actions();
 }
 
 void WeeklyBriefPanel::save_settings() {
@@ -337,7 +356,7 @@ void WeeklyBriefPanel::save_settings() {
     for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
         if (it.value()->isChecked())
             plats.append(it.key());
-    const QJsonObject s{{"v", 2}, // this list has a box for every section (brief_drafts.settings_set)
+    const QJsonObject s{{"v", 3}, // this list has a box for every section (brief_drafts.settings_set)
                         {"topics", topics},
                         {"detail", detail_->currentData().toString()},
                         {"platforms", plats},
@@ -359,14 +378,36 @@ void WeeklyBriefPanel::save_settings() {
                  });
 }
 
+void WeeklyBriefPanel::render_actions() {
+    const bool idle = !busy_ && current_weekly().value("state").toString() != QLatin1String("building");
+    generate_btn_->setEnabled(idle);
+    post_btn_->setEnabled(idle);
+}
+
 bool WeeklyBriefPanel::start(const QString& what) {
-    if (busy_ || current_weekly().value("state").toString() == QLatin1String("building")) {
-        say(QStringLiteral("Still working — one thing at a time."));
+    if (busy_ || current_weekly().value("state").toString() == QLatin1String("building"))
         return false;
-    }
     busy_ = true;
+    render_actions(); // at once: a second click must find them off
     say(what);
     return true;
+}
+
+void WeeklyBriefPanel::cancel_build() {
+    const QString id = current_weekly().value("id").toString();
+    if (id.isEmpty())
+        return;
+    say(QStringLiteral("Cancelling…"));
+    QPointer<WeeklyBriefPanel> self = this;
+    call_backend(this, QStringLiteral("draft_build_cancel"), {{QStringLiteral("id"), id}}, kQuickMs,
+                 [self](const QJsonObject&, const QString& err, Outcome) {
+                     if (!self)
+                         return;
+                     self->building_ = false; // told here, not as "Built."
+                     self->say(err.isEmpty() ? QStringLiteral("Cancelled.") : err,
+                               err.isEmpty() ? QString() : ui::colors::WARNING());
+                     self->refresh();
+                 });
 }
 
 void WeeklyBriefPanel::say(const QString& text, const QString& colour) {
@@ -379,7 +420,7 @@ bool WeeklyBriefPanel::ask(const QString& title, const QString& question) {
 }
 
 void WeeklyBriefPanel::generate(bool force) {
-    if (!start(QStringLiteral("Building — a few minutes.")))
+    if (!start(QString()))
         return;
     QPointer<WeeklyBriefPanel> self = this;
     call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
@@ -387,6 +428,7 @@ void WeeklyBriefPanel::generate(bool force) {
                      if (!self)
                          return;
                      self->busy_ = false;
+                     self->render_actions();
                      // Corrections, or a published brief: the backend says which.
                      if (o.value("needs_force").toBool() || o.value("needs_new_edition").toBool()) {
                          self->say({});
@@ -394,10 +436,41 @@ void WeeklyBriefPanel::generate(bool force) {
                              self->generate(true);
                          return;
                      }
-                     if (!err.isEmpty())
+                     if (!err.isEmpty()) {
                          self->say(err, ui::colors::NEGATIVE());
+                     } else {
+                         // The page fills in beside the drawer as it is built.
+                         self->adopt(o);
+                         emit self->open_beside(QStringLiteral("social"),
+                                                {{QStringLiteral("tab"), QStringLiteral("briefs")}});
+                     }
                      self->refresh();
                  });
+}
+
+void WeeklyBriefPanel::follow_build() {
+    const QJsonObject d = current_weekly();
+    BuildWatch::instance().watch(d.value("state").toString() == QLatin1String("building")
+                                     ? d.value("progress_path").toString()
+                                     : QString());
+}
+
+void WeeklyBriefPanel::adopt(const QJsonObject& draft) {
+    QJsonArray list = drafts_.value("drafts").toArray();
+    const QString id = draft.value("id").toString();
+    int at = -1;
+    for (int i = 0; i < list.size(); ++i)
+        if (list[i].toObject().value("id").toString() == id)
+            at = i;
+    if (id.isEmpty())
+        return;
+    if (at < 0)
+        list.prepend(draft);
+    else
+        list[at] = draft;
+    drafts_[QStringLiteral("drafts")] = list;
+    follow_build();
+    render();
 }
 
 void WeeklyBriefPanel::post() {

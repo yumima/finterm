@@ -29,6 +29,7 @@ Actions:
                                also runs a tick: what is due is published
   draft {id}                   one draft: its editable body, X text, log
   draft_build_weekly {force}   (re)build this week's brief in the background
+  draft_build_cancel {id}      stop a build started from the app
   theme_facts {tickers}        EDGAR facts for a theme brief's companies
   theme_create {title, overview, facts}
                                a theme brief draft in the fixed structure
@@ -226,6 +227,7 @@ DRAFT_ACTIONS = {
     "draft_revert": lambda p: bd.revert(_sid(p)),
     "draft_schedule": lambda p: bd.schedule(_sid(p), str(p.get("at") or ""),
                                             accept_incomplete=bool(p.get("accept_incomplete"))),
+    "draft_build_cancel": lambda p: bd.cancel_build(_sid(p)),
     "draft_publish": lambda p: bd.publish(_sid(p), accept_incomplete=bool(p.get("accept_incomplete"))),
     "draft_delete": lambda p: bd.delete(_sid(p)),
 }

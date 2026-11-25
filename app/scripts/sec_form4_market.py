@@ -43,6 +43,7 @@ import json
 import os
 import re
 import sqlite3
+import time
 import sys
 from datetime import date, timedelta
 
@@ -180,7 +181,77 @@ def _extract_xml(text):
     return text[i:j + len("</ownershipDocument>")].encode("utf-8", "replace")
 
 
-def scan(days=3, limit=None, max_new_days=None):
+EDGAR_GAP = 0.2   # at most 5 requests a second (SEC allows 10 in all)
+READERS = 4       # at once; the gap still spaces their starts
+
+
+def _read_all(paths):
+    """(accession, path) -> (accession, path, answer, status), in order, a few
+    read at once. A day is walked over them one by one, so what is committed
+    when is as it was; a walk that stops early leaves the rest unread."""
+    import itertools
+    from concurrent.futures import ThreadPoolExecutor
+
+    fetch = lambda p: sec_http.get(f"{BASE}/{p[1]}", gap=EDGAR_GAP)
+    with ThreadPoolExecutor(max_workers=READERS) as pool:
+        waiting, rest = [], iter(paths)
+        for item in itertools.islice(rest, READERS * 2):
+            waiting.append((item, pool.submit(fetch, item)))
+        while waiting:
+            item, job = waiting.pop(0)
+            for nxt in itertools.islice(rest, 1):
+                waiting.append((nxt, pool.submit(fetch, nxt)))
+            yield (*item, *job.result())
+
+
+class _ScanLock:
+    """One scan at a time, across the app, a brief's build and the read-ahead:
+    two would read the same filings and count their trades twice. Where there
+    is no flock (Windows) the store's own keys still keep a filing from being
+    counted twice (scan)."""
+
+    def __init__(self, wait_s=0, waiting=None):
+        self.wait_s, self.waiting, self.f = wait_s, waiting, None
+
+    def __enter__(self):
+        try:
+            import fcntl
+        except ImportError:
+            return True
+        self.f = open(f"{db_path()}.scan.lock", "a")
+        until, told = time.monotonic() + self.wait_s, False
+        while True:
+            try:
+                fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except OSError:
+                if time.monotonic() >= until:
+                    return False
+                if self.waiting and not told:
+                    self.waiting()
+                    told = True
+                time.sleep(1)
+
+    def __exit__(self, *exc):
+        if self.f:
+            self.f.close()  # lets go of the lock
+
+
+LOCKED = "the Form 4 store is locked by another scan — will retry"
+
+
+def scan(days=3, limit=None, max_new_days=None, progress=None, wait_s=0, waiting=None, deadline_s=None):
+    """_scan, one at a time (_ScanLock). Another scan running: this one waits
+    @wait_s for it (@waiting() is called once), else answers as for a locked
+    store."""
+    with _ScanLock(wait_s, waiting) as mine:
+        if not mine:
+            return {"fetched": 0, "transactions": 0, "days": int(days), "days_read": 0, "days_remaining": 1,
+                    "error": LOCKED}
+        return _scan(days, limit, max_new_days, progress, deadline_s)
+
+
+def _scan(days=3, limit=None, max_new_days=None, progress=None, deadline_s=None):
     """Read Form 4 filings into the local store, oldest-unread day first.
 
     A lock held by another writer — a second scan, an orphaned one — is
@@ -192,7 +263,12 @@ def scan(days=3, limit=None, max_new_days=None):
     Days already present in the store are skipped, so pressing again genuinely
     reaches further back instead of re-walking the same few days — which is what
     a "last 30 days" selector implies is reachable.
+
+    @progress(day, done, total, days_left): called as a day's filings are read.
+    @deadline_s: stop after that long, mid-day if need be: the day stays
+    unrecorded and the next pass resumes it.
     """
+    until = time.monotonic() + deadline_s if deadline_s else None
     con = connect()
     parent_at_start = os.getppid()
     try:
@@ -249,8 +325,13 @@ def scan(days=3, limit=None, max_new_days=None):
             if truncated:
                 todo = todo[:int(limit)]
             day_failed = 0
-            for n, (acc, path) in enumerate(todo, 1):
-                r, status = sec_http.get(f"{BASE}/{path}")
+            for n, (acc, path, r, status) in enumerate(_read_all(todo), 1):
+                if progress:
+                    progress(d, n, len(todo), days_left)
+                if until and time.monotonic() > until:
+                    truncated = True
+                    days_left = 0
+                    break
                 fetched += 1
                 # Commit in small batches. One transaction per day held the
                 # write lock for minutes at a time, and any other process
@@ -269,7 +350,10 @@ def scan(days=3, limit=None, max_new_days=None):
                     # next pass fetches it again rather than losing it.
                     day_failed += 1
                     continue
-                con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (acc, filed))
+                # In the transaction of its trades: a filing another scan has
+                # stored meanwhile is not counted again.
+                if con.execute("INSERT OR IGNORE INTO seen VALUES (?,?)", (acc, filed)).rowcount == 0:
+                    continue
                 xml = _extract_xml(r.text)
                 if not xml:
                     continue
@@ -323,7 +407,7 @@ def scan(days=3, limit=None, max_new_days=None):
         con.rollback()
         return {"fetched": fetched, "transactions": parsed, "days": int(days),
                 "days_read": 0, "days_remaining": max(1, len(wanted)),
-                "error": "the Form 4 store is locked by another scan — will retry"}
+                "error": LOCKED}
     finally:
         con.close()
 

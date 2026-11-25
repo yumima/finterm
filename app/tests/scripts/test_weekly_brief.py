@@ -399,6 +399,240 @@ def test_stock_flows_sums_by_stock_and_leaves_out_what_is_not_a_trade():
         b.db_path = old
 
 
+# ── the build ────────────────────────────────────────────────────────────────
+
+def _generator():
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "tools"))
+    import weekly_brief
+    return weekly_brief
+
+
+def test_a_build_shows_its_steps_and_the_page_as_it_comes():
+    import json
+    import tempfile
+    import threading
+    g = _generator()
+    path = os.path.join(tempfile.mkdtemp(prefix="progress-"), "progress.json")
+    read = lambda: json.load(open(path, encoding="utf-8"))
+    go = threading.Event()
+    saved = {k: getattr(g, k) for k in ("fetch_macro_series", "fetch_macro_rows", "screener_doc", "clusters_data",
+                                        "ipo_week")}
+    seen = {}
+
+    def filings(scan, progress=None, waiting=None):
+        if not scan:
+            return ROWS[:2], [], True
+        progress(date(2026, 11, 20), 340, 512, 2)
+        go.wait(10)
+        return ROWS, [], True
+
+    def calendar(week, say=None):
+        raise OSError("down")  # one part failing
+    g.fetch_macro_series = lambda today: {**_series(), **_regime_series(95.0, 25.0)}
+    g.fetch_macro_rows = calendar
+    g.screener_doc = lambda say=None, timeout=0: (say("Downloading prices 3/9", 1 / 3), (_doc(), None))[1]
+    g.clusters_data = filings
+    g.ipo_week = lambda today: IPO
+    import sec_13f_bulk
+    flows, sec_13f_bulk.stock_flows = sec_13f_bulk.stock_flows, lambda: FLOWS
+    out = {}
+    try:
+        t = threading.Thread(target=lambda: out.update(g.build_brief(date(2026, 11, 22),
+                                                                     progress_path=path)))
+        t.start()
+        import time
+        for _ in range(100):
+            time.sleep(0.05)
+            if os.path.exists(path):
+                seen = read()
+                if sum(s["state"] in ("done", "warn") for s in seen["steps"]) >= 5:
+                    break
+        # everything but the filings is there, and says what is being worked on
+        by = {s["id"]: s for s in seen["steps"]}
+        assert by["filings"]["state"] == "run" and by["page"]["state"] == "wait", by
+        assert by["calendar"]["state"] == "warn" and by["economy"]["state"] == "done", by
+        assert "| 10-year Treasury |" in seen["body"] and "| Screen leaders |" in seen["body"], seen["body"]
+        # what is known of the filings, and that more is coming
+        assert "| S1 |" in seen["body"] and "| S3 |" not in seen["body"] and "_Working…_" in seen["body"], seen["body"]
+        go.set()
+        t.join(10)
+        assert "| S3 |" in "\n".join(out["body"]) and "_Working…_" not in "\n".join(out["body"]), out["body"]
+        assert "could not be read" in "\n".join(out["body"])  # the calendar, said on the page
+        assert out["screens"] and out["rows"] == ROWS and out["complete"]
+        end = read()
+        assert not end["done"] and [s["state"] for s in end["steps"]][-1] == "run"  # the file is the caller's to finish
+        out["progress"].finish()
+        assert read()["done"]
+        # the finished page is the one built in a single go
+        mon, fri = wb.week_ahead(date(2026, 11, 22))
+        want = wb.brief_body(g.ALL_TOPICS, "standard", g.fetch_macro_series(None), _doc(), None, ROWS, [], FLOWS, [], mon,
+                             fri, "the release calendar could not be read (OSError)", date(2026, 11, 22), ipo=IPO)
+        assert out["body"] == want
+    finally:
+        go.set()
+        for k, v in saved.items():
+            setattr(g, k, v)
+        sec_13f_bulk.stock_flows = flows
+
+
+def test_filings_that_fail_make_an_incomplete_week():
+    g = _generator()
+    saved = g.clusters_data
+    g.clusters_data = lambda *a, **k: (_ for _ in ()).throw(OSError("down"))
+    try:
+        b = g.build_brief(date(2026, 11, 22), topics=["insider"], extras=False)
+        assert not b["complete"] and "could not be read" in b["notes"][0], b["notes"]
+    finally:
+        g.clusters_data = saved
+
+
+def test_the_calendar_is_asked_rarely_and_kept_when_it_refuses():
+    import io
+    import json
+    import tempfile
+    import time
+    import urllib.error
+    import urllib.request
+    tmp, calls = tempfile.mkdtemp(prefix="cal-"), []
+    saved, wb._calendar_cache = wb._calendar_cache, lambda name: os.path.join(tmp, name)
+    real = urllib.request.urlopen
+    week = (date(2026, 11, 16), date(2026, 11, 20))
+    age = lambda hours: [os.utime(os.path.join(tmp, n), (0, time.time() - hours * 3600)) for n in os.listdir(tmp)]
+    answer = [ff("CPI m/m", "2026-11-18T08:30:00-05:00")]
+
+    def ok(req, timeout=0):
+        calls.append(req.full_url)
+        return io.BytesIO(json.dumps(answer).encode())
+
+    def refuse(req, timeout=0):
+        calls.append(req.full_url)
+        raise urllib.error.HTTPError(req.full_url, 429, "", {}, None)
+    try:
+        urllib.request.urlopen = ok
+        rows, failed = wb.fetch_macro_rows(week)
+        assert len(rows) == 2 and not failed and len(calls) == 2
+        wb.fetch_macro_rows(week)
+        assert len(calls) == 2  # kept
+        # kept, but not for the week asked for: the feed is asked
+        wb.fetch_macro_rows((date(2026, 11, 23), date(2026, 11, 27)))
+        assert len(calls) == 4
+        # an empty answer is not kept over a good one
+        good, answer[:] = list(answer), []
+        age(4)
+        wb.fetch_macro_rows(week)
+        answer[:] = good
+        urllib.request.urlopen = refuse
+        rows, failed = wb.fetch_macro_rows(week)  # refused: the last answer, and no wait
+        assert rows and not failed, (rows, failed)
+        # one file answers with the week, the other refuses: its old copy is not mixed in
+        answer[:] = [ff("CPI m/m", "2026-11-18T10:30:00-05:00")]
+        urllib.request.urlopen = lambda req, timeout=0: (ok if "thisweek" in req.full_url else refuse)(req, timeout)
+        rows, failed = wb.fetch_macro_rows(week)
+        assert [r["date"] for r in rows] == ["2026-11-18T10:30:00-05:00"] and not failed, rows
+        urllib.request.urlopen = refuse
+        age(4 * 24)
+        rows, failed = wb.fetch_macro_rows(week, retry_wait=0)
+        assert not rows and "HTTP 429" in failed[0], failed
+    finally:
+        wb._calendar_cache, urllib.request.urlopen = saved, real
+
+
+# ── IPOs and lock-ups ────────────────────────────────────────────────────────
+
+IPO = {"ahead": [{"company": "Alpha_Co", "ticker": "AAA", "range": (14.0, 16.0), "step": "8-A12B", "filed": "2026-11-20",
+                  "spac": False},
+                 {"company": "Blank Check", "ticker": "", "range": (10.0, 10.0), "step": "S-1/A", "filed": "2026-11-19",
+                  "spac": True}],
+       "lockups": [{"ticker": "QNT", "company": "Quantinuum Inc.", "dated": date(2026, 6, 3), "days": 180,
+                    "ends": date(2026, 11, 30)}], "unread": 1}
+
+
+def test_ipo_part():
+    text = "\n".join(wb.ipo_part(IPO))
+    assert "| AAA | Alpha\\_Co | $14.00–16.00 | 8-A12B, Nov 20 |" in text, text
+    assert "| — | Blank Check (SPAC) | $10.00 | S-1/A, Nov 19 |" in text
+    assert "| QNT | Quantinuum Inc. | Mon Nov 30 | 180 days |" in text and "1 lock-up not confirmed by the prospectus is" in text
+    empty = "\n".join(wb.ipo_part({"ahead": [], "lockups": [], "unread": 0}))
+    assert "No IPO is expected" in empty and "No lock-up is known" in empty and "|" not in empty
+    # nothing read is not "none"
+    blind = "\n".join(wb.ipo_part({"ahead": [], "ahead_unread": 2, "lockups": [], "unread": 0, "partial": True}))
+    assert "No IPO" not in blind and "No lock-up" not in blind and "2 IPOs whose filings" in blind and "partly read" in blind
+    assert "could not be read" in "\n".join(wb.ipo_part({"error": "could not be read (OSError)"}))
+
+
+def test_what_a_filing_says():
+    import sec_ipo as s
+    assert s.price_range("the initial public offering price will be between $14.00 and $16.00 per share") == (14.0, 16.0)
+    assert s.price_range("revenue was between $12.1 and $12.5 million. We expect the initial public offering price to be "
+                         "between $18.00 and $20.00 per share") == (18.0, 20.0)
+    assert s.price_range("a conversion price between $2.00 and $3.00. The offering price is between $8.00 and $10.00") == (8, 10)
+    assert s.price_range("the offering price, with warrants to exercise between $0.50 and $1.20") is None
+    assert s.price_range("offering price in the range of $ [ 5 ] to $[ 6 ] per Ordinary Share") == (5.0, 6.0)
+    assert s.price_range("at an initial public offering price of $10.00. We have") == (10.0, 10.0)
+    assert s.price_range("between $2 and $900 per share") is None and s.price_range("price $ to be set") is None
+    assert s.prospectus_date("Alliance Prospectus Dated June 9, 2026. Table") == date(2026, 6, 9)
+    assert s.prospectus_date("The date of this prospectus is June 2, 2026") == date(2026, 6, 2)
+    assert s.prospectus_date("Subject to completion, dated , 2026") is None
+    assert s.prospectus_date("preliminary prospectus dated October 28, 2026. The date of this prospectus is November 5, 2026")\
+        == date(2026, 11, 5)
+    assert s.symbol("approved under the symbol “QNT.”") == "QNT" and s.symbol("under the symbol “ ”") == ""
+    lock = "Our directors and officers agreed not to sell any of our stock for 180 days following the date of this prospectus. "
+    r144 = "Under Rule 144, beginning 90 days after the date of this prospectus, holders may not yet sell. "
+    assert s.lockup_terms(lock) == [180] and s.lockup_terms(r144 * 5) == []
+    assert s.lockup_terms(("x " * 400) + lock + ("y " * 400) + r144 * 3) == [180]
+    both = lock + ("y " * 400) + lock.replace("180", "90")
+    assert s.lockup_terms(both) == [90, 180]
+    own = "we have agreed not to sell any shares for 90 days after the date of this prospectus. "
+    assert s.lockup_terms(own * 2 + ("y " * 400) + lock) == [180]  # the company's own is not the holders'
+    assert s.lockup_terms("we will not be required to pay for 120 days after the date of this prospectus") == []
+    assert s.lockup_terms("underwriters have 30 days from the date of this prospectus to purchase") == []
+    assert s.plain("<p>The&nbsp;date<br>of <b>this</b> prospectus") == "The date of this prospectus".replace("The", " The")
+
+
+class _Kv(dict):
+    def get(self, k, *_):
+        return dict.get(self, k)
+
+    def put(self, k, v):
+        self[k] = v
+
+
+def test_lockups_end_by_the_prospectus_and_only_when_it_is_sure():
+    import sec_ipo as s
+    f = [{"form": "424B4", "date": "2026-06-04", "accession": "1", "doc": "d"}]
+    facts = {"A": {"dated": "2026-06-03", "lockup": [90, 180]}, "B": {"dated": None, "lockup": [180]},
+             "C": {"dated": "2026-06-03", "lockup": [90]}, "E": {"dated": "2026-05-20", "lockup": [180]}}
+    facts["A"]["symbol"] = "AAA"
+    saved = s._filings, s._text
+    s._filings = lambda cik, cache: (f, f"{cik} Inc.") if cik != "D" else (None, None)
+    s._text = lambda cik, row, cache: facts[cik]
+    row = lambda c: {"cik": c, "ticker": c, "company": c, "priced_date": "2026-06-04", "expiry": "2026-12-01",
+                     "lockup_days": 180, "basis": "term"}
+    try:
+        got, unread = s.lockups([row(c) for c in "ABCDE"], date(2026, 11, 30), date(2026, 12, 6), _Kv())
+        # from the prospectus's own date, a day before the pricing row's
+        assert [(r["ticker"], r["company"], r["ends"]) for r in got] == [("AAA", "A Inc.", date(2026, 11, 30))], got
+        assert unread == 4  # no date; another term; SEC did not answer; another prospectus's date
+        assumed = dict(row("A"), basis="assumed")  # no term in the calendar: the prospectus must state just one
+        assert s.lockups([assumed], date(2026, 11, 30), date(2026, 12, 6), _Kv()) == ([], 1)
+        got, _ = s.lockups([row("A")], date(2026, 12, 1), date(2026, 12, 7), _Kv())
+        assert got == []  # ended the day before the window, whatever the calendar's date
+        deals = [{"cik": "1", "company": "N", "ticker": "T", "projection": {"kind": k, "date": "2026-12-02"}}
+                 for k in ("scheduled", "estimate")] + [{"cik": "1", "company": "N", "ticker": "late",
+                                                         "projection": {"kind": "scheduled", "date": "2026-12-20"}},
+                                                        {"company": "no CIK", "projection": {"kind": "scheduled",
+                                                                                             "date": "2026-12-02"}}]
+        s._filings = lambda cik, cache: ([{"form": "8-A12B", "date": "2026-11-28", "accession": "3", "doc": ""},
+                                          {"form": "S-1/A", "date": "2026-11-27", "accession": "2", "doc": "d"},
+                                          {"form": "S-1/A", "date": "2026-11-20", "accession": "1", "doc": "d"}], "Sec Name Inc.")
+        s._text = lambda cik, r, cache: {"range": (14.0, 16.0) if r["accession"] == "1" else None, "symbol": "T"}
+        got, unread = s.ahead(deals, date(2026, 11, 30), date(2026, 12, 6), _Kv())
+        assert got == [{"company": "Sec Name Inc.", "ticker": "T", "range": (14.0, 16.0), "step": "8-A12B",
+                        "filed": "2026-11-28", "spac": False}] and unread == 1, (got, unread)
+    finally:
+        s._filings, s._text = saved
+
+
 # ── the issue and its posts ──────────────────────────────────────────────────
 
 def _body(topics, **kw):
@@ -411,6 +645,7 @@ def test_the_issue_holds_the_chosen_sections_in_order_and_is_short():
     full = _body(("summary", "macro", "screens", "insider", "funds"))
     heads = [ln for ln in full.split("\n") if ln.startswith("## ")]
     assert heads == ["## At a glance", "## Markets and economy", "## Week ahead, Nov 16–20", "## Stocks"], heads
+    assert "## Week ahead" in _body(("ipo",)) and "IPOs and lock-ups" in _body(("ipo",))
     parts = [full.index(x) for x in ("| Insider buying |", "| Funds added |", "| Screen leaders |")]
     assert parts == sorted(parts) and parts[0] > full.index("## Stocks"), parts
     assert len(full.split()) < 900 and len(full.split("\n")) < 100, (len(full.split()), len(full.split("\n")))

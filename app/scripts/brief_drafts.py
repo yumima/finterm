@@ -76,12 +76,13 @@ THEME_DISCLAIMER = (
 # --topics/--detail), by tick() (where to post) and by tools/weekly_publish.sh
 # (auto-mode). Set from finterm › NEWS › What's On › WEEKLY BRIEF.
 
-TOPICS = ("summary", "macro", "insider", "funds", "screens", "ipo_private")
+TOPICS = ("summary", "macro", "ipo", "insider", "funds", "screens")
+RENAMED_TOPICS = {"ipo_private": "ipo"}  # the IPO part, when it was the owner's only
 DETAILS = ("full", "standard", "short")
 AUTO_MODES = ("draft", "publish")
-PUBLIC_SECTIONS = ("macro", "insider", "funds", "screens")  # what a published issue can hold
+PUBLIC_SECTIONS = ("macro", "ipo", "insider", "funds", "screens")  # what a published issue can hold
 DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft",
-                    "v": 2}  # 2: the one-page brief (fund moves)
+                    "v": 3}  # 2: the one-page brief (fund moves); 3: IPOs are public
 
 
 def settings_path():
@@ -96,11 +97,12 @@ def settings_get():
         # default; what was chosen of the rest stands.
         if saved.get("v", 1) < 2 and isinstance(saved.get("topics"), list):
             saved["topics"] = [*saved["topics"], "funds"]
-        s.update(saved, v=2)
+        s.update(saved, v=3)
     except (OSError, ValueError, AttributeError, TypeError):
         pass
     import social_post as sp
-    s["topics"] = [t for t in TOPICS if t in s.get("topics", [])]
+    chosen = [RENAMED_TOPICS.get(t, t) for t in s.get("topics", [])]
+    s["topics"] = [t for t in TOPICS if t in chosen]
     if not [t for t in s["topics"] if t in PUBLIC_SECTIONS]:  # a hand-edited file: never an empty issue
         s["topics"] = list(DEFAULT_SETTINGS["topics"])
     s["detail"] = s.get("detail") if s.get("detail") in DETAILS else "standard"
@@ -114,7 +116,7 @@ def settings_set(new):
     import social_post as sp
     cur = settings_get()
     if "topics" in new:
-        new = dict(new, topics=list(new["topics"]))
+        new = dict(new, topics=[RENAMED_TOPICS.get(t, t) for t in new["topics"]])
         bad = [t for t in new["topics"] if t not in TOPICS]
         if bad:
             return {"error": f"unknown topic(s): {', '.join(bad)}"}
@@ -122,8 +124,10 @@ def settings_set(new):
             return {"error": "Pick at least one section: a brief with nothing in it is not published."}
         # A screen from before fund moves (an app still running, or not yet
         # updated) has no box for them and sends none: its list is not a choice.
-        if int(new.get("v") or 1) < 2 and "funds" in cur["topics"] and "funds" not in new["topics"]:
-            new["topics"].append("funds")
+        # The same for IPOs, whose box it looks up under their old name.
+        for t, since in (("funds", 2), ("ipo", 3)):
+            if int(new.get("v") or 1) < since and t in cur["topics"] and t not in new["topics"]:
+                new["topics"].append(t)
         cur["topics"] = [t for t in TOPICS if t in new["topics"]]
     if "detail" in new:
         if new["detail"] not in DETAILS:
@@ -305,6 +309,7 @@ def summary(m):
             # What is posted where — the shared record (timer, app, by hand).
             "posted": _posted_record(m),
             "topics": m.get("topics", []), "detail": m.get("detail", ""),
+            "progress_path": str(progress_path(m["id"])) if st == "building" else "",
             "published_at": m.get("published_at", ""), "commit": m.get("commit", ""),
             # A note stored on the draft (a failed rebuild, a scheduled publish
             # being retried) — never the top-level "error", which means THIS
@@ -329,6 +334,11 @@ def _posted_record(m):
         return sp.posted(m["key"])
     except Exception:  # noqa: BLE001 — a record that can't be read shows as nothing posted
         return {}
+
+
+def progress_path(did):
+    """Where a build keeps its progress (tools/weekly_brief.py Progress)."""
+    return _dir(did) / "progress.json"
 
 
 def list_drafts():
@@ -476,6 +486,80 @@ def start_weekly_build(force=False):
     return get(did)
 
 
+def cancel_build(did):
+    """Stop a build started from the app: the brief is what it was before."""
+    import signal
+
+    m = load(did)
+    if not m or _effective_state(m) != "building":
+        return {"error": "Nothing is being built."}
+    pid = int(m.get("pid") or 0)
+    # Its own session (start_weekly_build), so its children end with it. The
+    # Sunday run is not stopped from here: systemd owns it.
+    try:
+        mine = pid > 1 and os.getpgid(pid) == pid and "build-weekly" in subprocess.run(
+            ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+    except OSError:
+        mine = False
+    if not mine:
+        return {"error": "The Sunday run is building it; it finishes by itself."}
+    # Under the lock the finished draft is put in place with, and only while the
+    # draft is still this build's: never in the middle of that, never another's.
+    with Lock(wait=True):
+        m = load(did)
+        if not m or m.get("state") != "building" or m.get("pid") != pid:
+            return {"error": "It had finished.", **(get(did) if m else {})}
+        os.killpg(pid, signal.SIGTERM)
+        for _ in range(50):
+            if not _alive(pid):
+                break
+            time.sleep(0.1)
+        else:
+            os.killpg(pid, signal.SIGKILL)
+            time.sleep(0.2)
+        # Not load(): a died new edition reads as published there already.
+        back = "published" if m.get("prev_published") else "ready" if m.get("prev_ready") else "failed"
+        m.update({"state": back, "pid": None, "error": "the build was cancelled" if back == "failed" else ""})
+        store(m)
+        shutil.rmtree(_dir(did) / "build", ignore_errors=True)
+        progress_path(did).unlink(missing_ok=True)
+    return get(did)
+
+
+PREFETCH_EVERY_S = 3 * 3600
+PREFETCH_FOR_S = 8 * 60  # the tick that runs it holds up the next ones
+
+
+def prefetch_filings():
+    """Read the Form 4 filings published since, a day at a time (the tick timer):
+    a build then has minutes of reading done for it. Never when a publish is
+    near, and nothing depends on it."""
+    mark = _root() / "social" / ".prefetched"
+    try:
+        if time.time() - mark.stat().st_mtime < PREFETCH_EVERY_S:
+            return
+    except FileNotFoundError:
+        pass
+    soon = _now() + timedelta(minutes=20)
+    for s in list_drafts()["drafts"]:
+        due = _parse(s.get("schedule_at"))
+        if s["state"] == "building" or (due and due < soon):
+            return
+        m = load(s["id"])
+        if m and m.get("state") == "published" and pending_posts(m):
+            return
+    if not os.environ.get(wb.CONTACT_KEY):
+        c = wb.contact_from_keyring()
+        if not c:
+            return  # SEC refuses a reader that does not say who it is
+        os.environ[wb.CONTACT_KEY] = c
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    mark.touch()
+    import sec_form4_market as f4
+
+    f4.scan(days=wb.WINDOW_DAYS, max_new_days=1, deadline_s=PREFETCH_FOR_S)  # gives way to another scan
+
+
 def repo_root():
     """The source checkout these scripts run from (the app runs them from
     <repo>/app/build/…/scripts, inside it). The generator is taken from
@@ -530,6 +614,7 @@ def build_weekly(if_unedited=False, again=False):
                   "title": f"Weekly brief {wb.issue_key(date.today())}"})
         with Lock(wait=True):
             store(m)
+        progress_path(did).unlink(missing_ok=True)
         scratch = _dir(did) / "build"
         shutil.rmtree(scratch, ignore_errors=True)
         (scratch / "site").mkdir(parents=True)
@@ -541,7 +626,8 @@ def build_weekly(if_unedited=False, again=False):
             st = settings_get()
             r = subprocess.run([sys.executable, str(repo_root() / "tools/weekly_brief.py"), "--site",
                                 str(scratch / "site"), "--allow-incomplete", "--draft",
-                                "--topics", ",".join(st["topics"]), "--detail", st["detail"]],
+                                "--topics", ",".join(st["topics"]), "--detail", st["detail"],
+                                "--progress", str(progress_path(did))],
                                stdin=subprocess.DEVNULL, timeout=BUILD_TIMEOUT_S)
             if r.returncode != 0:
                 raise RuntimeError(f"the brief failed (exit {r.returncode}) — see the log")
@@ -1143,6 +1229,10 @@ def main(argv):
             print(json.dumps(tick()))
         except RuntimeError as e:  # another run holds the lock: the next tick does it
             print(f"skipped: {e}")
+        try:
+            prefetch_filings()
+        except Exception as e:  # noqa: BLE001 — a convenience: the build reads what is missing
+            print(f"filings not read ahead: {type(e).__name__}: {e}")
         return 0
     if cmd == "publish" and len(argv) > 2:
         m = load(argv[2])

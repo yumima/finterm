@@ -1,5 +1,7 @@
 #include "screens/social/BriefsPanel.h"
 
+#include "screens/social/BuildProgress.h"
+
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "screens/ownership/OwnershipUi.h"
@@ -26,6 +28,7 @@
 #include <QRegularExpression>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTableWidget>
 #include <QTextBrowser>
@@ -112,11 +115,10 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     // ── actions ──
     auto* top = new QHBoxLayout;
     top->setSpacing(6);
-    auto* gen = button(QStringLiteral("Generate weekly brief"),
-                       QStringLiteral("Build this week's brief now: markets and economy, the week ahead, stocks "
-                                      "(insider buying, fund moves, the screens) and (privately) the IPOs ahead. Takes a few minutes."));
-    connect(gen, &QPushButton::clicked, this, [this]() { generate_weekly(false); });
-    top->addWidget(gen);
+    gen_btn_ = button(QStringLiteral("Generate weekly brief"),
+                      QStringLiteral("Build this week's brief from the latest data"));
+    connect(gen_btn_, &QPushButton::clicked, this, [this]() { generate_weekly(false); });
+    top->addWidget(gen_btn_);
     auto* theme = button(QStringLiteral("New theme brief…"),
                          QStringLiteral("A brief on a theme you choose — companies, insider buying and recent SEC "
                                         "filings, with an overview — in a fixed structure"));
@@ -169,8 +171,10 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     edit_btn_->setCheckable(true);
     read_btn_->setChecked(true);
     connect(read_btn_, &QPushButton::clicked, this, [this]() {
+        live_body_.clear();
         preview_->setMarkdown(preview_markdown(source_->toPlainText()));
         view_->setCurrentIndex(0);
+        show_build(); // while one runs, its page
         render_controls();
     });
     connect(edit_btn_, &QPushButton::clicked, this, [this]() {
@@ -204,6 +208,12 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     });
     view_->addWidget(preview_);
     view_->addWidget(source_);
+    build_ = new BuildProgressView;
+    connect(build_, &BuildProgressView::cancel, this, &BriefsPanel::cancel_build);
+    auto& watch = BuildWatch::instance();
+    connect(&watch, &BuildWatch::updated, this, &BriefsPanel::show_build);
+    connect(&watch, &BuildWatch::finished, this, &BriefsPanel::load_list);
+    v->addWidget(build_);
     v->addWidget(view_, 1);
 
     log_ = new QLabel;
@@ -351,10 +361,15 @@ void BriefsPanel::load_list() {
                      const auto drafts = list_.value("drafts").toArray();
                      bool found = false;
                      bool waiting = false;
+                     QString building, progress;
                      for (const auto& d : drafts) {
                          const auto x = d.toObject();
                          found |= x.value("id").toString() == current_;
                          const QString st = x.value("state").toString();
+                         if (st == "building") {
+                             building = x.value("id").toString();
+                             progress = x.value("progress_path").toString();
+                         }
                          // In motion: a build, an X post waiting for its page, or a schedule
                          // coming due in the next 20 minutes (a later one is the timer's job).
                          const QDateTime due = QDateTime::fromString(x.value("schedule_at").toString(), Qt::ISODate);
@@ -363,6 +378,14 @@ void BriefsPanel::load_list() {
                          waiting |= st == "building" || (to_due >= -60 && to_due < 20 * 60) ||
                                     (st == "published" && !awaiting_posts(x).isEmpty());
                      }
+                     BuildWatch::instance().watch(progress);
+                     // A build that begins is what the reader came to see — once, and
+                     // never over corrections not saved.
+                     if (!building.isEmpty() && building != shown_build_ && !dirty()) {
+                         current_ = building;
+                         found = true;
+                     }
+                     shown_build_ = building;
                      if (!found)
                          current_ = drafts.isEmpty() ? QString() : drafts.first().toObject().value("id").toString();
                      render_list();
@@ -398,7 +421,11 @@ void BriefsPanel::load_draft(const QString& id) {
                      const QString body = o.value("body").toString(), xt = o.value("x_text").toString().trimmed();
                      // A poll that brings the same text leaves the reader where they are
                      // (scroll, cursor); only new text — or another draft — is loaded.
-                     if (!keep_edits && (!same || body != loaded_body_ || xt != loaded_x_)) {
+                     // While a build runs the reading view holds ITS page (show_build).
+                     const bool live = same && o.value("state").toString() == "building" && !live_body_.isEmpty();
+                     if (!keep_edits && !live &&
+                         (!same || body != loaded_body_ || xt != loaded_x_ || !live_body_.isEmpty())) {
+                         live_body_.clear();
                          loaded_body_ = body;
                          loaded_x_ = xt;
                          source_->setPlainText(loaded_body_);
@@ -468,6 +495,7 @@ void BriefsPanel::render_draft() {
                             : QString());
         chips_->clear();
         log_->hide();
+        build_->hide();
         render_controls();
         return;
     }
@@ -511,10 +539,12 @@ void BriefsPanel::render_draft() {
     for (const auto& n : draft_.value("notes").toArray())
         notes << n.toString();
     const QString err = draft_.value("note").toString(); // the draft's stored note (not a call error)
-    if (st == "building" || st == "failed") {
-        QString text = st == "building" ? QStringLiteral("Building — this takes a few minutes. Recent log:\n")
-                                        : QStringLiteral("The build failed: %1\nRecent log:\n").arg(err);
-        log_->setText(text + draft_.value("log").toString());
+    build_->setVisible(st == "building");
+    if (st == "building") {
+        log_->hide();
+        show_build();
+    } else if (st == "failed") {
+        log_->setText(QStringLiteral("The build failed: %1\nRecent log:\n").arg(err) + draft_.value("log").toString());
         log_->show();
     } else if (!notes.isEmpty() || !err.isEmpty()) {
         log_->setText((err.isEmpty() ? QString() : err + "\n") + notes.join('\n'));
@@ -540,6 +570,7 @@ void BriefsPanel::render_controls() {
     save_btn_->setText(d ? QStringLiteral("Save •") : QStringLiteral("Save"));
     revert_btn_->setEnabled(ready && !busy_ &&
                             (draft_.value("edited").toBool() || d));
+    gen_btn_->setEnabled(!busy_ && shown_build_.isEmpty());
     rebuild_btn_->setVisible(weekly);
     rebuild_btn_->setEnabled(weekly && st != "building" && !busy_);
     delete_btn_->setEnabled(have && st != "published" && st != "building" && !busy_);
@@ -593,13 +624,35 @@ void BriefsPanel::render_controls() {
 
 // ── actions ─────────────────────────────────────────────────────────────────
 
+void BriefsPanel::show_build() {
+    if (draft_.value("state").toString() != "building" || draft_.value("id").toString() != current_ || dirty())
+        return;
+    const QString body = BuildWatch::instance().progress().body;
+    if (body.isEmpty() || body == live_body_)
+        return;
+    live_body_ = body;
+    const int at = preview_->verticalScrollBar()->value(); // the page grows under the reader
+    preview_->setMarkdown(preview_markdown(body));
+    preview_->verticalScrollBar()->setValue(at);
+}
+
+void BriefsPanel::cancel_build() {
+    set_status(QStringLiteral("Cancelling…"));
+    call_backend(this, QStringLiteral("draft_build_cancel"), {{QStringLiteral("id"), draft_.value("id").toString()}},
+                 kQuickMs, [this](const QJsonObject&, const QString& err, Outcome) {
+                     set_status(err.isEmpty() ? QStringLiteral("Cancelled.") : err.toHtmlEscaped(), !err.isEmpty());
+                     load_list(); // (draft_ stays: corrections not saved are the reader's)
+                 });
+}
+
 void BriefsPanel::generate_weekly(bool force) {
     busy_ = true;
     render_controls();
-    set_status(QStringLiteral("Starting this week's build…"));
+    set_status({});
     call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
                  [this](const QJsonObject& o, const QString& err, Outcome) {
                      busy_ = false;
+                     render_controls();
                      if (o.value("needs_force").toBool() || o.value("needs_new_edition").toBool()) {
                          if (confirm(this, QStringLiteral("Generate"), err.toHtmlEscaped(), QStringLiteral("Generate")))
                              generate_weekly(true);
@@ -614,8 +667,6 @@ void BriefsPanel::generate_weekly(bool force) {
                      }
                      current_ = o.value("id").toString();
                      draft_ = {};
-                     set_status(QStringLiteral("Building in the background — a few minutes. You can leave this "
-                                               "screen; the timer-built and app-built drafts are the same."));
                      load_list();
                  });
 }

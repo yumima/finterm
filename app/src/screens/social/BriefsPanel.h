@@ -36,6 +36,8 @@ class QTimer;
 
 namespace finterm::screens {
 
+class BuildProgressView;
+
 class BriefsPanel : public QWidget {
     Q_OBJECT
   public:
@@ -62,6 +64,9 @@ class BriefsPanel : public QWidget {
     QString x_text() const;
 
     void generate_weekly(bool force);
+    void cancel_build();
+    /// A running build's page so far, in the reading view.
+    void show_build();
     void new_theme();
     void save();
     void revert();
@@ -79,6 +84,8 @@ class BriefsPanel : public QWidget {
     QJsonObject draft_; ///< the selected draft (the "draft" answer)
     QString current_;   ///< selected draft id
     QString loaded_body_, loaded_x_;
+    QString live_body_;   ///< the running build's page on show
+    QString shown_build_; ///< the build that was brought up by itself
     int list_seq_ = 0, draft_seq_ = 0;
     bool busy_ = false;
     bool list_inflight_ = false;
@@ -86,6 +93,7 @@ class BriefsPanel : public QWidget {
     QTableWidget* table_ = nullptr;
     QLabel* title_ = nullptr;
     QLabel* chips_ = nullptr;
+    QPushButton* gen_btn_ = nullptr;
     QPushButton* read_btn_ = nullptr;
     QPushButton* edit_btn_ = nullptr;
     QPushButton* save_btn_ = nullptr;
@@ -106,6 +114,7 @@ class BriefsPanel : public QWidget {
     QPushButton* publish_btn_ = nullptr;
     QLabel* status_ = nullptr;
     QLabel* log_ = nullptr;
+    BuildProgressView* build_ = nullptr;
     QTimer* poll_ = nullptr;
     bool setting_ = false;
 };

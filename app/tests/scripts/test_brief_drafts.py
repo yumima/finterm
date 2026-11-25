@@ -195,10 +195,12 @@ def test_settings_validate_and_drive_the_build():
     st = bd.settings_get()
     assert st["detail"] == "standard" and st["auto"] == "draft" and "insider" in st["topics"], st
     assert "error" in bd.settings_set({"topics": ["nope"]})
-    assert "error" in bd.settings_set({"topics": ["ipo_private"]})  # nothing public: refused
+    assert "error" in bd.settings_set({"topics": ["summary"]})  # nothing of its own: refused
+    assert bd.settings_set({"v": 3, "topics": ["ipo_private"]})["topics"] == ["ipo"]  # its name before it was public
+    bd.settings_set(bd.DEFAULT_SETTINGS)
     assert "error" in bd.settings_set({"platforms": ["myspace"]})
     assert "error" in bd.settings_set({"detail": "huge"})
-    out = bd.settings_set({"v": 2, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
+    out = bd.settings_set({"v": 3, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
                            "auto": "publish"})
     assert out["topics"] == ["summary", "macro", "funds"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
     assert bd.settings_get() == out
@@ -223,14 +225,16 @@ def test_settings_from_before_the_one_page_brief():
     bd.settings_path().parent.mkdir(parents=True, exist_ok=True)
     bd.settings_path().write_text(json.dumps({"topics": ["summary", "insider", "screens"], "detail": "short"}))
     st = bd.settings_get()
-    assert st["topics"] == ["summary", "insider", "funds", "screens"] and st["detail"] == "short" and st["v"] == 2, st
+    assert st["topics"] == ["summary", "insider", "funds", "screens"] and st["detail"] == "short" and st["v"] == 3, st
     # A screen without a box for fund moves does not switch them off...
     assert "funds" in bd.settings_set({"topics": ["insider", "screens"], "detail": "full"})["topics"]
+    # ...nor, of before, the IPOs, which it knows by another name
+    bd.settings_set({"v": 3, "topics": ["ipo", "insider", "funds"]})
+    assert bd.settings_set({"v": 2, "topics": ["insider"], "detail": "full"})["topics"] == ["ipo", "insider"]
     # ...one with a box does, for good.
-    bd.settings_set({"v": 2, "topics": ["summary", "insider", "screens"]})
+    bd.settings_set({"v": 3, "topics": ["summary", "insider", "screens"]})
     assert bd.settings_get()["topics"] == ["summary", "insider", "screens"], bd.settings_get()
     assert "error" in bd.settings_set({"topics": ["summary"]})
-    assert "error" in bd.settings_set({"v": 2, "topics": ["summary", "ipo_private"]})
     bd.settings_path().write_text("[1]")  # not a settings file: the defaults
     assert bd.settings_get()["topics"] == list(bd.TOPICS)
     bd.settings_set(bd.DEFAULT_SETTINGS)
@@ -412,6 +416,65 @@ def test_a_published_brief_can_be_generated_again():
     after.update({"state": "ready"})
     bd.store(after)
     assert "new edition" in bd.delete(did)["error"]
+    shutil.rmtree(bd._dir(did))
+
+
+def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
+    did = bd.weekly_id()
+    assert "Nothing" in bd.cancel_build("weekly-none")["error"]
+    m = make_weekly(did)
+    # a stand-in for the build: its own session, a child of its own
+    p = subprocess.Popen([sys.executable, "-c", "import subprocess,time\n"
+                          "c = subprocess.Popen(['sleep', '60']); print(c.pid, flush=True); time.sleep(60)", "build-weekly"],
+                         stdout=subprocess.PIPE, text=True, start_new_session=True)
+    child = int(p.stdout.readline())
+    m.update({"state": "building", "pid": p.pid, "prev_ready": True})
+    bd.store(m)
+    bd.progress_path(did).write_text("{}")
+    assert bd.get(did)["progress_path"] == str(bd.progress_path(did))
+    import threading
+    threading.Thread(target=p.wait, daemon=True).start()  # reaped, as a build's is
+    r = bd.cancel_build(did)
+    assert r.get("state") == "ready" and not r.get("note") and r["progress_path"] == "", r
+    assert not bd.progress_path(did).exists()
+    for _ in range(20):
+        if not bd._alive(child):
+            break
+        bd.time.sleep(0.1)
+    gone = not bd._alive(child) or "Z" in subprocess.run(["ps", "-o", "stat=", "-p", str(child)], capture_output=True,
+                                                         text=True).stdout
+    assert gone, "the build's children end with it"
+    # a build that finishes while Cancel waits for its turn is left alone
+    q = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "build-weekly"], start_new_session=True)
+    m = bd.load(did)
+    m.update({"state": "building", "pid": q.pid, "prev_ready": True})
+    bd.store(m)
+    out = []
+    with bd.Lock(wait=True):  # putting the finished draft in place
+        th = threading.Thread(target=lambda: out.append(bd.cancel_build(did)))
+        th.start()
+        bd.time.sleep(0.4)
+        assert q.poll() is None, "never stopped in the middle of that"
+        m.update({"state": "ready", "pid": None, "body_done": True})
+        bd.store(m)
+    th.join(10)
+    assert "finished" in out[0]["error"] and q.poll() is None and bd.load(did)["body_done"], out
+    # ...nor is another build that took its place
+    m.update({"state": "building", "pid": q.pid})
+    bd.store(m)
+    real = bd.load
+    first = dict(m)
+    bd.load = lambda d: (setattr(bd, "load", real), first)[1]  # what Cancel saw
+    m["pid"] = os.getpid()
+    bd.store(m)
+    assert "finished" in bd.cancel_build(did)["error"] and q.poll() is None and bd.load(did)["pid"] == os.getpid()
+    q.kill()
+    q.wait()
+    # one that systemd started is not ours to stop
+    m = bd.load(did)
+    m.update({"state": "building", "pid": os.getpid(), "prev_ready": True})
+    bd.store(m)
+    assert "Sunday run" in bd.cancel_build(did)["error"]
     shutil.rmtree(bd._dir(did))
 
 

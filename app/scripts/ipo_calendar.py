@@ -849,7 +849,7 @@ def lockup_rows(deals, today, ahead=180, behind=7):
             continue
         out.append({"deal_id": d["deal_id"], "ticker": d["ticker"], "company": d["company"],
                     "priced_date": p.isoformat(), "lockup_days": days, "expiry": exp.isoformat(),
-                    "basis": basis, "shares_offered": d.get("shares"),
+                    "basis": basis, "shares_offered": d.get("shares"), "cik": d.get("cik"),
                     "final_price": d.get("final_price")})
     out.sort(key=lambda r: r["expiry"])
     return out
