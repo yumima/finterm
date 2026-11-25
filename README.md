@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`6eb95c04e`](https://github.com/yumima/finterm/commit/6eb95c04e) Weekly brief: track record, earnings ahead, holdings, card, alerts
 - [`821a3c92d`](https://github.com/yumima/finterm/commit/821a3c92d) Weekly brief: ACCOUNTS is its name
 - [`63e4434dd`](https://github.com/yumima/finterm/commit/63e4434dd) Weekly brief: the page gets the room
 - [`aa437d5c1`](https://github.com/yumima/finterm/commit/aa437d5c1) Weekly brief: it ends with a link to finterm

@@ -1,6 +1,6 @@
 {% assign r = site.data.release %}
 <p class="counter">
-  {% unless include.short %}Version {{ r.version }}{% if r.released %} · <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y" }}</time>{% endif %} · {% endunless %}Downloads: <span id="count" data-counts='{{ site.data.counts | jsonify }}'>{{ site.data.counts.sum }}</span>
+  {% unless include.short %}Version {{ r.version }}{% if r.released %} · <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y" }}</time>{% endif %} · {% endunless %}Clones + Downloads: <span id="count" data-counts='{{ site.data.counts | jsonify }}'>{{ site.data.counts.sum }}</span>
 </p>
 <script>
 (function () {
@@ -26,7 +26,7 @@
     return Math.max(known[os], mine.reduce(function (n, c) { return Math.max(n, c.known) + 1; }, 0));
   }
   function render() {
-    var sum = 0;
+    var sum = counts.clones;
     Object.keys(ext).forEach(function (os) {
       var n = shown(os), tile = document.getElementById("count-" + os);
       sum += n;

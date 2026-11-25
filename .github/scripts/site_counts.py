@@ -4,7 +4,9 @@
     site_counts.py DOWNLOADS.json RELEASES.json OUT.json
 
 `total` is `kept` (releases GitHub no longer lists) plus the listed ones. The page
-starts from it and replaces it with GitHub's current figures.
+starts from it and replaces it with GitHub's current figures. `sum` is what it shows:
+the downloads and `clones`, a figure GitHub gives only the owner (kept in
+DOWNLOADS.json).
 """
 
 import json
@@ -19,7 +21,8 @@ def site_counts(data: dict, releases: list) -> dict:
     kept = {os: sum(e[os] for e in earlier.values()) for os in ENDS}
     live = [counts(r["assets"]) for r in releases if r["tag_name"] not in earlier]
     total = {os: kept[os] + sum(c[os] for c in live) for os in ENDS}
-    return {"kept": kept, "kept_tags": list(earlier), "total": total, "sum": sum(total.values())}
+    return {"kept": kept, "kept_tags": list(earlier), "total": total, "clones": data.get("clones", 0),
+            "sum": data.get("clones", 0) + sum(total.values())}
 
 
 if __name__ == "__main__":
