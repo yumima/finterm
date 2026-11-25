@@ -648,6 +648,7 @@ def test_the_issue_holds_the_chosen_sections_in_order_and_is_short():
     assert "## Week ahead" in _body(("ipo",)) and "IPOs and lock-ups" in _body(("ipo",))
     parts = [full.index(x) for x in ("| Insider buying |", "| Funds added |", "| Screen leaders |")]
     assert parts == sorted(parts) and parts[0] > full.index("## Stocks"), parts
+    assert full.rstrip().endswith("Made with [finterm](https://yumima.github.io/finterm/), an open-source research terminal.")
     assert len(full.split()) < 900 and len(full.split("\n")) < 100, (len(full.split()), len(full.split("\n")))
     only = _body(("funds",))
     assert "## Stocks" in only and "| Funds added |" in only and "Insider" not in only and "CPI" not in only

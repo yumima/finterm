@@ -1036,4 +1036,5 @@ def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events,
         out += ["## Week ahead", ""]
     if "ipo" in topics:
         out += PENDING if "ipo" in pending else ipo_part(ipo, BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"]))
-    return out + stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending)
+    out += stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending)
+    return out + [f"Made with [finterm]({SITE_URL}/), an open-source research terminal.", ""]
