@@ -6,6 +6,7 @@ A comprehensive, Bloomberg-style financial research terminal for markets, compan
 
 Latest first.
 
+- [`e8cc7f5b9`](https://github.com/yumima/finterm/commit/e8cc7f5b9) site: the lead says what finterm is, not what it is written in
 - [`6d441b4cb`](https://github.com/yumima/finterm/commit/6d441b4cb) site: the counter is clones and downloads
 - [`6eb95c04e`](https://github.com/yumima/finterm/commit/6eb95c04e) Weekly brief: track record, earnings ahead, holdings, card, alerts
 - [`821a3c92d`](https://github.com/yumima/finterm/commit/821a3c92d) Weekly brief: ACCOUNTS is its name
