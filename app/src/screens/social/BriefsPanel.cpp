@@ -635,7 +635,7 @@ void BriefsPanel::render_controls() {
         why = QStringLiteral("Published — Post sends it to %1.").arg(pending.join(", "));
     else if (ready)
         why = QStringLiteral("Posted to the ticked platforms as soon as the page is live after publishing. A "
-                             "platform not connected (CHANNELS) is skipped.");
+                             "platform not connected (ACCOUNTS) is skipped.");
     const QJsonObject errs = draft_.value("post_errors").toObject();
     for (auto it = errs.begin(); it != errs.end(); ++it)
         why += QStringLiteral("\n%1 not posted: %2").arg(it.key(), it.value().toString());
