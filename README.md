@@ -40,11 +40,11 @@ Latest first.
 <!-- DOWNLOAD-TABLE-START -->
 | System | Download | First launch |
 |---|---|---|
-| **Linux** x86-64 | [AppImage (.run)](https://github.com/yumima/finterm/releases/download/v4.1.0/finterm-4.1.0-linux-x64-setup.run) | `chmod +x finterm-*.run && ./finterm-*.run` |
-| **Windows** 10/11 x64 | [Installer (.exe)](https://github.com/yumima/finterm/releases/download/v4.1.0/finterm-4.1.0-windows-x64-setup.exe) | Run it. At SmartScreen: **More info → Run anyway** |
-| **macOS** 13+ Apple Silicon | [Disk image (.dmg)](https://github.com/yumima/finterm/releases/download/v4.1.0/finterm-4.1.0-macos-arm64-setup.dmg) | Drag to Applications, then **right-click → Open → Open** |
+| **Linux** x86-64 | [AppImage (.run)](https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-linux-x64-setup.run) | `chmod +x finterm-*.run && ./finterm-*.run` |
+| **Windows** 10/11 x64 | [Installer (.exe)](https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-windows-x64-setup.exe) | Run it. At SmartScreen: **More info → Run anyway** |
+| **macOS** 13+ Apple Silicon | [Disk image (.dmg)](https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-macos-arm64-setup.dmg) | Drag to Applications, then **right-click → Open → Open** |
 
-Current release: [v4.1.0](https://github.com/yumima/finterm/releases/tag/v4.1.0) · [all releases](https://github.com/yumima/finterm/releases)
+Current release: [v4.2.0](https://github.com/yumima/finterm/releases/tag/v4.2.0) · [all releases](https://github.com/yumima/finterm/releases)
 <!-- DOWNLOAD-TABLE-END -->
 
 ### What happens, step by step
