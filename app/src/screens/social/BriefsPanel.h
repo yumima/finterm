@@ -69,6 +69,7 @@ class BriefsPanel : public QWidget {
     void cancel_build();
     /// A running build's page so far, in the reading view.
     void show_build();
+    void show_page(const QString& body);
     void new_theme();
     void save();
     void revert();

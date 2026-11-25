@@ -196,11 +196,11 @@ def test_settings_validate_and_drive_the_build():
     assert st["detail"] == "standard" and st["auto"] == "draft" and "insider" in st["topics"], st
     assert "error" in bd.settings_set({"topics": ["nope"]})
     assert "error" in bd.settings_set({"topics": ["summary"]})  # nothing of its own: refused
-    assert bd.settings_set({"v": 3, "topics": ["ipo_private"]})["topics"] == ["ipo"]  # its name before it was public
+    assert bd.settings_set({"v": 4, "topics": ["ipo_private"]})["topics"] == ["ipo"]  # its name before it was public
     bd.settings_set(bd.DEFAULT_SETTINGS)
     assert "error" in bd.settings_set({"platforms": ["myspace"]})
     assert "error" in bd.settings_set({"detail": "huge"})
-    out = bd.settings_set({"v": 3, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
+    out = bd.settings_set({"v": 4, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
                            "auto": "publish"})
     assert out["topics"] == ["summary", "macro", "funds"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
     assert bd.settings_get() == out
@@ -225,14 +225,14 @@ def test_settings_from_before_the_one_page_brief():
     bd.settings_path().parent.mkdir(parents=True, exist_ok=True)
     bd.settings_path().write_text(json.dumps({"topics": ["summary", "insider", "screens"], "detail": "short"}))
     st = bd.settings_get()
-    assert st["topics"] == ["summary", "insider", "funds", "screens"] and st["detail"] == "short" and st["v"] == 3, st
+    assert st["topics"] == ["summary", "earnings", "insider", "funds", "screens", "mine"] and st["detail"] == "short" and st["v"] == 4, st
     # A screen without a box for fund moves does not switch them off...
     assert "funds" in bd.settings_set({"topics": ["insider", "screens"], "detail": "full"})["topics"]
     # ...nor, of before, the IPOs, which it knows by another name
-    bd.settings_set({"v": 3, "topics": ["ipo", "insider", "funds"]})
+    bd.settings_set({"v": 4, "topics": ["ipo", "insider", "funds"]})
     assert bd.settings_set({"v": 2, "topics": ["insider"], "detail": "full"})["topics"] == ["ipo", "insider"]
     # ...one with a box does, for good.
-    bd.settings_set({"v": 3, "topics": ["summary", "insider", "screens"]})
+    bd.settings_set({"v": 4, "topics": ["summary", "insider", "screens"]})
     assert bd.settings_get()["topics"] == ["summary", "insider", "screens"], bd.settings_get()
     assert "error" in bd.settings_set({"topics": ["summary"]})
     bd.settings_path().write_text("[1]")  # not a settings file: the defaults
@@ -417,6 +417,78 @@ def test_a_published_brief_can_be_generated_again():
     bd.store(after)
     assert "new edition" in bd.delete(did)["error"]
     shutil.rmtree(bd._dir(did))
+
+
+def test_publishing_keeps_the_record_and_the_picture():
+    bare = origin()
+    show = lambda rel: subprocess.run(["git", "--git-dir", str(bare), "show", f"main:{rel}"], capture_output=True).stdout
+    png = "site/assets/brief/2026-11-09.png"
+
+    def draft(did, key, line="**Bearish: half risk.**", more=()):
+        m = make_weekly(did)
+        for rel in ("site/issue.json", "site/_data/announce.json"):
+            f = bd._file(m, rel)
+            f.write_text(json.dumps({**json.loads(f.read_text()), "issue": key, "call": {
+                "close": "2026-11-13", "state": "bearish", "label": "Bearish", "stance": 0.5, "line": "**Bearish: half risk.**"}}))
+        bd._file(m, png).parent.mkdir(parents=True, exist_ok=True)
+        bd._file(m, png).write_bytes(b"\x89PNG\x00\xff")
+        for x in (png, *more):
+            m["files"].append(x)
+            bd._file(m, x).write_bytes(b"\x89PNG\x00\xff")
+        bd.store(m)
+        f = bd._file(m, POST)
+        f.write_text(f.read_text().replace("## Week ahead", f"{line}\n\n## Week ahead").replace(
+            "date: 2026-11-09", 'image: "/assets/brief/2026-11-09.png"\ndate: 2026-11-09'))
+        # the holdings: beside the draft, shown with it, in nothing that is published
+        bd.private_path(did).write_text("| HOLDING | 2 bought |")
+        return m
+    real, bd._index_closes = bd._index_closes, lambda: [(date(2026, 11, 13), 100.0), (date(2026, 11, 20), 101.0)]
+    try:
+        draft("weekly-record", "2026-W46")
+        assert "HOLDING" in bd.get("weekly-record")["private"] and "HOLDING" not in bd.get("weekly-record")["body"]
+        assert not bd.publish("weekly-record").get("error")
+        calls = json.loads(show("site/_data/calls.json"))
+        assert [c["issue"] for c in calls["calls"]] == ["2026-W46"] and show(png) == b"\x89PNG\x00\xff", calls
+        assert b"HOLDING" not in show(POST) and b"image:" in show(POST)
+        everything = subprocess.run(["git", "--git-dir", str(bare), "grep", "-c", "HOLDING", "main"], capture_output=True).stdout
+        assert everything == b"", everything
+        # the owner took the stance out: not kept, not pictured, not in the data
+        draft("weekly-record2", "2026-W45", line="**Corrected.**", more=["site/assets/brief/never.png"])
+        assert not bd.publish("weekly-record2").get("error")
+        calls = json.loads(show("site/_data/calls.json"))
+        assert [c["issue"] for c in calls["calls"]] == ["2026-W46"], calls
+        assert show(png) == b"" and b"image:" not in show(POST) and "call" not in json.loads(show("site/issue.json"))
+    finally:
+        bd._index_closes = real
+
+
+def test_health_says_what_is_missing():
+    d = lambda *a: datetime(*a)
+    sun = d(2031, 11, 23, 13)
+    did = bd.weekly_id(sun.date())
+    make_weekly("weekly-2026-w40")  # there is a weekly brief here
+    assert "not built" in bd.health(sun) and bd.health(d(2031, 11, 23, 10)) == "" and bd.health(d(2031, 11, 28, 13)) == ""
+    m = make_weekly(did)
+    assert bd.health(sun) == "" and "not published" in bd.health(d(2031, 11, 24, 13)), bd.health(d(2031, 11, 24, 13))
+    m["complete"] = False
+    bd.store(m)
+    assert "incomplete" in bd.health(sun)
+    m.update({"state": "failed", "error": "boom"})
+    bd.store(m)
+    assert "boom" in bd.health(sun)
+    m["error"] = "the build was cancelled"
+    bd.store(m)
+    assert bd.health(sun) == ""
+    m.update({"state": "published", "complete": True, "published_at": bd._iso(bd._now())})
+    bd.store(m)
+    assert bd.health(d(2031, 11, 24, 13)) == ""
+    shutil.rmtree(bd._dir(did))
+
+
+def test_the_symbols_are_kept_for_the_owner_only():
+    bd.keep_symbols(["aapl", " msft ", "", 5, "AAPL"])
+    assert json.loads(bd.symbols_path().read_text()) == ["AAPL", "MSFT"]
+    assert bd.symbols_path().stat().st_mode & 0o077 == 0
 
 
 def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():

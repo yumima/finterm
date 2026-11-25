@@ -76,13 +76,14 @@ THEME_DISCLAIMER = (
 # --topics/--detail), by tick() (where to post) and by tools/weekly_publish.sh
 # (auto-mode). Set from finterm › NEWS › What's On › WEEKLY BRIEF.
 
-TOPICS = ("summary", "macro", "ipo", "insider", "funds", "screens")
+TOPICS = ("summary", "macro", "earnings", "ipo", "insider", "funds", "screens", "mine")
+NEW_TOPICS = (("funds", 2), ("earnings", 4), ("mine", 4))  # the settings version each came with
 RENAMED_TOPICS = {"ipo_private": "ipo"}  # the IPO part, when it was the owner's only
 DETAILS = ("full", "standard", "short")
 AUTO_MODES = ("draft", "publish")
-PUBLIC_SECTIONS = ("macro", "ipo", "insider", "funds", "screens")  # what a published issue can hold
+PUBLIC_SECTIONS = ("macro", "earnings", "ipo", "insider", "funds", "screens")  # what a published issue can hold
 DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft",
-                    "v": 3}  # 2: the one-page brief (fund moves); 3: IPOs are public
+                    "v": 4}  # 2: the one-page brief (fund moves); 3: IPOs are public; 4: earnings, your holdings
 
 
 def settings_path():
@@ -95,9 +96,9 @@ def settings_get():
         saved = json.loads(settings_path().read_text(encoding="utf-8"))
         # Saved before fund moves existed: they are on, as a new section is by
         # default; what was chosen of the rest stands.
-        if saved.get("v", 1) < 2 and isinstance(saved.get("topics"), list):
-            saved["topics"] = [*saved["topics"], "funds"]
-        s.update(saved, v=3)
+        if isinstance(saved.get("topics"), list):
+            saved["topics"] = [*saved["topics"], *(t for t, since in NEW_TOPICS if saved.get("v", 1) < since)]
+        s.update(saved, v=DEFAULT_SETTINGS["v"])
     except (OSError, ValueError, AttributeError, TypeError):
         pass
     import social_post as sp
@@ -125,7 +126,7 @@ def settings_set(new):
         # A screen from before fund moves (an app still running, or not yet
         # updated) has no box for them and sends none: its list is not a choice.
         # The same for IPOs, whose box it looks up under their old name.
-        for t, since in (("funds", 2), ("ipo", 3)):
+        for t, since in (*NEW_TOPICS, ("ipo", 3)):
             if int(new.get("v") or 1) < since and t in cur["topics"] and t not in new["topics"]:
                 new["topics"].append(t)
         cur["topics"] = [t for t in TOPICS if t in new["topics"]]
@@ -341,6 +342,12 @@ def progress_path(did):
     return _dir(did) / "progress.json"
 
 
+def private_path(did):
+    """The owner's holdings this week (weekly_brief_core.mine_part): beside the
+    draft's files, never one of them, so nothing that publishes can read it."""
+    return _dir(did) / "private.md"
+
+
 def list_drafts():
     out = []
     for d in drafts_dir().iterdir():
@@ -349,7 +356,7 @@ def list_drafts():
             if m:
                 out.append(summary(m))
     out.sort(key=lambda s: s.get("created", ""), reverse=True)
-    return {"drafts": out, "worktree": str(worktree())}
+    return {"drafts": out, "worktree": str(worktree()), "health": health()}
 
 
 def get(did):
@@ -364,6 +371,10 @@ def get(did):
             out["log"] = "\n".join(log_path().read_text(encoding="utf-8", errors="replace").splitlines()[-14:])
         except FileNotFoundError:
             out["log"] = ""
+    try:
+        out["private"] = private_path(did).read_text(encoding="utf-8")
+    except OSError:
+        out["private"] = ""
     if m.get("main") and _file(m, m["main"]).exists():
         try:
             out["body"] = "\n".join(split_page(_file(m, m["main"]).read_text(encoding="utf-8"))[2])
@@ -449,8 +460,73 @@ def weekly_id(today=None):
     return f"weekly-{wb.issue_key(today or date.today()).lower()}"
 
 
-def start_weekly_build(force=False):
+def symbols_path():
+    """The owner's portfolio and watchlist symbols, as the app last sent them:
+    for the private block, the Sunday run's too. Local, readable by the owner."""
+    return _root() / "social" / "my_symbols.json"
+
+
+def keep_symbols(symbols):
+    syms = sorted({s.strip().upper() for s in symbols if isinstance(s, str) and s.strip()})[:2000]
+    p = symbols_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(syms, fh)
+    os.replace(tmp, p)
+
+
+def health(now=None):
+    """What is wrong with this week's brief, or "". Due from Sunday noon (it is
+    built at nine) until the week is over, published or not by Monday noon."""
+    now = now or datetime.now()
+    if now.weekday() not in (6, 0, 1, 2) or (now.weekday() == 6 and now.hour < 12):
+        return ""
+    m = load(weekly_id(now.date()))
+    if not m:
+        # Only where there is a weekly brief at all.
+        ever = any(x.is_dir() and x.name.startswith("weekly-") for x in drafts_dir().iterdir())
+        return "This week's brief was not built." if ever else ""
+    st = _effective_state(m)
+    if st == "failed" and "cancelled" in (m.get("error") or ""):
+        return ""
+    if st == "failed":
+        return f"This week's brief failed: {m.get('error') or 'see the log'}"
+    if st == "ready" and not m.get("complete", True):
+        return "This week's brief is incomplete: some filings could not be read."
+    late = now.weekday() in (0, 1, 2) and (now.weekday() != 0 or now.hour >= 12)
+    if st == "ready" and late and not m.get("published_at"):
+        return "This week's brief is built but not published."
+    return ""
+
+
+def notify_health():
+    """A desktop notice of health(), once per week and message (the tick timer)."""
+    msg = health()
+    if not msg:
+        return
+    mark = _root() / "social" / ".health"
+    said = f"{weekly_id()} {msg}"
+    try:
+        if mark.read_text(encoding="utf-8") == said:
+            return
+    except OSError:
+        pass
+    try:
+        subprocess.run(["notify-send", "--urgency=critical", "finterm", f"{msg} NEWS › What's On › WEEKLY BRIEF."],
+                       timeout=10, check=True)
+    except (OSError, subprocess.SubprocessError):
+        print(msg)  # not shown: the next tick tries again
+        return
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    mark.write_text(said, encoding="utf-8")
+
+
+def start_weekly_build(force=False, symbols=None):
     """Start the build in the background (minutes); the screen polls get()."""
+    if symbols is not None:
+        keep_symbols(symbols)
     did = weekly_id()
     m = load(did)
     if m and _effective_state(m) == "building":
@@ -627,7 +703,7 @@ def build_weekly(if_unedited=False, again=False):
             r = subprocess.run([sys.executable, str(repo_root() / "tools/weekly_brief.py"), "--site",
                                 str(scratch / "site"), "--allow-incomplete", "--draft",
                                 "--topics", ",".join(st["topics"]), "--detail", st["detail"],
-                                "--progress", str(progress_path(did))],
+                                "--progress", str(progress_path(did)), "--symbols", str(symbols_path())],
                                stdin=subprocess.DEVNULL, timeout=BUILD_TIMEOUT_S)
             if r.returncode != 0:
                 raise RuntimeError(f"the brief failed (exit {r.returncode}) — see the log")
@@ -641,13 +717,20 @@ def build_weekly(if_unedited=False, again=False):
                 m = load(did) or m
                 for which in ("files", "generated"):
                     shutil.rmtree(_dir(did) / which, ignore_errors=True)
-                    for rel in (main,) + WEEKLY_FILES:
+                    # With the picture of the issue, when one was drawn.
+                    files = [main, *WEEKLY_FILES] + [str(p.relative_to(scratch)) for p in
+                                                     sorted((scratch / "site/assets/brief").glob("*.png"))]
+                    for rel in files:
                         dst = _file(m, rel, which)
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(scratch / rel, dst)
+                private_path(did).unlink(missing_ok=True)
+                if (scratch / "private.md").exists():
+                    shutil.copy2(scratch / "private.md", private_path(did))
+                    os.chmod(private_path(did), 0o600)
                 # New text has not been reviewed: any schedule is cleared.
                 m.update({"state": "ready", "key": issue["issue"], "url": issue.get("url", ""), "main": main,
-                          "files": [main, *WEEKLY_FILES], "built_at": _iso(_now()), "edited": False,
+                          "files": files, "built_at": _iso(_now()), "edited": False,
                           "complete": bool(issue.get("complete", True)), "notes": issue.get("notes", []),
                           "x_text": issue.get("x", ""), "x_generated": issue.get("x", ""), "pid": None,
                           "schedule_at": "", "accept_incomplete": False, "error": "",
@@ -977,6 +1060,28 @@ def schedule(did, at, accept_incomplete=False):
     return get(did)
 
 
+def _index_closes():
+    """The S&P 500's closes since the record began (FRED), for its outcomes."""
+    import fred_data
+
+    r = fred_data.get_series_keyless("SP500", (date.today() - timedelta(days=3650)).isoformat())
+    if r.get("error"):
+        raise RuntimeError(r["error"])
+    return [(date.fromisoformat(o["date"]), float(o["value"])) for o in r.get("observations") or []]
+
+
+def _state_kept(m, public_main):
+    """The issue's call when the page still states it; None when the owner's
+    correction took it out — then it is not kept, and the picture, which shows
+    it, is not published."""
+    try:
+        issue = json.loads(_file(m, "site/issue.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    call = issue.get("call")
+    return issue if call and call.get("line", "") in public_main else {k: v for k, v in issue.items() if k != "call"}
+
+
 def publish(did, accept_incomplete=False):
     """Commit and push one draft's files. GitHub Pages deploys in a minute
     or two; tick() posts to X once the page shows this version."""
@@ -987,6 +1092,12 @@ def publish(did, accept_incomplete=False):
     if not m.get("complete", True) and not accept_incomplete:
         return {"error": "Some days of filings could not be read; confirm publishing an incomplete week.",
                 "needs_confirm": True}
+    closes = []
+    if m["kind"] == "weekly":  # before the lock: a slow answer holds up no one else
+        try:
+            closes = _index_closes()
+        except Exception as e:  # noqa: BLE001 — an unread index never holds a publish back
+            print(f"track record: outcomes not updated ({type(e).__name__})")
     with Lock(wait=True):
         # Again under the lock: another publisher (the timer's tick, the
         # screen's) may have published it while this one waited.
@@ -996,18 +1107,39 @@ def publish(did, accept_incomplete=False):
             return {"error": why, "already": bool(m and m.get("state") == "published")}
         _reset_worktree()
         wt = worktree()
+        issue = _state_kept(m, _file(m, m["main"]).read_text(encoding="utf-8")) if m["kind"] == "weekly" else {}
         for rel in m["files"]:
             dst = wt / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
+            if rel.endswith(".png"):
+                if issue.get("call"):
+                    shutil.copy2(_file(m, rel), dst)
+                else:
+                    dst.unlink(missing_ok=True)
+                continue
             text = _file(m, rel).read_text(encoding="utf-8")
             # Private blocks (the owner's Nasdaq IPO section) never leave
             # this machine; a weekly rerun keeps its file name, so it
             # replaces the week's issue rather than adding one.
             public = wb.strip_private(text)
-            if wb.PRIVATE_OPEN in public or "Nasdaq calendar — only you see this" in public:
+            if wb.PRIVATE_OPEN in public or "only you see this" in public:
                 raise RuntimeError(f"{rel}: a private section survived stripping; not published")
+            if not issue.get("call") and m["kind"] == "weekly":
+                if rel == m["main"]:
+                    public = re.sub(r"(?m)^image: .*\n", "", public, count=1)
+                elif rel.endswith(".json"):
+                    public = json.dumps({k: v for k, v in json.loads(public).items() if k != "call"}, indent=2,
+                                        ensure_ascii=False) + "\n"
             dst.write_text(public, encoding="utf-8")
-        _git("add", "-A", *m["files"])
+        record = []
+        if m["kind"] == "weekly":  # its stance, kept for good
+            import brief_track
+
+            record = ["site/_data/calls.json"]
+            brief_track.update(wt / record[0], issue, _now(), closes)
+        # (A picture that was neither kept nor ever published is no path to git.)
+        paths = [p for p in (*m["files"], *record) if (wt / p).exists() or _git("ls-files", "--", p)]
+        _git("add", "-A", *paths)
         if subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--quiet"]).returncode == 0:
             m.update({"state": "published", "published_at": _iso(_now()), "schedule_at": "",
                       "commit": _git("rev-parse", "HEAD"), "error": ""})
@@ -1229,6 +1361,10 @@ def main(argv):
             print(json.dumps(tick()))
         except RuntimeError as e:  # another run holds the lock: the next tick does it
             print(f"skipped: {e}")
+        try:
+            notify_health()
+        except Exception as e:  # noqa: BLE001
+            print(f"health: {type(e).__name__}: {e}")
         try:
             prefetch_filings()
         except Exception as e:  # noqa: BLE001 — a convenience: the build reads what is missing

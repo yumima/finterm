@@ -189,7 +189,7 @@ def test_regime_states_are_the_tested_definition():
     assert set(wb.STANCE) == set(wb.LABELS) == set(wb.REGIMES)
     # the stance is the tested rule: full above the average, half below
     assert [wb.STANCE[k] for k in wb.REGIMES] == [1.0, 1.0, 0.5, 0.5]
-    ev = wb._load_evidence()  # the shipped record holds every state the call can make
+    ev = wb.load_evidence()  # the shipped record holds every state the call can make
     assert set(ev["states"]) == set(wb.REGIMES) and all(ev["states"][k]["weeks"] > 50 for k in wb.REGIMES)
     assert ev["rule"]["worst"] > ev["always"]["worst"] and ev["rule"]["cagr"] < ev["always"]["cagr"]
 
@@ -416,7 +416,7 @@ def test_a_build_shows_its_steps_and_the_page_as_it_comes():
     read = lambda: json.load(open(path, encoding="utf-8"))
     go = threading.Event()
     saved = {k: getattr(g, k) for k in ("fetch_macro_series", "fetch_macro_rows", "screener_doc", "clusters_data",
-                                        "ipo_week")}
+                                        "ipo_week", "earnings_week", "holdings_week")}
     seen = {}
 
     def filings(scan, progress=None, waiting=None):
@@ -433,12 +433,14 @@ def test_a_build_shows_its_steps_and_the_page_as_it_comes():
     g.screener_doc = lambda say=None, timeout=0: (say("Downloading prices 3/9", 1 / 3), (_doc(), None))[1]
     g.clusters_data = filings
     g.ipo_week = lambda today: IPO
+    g.earnings_week = lambda today: EARN
+    g.holdings_week = lambda symbols, *a: {"symbols": len(symbols), "rows": MINE}
     import sec_13f_bulk
-    flows, sec_13f_bulk.stock_flows = sec_13f_bulk.stock_flows, lambda: FLOWS
+    flows, sec_13f_bulk.stock_flows = sec_13f_bulk.stock_flows, lambda symbols=(): FLOWS
     out = {}
     try:
-        t = threading.Thread(target=lambda: out.update(g.build_brief(date(2026, 11, 22),
-                                                                     progress_path=path)))
+        t = threading.Thread(target=lambda: out.update(g.build_brief(date(2026, 11, 22), progress_path=path,
+                                                                     symbols=["SECRETCO", "AAPL"])))
         t.start()
         import time
         for _ in range(100):
@@ -466,8 +468,12 @@ def test_a_build_shows_its_steps_and_the_page_as_it_comes():
         # the finished page is the one built in a single go
         mon, fri = wb.week_ahead(date(2026, 11, 22))
         want = wb.brief_body(g.ALL_TOPICS, "standard", g.fetch_macro_series(None), _doc(), None, ROWS, [], FLOWS, [], mon,
-                             fri, "the release calendar could not be read (OSError)", date(2026, 11, 22), ipo=IPO)
+                             fri, "the release calendar could not be read (OSError)", date(2026, 11, 22), ipo=IPO, earnings=EARN)
         assert out["body"] == want
+        # the owner's names are the build's to show, and no part of the page
+        assert "SECRETCO" in read()["body"] and "SECRETCO" not in "\n".join(out["body"]), read()["body"]
+        assert "SECRETCO" in "\n".join(wb.mine_part(out["mine"])) and "SECRETCO" not in str(out["problems"])
+        assert out["problems"] == ["calendar: OSError"], out["problems"]
     finally:
         go.set()
         for k, v in saved.items():
@@ -535,6 +541,117 @@ def test_the_calendar_is_asked_rarely_and_kept_when_it_refuses():
         assert not rows and "HTTP 429" in failed[0], failed
     finally:
         wb._calendar_cache, urllib.request.urlopen = saved, real
+
+
+# ── earnings ahead, the owner's names ────────────────────────────────────────
+
+EARN = {"rows": [{"symbol": "CRM", "company": "Salesforce, Inc.", "year_ago": date(2025, 12, 3)}], "unsure": 2,
+        "partial": False, "calendar": []}
+MINE = [{"symbol": "SECRETCO", "insiders": "2 bought $1.2M", "funds": "+$3.0M", "screens": "Buffett Value", "ahead": ""}]
+
+
+def test_earnings_part_prints_no_vendor_date():
+    text = "\n".join(wb.earnings_part(EARN))
+    assert "| CRM | Salesforce, Inc. | Wed Dec 3 |" in text and "2 more not confirmed" in text, text
+    assert "could not be read" in "\n".join(wb.earnings_part({"error": "could not be read (X)"}))
+    assert "lists no large company" in "\n".join(wb.earnings_part({"rows": [], "unsure": 0, "partial": False}))
+    assert "No large company" not in "\n".join(wb.earnings_part({"rows": [], "unsure": 0, "partial": True}))
+
+
+def test_earnings_are_confirmed_by_the_same_report_a_year_ago():
+    import sec_earnings as s
+    day = date(2026, 12, 2)
+    rows = [{"symbol": x, "date": d, "market_cap": c} for x, d, c in (
+        ("BIG", "2026-12-02", 9e11), ("OTHER", "2026-12-02", 8e11), ("NOANS", "2026-12-02", 7e11),
+        ("SMALL", "2026-12-02", 1e9), ("LATER", "2026-12-20", 9e11), ("NOCAP", "2026-12-02", None))]
+    saved, s.reports = s.reports, lambda cik, cache: {
+        "BIG": ("Big Inc.", [date(2026, 8, 27), date(2025, 12, 3), date(2025, 11, 10)]),
+        "OTHER": ("Other Inc.", [date(2026, 10, 1), date(2025, 10, 1)]), "NOANS": None}[cik]
+    try:
+        got, unsure = s.ahead(rows, day, day + timedelta(days=7), None, lambda x: x)
+        assert got == [{"symbol": "BIG", "company": "Big Inc.", "year_ago": date(2025, 12, 3)}] and unsure == 2, (got, unsure)
+    finally:
+        s.reports = saved
+
+
+def test_mine_rows_and_block():
+    doc = {"strategies": [{"id": "buffett", "name": "Buffett Value", "symbols": ["AAA"]},
+                          {"id": "trend_template", "name": "TT", "symbols": ["AAA"]}]}
+    rows = wb.mine_rows(["AAA", "BBB", "ZZZ"], {"AAA": {"insiders": 2, "value": 1.2e6}}, {"BBB": {"insiders": 1, "value": 5e5}},
+                        {"AAA": {"net": -3e9}}, doc, {"AAA": ["earnings Wed Dec 2"]})
+    assert [r["symbol"] for r in rows] == ["AAA", "BBB"], rows
+    assert rows[0] == {"symbol": "AAA", "insiders": "2 bought $1.2M", "funds": "−$3.0B", "screens": "Buffett Value",
+                       "ahead": "earnings Wed Dec 2"} and rows[1]["insiders"] == "1 sold $500.0K", rows
+    assert "| AAA | 2 bought" in "\n".join(wb.mine_part({"symbols": 3, "rows": rows}))
+    assert wb.mine_part(None) == [] and wb.mine_part({"symbols": 0}) == []
+    none = "\n".join(wb.mine_part({"symbols": 4, "rows": [], "unread": ["funds", "screens"]}))
+    assert "Nothing found" in none and "Not read: funds, screens." in none, none
+    g = _generator()
+    assert g.one_symbol("BRK-B") == g.one_symbol("BRK/B") == "BRK.B" and "BRK-B" in g.spellings(["BRK.B"])
+
+
+def test_a_card_is_drawn_from_the_stance_and_public_figures():
+    import tempfile
+    g = _generator()
+    r = wb.market_regime(_regime_series(95.0, 25.0), date(2026, 11, 22))
+    tmp = __import__("pathlib").Path(tempfile.mkdtemp(prefix="card-"))
+    rel = g.write_card(tmp, date(2026, 11, 22), {"regime": r, "series": _series()})
+    if rel is not None:  # no Pillow or font: no picture
+        assert rel == "assets/brief/2026-11-16.png" and (tmp / rel).read_bytes()[:4] == b"\x89PNG"
+    assert g.write_card(tmp, date(2026, 11, 22), {"regime": None}) is None
+
+
+# ── the public record ────────────────────────────────────────────────────────
+
+def test_track_record():
+    import brief_track as t
+    from datetime import datetime, timezone
+    at = lambda *a: datetime(*a, tzinfo=timezone.utc)
+    issue = lambda key, close, state, stance: {"issue": key, "url": "u", "call": {
+        "close": close, "state": state, "label": "L", "stance": stance, "line": "x"}}
+    sun = at(2026, 11, 22, 17)
+    d = t.add({"calls": []}, issue("W47", "2026-11-20", "bearish", 0.5), sun)
+    d = t.add(d, issue("W47", "2026-11-20", "bearish", 0.5), sun)  # published again: one call
+    assert len(d["calls"]) == 1 and "revised" not in d["calls"][0] and "line" not in d["calls"][0]
+    d = t.add(d, issue("W47", "2026-11-25", "bullish", 1.0), at(2026, 11, 25, 15))
+    d = t.add(d, issue("W47", "2026-11-25", "bullish", 1.0), at(2026, 11, 25, 16))
+    assert d["calls"][0]["state"] == "bearish" and [r["state"] for r in d["calls"][0]["revised"]] == ["bullish"], d
+    assert t.add(d, {"issue": "W48"}, sun) is d  # no stance, no call
+    d = t.add(d, issue("W48", "2026-11-27", "bullish", 1.0), at(2026, 11, 29, 17))
+    px = [(date(2026, 11, 20), 120.0), (date(2026, 11, 23), 100.0), (date(2026, 11, 27), 98.0), (date(2026, 11, 30), 96.0),
+          (date(2026, 12, 1), 88.0)]
+    a, b = t.outcomes(d, px)["calls"]
+    # from Monday's close: the fall before it was public is no part of its record
+    assert (a["since"], a["week"], a["quarter"], a["fall"]) == ("2026-11-23", "down", None, "yes"), a
+    assert (b["since"], b["week"], b["fall"]) == ("2026-11-30", None, None), b
+    rule = (1 + 0.5 * (98 / 100 - 1)) * (1 + 0.5 * (96 / 98 - 1)) * (88 / 96)
+    total = t.outcomes(d, px)["total"]
+    assert total["rule"] == round((rule - 1) * 100, 1) and total["always"] == -12.0, total
+    # published in the session: that day's close; after it: the next one's
+    in_session = t.outcomes(t.add({"calls": []}, issue("A", "x", "bearish", 0.5), at(2026, 11, 27, 17)), px)["calls"][0]
+    after = t.outcomes(t.add({"calls": []}, issue("A", "x", "bearish", 0.5), at(2026, 11, 27, 19)), px)["calls"][0]  # a half day: closed at 18 UTC
+    assert t._close(date(2026, 11, 27)).hour == 13 and t._close(date(2026, 11, 20)).hour == t._close(date(2026, 12, 23)).hour == 16
+    assert in_session["since"] == "2026-11-27" and after["since"] == "2026-11-30"
+    late = t.outcomes(t.add({"calls": []}, issue("A", "x", "bearish", 0.5), at(2026, 12, 2, 12)), px)
+    assert late["calls"][0]["since"] is None and late["total"] == {}, late
+    px += [(date(2026, 12, 2) + timedelta(days=i), 110.0) for i in range(70)]
+    a = t.outcomes({"calls": d["calls"][:1]}, px)["calls"][0]
+    assert (a["quarter"], a["fall"]) == ("up", "yes")
+    import tempfile
+    p = __import__("pathlib").Path(tempfile.mkdtemp(prefix="track-")) / "x" / "calls.json"
+    kept = t.update(p, issue("W47", "2026-11-20", "bearish", 0.5), sun, [])
+    assert kept["calls"][0]["issue"] == "W47" and p.exists()  # the call is kept without the index
+    p.write_text("<<<<<<< HEAD")
+    assert t.update(p, issue("W48", "x", "bearish", 0.5), sun, []) is None and p.read_text() == "<<<<<<< HEAD"
+
+
+def test_what_the_monday_check_mails_about():
+    g = _generator()
+    assert g.serious("screens", "the scan timed out") and g.serious("funds", "OSError") and g.serious("economy", "12 series not read")
+    for sid, warn in (("funds", "13F season: 120 of about 8,000 managers have filed for Sep 30, 2026"), ("earnings", "partly read"),
+                      ("economy", "1 series not read"), ("calendar", "the calendar for that week was not published yet"),
+                      ("holdings", "OSError")):
+        assert not g.serious(sid, warn), (sid, warn)
 
 
 # ── IPOs and lock-ups ────────────────────────────────────────────────────────

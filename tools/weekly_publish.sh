@@ -33,6 +33,12 @@ if [ -z "$mode" ] && [ "$(python3 "$DRAFTS" auto-mode)" = publish ]; then
     mode=--auto
 fi
 
+alarm() { # a failure nobody sees is a missing week
+    command -v notify-send >/dev/null 2>&1 && notify-send --urgency=critical "finterm: the weekly brief failed" \
+        "See $LOG, or generate it in NEWS › What's On › WEEKLY BRIEF." || true
+}
+trap alarm ERR
+
 if [ "$mode" != "--auto" ]; then
     python3 "$DRAFTS" build-weekly --if-unedited
     id=$(python3 "$DRAFTS" weekly-id)
@@ -58,7 +64,7 @@ for attempt in 1 2 3; do
         sleep 600
     fi
 done
-[ -n "$ok" ] || { echo "not published this run; the timer retries next time"; exit 1; }
+[ -n "$ok" ] || { echo "not published this run; the timer retries next time"; alarm; exit 1; }
 
 # Post to the chosen platforms once the page shows this version (tick does
 # nothing until then; each platform is posted once, ever).

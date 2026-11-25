@@ -79,6 +79,7 @@ struct Strategy {
 struct ScanResult {
     QString error;
     QString asof;                      // exchange date of the last bar
+    QString fund_day;                  // fundamentals kept from that day: the scanner did not answer
     bool intraday = false;             // today's bar is still moving — not a close
     QString prices_fetched;            // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
     int stale_prices = 0;              // names served from an older cache (their download failed)
@@ -135,6 +136,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     if (!r.error.isEmpty())
         return r;
     r.asof = root.value(QStringLiteral("asof")).toString();
+    r.fund_day = root.value(QStringLiteral("fund_day")).toString();
     r.intraday = root.value(QStringLiteral("intraday")).toBool();
     r.prices_fetched = root.value(QStringLiteral("prices_fetched")).toString();
     r.stale_prices = root.value(QStringLiteral("stale_prices")).toInt();

@@ -47,9 +47,9 @@ ISSUE_DISCLAIMER = (
     "General, impersonal information compiled mechanically from public data. The market stance and the screens are the "
     "output of fixed rules, the same for every reader: not advice fitted to anyone's circumstances, not a "
     "recommendation of any security, not an offer. finterm and its authors are not registered investment advisers or "
-    "broker-dealers and receive no compensation from any company listed. Backtests are hypothetical; past results do "
+    "broker-dealers, receive no compensation from any company listed, and may hold securities named here. Backtests are hypothetical; past results do "
     "not predict future returns. Data may contain errors: verify against the filings. Sources: SEC EDGAR (Forms 4, 13F, "
-    "S-1, F-1 and 424B); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
+    "S-1, F-1, 424B and 8-K); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
     "ForexFactory calendar; the market stance, screens and breadth computed by finterm from S&P 500, VIX, TradingView "
     "and Yahoo Finance data, none of which is reproduced."
 )
@@ -734,7 +734,7 @@ def regime_words(r):
     return f"S&P 500 {trend} its 200-day average, fear {fear}"
 
 
-def _load_evidence():
+def load_evidence():
     import json
 
     try:
@@ -744,17 +744,26 @@ def _load_evidence():
         return {}
 
 
+def call_head(r):
+    """The stance as the page states it: a brief whose text no longer says it has
+    no call to keep (brief_drafts.publish)."""
+    return f"**{LABELS[r['state']]}: {'full risk' if STANCE[r['state']] == 1 else 'half risk'}.**"
+
+
+def has_record(ev, state):
+    return bool(((ev or {}).get("states") or {}).get(state) and (ev or {}).get("rule") and (ev or {}).get("always"))
+
+
 def call_lines(r, ev):
     """The call, and the record it rests on. Without a measured record there is
     no stance: the state is said and that is all."""
     st, al = ((ev or {}).get("states") or {}).get(r["state"]), (ev or {}).get("all")
     rule, always = (ev or {}).get("rule"), (ev or {}).get("always")
     where = f"{regime_words(r)}, at the {r['date']:%b %-d} close"
-    if not (st and al and rule and always):
+    if not (has_record(ev, r["state"]) and al):
         return [f"**{LABELS[r['state']]}.** {where}.", ""]
-    stance = "full risk" if STANCE[r["state"]] == 1 else "half risk"
     pc = lambda x: f"{x * 100:.0f}%"
-    out = [f"**{LABELS[r['state']]}: {stance}.** {where[0].upper()}{where[1:]}. A 10% fall within a quarter has followed "
+    out = [f"{call_head(r)} {where[0].upper()}{where[1:]}. A 10% fall within a quarter has followed "
            f"{pc(st['dd10'])} of such weeks (all weeks: {pc(al['dd10'])}).", ""]
     # Which line the close would have to cross for another call.
     near = []
@@ -767,7 +776,8 @@ def call_lines(r, ev):
             f"{pc(st['up'])} of the time (all: {pc(al['up'])}), average {_signed(st['mean'] * 100, '.1f', '%')} "
             f"({_signed(al['mean'] * 100, '.1f', '%')}); average weekly move {st['week_move'] * 100:.1f}%. The stance's "
             "rule, full above the average and half below with the rest in T-bills (the half chosen on the same data): "
-            f"{rule['cagr'] * 100:.1f}% a year, worst fall {pc(-rule['worst'])}; always invested {always['cagr'] * 100:.1f}%, {pc(-always['worst'])}."
+            f"{rule['cagr'] * 100:.1f}% a year, worst fall {pc(-rule['worst'])}; always invested {always['cagr'] * 100:.1f}%, {pc(-always['worst'])}. "
+            f"[Track record]({SITE_URL}/track-record/)."
             + (f" Borderline: {' and '.join(near)}." if near else ""), ""]
     return out
 
@@ -817,7 +827,7 @@ def glance_section(series, market, events, macro_err, today, evidence=None, asof
     """The top of the page: the market call, the week past, the week ahead."""
     r = market_regime(series, today)
     out = ["## At a glance", ""]
-    out += (call_lines(r, _load_evidence() if evidence is None else evidence) if r
+    out += (call_lines(r, load_evidence() if evidence is None else evidence) if r
             else ["_No market call: this week's closes could not be read._", ""])
     for ln in (past_week_line(series, market, r, today, asof), week_ahead_line(events, macro_err)):
         if ln:
@@ -911,12 +921,14 @@ def screens_part(doc, error=None, per_screen=3, rows=(), flows=None):
     if said:
         out += [" ".join(said), ""]
     stale = int(doc.get("stale_prices") or 0)
+    kept = doc.get("fund_day")
     best = max((st["evidence"]["t"] for st in doc.get("strategies") or []
                 if (st.get("evidence") or {}).get("t") is not None), default=None)
     out += [(f"As of the {md_escape(doc.get('asof'))} {'session, before its close' if doc.get('intraday') else 'close'}. " if doc.get("asof") else "")
             + "Screen output, not a recommendation. Record: each screen against the equal-weighted S&P 500 in "
               "finterm's backtest (R = per trade, in units of risk)"
             + ("; none beat it with statistical significance." if best is None or best < 2 else ".")
+            + (f" Company figures are of {md_escape(kept)}; their source did not answer." if kept else "")
             + (f" {stale} stock{'' if stale == 1 else 's'} ranked on an earlier close." if stale else ""), ""]
     return out
 
@@ -974,6 +986,67 @@ def stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending=fro
 IPO_DAYS = 7
 
 
+def earnings_part(earn, max_rows=8):
+    """Large companies expected to report in the next seven days (sec_earnings):
+    SEC's name and the day of the same report a year ago, no vendor's date."""
+    if not earn or earn.get("error"):
+        return [f"_Earnings: {md_escape((earn or {}).get('error') or 'not read')}._", ""]
+    rows = earn.get("rows") or []
+    if not rows:
+        if earn.get("partial") or earn.get("unsure"):
+            return ["_Earnings: no large report confirmed for the next 7 days._", ""]
+        return ["_The calendar lists no large company for the next 7 days._", ""]
+    out = ["| Earnings, 7 days | Company | A year ago |", "|---|---|---:|"]
+    out += [f"| {md_escape(r['symbol'])} | {md_escape(r['company'])} | {r['year_ago']:%a %b %-d} |" for r in rows[:max_rows]]
+    n = earn.get("unsure") or 0
+    return out + ["", "Expected by the calendar and by the same report a year ago (SEC 8-K); dates can move."
+                  + (f" {n} more not confirmed." if n else "")
+                  + (" The calendar was only partly read." if earn.get("partial") else ""), ""]
+
+
+PRIVATE_MINE = "## Your holdings (private: on this computer only)"
+
+
+def mine_part(mine, max_rows=15):
+    """The owner's own names this week, from the portfolios and watchlists the
+    app last sent. NEVER part of the page: a file of its own beside the draft
+    (brief_drafts private_path), so no correction of the page can publish it."""
+    if not mine or not mine.get("symbols"):
+        return []
+    rows, unread = mine.get("rows") or [], mine.get("unread") or []
+    note = f"Not read: {', '.join(unread)}." if unread else ""
+    out = [PRIVATE_MINE, ""]
+    if not rows:
+        out += [f"_Nothing found this week on your {mine['symbols']} names._" + (f" {note}" if note else ""), ""]
+    else:
+        out += ["| Symbol | Insiders, 7 days | Funds, net | Screens | Ahead |", "|---|---|---:|---|---|"]
+        out += [f"| {md_escape(r['symbol'])} | {md_escape(r['insiders']) or '—'} | {md_escape(r['funds']) or '—'} | "
+                f"{md_escape(r['screens']) or '—'} | {md_escape(r['ahead']) or '—'} |" for r in rows[:max_rows]]
+        out += ["", f"{len(rows)} of your {mine['symbols']} names"
+                    + (f"; the first {max_rows} are shown" if len(rows) > max_rows else "") + "."
+                    + (f" {note}" if note else ""), ""]
+    return out
+
+
+def mine_rows(symbols, buys, sells, flows, doc, ahead):
+    """[{symbol, insiders, funds, screens, ahead}] for the names with something,
+    most of it first."""
+    out = []
+    for s in symbols:
+        b, x = buys.get(s), sells.get(s)
+        people = lambda r, word: f"{r['insiders']} {word} {money(r['value'])}" if r else ""
+        fl = (flows or {}).get(s)
+        on = [(st.get("name") or "").split(" (")[0] for st in (doc or {}).get("strategies") or []
+              if st.get("id") not in PICK_SKIP and s in (st.get("symbols") or [])]
+        row = {"symbol": s, "insiders": ", ".join(p for p in (people(b, "bought"), people(x, "sold")) if p),
+               "funds": f"{'+' if fl['net'] > 0 else '−'}{money(abs(fl['net']))}" if fl else "",
+               "screens": ", ".join(on), "ahead": "; ".join(ahead.get(s) or [])}
+        n = sum(bool(row[k]) for k in ("insiders", "funds", "screens", "ahead"))
+        if n:
+            out.append((-n, s, row))
+    return [r for _, _, r in sorted(out, key=lambda t: t[:2])]
+
+
 def ipo_part(ipo, max_rows=5):
     """IPOs expected to price and lock-ups ending in the next seven days, every
     figure from the companies' SEC filings (sec_ipo)."""
@@ -1017,7 +1090,7 @@ def ipo_part(ipo, max_rows=5):
 
 
 def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events, mon, fri, macro_err, today,
-               pending=frozenset(), ipo=None):
+               pending=frozenset(), ipo=None, earnings=None):
     """The issue's sections, one page at the standard detail: the market at a
     glance (the call, past week, week ahead), markets and economy, the week
     ahead, and stocks (insiders, funds, the screens).
@@ -1032,8 +1105,10 @@ def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events,
         out += ["## Markets and economy", ""] + PENDING if "series" in pending else economy_section(series)
     if "macro" in topics:
         out += ["## Week ahead", ""] + PENDING if "events" in pending else week_ahead_section(events, mon, fri, macro_err)
-    elif "ipo" in topics:
+    elif {"ipo", "earnings"} & set(topics):
         out += ["## Week ahead", ""]
+    if "earnings" in topics:
+        out += PENDING if "earnings" in pending else earnings_part(earnings)
     if "ipo" in topics:
         out += PENDING if "ipo" in pending else ipo_part(ipo, BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"]))
     out += stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending)

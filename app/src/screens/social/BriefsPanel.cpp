@@ -1,6 +1,7 @@
 #include "screens/social/BriefsPanel.h"
 
 #include "screens/social/BuildProgress.h"
+#include "screens/social/UserSymbols.h"
 
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
@@ -188,7 +189,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     read_btn_->setChecked(true);
     connect(read_btn_, &QPushButton::clicked, this, [this]() {
         live_body_.clear();
-        preview_->setMarkdown(preview_markdown(source_->toPlainText()));
+        show_page(source_->toPlainText());
         view_->setCurrentIndex(0);
         show_build(); // while one runs, its page
         render_controls();
@@ -458,7 +459,7 @@ void BriefsPanel::load_draft(const QString& id) {
                          loaded_x_ = xt;
                          source_->setPlainText(loaded_body_);
                          x_edit_->setPlainText(loaded_x_);
-                         preview_->setMarkdown(preview_markdown(loaded_body_));
+                         show_page(loaded_body_);
                      }
                      {
                          const QJsonArray to = o.value("post_to").toArray();
@@ -654,6 +655,14 @@ void BriefsPanel::render_controls() {
 
 // ── actions ─────────────────────────────────────────────────────────────────
 
+void BriefsPanel::show_page(const QString& body) {
+    // The holdings are read under the page and are no part of it: not in the
+    // editor, not in what is published.
+    const QString mine = draft_.value("private").toString();
+    preview_->setMarkdown(preview_markdown(body) +
+                          (mine.isEmpty() ? QString() : QStringLiteral("\n\n---\n\n") + preview_markdown(mine)));
+}
+
 void BriefsPanel::show_build() {
     if (draft_.value("state").toString() != "building" || draft_.value("id").toString() != current_ || dirty())
         return;
@@ -679,7 +688,8 @@ void BriefsPanel::generate_weekly(bool force) {
     busy_ = true;
     render_controls();
     set_status({});
-    call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
+    call_backend(this, QStringLiteral("draft_build_weekly"),
+                 {{QStringLiteral("force"), force}, {QStringLiteral("symbols"), user_symbols()}}, kQuickMs,
                  [this](const QJsonObject& o, const QString& err, Outcome) {
                      busy_ = false;
                      render_controls();

@@ -2396,7 +2396,7 @@ def _filers(con, quarter):
     return con.execute("SELECT COUNT(DISTINCT cik) FROM books WHERE quarter=?", (quarter,)).fetchone()[0]
 
 
-def stock_flows(limit=10, today=None):
+def stock_flows(limit=10, today=None, symbols=()):
     """Institutions' net change by stock: the stored big moves of the newest
     quarter, summed per stock. Reads only what the sync stored — never a scan,
     never a price lookup.
@@ -2452,6 +2452,7 @@ def stock_flows(limit=10, today=None):
         if not rank:
             return {"error": "the 13F scan holds no moves"}
         return {"quarter": q, "filed_to": filed_to, "managers": n,
+                "by": {d["ticker"]: d for d in rank if d["ticker"] in set(symbols)},
                 "added": [d for d in reversed(rank) if d["net"] > 0][:int(limit)],
                 "trimmed": [d for d in rank if d["net"] < 0][:int(limit)]}
     finally:

@@ -1,6 +1,7 @@
 #include "screens/news/WeeklyBriefPanel.h"
 
 #include "screens/social/BuildProgress.h"
+#include "screens/social/UserSymbols.h"
 
 #include "services/social/SocialBackend.h"
 #include "ui/theme/Theme.h"
@@ -39,7 +40,10 @@ const Opt kTopics[] = {
     {"insider", "Insider buying", "Companies where two or more insiders bought on the open market (SEC Form 4)"},
     {"funds", "Fund moves", "What institutions added and trimmed, net by stock (SEC 13F)"},
     {"screens", "Screen leaders", "The first names of each of finterm's screens, with each screen's own record"},
+    {"earnings", "Earnings ahead", "Large companies expected to report in the next 7 days, confirmed by SEC filings"},
     {"ipo", "IPOs and lock-ups", "IPOs expected to price and lock-ups ending in the next 7 days, from SEC filings"},
+    {"mine", "Your holdings (private)",
+     "This week on your portfolios and watchlists — in your draft only; never published or posted"},
 };
 const Opt kPlatforms[] = {
     {"x", "X", "Posted as the account connected for X"},
@@ -326,6 +330,9 @@ void WeeklyBriefPanel::render() {
             lines << QStringLiteral("<span style='color:%1'>%2</span>")
                          .arg(ui::colors::WARNING(), d.value("note").toString().toHtmlEscaped());
     }
+    const QString health = drafts_.value("health").toString();
+    if (!health.isEmpty())
+        lines << QStringLiteral("<span style='color:%1'>%2</span>").arg(ui::colors::WARNING(), health.toHtmlEscaped());
     issue_->setText(lines.join(QStringLiteral("<br>")));
 
     // Generate and Post are on unless something is running; a click that
@@ -359,7 +366,7 @@ void WeeklyBriefPanel::save_settings() {
     for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
         if (it.value()->isChecked())
             plats.append(it.key());
-    const QJsonObject s{{"v", 3}, // this list has a box for every section (brief_drafts.settings_set)
+    const QJsonObject s{{"v", 4}, // this list has a box for every section (brief_drafts.settings_set)
                         {"topics", topics},
                         {"detail", detail_->currentData().toString()},
                         {"platforms", plats},
@@ -426,7 +433,7 @@ void WeeklyBriefPanel::generate(bool force) {
     if (!start(QString()))
         return;
     QPointer<WeeklyBriefPanel> self = this;
-    call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
+    call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}, {QStringLiteral("symbols"), user_symbols()}}, kQuickMs,
                  [self](const QJsonObject& o, const QString& err, Outcome) {
                      if (!self)
                          return;

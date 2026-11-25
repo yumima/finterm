@@ -206,6 +206,48 @@ check(mk60["sectors"] == list(med.index), f"sectors by median 5-session return: 
 check(sd.compute(fund, {s: f.iloc[-100:] for s, f in frames.items()})[2]["above200_share"] is None,
       "no 200-day average anywhere: absent, not 0%")
 
+# ── the scanner does not answer ─────────────────────────────────────────────
+import tempfile as _tf
+_dir, _real_dir, _real_fetch = _tf.mkdtemp(), sd.cache_dir, sd.fetch_universe
+sd.cache_dir = lambda *p: __import__("pathlib").Path(_dir)
+kept = {"AAA": dict(fund_rec("AAA", mcap=1e10, ev=1.2e10, pe=20.0, pb=4.0, ps=2.0, ev_ebitda=12.0, div_yield=0.02, q_close=100.0),
+                    ni_h=[1.0, None]), "SPLIT": fund_rec("SPLIT", mcap=5e9, q_close=100.0), "GONE": fund_rec("GONE", mcap=5e9, q_close=10.0)}
+sd.fetch_universe = lambda m: kept
+check(sd.load_universe(2e9, now=1.8e9) == (kept, None), "a scan that answers is today's")
+
+
+def _down(m):
+    raise OSError("down")
+
+
+sd.fetch_universe = lambda m: {"AAA": kept["AAA"]}
+check(sd.load_universe(2e9, now=1.8e9)[1] is None, "a short answer is used")
+sd.fetch_universe = _down
+got, day_ = sd.load_universe(2e9, now=1.8e9 + 5 * 86400)
+check(len(got) == 3, "...and does not replace the whole one kept")
+check(got["AAA"]["mcap"] == 1e10 and got["AAA"]["ni_h"] == [1.0, None] and day_ == "2027-01-15", f"its last answer, and from when: {day_}")
+for late, why in ((1.8e9 + 40 * 86400, "too old"), (None, "another universe")):
+    try:
+        sd.load_universe(2e9 if late else 3e8, now=late or 1.8e9)
+        check(False, f"kept answer used although {why}")
+    except OSError:
+        pass
+px_ = lambda was, p: pd.DataFrame({"Close": [was, p]}, index=pd.to_datetime(["2027-01-15", "2027-01-20"]))
+# SPLIT: 2:1 since; its history is adjusted (100 reads 50) and it is up 2%
+aged = sd.age_universe(kept, {"AAA": px_(100.0, 110.0), "SPLIT": px_(50.0, 51.0),
+                              "OLD": px_(1.0, 2.0)}, "2027-01-15")
+a_ = aged["AAA"]
+check(abs(a_["mcap"] - 1.1e10) < 1 and abs(a_["ev"] - 1.3e10) < 1 and abs(a_["pe"] - 22) < 1e-9 and abs(a_["div_yield"] - 0.02 / 1.1) < 1e-12
+      and abs(a_["ev_ebitda"] - 13.0) < 1e-9 and a_["q_close"] == 110.0 and a_["q_open"] is None, f"kept figures at today's price: {a_}")
+check(abs(aged["SPLIT"]["mcap"] - 5e9 * 1.02) < 1 and aged["GONE"]["mcap"] is None, f"a split since changes nothing; no price, no market cap: {aged['SPLIT']['mcap']}")
+# read before Monday's open, at Friday's price: Monday's fall counts
+early = {"AAA": dict(kept["AAA"], q_time=1800019800 - 3 * 86400)}  # 2027-01-12
+fell = pd.DataFrame({"Close": [100.0, 80.0, 80.0]}, index=pd.to_datetime(["2027-01-12", "2027-01-15", "2027-01-20"]))
+check(abs(sd.age_universe(early, {"AAA": fell}, "2027-01-15")["AAA"]["mcap"] - 8e9) < 1, "from the price it was read at")
+check(sd.age_universe(kept, {"AAA": px_(1.0, 2.0)}, "2027-03-01")["AAA"]["mcap"] is None, "no close near that day: no market cap")
+check(kept["AAA"]["mcap"] == 1e10, "the kept answer itself is not changed")
+sd.cache_dir, sd.fetch_universe = _real_dir, _real_fetch
+
 # ── Buffett Value ────────────────────────────────────────────────────────────
 hist = {"ni_h": [110.0 - 4 * i for i in range(12)], "fcf_h": [100.0 - 4 * i for i in range(12)],
         "gp_h": [400.0] * 12, "rev_h": [1000.0] * 12, "fy_h": [2025 - i for i in range(12)]}

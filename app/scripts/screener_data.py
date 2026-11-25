@@ -154,6 +154,104 @@ def fetch_universe(min_mcap):
     return parse_universe(data.get("data") or [])
 
 
+FUND_KEEP_DAYS = 35
+
+
+def _universe_path(min_mcap):
+    return os.path.join(str(cache_dir("screener")), f"universe_{int(min_mcap)}.json")
+
+
+def _kept_universe(path):
+    with open(path, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    if not (isinstance(doc, dict) and isinstance(doc.get("fund"), dict) and isinstance(doc.get("at"), (int, float))
+            and isinstance(doc.get("day"), str) and all(isinstance(r, dict) for r in doc["fund"].values())):
+        raise ValueError("not a kept universe")
+    return doc
+
+
+def load_universe(min_mcap, now=None):
+    """(fundamentals, the day they are from when they are not today's). The
+    scanner is the only source of them and not a public one: its last answer is
+    kept, and used for up to FUND_KEEP_DAYS when it does not answer — earnings
+    and balance sheets change once a quarter; prices are Yahoo's and today's.
+    Raises as fetch_universe does when there is nothing kept."""
+    now, path = now or time.time(), _universe_path(min_mcap)
+    try:
+        fund = fetch_universe(min_mcap)
+        if not fund:
+            raise ValueError("TradingView scanner returned no stocks")
+    except Exception as e:
+        try:
+            doc = _kept_universe(path)
+        except (OSError, ValueError):
+            raise e from None
+        if now - doc["at"] > FUND_KEEP_DAYS * 86400:
+            raise
+        print(f"scanner: {type(e).__name__}: {e}; using its answer of {doc['day']}", file=sys.stderr)
+        return doc["fund"], doc["day"]
+    try:
+        kept = _kept_universe(path)["fund"]
+    except (OSError, ValueError):
+        kept = {}
+    if len(fund) < 0.5 * len(kept):
+        return fund, None  # a short answer is not worth more than the whole one kept
+    try:
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"at": now, "day": datetime.fromtimestamp(now, _et()).strftime("%Y-%m-%d"), "fund": fund}, fh,
+                      default=_clean)
+        os.replace(tmp, path)
+    except OSError as e:
+        print(f"universe not kept: {e}", file=sys.stderr)
+    return fund, None
+
+
+def age_universe(fund, frames, day):
+    """Kept fundamentals of @day at today's prices: market cap and the ratios
+    move with the price since the one they were computed at. When that one is
+    nowhere near its session's close in today's split-adjusted history a split
+    lies between, and the adjusted close stands for it. A name without a close
+    of that session (or the few before it) has no market cap, and so no ratio,
+    rather than a wrong one."""
+    out = {}
+    for s, r in fund.items():
+        r = dict(r)
+        f = frames.get(s)
+        c = f["Close"].dropna() if f is not None else pd.Series(dtype=float)
+        if len(c) and c.index.tz is not None:
+            c = c.tz_localize(None)
+        t = r.get("q_time")  # the session of the price, which a fetch before the open predates
+        then = pd.Timestamp(datetime.fromtimestamp(t, timezone.utc).astimezone(_et()).date() if t else day)
+        at = c[c.index.normalize() <= then] if len(c) else c
+        k = None
+        if len(at) and (then - at.index[-1].normalize()).days <= 5 and at.iloc[-1] > 0:
+            base, was = float(at.iloc[-1]), r.get("q_close")
+            if was and 1 / 1.2 < was / base < 1.2:
+                base = was
+            k = float(c.iloc[-1]) / base
+        if k is None:
+            for x in ("mcap", "ev", "pe", "pb", "ps", "ev_ebitda", "q_close", "div_yield", "buyback_yield"):
+                r[x] = None
+        else:
+            mcap, ev = r.get("mcap"), r.get("ev")
+            if mcap and ev:
+                r["ev"] = ev + mcap * (k - 1)
+                if r.get("ev_ebitda") is not None and ev > 0:
+                    r["ev_ebitda"] *= r["ev"] / ev
+            for x in ("mcap", "pe", "pb", "ps"):
+                if r.get(x) is not None:
+                    r[x] *= k
+            for x in ("div_yield", "buyback_yield"):
+                if r.get(x) is not None:
+                    r[x] /= k
+            r["q_close"] = float(c.iloc[-1])
+        for x in ("q_open", "q_high", "q_low", "q_volume", "q_time", "q_update", "q_mode", "q_change", "next_earnings"):
+            r[x] = None  # that day's quote, not today's
+        out[s] = r
+    return out
+
+
 def yahoo_symbol(tv_name):
     """TradingView 'BRK.B' -> Yahoo 'BRK-B'."""
     return tv_name.replace(".", "-").replace("/", "-")
@@ -1665,16 +1763,16 @@ CHART_BARS = 126  # closes per listed name: the table's 6-month trend line (kSpa
 
 def scan(min_mcap=2e9, force=False):
     log_progress(0, 1, "Fetching universe")
-    fund = fetch_universe(min_mcap)
-    if not fund:
-        return {"error": "TradingView scanner returned no stocks"}
+    fund, fund_day = load_universe(min_mcap)
     # ONE clock for the whole scan, taken BEFORE the price load: a scan that
     # straddles 16:15 must not judge freshness by one clock and live bars by
     # another (a morning partial bar then went out as the close)
     now = datetime.now(timezone.utc)
     frames, fetched_ts, stale = load_prices(sorted(fund), force=force, now=now)
-    quotes = dict(fund)
-    if in_session(now):
+    if fund_day:
+        fund = age_universe(fund, frames, fund_day)
+    quotes = {} if fund_day else dict(fund)
+    if in_session(now) and not fund_day:
         try:
             quotes.update(fetch_quotes(["AMEX:SPY"]))
         except Exception as e:  # the market line falls back to SPY's last close
@@ -1697,6 +1795,7 @@ def scan(min_mcap=2e9, force=False):
     doc = meta(lists, extras.get("examples"))
     doc.update({
         "asof": asof,
+        "fund_day": fund_day,  # the scanner did not answer: fundamentals of that day, prices of today
         # today's bar is still moving: the label must not say "close"
         "intraday": bool(in_session(now)) and asof == now.astimezone(_et()).strftime("%Y-%m-%d"),
         # the OLDEST fetch behind the lists, with its date: a failed chunk

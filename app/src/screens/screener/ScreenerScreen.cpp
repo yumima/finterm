@@ -842,6 +842,8 @@ void ScreenerScreen::apply_result(const screener::ScanResult& r, bool provisiona
         else
             bits << QStringLiteral("As of %1 close").arg(r.asof);
     }
+    if (!r.fund_day.isEmpty())
+        bits << QStringLiteral("TradingView did not answer: fundamentals of %1 at today's prices").arg(r.fund_day);
     if (r.stale_prices > 0)
         bits << QStringLiteral("%1 names on older prices (oldest %2)").arg(r.stale_prices).arg(r.prices_fetched);
     bits << QStringLiteral("%1 stocks (%2 priced)").arg(r.universe_n).arg(r.priced);

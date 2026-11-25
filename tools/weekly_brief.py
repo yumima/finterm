@@ -38,6 +38,7 @@ written to the output.
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -48,12 +49,13 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent.parent / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import brief_track  # noqa: E402
 from weekly_brief_core import (  # noqa: E402,F401 — the shared brief; re-exported for callers
-    CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, ECONOMY_SERIES, ISSUE_DISCLAIMER, MARKET_SERIES, METHOD_URL, REGIME_SERIES,
-    SITE_URL, WINDOW_DAYS,
-    IPO_DAYS, brief_body, clusters_data, clusters_section, contact_from_keyring, fetch_macro_rows, fetch_macro_series,
-    issue_day, issue_key, issue_url, macro_coverage, macro_events, page,
-    social_posts, week_ahead,
+    CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, ECONOMY_SERIES, IPO_DAYS, ISSUE_DISCLAIMER, LABELS, MARKET_SERIES,
+    METHOD_URL, REGIME_SERIES, SITE_URL, STANCE, WINDOW_DAYS,
+    brief_body, call_head, clusters_data, clusters_section, contact_from_keyring, economy_rows, fetch_macro_rows,
+    fetch_macro_series, issue_day, issue_key, issue_url, macro_coverage, macro_events, market_regime, market_rows,
+    has_record, load_evidence, mine_part, mine_rows, page, regime_words, social_posts, week_ahead,
 )
 
 
@@ -153,10 +155,69 @@ def screener_doc(timeout=900, say=None):
     return doc, None
 
 
-ALL_TOPICS = ("summary", "macro", "ipo", "insider", "funds", "screens")
+ALL_TOPICS = ("summary", "macro", "earnings", "ipo", "insider", "funds", "screens", "mine")
 
 
-def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=True, progress_path=None):
+def earnings_week(today):
+    """{rows, unsure, partial}: large companies expected to report in the next
+    seven days, confirmed by their SEC filings (sec_earnings)."""
+    import ipo_calendar
+    import sec_directory
+    import sec_earnings
+    import whats_on_calendar
+
+    hi = today + timedelta(days=IPO_DAYS)
+    cal = whats_on_calendar.earnings_days(today, hi)
+    if cal["days_total"] and not cal["days_answered"]:
+        return {"error": "the calendar could not be read", "calendar": []}
+    rows, unsure = sec_earnings.ahead(cal["earnings"], today, hi, ipo_calendar.Cache(), sec_directory.cik)
+    return {"rows": rows, "unsure": unsure, "partial": bool(cal["days_failed"]), "calendar": cal["earnings"]}
+
+
+def one_symbol(s):
+    return (s or "").upper().replace("-", ".").replace("/", ".")
+
+
+def spellings(symbols):
+    return sorted({s.replace(".", x) for s in map(one_symbol, symbols) for x in (".", "-", "/")})
+
+
+def holdings_week(symbols, today, flows, doc, earnings, ipo):
+    """The private block's data: this week on the owner's @symbols."""
+    import sec_form4_market as f4
+
+    # A share class is BRK.B, BRK-B or BRK/B, by the source.
+    mine = {one_symbol(s) for s in symbols}
+
+    def insiders(direction):
+        res = f4.recent(days=WINDOW_DAYS, min_insiders=1, min_value=0, symbols=spellings(symbols), direction=direction,
+                        limit=500)
+        return {one_symbol(r["symbol"]): r for r in res["rows"]}
+
+    ahead = {}
+    for r in (earnings or {}).get("calendar") or []:
+        if one_symbol(r["symbol"]) in mine:
+            ahead.setdefault(one_symbol(r["symbol"]), []).append(f"earnings {date.fromisoformat(r['date']):%a %b %-d}")
+    for r in (ipo or {}).get("lockups") or []:
+        if one_symbol(r["ticker"]) in mine:
+            ahead.setdefault(one_symbol(r["ticker"]), []).append(f"lock-up ends {r['ends']:%a %b %-d}")
+    by = {one_symbol(k): v for k, v in ((flows or {}).get("by") or {}).items()}
+    doc = {"strategies": [{**st, "symbols": [one_symbol(s) for s in st.get("symbols") or []]}
+                          for st in (doc or {}).get("strategies") or []]}
+    unread = [w for w, missing in (("funds", not by and not (flows or {}).get("quarter")), ("screens", not doc["strategies"]),
+                                   ("earnings", not (earnings or {}).get("calendar"))) if missing]
+    return {"symbols": len(mine), "unread": unread, "rows": mine_rows(sorted(mine), insiders("buy"), insiders("sell"), by, doc, ahead)}
+
+
+def serious(sid, warn):
+    """What the published issue names as a problem, and the Monday check mails
+    about: a part that failed — not a season, nor a calendar with a gap. Never
+    anything about the owner's holdings: issue.json is public."""
+    return sid != "holdings" and not re.match(r"13F season|partly read|\d series not read$|the calendar for that week", warn)
+
+
+def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=True, progress_path=None,
+                symbols=()):
     """The issue's one page and what it was built from: {body, rows, notes,
     complete, series, flows, screens}. Everything is read at once, and each
     part of the page is there as soon as what it needs is. Anything that
@@ -167,7 +228,7 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
         topics = [t for t in topics if t == "insider"]
     mon, fri = week_ahead(today)
     got = {"series": {}, "doc": None, "scr_err": None, "flows": None, "events": [], "macro_err": None,
-           "rows": [], "notes": [], "complete": True, "ipo": None}
+           "rows": [], "notes": [], "complete": True, "ipo": None, "earnings": None, "mine": None, "problems": []}
 
     def economy(say):
         got["series"] = fetch_macro_series(today)
@@ -197,7 +258,7 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
     def funds(say):
         import sec_13f_bulk
 
-        got["flows"] = sec_13f_bulk.stock_flows()
+        got["flows"] = sec_13f_bulk.stock_flows(symbols=spellings(symbols))
         return got["flows"].get("error")
 
     def ipos(say):
@@ -206,6 +267,13 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
             return got["ipo"]["error"]
         return "partly read" if got["ipo"].get("partial") or got["ipo"].get("ahead_unread") else None
 
+    def earnings(say):
+        got["earnings"] = earnings_week(today)
+        return got["earnings"].get("error") or ("partly read" if got["earnings"]["partial"] else None)
+
+    def holdings(say):
+        got["mine"] = holdings_week(symbols, today, got["flows"], got["doc"], got["earnings"], got["ipo"])
+
     # step, its label, what of the page it feeds, the work
     steps = [s for s, wanted in (
         (("economy", "Economy and rates", "series", economy), {"macro", "summary"} & set(topics)),
@@ -213,13 +281,17 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
         (("screens", "Stock screens", "doc", screens), {"screens", "summary"} & set(topics)),
         (("filings", "SEC Form 4 filings", "rows", filings), True),  # also the evergreen insider page's
         (("funds", "13F fund moves", "flows", funds), "funds" in topics),
+        (("earnings", "Earnings ahead", "earnings", earnings), "earnings" in topics),
         (("ipos", "IPOs and lock-ups", "ipo", ipos), "ipo" in topics)) if wanted]
-    pending = {feeds for _, _, feeds, _ in steps}
-    progress = Progress(progress_path, [(sid, label) for sid, label, _, _ in steps] + [("page", "Write the page")])
+    symbols = sorted(set(symbols)) if "mine" in topics else []
+    # Reads what the others found, so it comes after them.
+    last = [("holdings", "Your holdings", "mine", holdings)] if symbols else []
+    pending = {feeds for _, _, feeds, _ in steps + last}
+    progress = Progress(progress_path, [(sid, label) for sid, label, _, _ in steps + last] + [("page", "Write the page")])
 
     def page(pending):
         return brief_body(topics, detail, got["series"], got["doc"], got["scr_err"], got["rows"], got["notes"],
-                          got["flows"], got["events"], mon, fri, got["macro_err"], today, frozenset(pending), got["ipo"])
+                          got["flows"], got["events"], mon, fri, got["macro_err"], today, frozenset(pending), got["ipo"], got["earnings"])
 
     def run(sid, work):
         progress.step(sid, "run")
@@ -236,23 +308,38 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
                 got["flows"] = {"error": why}
             elif sid == "calendar":
                 got["macro_err"] = f"the release calendar could not be read ({why})"
+            elif sid == "earnings":
+                got["earnings"] = {"error": f"could not be read ({why})", "calendar": []}
+            elif sid == "holdings":
+                got["mine"] = {"symbols": len(symbols), "rows": [], "unread": [f"all of it ({why})"]}
             elif sid == "ipos":
                 got["ipo"] = {"error": f"could not be read ({why})"}
             return why
+
+    def end(sid, feeds, warn):
+        if warn:
+            print(f"warning: {sid}: {warn}", file=sys.stderr)
+            if serious(sid, warn):
+                got["problems"].append(f"{sid}: {warn}")
+        pending.discard(feeds)
+        progress.step(sid, "warn" if warn else "done", warn)
+        # (The holdings are shown as the build's, never written into the page.)
+        progress.page(page(pending) + (mine_part(got["mine"]) if got["mine"] else []))
 
     progress.page(page(pending))
     with ThreadPoolExecutor(max_workers=len(steps)) as pool:
         jobs = {pool.submit(run, sid, work): (sid, feeds) for sid, _, feeds, work in steps}
         for job in as_completed(jobs):
-            sid, feeds = jobs[job]
-            warn = job.result()
-            if warn:
-                print(f"warning: {sid}: {warn}", file=sys.stderr)
-            pending.discard(feeds)
-            progress.step(sid, "warn" if warn else "done", warn)
-            progress.page(page(pending))
+            end(*jobs[job], job.result())
+    if (got["doc"] or {}).get("fund_day"):
+        got["problems"].append(f"screens: the fundamentals are kept ones, of {got['doc']['fund_day']}")
+    for sid, _, feeds, work in last:
+        end(sid, feeds, run(sid, work))
     progress.step("page", "run")
-    return {"body": page(set()), **got, "screens": bool(got["doc"]), "progress": progress}
+    regime = market_regime(got["series"], today) if "summary" in topics and got["series"] else None
+    if regime and not has_record(load_evidence(), regime["state"]):
+        regime = None  # the page states no stance without its record, so there is none to keep
+    return {"body": page(set()), **got, "regime": regime, "screens": bool(got["doc"]), "progress": progress}
 
 
 def ipo_week(today):
@@ -273,8 +360,32 @@ def ipo_week(today):
 
 
 SECTION_WORDS = {"summary": "the market at a glance", "macro": "markets, economy and the week ahead",
-                 "ipo": "IPOs and lock-ups", "insider": "insider buying", "funds": "fund moves",
+                 "earnings": "earnings ahead", "ipo": "IPOs and lock-ups", "insider": "insider buying", "funds": "fund moves",
                  "screens": "screen leaders"}
+
+
+def write_card(site_dir, today, data):
+    """The picture a post of this issue's link shows; its path on the site, or
+    None when there is no stance or nothing to draw it with."""
+    import brief_card
+
+    r = data.get("regime")
+    if not r:
+        return None
+    m = {x["name"]: x for x in market_rows(data["series"])}
+    e = {x["name"]: x for x in economy_rows(data["series"])}
+    cells = [(label, m[name]["value"], f"{m[name]['change']} 1w") for label, name in (
+        ("10-year Treasury", "10-year Treasury"), ("2-year Treasury", "2-year Treasury"), ("Broad dollar", "Broad dollar index"))
+        if m.get(name, {}).get("value", "—") != "—"]
+    cells += [(label, e[name]["value"], e[name]["asof"].split(" (")[0]) for label, name in (
+        ("Real GDP", "Real GDP, q/q annualised"), ("Core PCE, y/y", "Core PCE, y/y"), ("Unemployment", "Unemployment rate"))
+        if e.get(name, {}).get("value", "—") != "—"]
+    rel = f"assets/brief/{issue_day(today).isoformat()}.png"
+    stance = "full risk" if STANCE[r["state"]] == 1 else "half risk"
+    words = regime_words(r)
+    ok = brief_card.make(site_dir / rel, f"Weekly brief · {today:%B %-d, %Y}", r["state"],
+                         f"{LABELS[r['state']]}: {stance}".upper(), f"{words} ({r['date']:%b %-d} close)", cells)
+    return rel if ok else None
 
 
 def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOPICS, data=None):
@@ -291,6 +402,7 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
             pass
 
     n = len(rows)
+    card = write_card(site_dir, today, data or {}) if topics else None
     # A per-run stamp in the page lets the publisher wait for THIS version to
     # be live, not an earlier deploy of the same URL.
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -311,6 +423,7 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
         "date": issue_day(today),
         "updated": today,
         "compact": True,  # the post layout's one-page style
+        **({"image": f"/{card}"} if card else {}),
     }, mark + raw(body), ISSUE_DISCLAIMER), encoding="utf-8")
 
     # The evergreen insider page: the full list, which the issue links to.
@@ -326,7 +439,10 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
     # before publishing an incomplete week (--allow-incomplete builds one).
     issue = {"issue": key, "date": today.isoformat(), "stamp": stamp, "count": n,
              "complete": bool(complete), "notes": list(notes),
-             "rows": rows[:25],
+             "rows": rows[:25], "problems": (data or {}).get("problems", []),
+             **({"call": {**brief_track.call_of(data["regime"], STANCE[data["regime"]["state"]],
+                                              LABELS[data["regime"]["state"]]),
+                         "line": call_head(data["regime"])}} if (data or {}).get("regime") else {}),
              **social_posts(rows, today, url, topics, (data or {}).get("series"), (data or {}).get("flows"),
                             (data or {}).get("screens", False))}
     out = site_dir / "_data"
@@ -338,10 +454,19 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
     return post
 
 
+def read_symbols(path):
+    try:
+        got = json.loads(Path(path).read_text(encoding="utf-8")) if path else []
+        return [s for s in got if isinstance(s, str) and s] if isinstance(got, list) else []
+    except (OSError, ValueError):
+        return []
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", help="local mode: output folder (default: finterm's files folder, weekly/)")
     ap.add_argument("--site", help="site mode: the website folder to write into (public: EDGAR data only)")
+    ap.add_argument("--symbols", help="a file with the owner's symbols (JSON list), for private.md")
     ap.add_argument("--progress", help="a file to keep the build's progress in, for the app to show")
     ap.add_argument("--no-scan", action="store_true", help="use the Form 4 data already scanned; don't fetch")
     ap.add_argument("--no-extras", action="store_true",
@@ -350,10 +475,11 @@ def main():
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="site mode: publish even when some days of filings could not be read")
     ap.add_argument("--topics", default=",".join(ALL_TOPICS),
-                    help="comma-separated sections: summary, macro, ipo, insider, funds, screens")
+                    help="comma-separated sections: summary, macro, earnings, ipo, insider, funds, screens, mine (drafts)")
     ap.add_argument("--detail", default="standard", choices=("full", "standard", "short"),
                     help="rows a table holds: 10, 5 or 3")
-    ap.add_argument("--draft", action="store_true", help="accepted, without effect (a draft holds what is published)")
+    ap.add_argument("--draft", action="store_true", help="site mode, for review in the app: writes private.md beside the site, the owner's holdings "
+                         "this week, never part of it")
     args = ap.parse_args()
     topics = [t.strip() for t in args.topics.split(",") if t.strip()]
     bad = [t for t in topics if t not in ALL_TOPICS]
@@ -377,7 +503,8 @@ def main():
     week_of = today - timedelta(days=today.weekday())
     if args.site:
         b = build_brief(today, topics, args.detail, scan=not args.no_scan,
-                        extras=not args.no_extras, progress_path=args.progress)
+                        extras=not args.no_extras, progress_path=args.progress,
+                        symbols=read_symbols(args.symbols) if args.draft else [])
         if not b["complete"] and not args.allow_incomplete:
             # A partial week published and announced reads as a quiet week.
             # Fail loudly; the next run resumes where this one stopped.
@@ -385,6 +512,8 @@ def main():
                 print(f"error: {n}", file=sys.stderr)
             print("error: not publishing an incomplete issue (--allow-incomplete overrides)", file=sys.stderr)
             sys.exit(2)
+        if b["mine"]:  # beside the site, never in it
+            (Path(args.site).parent / "private.md").write_text("\n".join(mine_part(b["mine"])), encoding="utf-8")
         print(write_site(Path(args.site), b["rows"], b["notes"], today, b["body"], complete=b["complete"], topics=topics,
                          data=b))
         b["progress"].step("page", "done")

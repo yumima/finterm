@@ -1,0 +1,37 @@
+# The weekly brief is built and published on the owner's machine. When that
+# machine is off, or the run fails, nothing there can say so: this looks at the
+# published site from outside, and a failed scheduled run is mailed to the owner.
+name: Brief check
+
+on:
+  schedule:
+    - cron: "0 19 * * 1"  # Monday, 11 or 12 in California: built Sunday, reviewed by now
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          curl -fsS --retry 3 "https://yumima.github.io/finterm/issue.json?run=${GITHUB_RUN_ID}" -o issue.json
+          python3 - <<'EOF'
+          import json
+          from datetime import date, timedelta
+
+          issue = json.load(open("issue.json"))
+          # As weekly_brief_core.issue_key: an issue covers the week it follows.
+          y, w, _ = (date.today() - timedelta(days=3)).isocalendar()
+          want, bad = f"{y}-W{w:02d}", []
+          if issue.get("issue") != want:
+              bad.append(f"the site shows {issue.get('issue')}; {want} is not published")
+          if not issue.get("complete", True):
+              bad.append("the published issue is incomplete")
+          bad += issue.get("problems") or []
+          for b in bad:
+              print(f"::error::{b}")
+          raise SystemExit(1 if bad else 0)
+          EOF
