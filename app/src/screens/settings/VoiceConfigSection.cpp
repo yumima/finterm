@@ -379,7 +379,7 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
 
     auto* hdr = new QLabel(QStringLiteral(
         "<b>Text-to-speech</b> (output) — news read-aloud speaks with the LLM engine's voice: hearth's natural "
-        "Kokoro voices (provision with <code>hearth voice --voice kokoro</code>) or OpenAI's. Chat replies, and "
+        "Kokoro voices (provision with <code>hearth voice install kokoro</code>) or OpenAI's. Chat replies, and "
         "read-aloud when the engine has no voice, use a local Piper voice — download one from "
         "<a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a> and point Model at it."));
     hdr->setTextFormat(Qt::RichText);

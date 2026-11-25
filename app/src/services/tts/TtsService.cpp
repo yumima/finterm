@@ -65,7 +65,7 @@ QString resolve_script_path() {
 }
 
 /// The Piper voice .onnx to use. Prefers the explicit `tts.model_path` setting;
-/// otherwise auto-discovers a voice provisioned by `hearth voice` / `hearth
+/// otherwise auto-discovers a voice installed by `hearth voice install` / `hearth
 /// setup` so the user doesn't have to configure a path by hand.
 QString resolve_model_path() {
     const QString configured = get_setting("tts.model_path");
@@ -82,7 +82,7 @@ QString resolve_model_path() {
     return {};
 }
 
-/// piper is on PATH (incl. ~/.local/bin, where `hearth voice` symlinks it).
+/// piper is on PATH (incl. ~/.local/bin, where `hearth voice install` links it).
 bool piper_on_path() {
     const QString lbin = QDir::homePath() + "/.local/bin";
     return !QStandardPaths::findExecutable("piper").isEmpty() ||
@@ -560,14 +560,14 @@ bool TtsService::start_piper(const QString& text) {
     const QString model = resolve_model_path();
     if (model.isEmpty()) {
         set_reading(false); // before fail(): see speak_via_engine
-        fail(QStringLiteral("TTS voice not found — run `hearth voice` to provision one"));
+        fail(QStringLiteral("TTS voice not found — run `hearth voice install en_US-amy-medium` for one"));
         return false;
     }
 
     const QString script = resolve_script_path();
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    // Ensure ~/.local/bin (where `hearth voice` symlinks piper) is on PATH so
+    // Ensure ~/.local/bin (where `hearth voice install` links piper) is on PATH so
     // piper_tts.py's shutil.which("piper") finds it even under a desktop launch.
     const QString lbin = QDir::homePath() + "/.local/bin";
     const QString cur_path = env.value("PATH");

@@ -48,7 +48,9 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
       1500-token one. No queue of ours changes that (nothing pre-empts a running answer);
       finterm gives an engine on this computer 5 minutes and says it may be busy
 - [x] 3.7 Voices out of finterm's folder
-- [x] 3.9 `hearth client install`: builds mantel (source tree or release) and adds it to the app menu
+- [x] 3.9 `hearth client install`: builds the window (source tree or release) and adds it to the app menu
+- [x] 3.10 One name: mantel is hearth-client, shown as "Hearth"; plain `hearth` is the coding agent;
+      commands grouped (model, voice, provider)
 - [ ] 3.8 Switch the developer machine over (asks first): merge `engine` into main of hearth and
       finterm, run from there; then delete the mantel repository (local and GitHub; user
       decided 2026-11-24, every commit is in hearth) and the *-engine worktrees and branches

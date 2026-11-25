@@ -10,7 +10,7 @@
 // Configuration via SettingsRepository:
 //   `tts.provider`   = "piper" | "none" | unset
 //                      "none" disables; unset or "piper" auto-detects a voice
-//                      provisioned by `hearth voice` / `hearth setup`.
+//                      installed by `hearth voice install` / `hearth setup`.
 //   `tts.model_path` = absolute path to a Piper .onnx voice (optional;
 //                      auto-discovered under ~/.local/share/finterm/piper or
 //                      ~/.hearth/voices when unset)
