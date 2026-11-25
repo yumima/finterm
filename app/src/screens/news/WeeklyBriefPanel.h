@@ -10,8 +10,8 @@
 //                publish (the full workspace opens beside the drawer: read,
 //                correct, schedule, publish) · Post now (a published brief,
 //                to the platforms ticked below that it has not gone to yet)
-//   TOPICS       which sections it carries (summary, insider buying, the
-//                week ahead, screen leaders, your private IPO calendar)
+//   TOPICS       which sections it carries (at a glance, markets and economy, insider
+//                buying, fund moves, screen leaders, your private IPO calendar)
 //   DETAIL       how many rows each shows (full / standard / short)
 //   PLATFORMS    where it is posted once its page is live — each platform
 //                once, ever; a platform not connected says so (connect it in

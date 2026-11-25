@@ -75,6 +75,7 @@ TV_COLUMNS = {
     "total_revenue_ttm": ("revenue", None),
     "net_income_ttm": ("net_income", None),
     "cash_f_operating_activities_ttm": ("ocf", None),
+    "total_debt_fq": ("total_debt", None),
     "piotroski_f_score_ttm": ("piotroski", None),
     "return_on_invested_capital_fq": ("roic", 0.01),
     "return_on_equity_fq": ("roe", 0.01),
@@ -101,6 +102,13 @@ TV_COLUMNS = {
     "update_time": ("q_update", None),  # when the (delayed) quote was last SENT, unix — not the price's time
     "update_mode": ("q_mode", None),
     "change": ("q_change", 0.01),       # TradingView's own % change vs ITS previous close
+}
+
+# Annual histories, newest first (USD; up to 20 fiscal years). Lists, not numbers.
+TV_HISTORY = {
+    "net_income_fy_h": "ni_h", "free_cash_flow_fy_h": "fcf_h",
+    "gross_profit_fy_h": "gp_h", "total_revenue_fy_h": "rev_h",
+    "fiscal_period_fy_h": "fy_h",
 }
 
 # Sectors where EBIT / enterprise value / gross profit do not mean what the
@@ -135,7 +143,7 @@ def fetch_universe(min_mcap):
             {"left": "is_primary", "operation": "equal", "right": True},
             {"left": "exchange", "operation": "in_range", "right": ["NASDAQ", "NYSE", "AMEX"]},
         ],
-        "columns": list(TV_COLUMNS),
+        "columns": list(TV_COLUMNS) + list(TV_HISTORY),
         "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
         "range": [0, 6000],
     }
@@ -179,6 +187,8 @@ def parse_universe(rows):
                 continue
             f = _num(v)
             rec[key] = f * scale if (f is not None and scale is not None) else f
+        for col, v in zip(TV_HISTORY, vals[len(cols):]):
+            rec[TV_HISTORY[col]] = [_num(x) for x in v] if isinstance(v, list) else None
         if not rec.get("tv_name"):
             continue
         rec["symbol"] = yahoo_symbol(rec["tv_name"])
@@ -521,6 +531,91 @@ def pullback_signals(close, high, low):
     return out
 
 
+# ── Quality at a fair price (Buffett) ────────────────────────────────────────
+#
+# Buffett publishes no screen. These are the tests he has stated in print,
+# made exact; each threshold's origin is in the strategy's `rules` and in
+# plans/research/buffett_screen_2026-11.md. The definitions below are the only
+# ones: fund_backtest.py imports them.
+BUFFETT = {
+    "years": 10,           # consecutive fiscal years of earnings and free cash flow
+    "fcf_misses": 1,       # years of negative free cash flow allowed
+    "growth": 0.03,        # a year, earnings, first three years' average to the last three's
+    "roe": 0.15, "roic": 0.12,
+    "debt_years": 4.0,     # total debt in years of earnings
+    "gm_low": 0.80,        # the worst year's gross margin against the median year's
+    "trend": 0.80,         # the last year's earnings against the 3-year average
+    "growth_cap": 0.08,    # the most growth the value assumes, for ten years
+    "terminal": 0.03,      # and after them
+    "discount": 0.10,      # the return he asks for at least
+    "n": 30,
+}
+
+
+def buffett_multiple(growth):
+    """What one dollar of owner earnings is worth: ten years at `growth`
+    (between 0 and the cap), then the terminal rate, discounted."""
+    b = BUFFETT
+    g, r, t = min(max(growth, 0.0), b["growth_cap"]), b["discount"], b["terminal"]
+    q = (1 + g) / (1 + r)
+    return sum(q ** k for k in range(1, 11)) + q ** 10 * (1 + t) / (r - t)
+
+
+def buffett_facts(ni, fcf, gp, rev, periods=None, latest_ni=None, min_years=None):
+    """One company's history as the numbers the rules test, or {} when it has
+    fewer than `min_years` consecutive fiscal years of earnings AND free cash
+    flow. Lists are newest first; a missing year ends the history — it is
+    never read as zero."""
+    b = BUFFETT
+    n, need = 0, min_years or b["years"]
+    for i in range(min(len(ni or []), len(fcf or []), b["years"])):
+        if ni[i] is None or fcf[i] is None:
+            break
+        if periods is not None and i and (i >= len(periods) or periods[i] is None or periods[i - 1] is None
+                                          or periods[i] != periods[i - 1] - 1):
+            break
+        n += 1
+    if n < need:
+        return {}
+    e, f = ni[:n], fcf[:n]
+    now, then = sum(e[:3]) / 3, sum(e[-3:]) / 3
+    owner = min(now, sum(f[:3]) / 3)
+    # The margin's own history: where a company reports no gross profit, the
+    # test was not taken (None), and it is the caller who says what that means.
+    gm = [g / r for g, r in zip((gp or [])[:n], (rev or [])[:n]) if g is not None and r is not None and r > 0]
+    growth = (now / then) ** (1 / (n - 3)) - 1 if now > 0 and then > 0 else None
+    # fewer than five reported years are too few to call a margin steady: as
+    # with none, the test was not taken
+    med = float(np.median(gm)) if len(gm) >= 5 else None
+    return {
+        "years": n, "ni_pos": sum(x > 0 for x in e), "fcf_pos": sum(x > 0 for x in f),
+        "ni_avg": now, "owner": owner, "growth": growth,
+        "gm_years": len(gm) if len(gm) >= 5 else 0,
+        "gm_low": min(gm) / med if med is not None and med > 0 else None,
+        "trend": (latest_ni / now) if latest_ni is not None and now > 0 else None,
+        "value": owner * buffett_multiple(growth) if owner > 0 and growth is not None else None,
+    }
+
+
+def buffett_quality(x, roe, roic, debt):
+    """The business tests, in order: [(rule, passed)]. An absent number fails
+    its test, except a gross margin the company does not report."""
+    b = BUFFETT
+    num = lambda v: v is not None and math.isfinite(v)
+    n = x.get("years", 0)
+    return [
+        ("years", n > 0),
+        ("profit", n > 0 and x["ni_pos"] == n),
+        ("cash", n > 0 and x["fcf_pos"] >= n - b["fcf_misses"]),
+        ("growth", num(x.get("growth")) and x["growth"] >= b["growth"]),
+        ("roe", num(roe) and roe >= b["roe"]),
+        ("roic", num(roic) and roic >= b["roic"]),
+        ("debt", num(debt) and n > 0 and x["ni_avg"] > 0 and debt <= b["debt_years"] * x["ni_avg"]),
+        ("margin", n > 0 and (x["gm_years"] == 0 or (x["gm_low"] is not None and x["gm_low"] >= b["gm_low"]))),
+        ("trend", num(x.get("trend")) and x["trend"] >= b["trend"]),
+    ]
+
+
 # The Trend Template's 7 price criteria as the setting-up list names them, in
 # price_signals' order, with how far each must still move: (label, gap(row))
 # where gap is the change still needed, as a fraction of the moving side;
@@ -608,6 +703,21 @@ def setting_up(df, sig, lists, ctx):
                                   what="volatility must fall")
     out["magic_formula"] = next_in_line(ctx["magic"], set(lists["magic_formula"]), 30,
                                         fmt=lambda x: f"{x:.1f} rank points", what="combined rank needs")
+    # Good businesses still above their estimated value, nearest first: the
+    # watch list. The tested definition (setups_all_backtest.py).
+    on = set(lists["buffett"])
+    wait = df["mos"][ctx["good"]].dropna().drop(list(on), errors="ignore")
+    out["buffett"] = []
+    for s_, m_ in wait.sort_values(ascending=False, kind="stable").head(BUFFETT["n"]).items():
+        if m_ >= 0:  # under its value but not among the widest margins
+            g = float(df["mos"][lists["buffett"][-1]] - m_)
+            out["buffett"].append(_setup(s_, f"Below its estimated value, outside the {BUFFETT['n']} widest margins",
+                                         "outside the cut", g, f"{g * 100:.1f} pts",
+                                         f"the margin must widen {g * 100:.1f} pts to reach #{BUFFETT['n']}"))
+            continue
+        g = 1 - 1 / (1 - float(m_))  # the fall from the price to the estimated value
+        out["buffett"].append(_setup(s_, "Good business, priced above its estimated value", "above value", g,
+                                     f"{g * 100:.1f}%", f"the price must fall {g * 100:.1f}%"))
     pool_q = df["mom12_1"].reindex(ctx["gpa_pool"])
     out["quality_momentum"] = next_in_line(pool_q, set(lists["quality_momentum"]), 25,
                                            what="12-1 return must rise")
@@ -724,6 +834,7 @@ def evidence(strategy, ev_doc):
         # not crash the scan's allow_nan=False dump
         out.update({"tested": True, "excess": _clean(row.get("excess")), "t": _clean(row.get("t")),
                     "max_dd": _clean(row.get("max_dd")), "hit": _clean(row.get("hit")),
+                    "from": row.get("from"), "to": row.get("to"),
                     "subperiods": [_clean(x) for x in (row.get("subperiods") or [])]})
         for k in ("trades", "win_rate", "avg_R"):  # trade-simulated strategies only
             if row.get(k) is not None:
@@ -832,6 +943,37 @@ STRATEGIES = [
         "columns": ["r1m", "r3m", "r6m", "adr20", "off_high", "dollar_vol50"],
         "backtest": 'Leaders: top 2% by 1/3/6m (Qullamaggie-style)',
         "note": "Tested without the ADR / consolidation filters (top 2% by 1/3/6-month rank): no edge and the deepest drawdown of any screen. The method's edge, if any, is in entries and stops, which a screen does not do.",
+    },
+    {
+        "id": "buffett", "name": "Buffett Value", "family": "Practitioner",
+        "setups": "buffett",
+        "source": "Warren Buffett's letters to Berkshire shareholders (1986, 1987, 1989, 1991, 1992), made exact",
+        "summary": "Good businesses at or below an estimated value: ten years of profit, high returns, little debt, then the widest margin of safety. At most 30.",
+        "rules": ["Ten consecutive fiscal years of data, a profit in every one ('demonstrated consistent earning power', 1986)",
+                  "Free cash flow positive in at least nine of the ten",
+                  "Earnings up ≥ 3% a year, first three years' average to the last three's",
+                  "ROE ≥ 15% (the 1987 letter's floor for any year of ten; here the latest) and ROIC ≥ 12%, so debt cannot make the return",
+                  "Total debt ≤ 4 years of earnings ('good returns on equity while employing little or no debt', 1986)",
+                  "Worst year's gross margin ≥ 80% of the median year's, where five or more are reported: a stable margin is the trace of a moat",
+                  "Last twelve months' earnings ≥ 80% of the 3-year average (no 'turn-around situations', 1986)",
+                  "Owner earnings = the lower of 3-year average free cash flow and net income (the 1986 formula; the lower of the two stops share-based pay from counting as cash)",
+                  "Estimated value = owner earnings growing at their own rate, 0% to at most 8%, for ten years, then 3%, discounted at 10% (the rate in his 1991 example)",
+                  "Price at or below that value; ranked by margin of safety, the 30 widest",
+                  "Excludes Finance and Utilities: free cash flow and gross margin mean nothing there"],
+        "idea": "'It's far better to buy a wonderful company at a fair price than a fair company at a wonderful price' (1989). The first rules ask only whether the business is good: steady profit, high returns on little debt, cash behind the earnings. The last asks what the cash it earns is worth and whether the market asks less. 'If we calculate the value of a common stock to be only slightly higher than its price, we're not interested in buying' (1992): a name at the top of the list has the widest margin, one at the bottom almost none.",
+        "use": "Buffett reads the business before the price: whether he understands it, whether its advantage will last, whether its managers are able and honest. No screen measures those. He holds for many years, and in few names. The estimated value here moves a lot with growth and the discount rate: it orders candidates, it does not price them.",
+        "tested": "The same tests on SEC annual filings, visible 120 days after period end, point-in-time S&P 500 members, Finance and Utilities excluded (SIC codes), held one month; only the months that held names count (from 2015). XBRL filings start in 2009, so 7 to 10 years of history are used instead of ten, and the lists are short. Return on equity and the 'last twelve months' test use the last fiscal year; return on capital is net income / (equity + debt); debt is what the filing tags (none tagged fails); market cap comes from the filed public float.",
+        "reading": [["Warren Buffett, 1986 letter: acquisition criteria and owner earnings", 'https://www.berkshirehathaway.com/letters/1986.html'],
+                    ["Warren Buffett, 1987 letter: 'two tests of economic excellence'", 'https://www.berkshirehathaway.com/letters/1987.html'],
+                    ["Warren Buffett, 1992 letter: value, growth and the margin of safety", 'https://www.berkshirehathaway.com/letters/1992.html'],
+                    ["Frazzini, Kabiller & Pedersen (2018), 'Buffett's Alpha', Financial Analysts Journal", 'https://doi.org/10.2469/faj.v74.n4.3']],
+        "practice": "Take the five widest margins. For each, read the last annual report and write one page: what it sells, why a rival cannot take the customers, what would break that, and what you think it earns in ten years. Strike the ones you cannot explain. Paper-buy what is left and review once a year on the business, not the price; compare with SPY over at least five years.",
+        "rank_key": 'mos',
+        "setup_desc": 'companies that pass every business test but are not on the list, the 30 nearest to it: above their estimated value, or below it with a narrower margin',
+        "rank_by": "Margin of safety, widest first",
+        "columns": ["mos", "fair_value", "owner_yield", "ni_growth", "roe", "roic", "debt_years"],
+        "backtest": 'Buffett: quality at or below estimated value (max 30)',
+        "note": "Buffett publishes no formula. His own record came from cheap, safe, high-quality stocks held with leverage (Frazzini, Kabiller & Pedersen) and from judgement no rule here contains.",
     },
     {
         "id": "magic_formula", "name": "Magic Formula", "family": "Academic",
@@ -1167,8 +1309,38 @@ def compute(fund, frames, extras=None, now=None):
     df["value_n"] = vr.notna().sum(axis=1)  # ratios present (a loss still counts)
     df["value_score"] = vr.mean(axis=1).where(df["value_n"] >= 4)
 
+    # Quality at a fair price. Facts first, the price last: `mos` is how far the
+    # market value sits below the estimated value (negative = above it).
+    buf = {}
+    for s_ in syms:
+        r_ = fund[s_]
+        if not operating[s_]:
+            continue
+        x = buffett_facts(r_.get("ni_h"), r_.get("fcf_h"), r_.get("gp_h"), r_.get("rev_h"),
+                          r_.get("fy_h") or [], r_.get("net_income"))
+        tests = buffett_quality(x, r_.get("roe"), r_.get("roic"), r_.get("total_debt"))
+        mc = r_.get("mcap")
+        val = x.get("value")
+        buf[s_] = {"facts": x, "tests": dict(tests), "good": all(ok for _, ok in tests),
+                   "mos": 1 - mc / val if val and mc and mc > 0 else None}
+    col = lambda fn: pd.Series({s_: fn(buf[s_], fund[s_]) for s_ in buf}, dtype=float).reindex(syms)
+    df["mos"] = col(lambda b_, r_: b_["mos"])
+    # a share, at the price the market cap was struck on (the same response):
+    # the price column is Yahoo's or a later bar, and the ratio of the two
+    # would be in the value
+    df["fair_value"] = col(lambda b_, r_: b_["facts"]["value"] / r_["mcap"] * r_["q_close"]
+                           if b_["mos"] is not None and r_.get("q_close") else None)
+    df["owner_yield"] = col(
+        lambda b_, r_: b_["facts"]["owner"] / r_["mcap"] if b_["facts"] and (r_.get("mcap") or 0) > 0 else None)
+    df["ni_growth"] = col(lambda b_, r_: b_["facts"].get("growth"))
+    df["debt_years"] = col(
+        lambda b_, r_: r_["total_debt"] / b_["facts"]["ni_avg"]
+        if b_["facts"] and b_["facts"]["ni_avg"] > 0 and r_.get("total_debt") is not None else None)
+    good = pd.Series({s_: b_["good"] for s_, b_ in buf.items()}, dtype=bool).reindex(syms, fill_value=False)
+
     lists = {}
     rs = df["rs"]
+    lists["buffett"] = _top(df["mos"][good & (df["mos"] >= 0)], n=BUFFETT["n"])
     tt = df["tt_core"] & (rs >= 70)
     lists["trend_template"] = _top(rs[tt])
     lists["rs_leaders"] = _top(rs[tt], n=25)
@@ -1241,6 +1413,23 @@ def compute(fund, frames, extras=None, now=None):
         market = {"spy": float(sp.iloc[-1]),
                   "above50": bool(sp.iloc[-1] > sp.rolling(50).mean().iloc[-1]),
                   "above200": bool(sp.iloc[-1] > sp.rolling(200).mean().iloc[-1])}
+    # How broad the market is, counted over this universe (the weekly brief's
+    # line): stocks above their averages, stocks up over 5 sessions, and the
+    # sectors by their median stock's 5-session return. Only names with both
+    # numbers are counted; a count over nothing is absent, not 0%.
+    def share(cond, *known):
+        k_ = pd.concat(known, axis=1).notna().all(axis=1)
+        return float(cond[k_].mean()) if k_.any() else None
+    r5 = (close.iloc[-1] / close.iloc[-6] - 1).reindex(syms) if len(close) > 5 else pd.Series(np.nan, index=syms)
+    sma = {n_: last[f"sma{n_}"].reindex(syms) for n_ in (50, 200)}
+    by = r5.groupby(f["sector"]).agg(["median", "count"]) if "sector" in f.columns else pd.DataFrame()
+    market.update({
+        "above200_share": share(df["price"] > sma[200], df["price"], sma[200]),
+        "above50_share": share(df["price"] > sma[50], df["price"], sma[50]),
+        "up5_share": share(r5 > 0, r5),
+        "sectors": [s_ for s_, r_ in by.sort_values("median", ascending=False, kind="stable").iterrows()
+                    if r_["count"] >= 10] if len(by) else [],
+    })
     asof = close.index[-1].strftime("%Y-%m-%d") if len(close.index) else None
     if extras is not None:
         # NOT df.attrs: pandas deep-copies attrs into every derived frame
@@ -1248,11 +1437,11 @@ def compute(fund, frames, extras=None, now=None):
         extras["plan_asof"] = plan_asof
         extras["setups"] = setting_up(df, sig, lists, {
             "k": k, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap, "combo": combo,
-            "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1]})
+            "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1], "good": good})
         extras["examples"] = worked_examples(df, sig, lists, {
             "combo": combo, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap,
             "combo_pb": combo_pb.iloc[-1], "one": {n: v.iloc[-1] for n, v in one.items()},
-            "k": k, "pb_trig": pb_trig, "sector_ok": operating})
+            "k": k, "pb_trig": pb_trig, "sector_ok": operating, "good": good, "buffett": buf, "fund": fund})
     return df, lists, market, asof
 
 
@@ -1356,7 +1545,40 @@ def worked_examples(df, sig, lists, ctx):
             checks.append(C("Not already triggered or stopped today", "today's range crossed the entry or stop", False))
         return checks
 
+    def buffett(sym):
+        b_, r_, B_ = ctx["buffett"].get(sym), ctx["fund"].get(sym) or {}, BUFFETT
+        sec = v("sector", sym)
+        first = C("Not Finance or Utilities", sec if isinstance(sec, str) else "sector unknown",
+                  ctx["sector_ok"].get(sym, False))
+        if b_ is None:
+            return [first]
+        x, ok = b_["facts"], b_["tests"]
+        n = x.get("years", 0)
+        pc = lambda y: _pc(y) if y is not None else "—"
+        return [
+            first,
+            C(f"{B_['years']} consecutive fiscal years of earnings and free cash flow",
+              f"{n} years" if n else "fewer", ok["years"]),
+            C("A profit in every one of them", f"{x.get('ni_pos', 0)} of {n}", ok["profit"]),
+            C(f"Free cash flow in all but {B_['fcf_misses']}", f"{x.get('fcf_pos', 0)} of {n}", ok["cash"]),
+            C(f"Earnings up {_pc(B_['growth'])} a year or more (3-year averages)", pc(x.get("growth")), ok["growth"]),
+            C(f"Return on equity {_pc(B_['roe'])} or more", pc(r_.get("roe")), ok["roe"]),
+            C(f"Return on invested capital {_pc(B_['roic'])} or more", pc(r_.get("roic")), ok["roic"]),
+            C(f"Total debt within {B_['debt_years']:.0f} years of earnings",
+              f"{v('debt_years', sym):.1f} years" if np.isfinite(v("debt_years", sym)) else "—", ok["debt"]),
+            C(f"Worst gross margin at least {_pc(B_['gm_low'])} of the median year's",
+              "fewer than 5 years reported" if n and not x["gm_years"] else pc(x.get("gm_low")), ok["margin"]),
+            C(f"Last 12 months' earnings at least {_pc(B_['trend'])} of the 3-year average", pc(x.get("trend")),
+              ok["trend"]),
+            C("Priced at or below the estimated value",
+              f"{_usd(v('price', sym))} vs {_usd(v('fair_value', sym))}; margin of safety {_pc(v('mos', sym), True)}",
+              v("mos", sym) >= 0),
+            ranked(f"Then the {B_['n']} widest margins of safety", df["mos"][ctx["good"] & (df["mos"] >= 0)], sym,
+                   B_["n"]),
+        ]
+
     specs = {
+        "buffett": (df["mos"], buffett),
         "trend_template": (rs, template),
         "rs_leaders": (rs, lambda s_: template(s_) + [ranked("Top 25 by RS among the passers", rs[tt], s_, 25)]),
         "momentum": (mom, lambda s_: [C("12-1 return", _pc(mom.get(s_), True), np.isfinite(mom.get(s_, np.nan))),
@@ -1436,6 +1658,7 @@ OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1
               "tt_count", "earnings_yield", "roic", "roe", "gpa", "gross_margin", "piotroski",
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
               "div_yield", "shareholder_yield", "value_score", "next_earnings",
+              "mos", "fair_value", "owner_yield", "ni_growth", "debt_years",
               "entry", "stop", "risk_pct", "target3", "target5", "group_rs", "group_leaders"]
 CHART_BARS = 126  # closes per listed name: the table's 6-month trend line (kSparkBars)
 

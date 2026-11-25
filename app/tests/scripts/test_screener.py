@@ -194,6 +194,85 @@ for st in sd.STRATEGIES:
 # all but the Leader Pullback, whose resting-at-support setup a random market
 # does not produce (its pick path was checked on the real 2026-10-19 scan)
 check(both >= 10, f"60 names: strategies with both a pick and a miss: {both} of {len(sd.STRATEGIES)}")
+# ── breadth ──────────────────────────────────────────────────────────────────
+_, _, mk60, _ = sd.compute(fund60, fr60)
+c60 = pd.DataFrame({s: fr60[s]["Close"] for s in fund60})
+want = float((c60.iloc[-1] > c60.rolling(200).mean().iloc[-1]).mean())
+check(abs(mk60["above200_share"] - want) < 1e-12, f"share above the 200-day: {mk60['above200_share']} vs {want}")
+r5_ = c60.iloc[-1] / c60.iloc[-6] - 1
+check(abs(mk60["up5_share"] - float((r5_ > 0).mean())) < 1e-12, "share up over 5 sessions")
+med = r5_.groupby({s: fund60[s]["sector"] for s in fund60}).median().sort_values(ascending=False)
+check(mk60["sectors"] == list(med.index), f"sectors by median 5-session return: {mk60['sectors']}")
+check(sd.compute(fund, {s: f.iloc[-100:] for s, f in frames.items()})[2]["above200_share"] is None,
+      "no 200-day average anywhere: absent, not 0%")
+
+# ── Buffett Value ────────────────────────────────────────────────────────────
+hist = {"ni_h": [110.0 - 4 * i for i in range(12)], "fcf_h": [100.0 - 4 * i for i in range(12)],
+        "gp_h": [400.0] * 12, "rev_h": [1000.0] * 12, "fy_h": [2025 - i for i in range(12)]}
+facts = lambda h, **kw: sd.buffett_facts(h["ni_h"], h["fcf_h"], h["gp_h"], h["rev_h"], h["fy_h"], 112.0, **kw)
+x = facts(hist)
+check(x["years"] == 10 and x["ni_pos"] == 10 and x["fcf_pos"] == 10, f"ten years of both: {x}")
+check(abs(x["owner"] - 96.0) < 1e-9, f"owner earnings = the LOWER of the 3-year averages (FCF 96 < NI 106): {x['owner']}")
+check(abs(x["growth"] - ((106.0 / 78.0) ** (1 / 7) - 1)) < 1e-12, f"growth between 3-year averages, 7 years apart: {x['growth']}")
+check(all(ok for _, ok in sd.buffett_quality(x, 0.20, 0.15, 300.0)), "the model business passes every test")
+check(sd.buffett_facts(hist["ni_h"][:9], hist["fcf_h"][:9], [], [], None) == {}, "nine years are not ten")
+gap = dict(hist, ni_h=hist["ni_h"][:4] + [None] + hist["ni_h"][5:])
+check(facts(gap) == {}, "a missing year ends the history; it is never a zero-earnings year")
+skip = dict(hist, fy_h=[2025, 2024, 2022] + [2021 - i for i in range(9)])
+check(facts(skip) == {}, "a skipped fiscal year is not a consecutive one")
+fails = lambda h=hist, roe=0.20, roic=0.15, debt=300.0: [k for k, ok in sd.buffett_quality(facts(h), roe, roic, debt) if not ok]
+check(fails(dict(hist, ni_h=[-5.0 if i == 6 else v for i, v in enumerate(hist["ni_h"])])) == ["profit"], "one loss in ten fails")
+neg = lambda n: dict(hist, fcf_h=[-5.0 if i in range(4, 4 + n) else v for i, v in enumerate(hist["fcf_h"])])
+check(fails(neg(1)) == [] and fails(neg(2)) == ["cash"], "one year of negative free cash flow is allowed, two are not")
+check(fails(roe=None) == ["roe"] and fails(roic=float("nan")) == ["roic"] and fails(debt=None) == ["debt"],
+      "an absent ROE, ROIC or debt fails its test: it was never measured")
+check(fails(roe=0.1499) == ["roe"] and fails(roic=0.1199) == ["roic"] and fails(debt=106.0 * 4 + 1) == ["debt"], "the thresholds")
+check(fails(dict(hist, gp_h=[300.0 if i == 2 else 400.0 for i in range(12)])) == ["margin"], "an unstable gross margin fails")
+check(fails(dict(hist, gp_h=[390.0 + 10 * (i % 2) for i in range(10)])) == [], "the median of an even count is the middle pair's mean")
+check(fails(dict(hist, gp_h=[-20.0] * 12)) == ["margin"], "a margin reported and negative is not 'not reported'")
+check(abs(facts(dict(hist, gp_h=[300.0] + [400.0] * 5 + [360.0] * 4))["gm_low"] - 300.0 / 380.0) < 1e-12, "median of ten")
+check(fails(dict(hist, gp_h=[None] * 12)) == [], "a company that reports no gross profit is not failed for it")
+check([k for k, ok in sd.buffett_quality(sd.buffett_facts(hist["ni_h"], hist["fcf_h"], hist["gp_h"], hist["rev_h"],
+      hist["fy_h"], 80.0), 0.2, 0.15, 1.0) if not ok] == ["trend"], "collapsing earnings fail (80 < 80% of 106)")
+check([k for k, ok in sd.buffett_quality({}, 0.2, 0.15, 0.0) if not ok] ==
+      ["years", "profit", "cash", "growth", "debt", "margin", "trend"], "no history passes nothing it measures")
+check(abs(sd.buffett_multiple(0.0) - (sum(1.1 ** -k for k in range(1, 11)) + 1.1 ** -10 * 1.03 / 0.07)) < 1e-9
+      and sd.buffett_multiple(-0.2) == sd.buffett_multiple(0.0) and sd.buffett_multiple(0.5) == sd.buffett_multiple(0.08),
+      "growth is held between 0 and the cap")
+check(abs(x["value"] - 96.0 * sd.buffett_multiple(x["growth"])) < 1e-9, "value = owner earnings x the multiple")
+# through compute(): ranked by margin of safety, at most 30, none above value
+bf = {s: dict(r) for s, r in fund60.items()}
+for i, s in enumerate(sorted(bf)):
+    bf[s].update({k: list(v) for k, v in hist.items()}, net_income=112.0, roe=0.2, roic=0.15, total_debt=100.0,
+                 mcap=x["value"] * (0.4 + 0.02 * i), q_close=50.0)
+bex = {}
+bdf, bl, _, _ = sd.compute(bf, fr60, bex)
+ops = [s for s in sorted(bf) if bf[s]["sector"] != "Finance"]
+under = [s for s in ops if bf[s]["mcap"] <= x["value"]]
+check(bl["buffett"] == under[:30], f"cheapest against value first, no bank, at most 30: {bl['buffett'][:5]} of {len(under)}")
+check(abs(bdf.at[under[0], "fair_value"] - 50.0 * x["value"] / bf[under[0]]["mcap"]) < 1e-9,
+      "estimated value a share, at the price the market cap was struck on")
+bf2 = {s: dict(r, fy_h=None) for s, r in bf.items()}
+check(sd.compute(bf2, fr60)[1]["buffett"] == [], "unknown fiscal periods are not consecutive ones")
+bf3 = {s: dict(r, sector="Technology Services", mcap=x["value"] * (0.3 + 0.01 * i)) for i, (s, r) in enumerate(sorted(bf.items()))}
+bex3 = {}
+_, bl3, _, _ = sd.compute(bf3, fr60, bex3)
+w0 = bex3["setups"]["buffett"][0]
+check(len(bl3["buffett"]) == 30 and w0["symbol"] == sorted(bf3)[30] and abs(w0["gap"] - 0.01) < 1e-9
+      and "to reach #30" in w0["gap_text"], f"#31 is told how far its margin is from #30's: {w0}")
+wait = [d["symbol"] for d in bex["setups"]["buffett"]]
+check(wait == [s for s in ops if s not in bl["buffett"]][:30], f"the wait list: good, above value, nearest first: {wait[:4]}")
+g_ = next(d for d in bex["setups"]["buffett"] if bf[d["symbol"]]["mcap"] > x["value"])
+check(abs(g_["gap"] - (1 - x["value"] / bf[g_["symbol"]]["mcap"])) < 1e-9, "its gap is the fall to the value")
+for k_ in ("pick", "miss"):
+    ch = bex["examples"]["buffett"][k_]["checks"]
+    check(all(c["ok"] for c in ch) == (k_ == "pick"), f"Buffett worked {k_}: {ch}")
+# the scanner's history columns: lists, newest first, a null inside stays None
+hr = {"d": [{"name": "HHH", "description": "Hist Co", "market_cap_basic": 5e9}.get(c) for c in cols]
+      + [[3.0, None, 1.0], [2.0], None, [5.0], [2025, 2024]]}
+hu = sd.parse_universe([hr])["HHH"]
+check(hu["ni_h"] == [3.0, None, 1.0] and hu["gp_h"] is None and hu["fy_h"] == [2025.0, 2024.0], f"histories parsed: {hu}")
+
 # setting up: RS >= 70, exactly 6 of the 7 price criteria, never a passer, the
 # named rule really is the one failed, and its gap is a move still needed
 df60, _, _, _ = sd.compute(fund60, fr60)

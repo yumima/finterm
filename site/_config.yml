@@ -3,7 +3,7 @@ tagline: Open-source desktop financial research terminal
 description: >-
   Open-source desktop financial research terminal for Linux, Windows and macOS:
   equity research, SEC filings, futures, IPO pipeline, portfolio. Publishes a
-  weekly brief of insider-buying clusters from SEC Form 4.
+  one-page weekly brief: markets, economy, insider and fund moves, screen leaders.
 url: https://yumima.github.io
 baseurl: /finterm
 lang: en

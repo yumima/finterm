@@ -1,13 +1,14 @@
-"""The weekly insider-buying brief — data, page text and post texts.
+"""The weekly brief — data, page text and post texts.
 
 Shared by the app (social_app.py, behind the Social screen)
 and the owner's publishing tools (tools/weekly_brief.py, tools/announce.py).
 The app shows and posts the PUBLISHED issue (issue.json beside the page), so
 a post always matches the page it links to.
-Public output: SEC EDGAR data, the week's release schedule (no vendor
-figures) and screen tickers with finterm's own backtest records (no vendor
-figures) — see tools/weekly_brief.py.
+Public output: SEC EDGAR data, U.S. agencies' and the Fed's figures (FRED), the
+week's release schedule, and screen tickers with finterm's own backtest records
+and market counts (no vendor figures) — see tools/weekly_brief.py.
 """
+import os
 import re
 from datetime import date, timedelta
 
@@ -40,17 +41,18 @@ DISCLAIMER = (
 )
 
 
-# The weekly issue also carries the release schedule and the screens; it says
-# where each came from (the insider-only page keeps DISCLAIMER).
-ISSUE_DISCLAIMER = DISCLAIMER.replace(
-    "compiled mechanically from public SEC EDGAR filings (Form 4).",
-    "compiled mechanically from public SEC EDGAR filings (Form 4), a public economic-release calendar, and "
-    "published stock-screening rules applied by finterm.").replace(
-    "Source: U.S. SEC, EDGAR.",
-    "Sources: insider filings, U.S. SEC, EDGAR; release dates as set by U.S. agencies, via the ForexFactory "
-    "calendar; screen rankings computed by finterm from TradingView and Yahoo Finance market data, none of "
-    "which is reproduced here.")
-assert ISSUE_DISCLAIMER != DISCLAIMER
+# The weekly issue says where each of its sections came from (the insider-only
+# page keeps DISCLAIMER).
+ISSUE_DISCLAIMER = (
+    "General, impersonal information compiled mechanically from public data. The market stance and the screens are the "
+    "output of fixed rules, the same for every reader: not advice fitted to anyone's circumstances, not a "
+    "recommendation of any security, not an offer. finterm and its authors are not registered investment advisers or "
+    "broker-dealers and receive no compensation from any company listed. Backtests are hypothetical; past results do "
+    "not predict future returns. Data may contain errors: verify against the filings. Sources: SEC EDGAR (Forms 4 and "
+    "13F); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
+    "ForexFactory calendar; the market stance, screens and breadth computed by finterm from S&P 500, VIX, TradingView "
+    "and Yahoo Finance data, none of which is reproduced."
+)
 
 
 def contact_from_keyring():
@@ -67,7 +69,7 @@ def money(v):
     if v is None:
         return "—"
     for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
-        if abs(v) >= div:
+        if abs(v) >= div * 0.99995:  # 999,999 reads $1.0M, not $1,000.0K
             return f"${v / div:,.1f}{unit}"
     return f"${v:,.0f}"
 
@@ -111,11 +113,6 @@ def clusters_data(scan):
                      f"(missing: {', '.join(missing)}); the list may be incomplete.")
     res = f4.recent(days=WINDOW_DAYS, min_insiders=2, min_value=50_000.0)
     return res["rows"], notes, complete
-
-
-# How many rows a section shows at each detail level (the owner's choice).
-DETAIL_ROWS = {"full": 25, "standard": 15, "short": 5}
-DETAIL_PICKS = {"full": None, "standard": None, "short": 5}  # None = every screen
 
 
 def clusters_section(rows, notes, max_rows=25):
@@ -196,82 +193,72 @@ def x_weight(text):
     return sum(1 if any(a <= ord(c) <= b for a, b in _X_LIGHT) else 2 for c in text)
 
 
-def fit_post(head, items, tail, short_tail, url, limit, url_cost, weigh=len):
-    """The longest post within @limit: drop list items from the end, then fall
-    back to the short tail. @url_cost is what the network charges for the
-    link (X and Mastodon: 23 for any URL; Bluesky: its real length)."""
-    def cost(t):
-        return weigh(t) - weigh(url) + url_cost
-
-    for t in (tail, short_tail):
-        for k in range(len(items), -1, -1):
-            body = head if k == 0 else f"{head} Largest by $ reported: {', '.join(items[:k])}."
-            text = f"{body}\n\n{t}"
-            if cost(text) <= limit:
-                return text
-    return f"{head[:limit - cost(short_tail) - 3].rstrip()}…\n\n{short_tail}"
-
-
 def _limit(network, url):
     limit, url_cost = NETWORK_LIMITS[network]
     return limit, len(url) if url_cost is None else url_cost
 
 
-PUBLIC_TOPIC_WORDS = {"insider": "insider buying", "macro": "the week ahead",
-                      "screens": "the top name from each strategy screen"}
+def post_lines(topics, series, rows, flows, max_cashtags, today, screens=True):
+    """What moved, a line per section the issue holds, most general first. No
+    screen names: beside a ticker alone, a post has no room for the record."""
+    lines = []
+    r = market_regime(series, today) if "summary" in topics and series else None
+    if r:
+        lines.append(f"{LABELS[r['state']]}: {regime_words(r)} ({r['date']:%b %-d})")
+    if "macro" in topics and series:
+        by = {r["name"]: r for r in market_rows(series) if r["value"] != "—"}
+        parts = [f"{short} {by[name]['value']} ({by[name]['change']} 1w)" for name, short in
+                 (("10-year Treasury", "10Y"), ("2-year Treasury", "2Y")) if name in by]
+        eco = {r["name"]: r for r in economy_rows(series) if r["value"] != "—"}
+        # (A row whose newest month has no figure is not the latest: left out.)
+        parts += [f"{short} {eco[name]['value']}" for name, short in
+                  (("CPI, y/y", "CPI y/y"), ("Unemployment rate", "jobless rate"))
+                  if name in eco and "no base" not in eco[name]["asof"]]
+        if parts:
+            lines.append(" · ".join(parts))
+    tags = 0
+
+    def tag(sym):
+        nonlocal tags
+        tags += 1
+        return f"${sym}" if tags <= max_cashtags else sym
+
+    if "insider" in topics and rows:
+        top = [f"{tag(r['symbol'])} {money(r['value'])}" for r in rows if r.get("symbol")][:3]
+        if top:
+            lines.append(f"Insiders bought: {', '.join(top)}")
+    if "funds" in topics and flows and not flows.get("error"):
+        for key, word in (("added", "Funds added, net"), ("trimmed", "Funds trimmed, net")):
+            names = [tag(r["ticker"]) for r in (flows.get(key) or [])[:3]]
+            if names:
+                lines.append(f"{word}: {', '.join(names)}")
+    if "screens" in topics and screens:
+        lines.append("Plus each strategy screen's first names and record")
+    return lines
 
 
-def social_posts(rows, today, url, topics=("insider", "macro", "screens")):
-    """This issue's announcement per network, built from its own names and
-    figures (X treats repeated identical posts as spam), in the page's neutral
-    wording. It announces only what the issue holds: without the insider
-    section, no insider figures and no "full list"."""
-    span = f"7 days to {today:%b %-d}"
-    n = len(rows)
-    if "insider" not in topics:
-        parts = [PUBLIC_TOPIC_WORDS[t] for t in ("macro", "screens") if t in topics]
-        what = " and ".join(parts) if parts else "the week"
-        head = f"Weekly brief, week of {today:%b %-d}: {what}."
-        tail = short = f"The brief: {url}"
-        return {
-            "url": url,
-            "x": fit_post(head, [], tail, short, url, *_limit("x", url), weigh=x_weight),
-            "bluesky": fit_post(head, [], tail, short, url, *_limit("bluesky", url)),
-            "mastodon": fit_post(head, [], f"{tail}\n\nNot investment advice. #investing #stocks #opensource",
-                                 short, url, *_limit("mastodon", url)),
-        }
-    if n:
-        head = (f"Insider buying, {span} (SEC Form 4): {n} {'company' if n == 1 else 'companies'} "
-                f"with 2+ insiders buying on the open market.")
-    else:
-        head = f"Insider buying, {span} (SEC Form 4): no company had 2+ insiders buying on the open market."
-    def items_for(max_cashtags):
-        out = []
-        for r in rows:
-            if len(out) == 3:
-                break
-            sym = r.get("symbol") or ""
-            if sym:
-                tag = f"${sym}" if len(out) < max_cashtags else sym
-            else:
-                tag = (r.get("issuer") or "")[:24].rstrip(" ,.")
-            if not tag:
-                continue  # a row with no name says nothing in a post
-            out.append(f"{tag} {money(r['value'])} ({r['insiders']} insiders)")
-        return out
+def fit_lines(head, lines, tail, limit, url, url_cost, weigh=len):
+    """The longest post within @limit: lines are dropped from the end."""
+    for k in range(len(lines), -1, -1):
+        text = "\n".join([head, *lines[:k]]) + f"\n\n{tail}"
+        if weigh(text) - weigh(url) + url_cost <= limit:
+            return text
+    return f"{head}\n\n{url}"
 
-    # X refuses a post with more than one cashtag (HTTP 403); the others take any.
-    items = items_for(3)
-    x_items = items_for(MAX_CASHTAGS["x"])
-    tail = f"Full list, method and base rate: {url}"
-    short = f"Full list: {url}"
-    masto_tail = f"{tail}\n\nNot investment advice. #investing #stocks #insidertrading #opensource"
-    return {
-        "url": url,
-        "x": fit_post(head, x_items, tail, short, url, *_limit("x", url), weigh=x_weight),
-        "bluesky": fit_post(head, items, tail, short, url, *_limit("bluesky", url)),
-        "mastodon": fit_post(head, items, masto_tail, short, url, *_limit("mastodon", url)),
-    }
+
+def social_posts(rows, today, url, topics=("summary", "macro", "insider", "funds", "screens"), series=None, flows=None,
+                 screens=True):
+    """This issue's announcement per network, built from its own figures and
+    only from the sections it holds."""
+    head = f"What's moving, week to {today:%b %-d}"
+    out = {"url": url}
+    for net, extra, weigh in (("x", "", x_weight), ("bluesky", "", len),
+                              ("mastodon", "\n\nFixed rules, not personal advice. #investing #stocks #opensource", len)):
+        # X refuses a post with more than one cashtag (HTTP 403); the others take any.
+        lines = post_lines(topics, series or {}, rows, flows, MAX_CASHTAGS.get(net, 99), today,
+                           screens)
+        out[net] = fit_lines(head, lines, url + extra, _limit(net, url)[0], url, _limit(net, url)[1], weigh)
+    return out
 
 
 def page(front, body, disclaimer=None):
@@ -424,120 +411,16 @@ def macro_coverage(rows, mon, fri, failed=()):
     return "the calendar for that week was not published yet when this issue was built"
 
 
-def macro_section(events, mon, fri, error=None):
-    out = [f"## The week ahead — US releases, {mon:%b %-d} to {fri:%b %-d}", ""]
-    out.append(
-        "The scheduled US releases that move the whole market: everything rated high impact, plus Fed "
-        "speakers, jobless claims and the other inflation, labor and growth reports. Times are US Eastern. "
-        "Dates are set by the agencies and can move."
-    )
-    out.append("")
-    if error:
-        out.append(f"_No release list this week: {md_escape(error)}._")
-    elif not events:
-        out.append("_No top-tier US release is scheduled in the window._")
-    else:
-        out.append("| Day | Time (ET) | Release |")
-        out.append("|---|---|---|")
-        for ev in events:
-            w = ev["when"]
-            t = "—" if (w.hour, w.minute) == (0, 0) else w.strftime("%-I:%M %p")
-            names = " · ".join(md_escape(x) for x in ev["titles"])
-            out.append(f"| {w:%a %b %-d} | {t} | {names} |")
-    out.append("")
-    return out
-
-
-# ── the top name from each strategy screen ───────────────────────────────────
+# ── the strategy screens ─────────────────────────────────────────────────────
 #
-# Screen output, not a recommendation. Published: the ticker, the company's
-# name, the screen's rule in words and finterm's OWN backtest record. The
-# metrics behind the ranking come from TradingView and Yahoo, whose terms do
-# not allow redistribution, so no price, ratio or return of theirs is written.
+# Screen output, not a recommendation. Published: tickers, finterm's OWN
+# backtest records and its own counts over the market (breadth). The metrics
+# behind the rankings come from TradingView and Yahoo, whose terms do not allow
+# redistribution, so no price, ratio or return of theirs is written.
 
 # RS Leaders is the Trend Template's top 25 by RS: both lists start with the
-# same name every week, so the template is represented by RS Leaders.
+# same names every week, so the template is represented by RS Leaders.
 PICK_SKIP = ("trend_template",)
-
-# The app's summary in the imperative ("buy the break of …") reads, beside a
-# ticker on a public page, as an instruction about that stock. Described
-# instead, in the third person, like every other screen's.
-PUBLIC_SUMMARY = {
-    "luk_pullback": "Market leaders resting at their rising 21-day average; the method enters on a break of "
-                    "the prior day's high with a 1-3% stop.",
-}
-
-
-def screen_picks(doc):
-    """[(strategy, symbol, company, rank)] — the first-ranked name of each
-    screen; a name already listed under an earlier screen passes to the next
-    one down (rank says which). A screen with no passer has symbol None."""
-    rows = doc.get("rows") or {}
-    taken, out = set(), []
-    for st in doc.get("strategies") or []:
-        if st.get("id") in PICK_SKIP:
-            continue
-        pick, rank = None, 0
-        for i, sym in enumerate(st.get("symbols") or []):
-            if sym and sym not in taken:
-                pick, rank = sym, i + 1
-                break
-        if pick:
-            taken.add(pick)
-        out.append((st, pick, ((rows.get(pick) or {}).get("name") or "") if pick else "", rank))
-    return out
-
-
-def record_text(ev):
-    """The screen's measured record in one sentence (finterm's own tests)."""
-    if not ev or not ev.get("tested"):
-        return "Not backtested."
-    # Only what the export holds: no comparison or period it does not state.
-    if ev.get("avg_R") is not None:
-        n = ev.get("trades")
-        return (f"Tested as trades: average {ev['avg_R']:+.2f}R per trade"
-                + (f" over {n:,.0f} trades" if n else "") + ".")
-    x, t = ev.get("excess"), ev.get("t")
-    if x is None:
-        return "Not backtested."
-    return (f"{x * 100:+.1f}% a year vs the equal-weighted S&P 500"
-            + (f" (t {t:.1f})" if t is not None else "") + ".")
-
-
-def picks_section(picks, asof=None, error=None, stale=0):
-    out = ["## Top name from each screen", ""]
-    out.append(
-        "The first-ranked stock on each of finterm's strategy screens"
-        + (f" as of the {asof} close" if asof else "")
-        + " — each screen is a published, rule-exact method (Minervini, O'Neil, Greenblatt, Piotroski and "
-        "others), applied to US stocks above $2B. **Screen output, not a recommendation.** Every screen was "
-        "backtested on point-in-time S&P 500 members from 2010 to 2026, and none beat the equal-weighted index "
-        "with statistical significance; each line gives that screen's own record. A name already listed under "
-        "an earlier screen passes to that screen's next one."
-    )
-    if stale and not error:
-        out += ["", f"_Prices for {stale} stock{'' if stale == 1 else 's'} could not be refreshed for this run; "
-                    "they were ranked on their last earlier close._"]
-    out.append("")
-    if error:
-        out.append(f"_The screens could not be run this week ({md_escape(error)})._")
-    elif not picks:
-        out.append("_No screen produced a list this week._")
-    else:
-        for st, sym, company, rank in picks:
-            name = md_escape(st.get("name"))
-            if not sym:
-                out.append(f"- **{name}** — no stock passed this week.")
-                continue
-            who = f"**{md_escape(sym)}** {md_escape(company)}".rstrip()
-            pos = "" if rank == 1 else f" (its #{rank})"
-            summary = PUBLIC_SUMMARY.get(st.get("id")) or st.get("summary")
-            stop = "" if who.endswith(".") else "."  # "CareDx, Inc." — no second period
-            out.append(f"- **{name}**{pos}: {who}{stop} {md_escape(summary)} "
-                       f"Ranked by: {md_escape(st.get('rank_by')) or 'its score'}. "
-                       f"_Record: {md_escape(record_text(st.get('evidence')))}_")
-    out.append("")
-    return out
 
 
 # ── private sections ─────────────────────────────────────────────────────────
@@ -571,58 +454,471 @@ def strip_private(text):
     return "\n".join(out)
 
 
-# ── the week in brief ────────────────────────────────────────────────────────
+# ── macro and economy ────────────────────────────────────────────────────────
+#
+# Public-domain figures of U.S. agencies and the Federal Reserve, read through
+# FRED. Series with a private owner (S&P 500, VIX, ICE spreads) are not used:
+# they may not be republished.
 
-def week_summary(rows, events, mon, fri, macro_err=None, picks=None, scr_err=None,
-                 include=("insider", "macro", "screens")):
-    """Three lines a reader can stop at: last week (insider clusters), next
-    week (the releases), and the screens. Built from the sections below it,
-    so it can never say something they don't."""
-    out = ["## The week in brief", ""]
-    n = len(rows or [])
-    if "insider" not in include:
-        pass  # a topic left out of the brief is left out of its summary too
-    elif n:
-        top = []
-        for r in rows[:3]:
-            name = r.get("symbol") or (r.get("issuer") or "")[:30]
-            if name:
-                top.append(f"{md_escape(name)} ({money(r.get('value'))})")
-        # The clusters below are filtered at $50K reported: the summary says so,
-        # or "no company" would be false of a smaller cluster.
-        out.append(f"- **Last week:** {n} {'company' if n == 1 else 'companies'} had two or more insiders "
-                   f"buying on the open market, $50K or more in all (SEC Form 4)"
-                   + (f"; largest by dollars reported: {', '.join(top)}." if top else "."))
-    else:
-        out.append("- **Last week:** no company had two or more insiders buying $50K or more on the open market "
-                   "(SEC Form 4).")
-    if "macro" not in include:
-        pass
-    elif macro_err:
-        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** the release calendar was not available.")
-    elif not events:
-        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** no top-tier US release is scheduled.")
-    else:
-        days = {}
-        for ev in events:
-            days.setdefault(ev["when"].date(), []).extend(ev["titles"])
-        parts = []
-        for d in sorted(days):
-            names = []
-            for t in days[d]:
-                short = re.sub(r"\s+[my]/[my]$", "", t)  # "CPI m/m" and "CPI y/y" read as one CPI
-                if short not in names:
-                    names.append(short)
-            parts.append(f"{d:%a} {', '.join(md_escape(x) for x in names[:3])}"
-                         + (f" +{len(names) - 3}" if len(names) > 3 else ""))
-        out.append(f"- **Next week ({mon:%b %-d}–{fri:%b %-d}):** " + "; ".join(parts) + ".")
-    if "screens" not in include:
-        pass
-    elif picks:
-        names = [f"{md_escape(sym)} ({md_escape(st.get('name', '').split(' (')[0])})" for st, sym, _, _ in picks if sym]
-        if names:
-            out.append(f"- **Screens:** the top name on each — {', '.join(names)}. Screen output, not a recommendation.")
-    elif scr_err:
-        out.append("- **Screens:** not run this week.")
-    out.append("")
+# id: (name, kind, unit). Kinds: level = the value, weekly change beside it;
+# yoy = 12-month change of an index; diff = change on the month before.
+MARKET_SERIES = {
+    "DGS10": ("10-year Treasury", "bp"),
+    "DGS2": ("2-year Treasury", "bp"),
+    "DFF": ("Fed funds, effective", "bp"),
+    "DTWEXBGS": ("Broad dollar index", "pct"),
+    "DCOILWTICO": ("WTI crude, $/bbl", "pct"),
+    "NFCI": ("Financial conditions, NFCI", "abs"),
+}
+ECONOMY_SERIES = {
+    "A191RL1Q225SBEA": ("Real GDP, q/q annualised", "pct_level"),
+    "CPIAUCNS": ("CPI, y/y", "yoy"),  # unadjusted: the 12-month figure BLS reports
+    "PCEPILFE": ("Core PCE, y/y", "yoy"),
+    "UNRATE": ("Unemployment rate", "pct_level"),
+    "PAYEMS": ("Payrolls, monthly change", "diff_k"),
+    "ICSA": ("Initial jobless claims", "thousands"),
+}
+SPARK = "▁▂▃▄▅▆▇█"
+
+
+def spark(values, n=12):
+    """The last values as a line of blocks, lowest to highest of those shown.
+    "" for fewer than three; a flat line is drawn in the middle."""
+    v = list(values)
+    if len(v) > n:  # evenly spaced, the newest always the last
+        v = [v[round(i * (len(v) - 1) / (n - 1))] for i in range(n)]
+    if len(v) < 3:
+        return ""
+    lo, hi = min(v), max(v)
+    if hi == lo:
+        return SPARK[3] * len(v)
+    return "".join(SPARK[round((x - lo) / (hi - lo) * (len(SPARK) - 1))] for x in v)
+
+
+def fetch_macro_series(today, get=None):
+    """{series id: [(date, value)]}, oldest first, two and a half years back.
+    A series that could not be read is absent — never an empty history."""
+    if get is None:
+        import fred_data
+
+        get = fred_data.get_series_keyless
+    start = (today - timedelta(days=930)).isoformat()
+    out = {}
+    for sid in (*MARKET_SERIES, *ECONOMY_SERIES, *REGIME_SERIES):
+        try:
+            r = get(sid, start)
+        except Exception as e:  # noqa: BLE001 — one series never holds the issue back
+            r = {"error": type(e).__name__}
+        obs = [(date.fromisoformat(o["date"]), float(o["value"])) for o in (r or {}).get("observations") or []]
+        if not (r or {}).get("error") and obs:
+            out[sid] = sorted(obs)
     return out
+
+
+def _before(obs, day):
+    """The last (date, value) on or before @day, or None."""
+    got = [o for o in obs if o[0] <= day]
+    return got[-1] if got else None
+
+
+def _signed(x, fmt, unit=""):
+    """A signed figure with a true minus; a change that rounds to nothing is 0."""
+    s = format(abs(x), fmt)
+    return (s if float(s.replace(",", "")) == 0 else ("+" if x > 0 else "−") + s) + unit
+
+
+def _minus(s):
+    return s.replace("-", "−")
+
+
+def _change(now, was, kind):
+    if was is None:
+        return "—"
+    if kind == "bp":
+        return _signed((now - was) * 100, ".0f", " bp")
+    if kind == "pct":
+        return _signed((now / was - 1) * 100, ".1f", "%") if was > 0 else "—"
+    return _signed(now - was, ".2f")
+
+
+def market_rows(series):
+    """[{name, value, change, trend, asof}]: the latest, its change over a week
+    (the last figure at least seven days older), a year's trend. A series that
+    was not read keeps its row, as "—"."""
+    rows = []
+
+    def add(name, obs, kind, show):
+        if not obs:
+            rows.append({"name": name, "value": "—", "change": "—", "trend": "", "asof": ""})
+            return
+        d, v = obs[-1]
+        was = _before(obs, d - timedelta(days=7))
+        year = [x for day, x in obs if day > d - timedelta(days=365)]
+        rows.append({"name": name, "value": show(v), "change": _change(v, was and was[1], kind),
+                     "trend": spark(year), "asof": f"{d:%b %-d}"})
+
+    pct = lambda v: _minus(f"{v:.2f}%")
+    for sid, (name, kind) in MARKET_SERIES.items():
+        show = (pct if kind == "bp" else (lambda v: _minus(f"{v:.2f}")) if kind == "pct"
+                else lambda v: _signed(v, ".2f") + (" loose" if round(v, 2) < 0 else " tight" if round(v, 2) > 0 else ""))
+        add(name, series.get(sid), kind, show)
+        if sid == "DGS2":
+            # The spread, on the days both were quoted.
+            two = dict(series.get("DGS2") or [])
+            both = [(d, v - two[d]) for d, v in series.get("DGS10") or [] if d in two]
+            add("10-year minus 2-year", both, "bp", lambda v: _signed(v * 100, ".0f", " bp"))
+    return rows
+
+
+def _month_back(d, n):
+    y, m = divmod(d.year * 12 + d.month - 1 - n, 12)
+    return date(y, m + 1, 1)
+
+
+def economy_points(obs, kind):
+    """The figure a release reports, per period. y/y and monthly changes are
+    taken between the months themselves: a month the agency did not publish
+    makes no figure, instead of a change over a longer span."""
+    by = {d: v for d, v in obs}
+    if kind == "yoy":
+        return [(d, (v / by[_month_back(d, 12)] - 1) * 100) for d, v in obs if by.get(_month_back(d, 12))]
+    if kind == "diff_k":
+        return [(d, v - by[_month_back(d, 1)]) for d, v in obs if _month_back(d, 1) in by]
+    return list(obs)
+
+
+def economy_rows(series):
+    """[{name, value, prior, trend, asof}], a row per release. "no base" in the
+    period: the newest month has no 12-month change (see below)."""
+    show = {"pct_level": lambda v: _minus(f"{v:.1f}%"), "yoy": lambda v: _minus(f"{v:.1f}%"),
+            "diff_k": lambda v: _signed(v, ",.0f", "K"), "thousands": lambda v: f"{v / 1000:,.0f}K"}
+    rows = []
+    for sid, (name, kind) in ECONOMY_SERIES.items():
+        pts = economy_points(series.get(sid) or [], kind)
+        if not pts:
+            rows.append({"name": name, "value": "—", "prior": "—", "trend": "", "asof": ""})
+            continue
+        d, v = pts[-1]
+        asof = (f"Q{(d.month - 1) // 3 + 1} {d.year}" if sid == "A191RL1Q225SBEA"
+                else f"{d:%b %-d}" if sid == "ICSA" else f"{d:%b}")
+        # A newer month is out but makes no figure: the index a year earlier was
+        # never published (October 2025, the shutdown). Said, or the row reads
+        # as stale.
+        if kind == "yoy" and series[sid][-1][0] > d:
+            asof += f" ({series[sid][-1][0]:%b}: no base)"
+        recent = pts[-8:] if sid == "A191RL1Q225SBEA" else [p for p in pts if p[0] > d - timedelta(days=370)]
+        # The release before, not merely the figure before: after a month that
+        # made none there is no prior.
+        step = {"A191RL1Q225SBEA": 3, "ICSA": 0}.get(sid, 1)
+        prior = pts[-2] if len(pts) > 1 and (not step or pts[-2][0] == _month_back(d, step)) else None
+        rows.append({"name": name, "value": show[kind](v), "prior": show[kind](prior[1]) if prior else "—",
+                     "trend": spark([x for _, x in recent]), "asof": asof})
+    return rows
+
+
+def economy_section(series):
+    out = ["## Markets and economy", ""]
+    if not series:
+        out += ["_The figures could not be read this week._", ""]
+    else:
+        out += ["| Market | Latest | 1 week | 12 months | As of |", "|---|---:|---:|---|---|"]
+        out += [f"| {r['name']} | {r['value']} | {r['change']} | {r['trend']} | {r['asof']} |" for r in market_rows(series)]
+        out += ["", "| Economy | Latest | Prior | Trend | Period |", "|---|---:|---:|---|---|"]
+        out += [f"| {r['name']} | {r['value']} | {r['prior']} | {r['trend']} | {r['asof']} |" for r in economy_rows(series)]
+        out.append("")
+    return out
+
+
+# ── the market call ──────────────────────────────────────────────────────────
+#
+# Two inputs, each a conventional level: the S&P 500 against its 200-day
+# average, and the VIX against 20 and 30. What each state was followed by since
+# 1990 is measured by plans/research/market_regime/regime_backtest.py with THIS
+# function and written to regime_evidence.json; the call says only what that
+# supports. Neither series is published (private owners): the state is.
+
+REGIME_SERIES = ("SP500", "VIXCLS")
+REGIMES = ("bullish", "bullish_nervous", "bearish", "fear")
+
+
+def regime_state(price, average200, vix):
+    if price > average200:
+        return "bullish" if vix < 20 else "bullish_nervous"
+    return "fear" if vix >= 30 else "bearish"
+
+
+# The stance is one rule, tested as a rule: all of the money meant for stocks
+# above the 200-day average, half of it below (the rest in T-bills). It gave up
+# about a point a year for a worst fall a third smaller; out altogether cost
+# more, and half only when bearish hardly helped (regime_evidence.json: rule,
+# always, compared). The VIX changes the odds quoted, not the stance.
+STANCE = {"bullish": 1.0, "bullish_nervous": 1.0, "bearish": 0.5, "fear": 0.5}
+LABELS = {"bullish": "Bullish", "bullish_nervous": "Bullish, with nerves", "bearish": "Bearish", "fear": "High fear"}
+EVIDENCE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "regime_evidence.json")
+
+
+def market_regime(series, today):
+    """{state, date, price_gap, vix, week} on the last close both series hold,
+    or None when that is over four days old (a holiday weekend) or the 200 closes
+    are not there."""
+    px, vix = series.get("SP500") or [], dict(series.get("VIXCLS") or [])
+    i = next((k for k in range(len(px) - 1, -1, -1) if px[k][0] in vix), None)
+    if i is None or i < 199 or (today - px[i][0]).days > 4:
+        return None
+    average = sum(v for _, v in px[i - 199:i + 1]) / 200
+    was = _before(px[:i], px[i][0] - timedelta(days=7))
+    return {"state": regime_state(px[i][1], average, vix[px[i][0]]), "date": px[i][0],
+            "price_gap": px[i][1] / average - 1, "vix": vix[px[i][0]],
+            "week": px[i][1] / was[1] - 1 if was else None}
+
+
+def regime_words(r):
+    trend = "above" if r["price_gap"] > 0 else "below"
+    fear = "low" if r["vix"] < 20 else "elevated" if r["vix"] < 30 else "high"
+    return f"S&P 500 {trend} its 200-day average, fear {fear}"
+
+
+def _load_evidence():
+    import json
+
+    try:
+        with open(EVIDENCE_PATH, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def call_lines(r, ev):
+    """The call, and the record it rests on. Without a measured record there is
+    no stance: the state is said and that is all."""
+    st, al = ((ev or {}).get("states") or {}).get(r["state"]), (ev or {}).get("all")
+    rule, always = (ev or {}).get("rule"), (ev or {}).get("always")
+    where = f"{regime_words(r)}, at the {r['date']:%b %-d} close"
+    if not (st and al and rule and always):
+        return [f"**{LABELS[r['state']]}.** {where}.", ""]
+    stance = "full risk" if STANCE[r["state"]] == 1 else "half risk"
+    pc = lambda x: f"{x * 100:.0f}%"
+    out = [f"**{LABELS[r['state']]}: {stance}.** {where[0].upper()}{where[1:]}. A 10% fall within a quarter has followed "
+           f"{pc(st['dd10'])} of such weeks (all weeks: {pc(al['dd10'])}).", ""]
+    # Which line the close would have to cross for another call.
+    near = []
+    if abs(r["price_gap"]) < 0.01:
+        near.append("within 1% of the average")
+    level = 20 if r["price_gap"] > 0 else 30
+    if abs(r["vix"] - level) < 1:
+        near.append("the VIX a point from its line")
+    out += [f"Since {ev['from']} ({st['weeks']:,} such weeks), S&P 500 with dividends a quarter later: higher "
+            f"{pc(st['up'])} of the time (all: {pc(al['up'])}), average {_signed(st['mean'] * 100, '.1f', '%')} "
+            f"({_signed(al['mean'] * 100, '.1f', '%')}); average weekly move {st['week_move'] * 100:.1f}%. The stance's "
+            "rule, full above the average and half below with the rest in T-bills (the half chosen on the same data): "
+            f"{rule['cagr'] * 100:.1f}% a year, worst fall {pc(-rule['worst'])}; always invested {always['cagr'] * 100:.1f}%, {pc(-always['worst'])}."
+            + (f" Borderline: {' and '.join(near)}." if near else ""), ""]
+    return out
+
+
+def past_week_line(series, market, r, today, asof=None):
+    parts = []
+    if r and r["week"] is not None:
+        w = r["week"]
+        parts.append("S&P 500 " + ("little changed" if abs(w) < 0.0025 else "up" if w > 0 else "down")
+                     + f" to {r['date']:%b %-d}")
+    m = market or {}
+    if m.get("up5_share") is not None:
+        parts.append(f"{m['up5_share'] * 100:.0f}% of US stocks above $2B rose"
+                     + (f" to {date.fromisoformat(asof):%b %-d}" if asof and r and asof != r["date"].isoformat() else "")
+                     + (f", {m['above200_share'] * 100:.0f}% are above their 200-day average"
+                        if m.get("above200_share") is not None else ""))
+    sec = m.get("sectors") or []
+    if len(sec) >= 4:
+        parts.append(f"strongest {md_escape(sec[0])}, weakest {md_escape(sec[-1])} (median stock)")
+    for sid, short in (("DGS10", "10-year"), ("DTWEXBGS", "dollar"), ("DCOILWTICO", "oil")):
+        obs = series.get(sid) or []
+        # only a change of the past week: oil's source can be days behind
+        if obs and (today - obs[-1][0]).days <= 5:
+            name, kind = MARKET_SERIES[sid]
+            was = _before(obs, obs[-1][0] - timedelta(days=7))
+            parts.append(f"{short} {_change(obs[-1][1], was and was[1], kind)}")
+    return f"**Past week:** {'; '.join(parts)}." if parts else None
+
+
+def week_ahead_line(events, macro_err):
+    if macro_err:
+        return "**Week ahead:** the release calendar was not available."
+    if not events:
+        return "**Week ahead:** no top-tier US release."
+    order = {"FED": 0, "INFLATION": 1, "LABOR": 2, "GROWTH": 3, "": 4}
+    seen, picks = set(), []
+    for rank, when, t in sorted(((order[macro_kind(t)], ev["when"], t) for ev in events for t in ev["titles"]),
+                                key=lambda x: (x[0], x[1])):
+        short = re.sub(r"\s+[mqy]/[mqy]$", "", t)
+        if short not in seen:
+            seen.add(short)
+            picks.append(f"{md_escape(short)} ({when:%a})")
+    return f"**Week ahead:** {', '.join(picks[:3])}" + (f" and {len(picks) - 3} more." if len(picks) > 3 else ".")
+
+
+def glance_section(series, market, events, macro_err, today, evidence=None, asof=None):
+    """The top of the page: the market call, the week past, the week ahead."""
+    r = market_regime(series, today)
+    out = ["## At a glance", ""]
+    out += (call_lines(r, _load_evidence() if evidence is None else evidence) if r
+            else ["_No market call: this week's closes could not be read._", ""])
+    for ln in (past_week_line(series, market, r, today, asof), week_ahead_line(events, macro_err)):
+        if ln:
+            out += [ln, ""]
+    return out
+
+
+# ── stocks: insiders, funds and the screens, one section ─────────────────────
+#
+# Each part is a table whose first header names it, and a line of small print.
+
+# Rows a table of the issue holds, and names per screen, at the owner's level
+# of detail. The evergreen insider page keeps clusters_section's full list.
+BRIEF_ROWS = {"short": 3, "standard": 5, "full": 10}
+BRIEF_PICKS = {"short": 1, "standard": 3, "full": 5}
+BRIEF_DAYS = 5
+
+
+def insider_part(rows, notes, max_rows=5):
+    n = len(rows)
+    out = []
+    if not n:
+        out += ["_Insider buying: no company had two or more insiders buying $50K or more on the open market (Form 4, 7 days)._"]
+    else:
+        out += ["| Insider buying | Company | Insiders | Reported |", "|---|---|---:|---:|"]
+        out += [f"| {md_escape(r['symbol']) or '—'} | {md_escape(r['issuer'])} | {r['insiders']} | {money(r['value'])} |"
+                for r in rows[:max_rows]]
+        out += ["", f"{n} {'company' if n == 1 else 'companies'} with two or more insiders buying on the open market, "
+                    f"$50K or more (Form 4, 7 days); largest by dollars. [Full list]({SITE_URL}/insider-cluster-buys/). "
+                    "In finterm's 2025–26 study a looser form of this signal beat SPY by a median 1.8% over the next "
+                    "month (a lone insider's buy: 1.2%) and trailed it by 0.2% over three "
+                    f"([method]({METHOD_URL}))."]
+    for x in notes:
+        out += ["", f"> {x}"]
+    return out + [""]
+
+
+def funds_part(flows, max_rows=5):
+    """Institutions' net changes by stock, newest 13F filings (SEC)."""
+    out = []
+    adds, trims = (flows or {}).get("added") or [], (flows or {}).get("trimmed") or []
+    if (flows or {}).get("error") or not (adds or trims):
+        why = (flows or {}).get("error")
+        return [f"_Fund moves: {md_escape(why) if why else 'none this week'}._", ""]
+
+    def cell(rows, i):
+        if i >= len(rows):
+            return "", "", ""
+        r = rows[i]
+        sign = "+" if r["net"] > 0 else "−"
+        return md_escape(r["ticker"]), f"{sign}{money(abs(r['net']))}", f"{r['adds']} / {r['trims']}"
+
+    out += ["| Funds added | Net | Adds / cuts | Funds trimmed | Net | Adds / cuts |", "|---|---:|---:|---|---:|---:|"]
+    for i in range(min(max_rows, max(len(adds), len(trims)))):
+        out.append("| " + " | ".join(cell(adds, i) + cell(trims, i)) + " |")
+    q = date.fromisoformat(flows["quarter"])
+    filed = flows.get("filed_to")
+    out += ["", f"13F positions at {q:%b %-d, %Y}"
+                + (f", filed to {date.fromisoformat(filed):%b %-d}" if filed else "")
+                + (f", {flows['managers']:,} managers" if flows.get("managers") else "")
+                + ", against each manager's previous filing. Counted: US-listed companies (no funds), changes of "
+                  "$25M or more by managers with at most 1,000 positions; dollars are share changes at the filings' "
+                  "own prices. Splits and new listings are taken out."]
+    return out + [""]
+
+
+def screens_part(doc, error=None, per_screen=3, rows=(), flows=None):
+    """Every screen's first names and its measured record, one line each; then
+    the names more than one of the three parts holds."""
+    if error or not doc:
+        return [f"_The screens could not be run this week ({md_escape(error or 'no result')})._", ""]
+    out = ["| Screen leaders | First names | Record a year (t) |", "|---|---|---:|"]
+    on = {}
+    for st in doc.get("strategies") or []:
+        if st.get("id") in PICK_SKIP:
+            continue
+        syms = [s for s in st.get("symbols") or [] if s]
+        for s in syms:
+            on.setdefault(s, []).append(st["id"])
+        name = md_escape((st.get("name") or "").split(" (")[0])
+        out.append(f"| {name} | {', '.join(md_escape(s) for s in syms[:per_screen]) or '—'} | "
+                   f"{record_short(st.get('evidence'))} |")
+    many = sorted((s for s, ids in on.items() if len(ids) >= 3), key=lambda s: (-len(on[s]), s))[:8]
+    both = lambda names: [s for s in dict.fromkeys(names) if s in on][:6]
+    lines = [("On three or more screens", many),
+             ("On a screen, insiders buying", both(r.get("symbol") for r in rows)),
+             ("On a screen, funds adding", both(r["ticker"] for r in (flows or {}).get("added") or []))]
+    out.append("")
+    said = [f"**{what}:** {', '.join(f'{md_escape(s)} ({len(on[s])})' for s in names)}."
+            for what, names in lines if names]
+    if said:
+        out += [" ".join(said), ""]
+    stale = int(doc.get("stale_prices") or 0)
+    best = max((st["evidence"]["t"] for st in doc.get("strategies") or []
+                if (st.get("evidence") or {}).get("t") is not None), default=None)
+    out += [(f"As of the {md_escape(doc.get('asof'))} {'session, before its close' if doc.get('intraday') else 'close'}. " if doc.get("asof") else "")
+            + "Screen output, not a recommendation. Record: each screen against the equal-weighted S&P 500 in "
+              "finterm's backtest (R = per trade, in units of risk)"
+            + ("; none beat it with statistical significance." if best is None or best < 2 else ".")
+            + (f" {stale} stock{'' if stale == 1 else 's'} ranked on an earlier close." if stale else ""), ""]
+    return out
+
+
+def record_short(ev):
+    if not ev or not ev.get("tested"):
+        return "not tested"
+    if ev.get("avg_R") is not None:
+        return _signed(ev["avg_R"], ".2f", "R")
+    if ev.get("excess") is None:
+        return "not tested"
+    t = ev.get("t")
+    return _signed(ev["excess"] * 100, ".1f", "%") + (f" ({_signed(t, '.1f')})" if t is not None else "")
+
+
+def week_ahead_section(events, mon, fri, error=None):
+    out = [f"## Week ahead, {fri:%b %-d}" if mon == fri else f"## Week ahead, {mon:%b %-d}–{fri:%-d}"
+           if mon.month == fri.month else f"## Week ahead, {mon:%b %-d}–{fri:%b %-d}", ""]
+    if error:
+        return out + [f"_No release list this week: {md_escape(error)}._", ""]
+    if not events:
+        return out + ["_No top-tier US release is scheduled._", ""]
+    days = {}
+    for ev in events:
+        w = ev["when"]
+        names = []
+        for t in ev["titles"]:
+            short = re.sub(r"\s+[mqy]/[mqy]$", "", t)  # "CPI m/m" and "CPI y/y" are one release
+            if short not in names:
+                names.append(short)
+        at = "" if (w.hour, w.minute) == (0, 0) else f"{w:%-H:%M} "
+        days.setdefault(w.date(), []).append(at + ", ".join(md_escape(x) for x in names))
+    out += ["| Day | US releases (Eastern time) |", "|---|---|"]
+    out += [f"| {d:%a %-d} | {' · '.join(days[d])} |" for d in sorted(days)[:BRIEF_DAYS]]
+    return out + [""]
+
+
+def stocks_section(topics, detail, doc, scr_err, rows, notes, flows):
+    n = BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"])
+    out = []
+    if "insider" in topics:
+        out += insider_part(rows, notes, n)
+    if "funds" in topics:
+        out += funds_part(flows, n)
+    if "screens" in topics:
+        out += screens_part(doc, scr_err, BRIEF_PICKS.get(detail, BRIEF_PICKS["standard"]),
+                            rows if "insider" in topics else (), flows if "funds" in topics else None)
+    return ["## Stocks", ""] + out if out else []
+
+
+def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events, mon, fri, macro_err, today):
+    """The issue's sections, one page at the standard detail: the market at a
+    glance (the call, past week, next week), markets and economy, the week
+    ahead, and stocks (insiders, funds, the screens)."""
+    out = []
+    if "summary" in topics:
+        out += glance_section(series, (doc or {}).get("market"), events, macro_err, today, asof=(doc or {}).get("asof"))
+    if "macro" in topics:
+        out += economy_section(series)
+        out += week_ahead_section(events, mon, fri, macro_err)
+    return out + stocks_section(topics, detail, doc, scr_err, rows, notes, flows)

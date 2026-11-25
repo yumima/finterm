@@ -44,6 +44,7 @@ struct Evidence {
     std::optional<double> t;      // t-stat of the monthly excess
     std::optional<double> max_dd; // fraction, negative
     QVector<std::optional<double>> subperiods;
+    QString from, to; // "2015-03": the months that held names
     QString note;
     // trade-simulated strategies only (the Luk pullback)
     std::optional<int> trades;
@@ -203,6 +204,8 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.evidence.excess = num(eo, QStringLiteral("excess"));
         s.evidence.t = num(eo, QStringLiteral("t"));
         s.evidence.max_dd = num(eo, QStringLiteral("max_dd"));
+        s.evidence.from = eo.value(QStringLiteral("from")).toString();
+        s.evidence.to = eo.value(QStringLiteral("to")).toString();
         for (const auto& x : eo.value(QStringLiteral("subperiods")).toArray()) {
             const double d = x.toDouble(std::nan(""));
             s.evidence.subperiods << (x.isDouble() && std::isfinite(d) ? std::optional<double>(d) : std::nullopt);
@@ -279,6 +282,16 @@ inline const QVector<ColumnDef>& column_defs() {
         {"roic", "ROIC", Kind::Pct, "Return on invested capital (Magic Formula's return on capital)"},
         {"gross_margin", "Gross mgn", Kind::Pct, "Gross margin, trailing twelve months"},
         {"gpa", "GP/Assets", Kind::Pct, "Gross profit ÷ total assets (Novy-Marx)"},
+        {"mos", "Margin", Kind::PctSigned,
+         "Margin of safety: how far the market value is below the estimated value (an estimate: it moves a lot with "
+         "growth and the discount rate)"},
+        {"fair_value", "Est. value", Kind::Money,
+         "Estimated value a share: owner earnings grown at 0-8% for ten years, then 3%, discounted at 10%"},
+        {"owner_yield", "Owner yld", Kind::Pct,
+         "Owner earnings ÷ market cap; owner earnings = the lower of 3-year average free cash flow and net income"},
+        {"ni_growth", "Earn. 10Y", Kind::PctSigned,
+         "Earnings growth a year: first three of the last ten fiscal years, averaged, to the last three"},
+        {"debt_years", "Debt/earn.", Kind::Ratio, "Total debt ÷ 3-year average net income, in years"},
         {"earnings_yield", "EBIT/EV", Kind::Pct, "Earnings yield: EBIT ÷ enterprise value"},
         {"pe", "P/E", Kind::Ratio, "Price ÷ earnings, trailing"},
         {"pb", "P/B", Kind::Ratio, "Price ÷ book value"},

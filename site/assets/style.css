@@ -39,3 +39,34 @@ th{color:var(--muted);font-weight:600}
 @media (max-width:1000px){.cta-box{margin-left:16px;margin-right:16px}}
 .cta-box h2{border:0;margin-top:12px}
 footer.bottom{margin-top:40px;padding-bottom:40px;border-top:1px solid var(--line)}
+
+/* The weekly brief: one page. Two columns where there is room, and in print. */
+main.wide{max-width:1240px}
+.brief{font-size:14px;line-height:1.45}
+.brief h1{margin:20px 0 4px;font-size:clamp(22px,3vw,28px)}
+.brief .meta{margin:0 0 8px}
+.brief h2{margin:0 0 6px;font-size:17px;break-after:avoid}
+.brief table{display:table;font-size:12.5px;margin:0 0 8px;break-inside:avoid}
+.brief th,.brief td{padding:2px 6px;white-space:nowrap}
+.brief td:nth-child(2),.brief td:last-child{min-width:0;white-space:nowrap}
+.brief td:nth-child(2):not([style*="right"]){white-space:normal}
+.brief p{margin:0 0 10px;color:var(--muted)}
+.brief>p:last-child{font-size:12px}
+/* At a glance: the full width, the call first. */
+.brief h2#at-a-glance,.brief h2#at-a-glance~p:not(h2:not(#at-a-glance)~p){column-span:all}
+.brief h2#at-a-glance+p{font-size:16px;color:var(--fg);margin-bottom:6px}
+.brief h2#at-a-glance~p:not(h2:not(#at-a-glance)~p){margin-bottom:4px}
+.brief h2#markets-and-economy{margin-top:10px}
+@media (max-width:640px){.brief table{display:block;overflow-x:auto}}
+@media (min-width:1120px){.brief{columns:2;column-gap:36px}.brief h1,.brief .meta{column-span:all}.brief>p:last-child{column-span:all;border-top:1px solid var(--line);padding-top:8px}}
+@media print{
+  @page brief{size:letter;margin:9mm}
+  .compact{background:#fff;color:#000;page:brief}
+  .compact nav.projects,.compact header.top,.compact .cta-box,.compact footer.bottom{display:none}
+  .compact main.wide{max-width:none;padding:0}
+  .brief{columns:2;column-gap:6mm;font-size:8pt;line-height:1.25}
+  .brief h1{font-size:14pt;margin:0}.brief h1,.brief .meta,.brief>p:last-child{column-span:all}
+  .brief h2{font-size:10pt;margin:0 0 2pt}.brief h2#at-a-glance+p{font-size:9.5pt}.brief table{font-size:7.2pt;margin-bottom:3pt}.brief th,.brief td{padding:.5pt 3pt}
+  .brief p{margin:0 0 4pt;color:#333}.brief>p:last-child{font-size:6.5pt}
+  .brief a{color:inherit;text-decoration:none}
+}

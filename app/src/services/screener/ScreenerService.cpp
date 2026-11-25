@@ -46,7 +46,7 @@ ScreenerService& ScreenerService::instance() {
 }
 
 QString ScreenerService::scan_file(double min_mcap) {
-    return QStringLiteral("scan_v5_%1.json").arg(qint64(min_mcap)); // v5: setting up for every screen
+    return QStringLiteral("scan_v6_%1.json").arg(qint64(min_mcap)); // v6: Buffett Value
 }
 
 QJsonDocument ScreenerService::latest_scan(double min_mcap) const {
@@ -54,13 +54,13 @@ QJsonDocument ScreenerService::latest_scan(double min_mcap) const {
 }
 
 void ScreenerService::prune_old_scans() {
-    // Scans of an earlier format (scan_v1…v4) are never read again. The
+    // Scans of an earlier format (scan_v1…v5) are never read again. The
     // directory also holds the price store's files, which are not scans and
     // are left alone.
     static const QRegularExpression kScan(QStringLiteral("^scan_v(\\d+)_"));
     scans().prune([](const QString& name) {
         const auto m = kScan.match(name);
-        return !m.hasMatch() || name.startsWith(QLatin1String("scan_v5_"));
+        return !m.hasMatch() || name.startsWith(QLatin1String("scan_v6_"));
     });
 }
 

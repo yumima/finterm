@@ -209,6 +209,14 @@ def main():
             check("tier: a thousand-name book is broad", bulk.holder_tier("Some Adviser", 1000) == "broad")
             check("tier: a fund is recognised by name", bulk.is_fund("DIREX DAIL SEMI BU 3X ET") and
                   bulk.is_fund("ISHARES CORE S&P 500") and not bulk.is_fund("APPLE INC"))
+            for co in ("NETFLIX INC", "VERIZON COMMUNICATIONS INC", "DIGITAL RLTY TR INC", "SUN CMNTYS INC",
+                       "Sun Communities, Inc.", "NORTHERN TR CORP", "CAMDEN PPTY TR", "ULTRA CLEAN HLDGS INC",
+                       "KIMBERLY-CLARK CORP", "INVESCO LTD", "BUILD-A-BEAR WORKSHOP INC", "RBC BEARINGS INC"):
+                check(f"a company is not a fund by a part of its name: {co}", not bulk.is_fund(co))
+            for fd in ("VANGUARD INDEX FDS", "SPDR S&P 500 ETF TR", "INVESCO QQQ TR", "SELECT SECTOR SPDR TR",
+                       "J P MORGAN EXCHANGE TRADED F", "GRAYSCALE BITCOIN TR", "VICTORY PORTFOLIOS II",
+                       "BLACKROCK MUNIYIELD QUALITY", "ISHARESTR", "The Vanguard Group, Inc.", "CAPITAL GROUP CORE EQUITY ET"):
+                check(f"a fund: {fd}", bulk.is_fund(fd))
         finally:
             con.close()
 

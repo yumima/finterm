@@ -44,6 +44,7 @@ ACTIONS
 import io
 import json
 import os
+import re as _re
 import sqlite3
 import sys
 import time
@@ -1472,17 +1473,31 @@ def _ensure_totals(con, quarter):
 # is about stocks; a levered ETF tops any SI ÷ 13F ranking by construction.
 # Matched on the filers' own issuer strings, which is a heuristic and is said
 # so wherever the exclusion is applied.
-FUND_WORDS = ("ETF", "ETN", " ET ", "ISHARES", "PROSHARES", "DIREX", "SPDR", "INVESCO",
-              "VANGUARD", "TRUST", " TR ", "FUND", "INDEX", "PORTFOLIO", "PHYSICAL",
-              "GRANITESHARES", "WISDOMTREE", "GLOBAL X", "ARK ", "VANECK",
-              "FIRST TRUST", "SCHWAB STRATEGIC", "JPMORGAN EXCHANGE", "PACER",
-              "ULTRA", "BULL", "BEAR", " 2X", " 3X", "LEVERAGED", "INVERSE", "IPATH", " VIX",
-              "STRATEGIC INV", "CLOSED-END", "CLOSED END", "MUNI", "SELECT SECTOR")
+#
+# Whole words: as substrings, "ETF" took out NETFLIX and "MUNI" every
+# COMMUNICATIONS and COMMUNITIES company (2026-11-25).
+FUND_WORDS = {"ETF", "ETFS", "ETN", "ETNS", "ET", "ISHARES", "PROSHARES", "SPDR", "FUND", "FUNDS", "FD", "FDS",
+              "GRANITESHARES", "VANECK", "IPATH", "VIX", "2X", "3X", "LEVERAGED", "INVERSE", "MUNI", "MUNICIPAL",
+              "VANGUARD", "YIELDMAX", "MICROSECTORS"}
+FUND_PREFIXES = ("DIREX", "ISHARES", "PROSHARES", "MUNIY", "MUNIH", "MUNIV", "MUNIE")
+# Words a company can carry too: a fund only without a company's own word.
+FUND_LIKE = {"INVESCO", "TRUST", "TR", "INDEX", "PORTFOLIO", "PORTFOLIOS", "PHYSICAL", "WISDOMTREE", "ARK", "PACER",
+             "ULTRA", "BULL", "BEAR"}
+FUND_PHRASES = ("GLOBAL X", "SCHWAB STRATEGIC", "JPMORGAN EXCHANGE", "STRATEGIC INV", "CLOSED-END", "CLOSED END",
+                "SELECT SECTOR", "FIRST TRUST EXCHANGE", "FIRST TR EXCHANGE", "EXCHANGE TRADED", "EXCHANGE-TRADED",
+                "EXCH TRADED", "EXCH TRD", "MANAGER DIRECTED", "STATE STREET COMMUNICATION")
+COMPANY_WORDS = {"INC", "CORP", "CORPORATION", "CO", "COMPANY", "LTD", "PLC", "HLDGS", "HOLDINGS", "HLDG", "GROUP",
+                 "REIT", "RLTY", "REALTY", "PPTY", "PPTYS", "PROPERTY", "PROPERTIES", "RESIDENTIAL", "APARTMENT",
+                 "HOSPITALITY", "INDUSTRIAL", "LODGING", "OFFICE", "HEALTHCARE", "STORAGE", "BANCORP", "BANCSHARES", "BANK", "HOTEL",
+                 "HOTELS", "MORTGAGE", "MTG", "THERAPY", "PROLOGIS"}
 
 
 def is_fund(name):
-    n = " " + (name or "").upper() + " "
-    return any(w in n for w in FUND_WORDS)
+    text = " ".join(_re.sub(r"[^A-Z0-9&+\-]+", " ", (name or "").upper()).split())
+    words = set(text.replace("-", " ").split())
+    if words & FUND_WORDS or any(w.startswith(FUND_PREFIXES) for w in words) or any(p in text for p in FUND_PHRASES):
+        return True
+    return bool(words & FUND_LIKE) and not words & COMPANY_WORDS
 
 
 def shares_by_ticker(quarter=None):
@@ -1676,7 +1691,7 @@ SPLIT_GAP_LO, SPLIT_GAP_HI = 0.6, 1.67   # price-per-share ratios worth checking
 # a change of rule recomputes them instead of serving the old answer (the
 # Thomson Reuters CUSIP change stayed unlinked after the name rule learned
 # "Sh Par", because the stored result predated it).
-ADJ_RULES_VERSION = 4
+ADJ_RULES_VERSION = 5  # 5: funds by whole words (is_fund)
 
 
 def split_factor_between(splits, prior_q, cur_q):
@@ -2369,6 +2384,80 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
 
 
 
+# A US listing: up to five letters, a share class after a dot or dash. The
+# ticker lookup leaves a foreign line here and there ("WV8" for AvalonBay).
+_US_TICKER = _re.compile(r"^[A-Z]{1,5}([.-][A-Z]{1,2})?$")
+
+
+SCAN_COVERS = 0.98
+
+
+def _filers(con, quarter):
+    return con.execute("SELECT COUNT(DISTINCT cik) FROM books WHERE quarter=?", (quarter,)).fetchone()[0]
+
+
+def stock_flows(limit=10, today=None):
+    """Institutions' net change by stock: the stored big moves of the newest
+    quarter, summed per stock. Reads only what the sync stored — never a scan,
+    never a price lookup.
+
+    Only a quarter whose filings are in (past the deadline, as many filers as
+    before: quarter_is_complete) — halfway, the sums are the early filers' and
+    flip: on 8 Nov 2026 MU was +$2.3B, it ended −$7.3B. During the season the
+    quarter before cannot stand in, because its big moves are replaced filer
+    by filer; then the answer is {"error"} saying so."""
+    today = today or _date.today().isoformat()
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='big_moves'").fetchone() \
+                or not _big_moves_stored(con):
+            return {"error": "the 13F index has not been read yet"}
+        # (A filing that mistypes a future period is not a quarter.)
+        q = con.execute("SELECT MAX(quarter) FROM books WHERE quarter < ?", (today,)).fetchone()[0]
+        prior = con.execute("SELECT MAX(quarter) FROM books WHERE quarter < ?", (q or "",)).fetchone()[0]
+        if not q or not prior:
+            return {"error": "the 13F index holds no two quarters to compare"}
+        n, before = _filers(con, q), _filers(con, prior)
+        if not quarter_is_complete(q, n, before, today):
+            return {"error": f"13F season: {n:,} of about {before:,} managers have filed for "
+                             f"{_date.fromisoformat(q):%b %-d, %Y}"}
+        # The index can be ahead of the scan (a sync cut short): its sums are
+        # then the early filers' again. The scan's stamp says how many filings
+        # of the quarter it saw; a few stragglers since change nothing.
+        stamp = con.execute("SELECT stamp FROM big_moves_run").fetchone()[0].removeprefix(INCOMPLETE)
+        seen = next((int(p.split(":")[1]) for p in stamp.split("|") if p.startswith(q + ":")), 0)
+        now = con.execute("SELECT filers FROM quarters WHERE quarter=?", (q,)).fetchone()
+        # (`filers` is written when a sync ends; `books` filing by filing.)
+        if seen < SCAN_COVERS * max(n, now[0] if now and now[0] else 0):
+            return {"error": "the 13F scan is behind its filings (the next sync brings it up to date)"}
+        by, filed_to = {}, ""
+        for manager, issuer, ticker, flow, filed, kind in con.execute(
+                "SELECT manager, issuer, ticker, flow, filed, kind FROM big_moves WHERE quarter = ? AND "
+                "position_count <= ? AND ticker <> ''", (q, MAX_DISCRETIONARY_POSITIONS)):
+            filed_to = max(filed_to, filed or "")
+            # A filer's own parent or subsidiary: a restructuring, not a trade.
+            if issuer_key(manager) == issuer_key(issuer) or not _US_TICKER.match(ticker):
+                continue
+            d = by.setdefault(ticker, {"ticker": ticker, "net": 0.0, "adds": 0, "trims": 0, "old": 0, "fund": 0})
+            d["net"] += flow
+            d["adds" if flow > 0 else "trims"] += 1
+            d["old"] += kind != "new"
+            # One verdict per stock, whatever each filer's spelling of it.
+            d["fund"] += 1 if is_fund(issuer) else -1
+        # Nobody held it before: a listing the prior quarter's few early
+        # filers hid from the new-listing rule (SK Hynix's ADS: 100 "new"
+        # positions, no other move).
+        rank = sorted((d for d in by.values() if d["fund"] < 0 and (d["old"] or d["adds"] < 5)),
+                      key=lambda d: (d["net"], d["ticker"]))
+        if not rank:
+            return {"error": "the 13F scan holds no moves"}
+        return {"quarter": q, "filed_to": filed_to, "managers": n,
+                "added": [d for d in reversed(rank) if d["net"] > 0][:int(limit)],
+                "trimmed": [d for d in rank if d["net"] < 0][:int(limit)]}
+    finally:
+        con.close()
+
+
 # ── Keeping the index current ───────────────────────────────────────────────
 #
 # Two SEC sources, used together so the index is as new as the filings are:
@@ -2384,7 +2473,6 @@ def big_moves(limit=200, side="both", sort="value", active_only=True, include_fu
 # treated as complete, so the screens move to it without waiting for the data
 # set; the data set then replaces it wholesale.
 
-import re as _re
 from datetime import date as _date, timedelta as _td
 
 EDGAR_GAP = 0.12            # ~8 requests a second: inside SEC's 10/s fair-access limit

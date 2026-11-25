@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
-"""Weekly brief: insider-buying clusters from SEC Form 4 filings, the week's
-top-tier US macro releases and the top name from each strategy screen, as
-Markdown.
+"""Weekly brief, one page of Markdown tables: the market at a glance (the call,
+the past and the next week), markets and the economy, the week ahead, and stocks (insider buying, fund moves, each strategy screen's first
+names).
 
-Built from finterm's own pipeline (sec_form4_market — what the Ownership
-screen's market-wide scan runs), so the published rows are the ones the app
-shows. Open-market purchases (code P) filed in the last 7 days, grouped per
-issuer, two or more distinct insiders, 10%-owners and 10b5-1 plan trades
-excluded, sorted by total dollars reported.
+Built from finterm's own pipeline: SEC Form 4 (sec_form4_market, open-market
+purchases filed in the last 7 days, two or more insiders), SEC 13F
+(sec_13f_bulk.stock_flows), the screens (screener_data) and the release
+calendar, so the published rows are the ones the app shows.
 
-Public output: SEC EDGAR data (public information, freely redistributable;
-cite "U.S. SEC, EDGAR"); the week's release SCHEDULE (day, time, name — dates
-the agencies publish; the feed's consensus figures are never written); and the
-top-ranked TICKER of each screen with the screen's rule and finterm's own
-backtest record — no TradingView or Yahoo number is reproduced (their terms
-forbid redistribution). The IPO section built from
-Nasdaq's calendar is for personal use only — Nasdaq's terms forbid
-redistribution — so it is available locally with --include-ipo and never
-written to the public site.
+Public output: SEC EDGAR data (public information; cite "U.S. SEC, EDGAR");
+figures of U.S. agencies and the Federal Reserve through FRED (public domain
+series only); the week's release SCHEDULE (never the feed's consensus); and
+each screen's TICKERS with finterm's own backtest record and its own counts of
+market breadth — no TradingView or Yahoo number is reproduced (their terms
+forbid redistribution). The IPO section built from Nasdaq's calendar is for
+personal use only — Nasdaq's terms forbid redistribution — so it is available
+locally with --include-ipo and never written to the public site.
 
 Modes:
     python3 tools/weekly_brief.py [--out DIR]          one Markdown file (local)
@@ -27,9 +25,10 @@ Modes:
 
 Wording rules (publisher's exclusion — impersonal, bona fide, regular): the
 same template every week including empty weeks, neutral verbs ("filed",
-"reported"), a mechanical sort key stated in the text, no recommendations —
+"reported"), a mechanical sort key stated in the text, no recommendation of any security —
 the screen names are labelled screen output, each beside a record that shows
-no screen beat the index with significance.
+no screen beat the index with significance. The market stance is a fixed rule's
+output, the same for every reader, printed beside the rule's own record.
 
 SEC refuses clients that don't identify themselves: the contact email is read
 from FINTERM_CONTACT_EMAIL, else from finterm's keyring entry. It is never
@@ -46,10 +45,9 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from weekly_brief_core import (  # noqa: E402,F401 — the shared brief; re-exported for callers
-    CLUSTER_HISTORY, CONTACT_KEY, DETAIL_PICKS, DETAIL_ROWS, DISCLAIMER, ISSUE_DISCLAIMER, METHOD_URL, SITE_URL,
-    WINDOW_DAYS,
-    clusters_data, clusters_section, contact_from_keyring, issue_day, issue_key, issue_url,
-    fetch_macro_rows, macro_coverage, macro_events, private_block, week_summary, macro_section, md_escape, money, page, picks_section, screen_picks,
+    CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, ISSUE_DISCLAIMER, METHOD_URL, SITE_URL, WINDOW_DAYS,
+    brief_body, clusters_data, clusters_section, contact_from_keyring, fetch_macro_rows, fetch_macro_series,
+    issue_day, issue_key, issue_url, macro_coverage, macro_events, md_escape, money, page, private_block,
     social_posts, week_ahead,
 )
 
@@ -83,50 +81,47 @@ def screener_doc(timeout=900):
     return doc, None
 
 
-ALL_TOPICS = ("summary", "insider", "macro", "screens", "ipo_private")
+ALL_TOPICS = ("summary", "macro", "insider", "funds", "screens", "ipo_private")
 
 
-def extra_sections(today, clusters=(), private_ipo=False, topics=ALL_TOPICS, detail="standard"):
-    """(summary, sections): "The week in brief" (last week / next week /
-    screens), then the week ahead (top-tier US macro) and the top name from
-    each screen. Either one failing is said on the page; neither holds the
-    issue back. @private_ipo (drafts only): the IPO pipeline from Nasdaq's
-    calendar, in a private block that publishing strips."""
+def build_brief(today, clusters, notes, topics=ALL_TOPICS, detail="standard", private_ipo=False, extras=True):
+    """(body lines, data): the issue's one page. Anything that cannot be read
+    is said on the page; none of it holds the issue back. @private_ipo (drafts
+    only): the IPO pipeline from Nasdaq's calendar, in a private block that
+    publishing strips. Without @extras only the insider section, no fetches."""
+    if not extras:
+        topics = [t for t in topics if t == "insider"]
     mon, fri = week_ahead(today)
-    out, events, macro_err = [], [], None
-    if "macro" in topics:
+    series, events, macro_err, doc, scr_err, flows = {}, [], None, None, None, None
+    if "macro" in topics or "summary" in topics:
+        series = fetch_macro_series(today)
         rows, failed = fetch_macro_rows()
         macro_err = macro_coverage(rows, mon, fri, failed)
         events = macro_events(rows, mon, fri)
-        # Last week (the insider section, before these) → next week (releases,
-        # then the private IPO calendar) → the screens.
-        out += macro_section(events, mon, fri, error=macro_err)
-    if private_ipo:
+    if "screens" in topics or "summary" in topics:  # the scan also counts the market's breadth
+        doc, scr_err = screener_doc()
+    if "funds" in topics:
         try:
-            ipo = ipo_sections(today)
+            import sec_13f_bulk
+
+            flows = sec_13f_bulk.stock_flows()
+        except Exception as e:  # noqa: BLE001
+            flows = {"error": type(e).__name__}
+    body = brief_body(topics, detail, series, doc, scr_err, clusters, notes, flows, events, mon, fri, macro_err, today)
+    if private_ipo and "ipo_private" in topics:
+        try:
+            ipo = ipo_sections(today, max_rows=8)
         except Exception as e:  # noqa: BLE001 — a private extra never holds the draft back
             ipo = [f"_The IPO calendar could not be read ({type(e).__name__})._", ""]
-        out += private_block(["## Private: IPOs ahead (Nasdaq calendar — only you see this; never published)",
-                              ""] + ipo)
-    picks, scr_err = [], None
-    if "screens" in topics:
-        doc, scr_err = screener_doc()
-        picks = screen_picks(doc) if doc else []
-        cap = DETAIL_PICKS.get(detail)
-        if cap is not None:
-            picks = [p for p in picks if p[1]][:cap]  # the screens with a name, up to the cap
-        out += picks_section(picks, asof=(doc or {}).get("asof"), error=scr_err,
-                             stale=int((doc or {}).get("stale_prices") or 0))
-    for err in (macro_err, scr_err):
+        body += private_block(["## Private: IPOs ahead (Nasdaq calendar — only you see this; never published)",
+                               ""] + ipo)
+    for err in (macro_err, scr_err, (flows or {}).get("error")):
         if err:
             print(f"warning: {err}", file=sys.stderr)
-    summary = (week_summary(clusters, events, mon, fri, macro_err, picks, scr_err,
-                            include=[t for t in ("insider", "macro", "screens") if t in topics])
-               if "summary" in topics else [])
-    return summary, out
+    return body, {"series": series, "flows": flows, "screens": bool(doc)}
 
 
-def ipo_sections(today):
+def ipo_sections(today, max_rows=30):
     import ipo_calendar as ipo
 
     data = ipo.build(today=today, enrich=True)
@@ -159,7 +154,7 @@ def ipo_sections(today):
     else:
         out.append("| Projected | Ticker | Company | Range | Basis |")
         out.append("|---|---|---|---|---|")
-        for when, d, p in upcoming[:30]:
+        for when, d, p in upcoming[:max_rows]:
             window = when.isoformat()
             if p.get("lo") and p.get("hi") and p["lo"] != p["hi"]:
                 window = f"{p['lo']} – {p['hi']}"
@@ -182,7 +177,7 @@ def ipo_sections(today):
     else:
         out.append("| Expiry | Ticker | Company | Priced | Term |")
         out.append("|---|---|---|---|---|")
-        for l in lockups:
+        for l in lockups[:max_rows]:
             term = f"{l['lockup_days']}d" + (" (assumed)" if l["basis"] == "assumed" else "")
             out.append(f"| {l['expiry']} | {md_escape(l['ticker'])} | {md_escape(l['company'])} | "
                        f"{l['priced_date']} | {term} |")
@@ -192,8 +187,11 @@ def ipo_sections(today):
     return out
 
 
-def write_site(site_dir, rows, notes, today, extra=(), complete=True, summary=(), topics=ALL_TOPICS,
-               detail="standard"):
+SECTION_WORDS = {"summary": "the market at a glance", "macro": "markets, economy and the week ahead", "insider": "insider buying", "funds": "fund moves",
+                 "screens": "screen leaders"}
+
+
+def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOPICS, data=None):
     import json
 
     key, url = issue_key(today), issue_url(today)
@@ -209,61 +207,47 @@ def write_site(site_dir, rows, notes, today, extra=(), complete=True, summary=()
             pass
 
     n = len(rows)
-    span = f"the 7 days to {today:%B %-d, %Y}"
     # A per-run stamp in the page lets the publisher wait for THIS version to
     # be live, not an earlier deploy of the same URL.
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     # {% raw %}: EDGAR text is data — a "{{" or "{%" in a filer's name must
     # never reach Liquid (it would break the build).
-    insider = ["{% raw %}"] + clusters_section(rows, notes) + ["{% endraw %}", ""]
-    # The issue shows the clusters at the owner's detail level, or not at all;
-    # the evergreen page below always keeps the full list.
-    issue_insider = (["{% raw %}"] + clusters_section(rows, notes, DETAIL_ROWS.get(detail, 25)) + ["{% endraw %}", ""]
-                     if "insider" in topics else [])
-    # The issue: insider clusters, then the week ahead and the screens. The
-    # evergreen insider page keeps the clusters alone.
-    body = [f"<!-- issue {key} stamp {stamp} -->", ""] + (
-        ["{% raw %}"] + list(summary) + ["{% endraw %}", ""] if summary else []) + issue_insider + (
-        ["{% raw %}"] + list(extra) + ["{% endraw %}", ""] if extra else [])
+    raw = lambda lines: ["{% raw %}"] + list(lines) + ["{% endraw %}", ""]
+    mark = [f"<!-- issue {key} stamp {stamp} -->", ""]
+    # Title and description name only the sections the issue holds.
+    what = ", ".join(w for t, w in SECTION_WORDS.items() if t in topics)
     # The file name stays "-insider-buying": it is how a rerun finds the
     # week's issue, and the announced URL does not depend on it.
     post = posts / f"{issue_day(today).isoformat()}-insider-buying.md"
     post.write_text(page({
-        # Title and description name only the sections the issue holds.
-        "title": "Weekly brief: " + ", ".join(
-            {"insider": "insider buying", "macro": "the week ahead", "screens": "screen leaders"}[t]
-            for t in ("insider", "macro", "screens") if t in topics) + f" — {span}",
-        "description": ((f"{n} {'company' if n == 1 else 'companies'} where two or more insiders reported "
-                         f"open-market purchases in SEC Form 4 filings, {span}." if n else
-                         f"No insider-buying clusters in SEC Form 4 filings, {span}.")
-                        if "insider" in topics else f"The weekly brief, {span}.")
-                       + ((" Plus " if "insider" in topics else " ") + " and ".join(
-                           p for t, p in (("macro", "the week's top-tier US releases"),
-                                          ("screens", "the top name from each strategy screen"))
-                           if t in topics) + "." if extra and ({"macro", "screens"} & set(topics)) else ""),
+        "title": f"Weekly brief, {today:%B %-d, %Y}",
+        "description": f"{what[0].upper()}{what[1:]} — the week to {today:%B %-d, %Y}, on one page.",
         # The week's Monday, date only: Jekyll reads it as midnight UTC, so it
         # is never in the future; the post layout shows `updated`.
         "date": issue_day(today),
         "updated": today,
-    }, body, ISSUE_DISCLAIMER if extra else DISCLAIMER), encoding="utf-8")
+        "compact": True,  # the post layout's one-page style
+    }, mark + raw(body), ISSUE_DISCLAIMER), encoding="utf-8")
 
+    # The evergreen insider page: the full list, which the issue links to.
     (site_dir / "insider-cluster-buys.md").write_text(page({
         "title": "Insider buying clusters this week (SEC Form 4)",
         "description": "Companies where two or more insiders reported open-market purchases in the last 7 days "
                        "of SEC Form 4 filings. Updated weekly.",
         "permalink": "/insider-cluster-buys/",
     }, [f"_Updated {today:%B %-d, %Y} · [this week's issue]({url}) · [all issues]({SITE_URL}/brief/)_", ""]
-        + [f"<!-- issue {key} stamp {stamp} -->", ""] + insider),
-        encoding="utf-8")
+        + mark + raw(clusters_section(rows, notes, max_rows=len(rows)))), encoding="utf-8")
 
     # complete/notes: the Social screen's draft review shows them and asks
     # before publishing an incomplete week (--allow-incomplete builds one).
     issue = {"issue": key, "date": today.isoformat(), "stamp": stamp, "count": n,
              "complete": bool(complete), "notes": list(notes),
-             "rows": rows[:25], **social_posts(rows, today, url, topics)}
-    data = site_dir / "_data"
-    data.mkdir(parents=True, exist_ok=True)
-    (data / "announce.json").write_text(json.dumps(issue, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+             "rows": rows[:25],
+             **social_posts(rows, today, url, topics, (data or {}).get("series"), (data or {}).get("flows"),
+                            (data or {}).get("screens", False))}
+    out = site_dir / "_data"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "announce.json").write_text(json.dumps(issue, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     # The same, published beside the pages: the app's Social screen shows and
     # posts exactly this, so a post always matches the page it links to.
     (site_dir / "issue.json").write_text(json.dumps(issue, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -278,14 +262,14 @@ def main():
                     help="local mode only: add the IPO pipeline (Nasdaq calendar data — personal use only)")
     ap.add_argument("--no-scan", action="store_true", help="use the Form 4 data already scanned; don't fetch")
     ap.add_argument("--no-extras", action="store_true",
-                    help="leave out the week-ahead calendar and the screens (they fetch: the screener scan "
-                         "takes minutes) — e.g. for a quick offline rebuild with --no-scan")
+                    help="the insider section only (the others fetch: the screener scan takes minutes) — "
+                         "e.g. for a quick offline rebuild with --no-scan")
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="site mode: publish even when some days of filings could not be read")
     ap.add_argument("--topics", default=",".join(ALL_TOPICS),
-                    help="comma-separated sections: summary, insider, macro, screens, ipo_private (drafts only)")
+                    help="comma-separated sections: summary, macro, insider, funds, screens, ipo_private (drafts only)")
     ap.add_argument("--detail", default="standard", choices=("full", "standard", "short"),
-                    help="how many rows each section shows")
+                    help="rows a table holds: 10, 5 or 3")
     ap.add_argument("--draft", action="store_true",
                     help="site mode, for review in the Social screen: adds the IPO pipeline as a PRIVATE block "
                          "(brief_drafts strips it from anything published)")
@@ -294,6 +278,11 @@ def main():
     bad = [t for t in topics if t not in ALL_TOPICS]
     if bad:
         ap.error(f"unknown topic(s): {', '.join(bad)}")
+    if args.no_extras:
+        topics = [t for t in topics if t == "insider"]
+    if not [t for t in topics if t in SECTION_WORDS and t != "summary"]:
+        ap.error("a brief with nothing in it is not written: name a section"
+                 + (" (--no-extras leaves only insider)" if args.no_extras else ""))
     if args.site and args.include_ipo:
         ap.error("--include-ipo is personal-use data and is never published to the site")
     if args.draft and not args.site:
@@ -319,26 +308,20 @@ def main():
                 print(f"error: {n}", file=sys.stderr)
             print("error: not publishing an incomplete issue (--allow-incomplete overrides)", file=sys.stderr)
             sys.exit(2)
-        summary, extra = ((), ()) if args.no_extras else extra_sections(
-            today, rows, private_ipo=args.draft and "ipo_private" in topics, topics=topics, detail=args.detail)
-        print(write_site(Path(args.site), rows, notes, today, extra, complete=complete, summary=summary,
-                         topics=topics, detail=args.detail))
+        body, data = build_brief(today, rows, notes, topics, args.detail, private_ipo=args.draft,
+                                 extras=not args.no_extras)
+        print(write_site(Path(args.site), rows, notes, today, body, complete=complete, topics=topics, data=data))
         return
 
     import finterm_paths
 
     out_dir = Path(args.out) if args.out else finterm_paths.user_root() / "files" / "weekly"
     out_dir.mkdir(parents=True, exist_ok=True)
-    lines = [f"# Weekly brief — week of {week_of:%B %-d, %Y}", ""]
-    lines.append(f"_Generated {today.isoformat()} from SEC EDGAR filings"
-                 + (" and Nasdaq's IPO calendar (personal use only)._" if args.include_ipo else "._"))
-    lines.append("")
-    summary, extra = ((), ()) if args.no_extras else extra_sections(today, rows, topics=topics, detail=args.detail)
-    lines += list(summary) + (clusters_section(rows, notes, DETAIL_ROWS.get(args.detail, 25))
-                              if "insider" in topics else []) + list(extra)
+    lines = [f"# Weekly brief, {today:%B %-d, %Y}", ""]
+    lines += build_brief(today, rows, notes, topics, args.detail, extras=not args.no_extras)[0]
     if args.include_ipo:
         lines += ipo_sections(today)
-    lines += ["---", "", f"_{DISCLAIMER if args.no_extras else ISSUE_DISCLAIMER}_", ""]
+    lines += ["---", "", f"_{ISSUE_DISCLAIMER}_", ""]
     path = out_dir / f"weekly-{week_of.isoformat()}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     print(path)

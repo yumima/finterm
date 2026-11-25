@@ -51,7 +51,9 @@ pth = close / S["hi52"]
 # --- month-end rebalance dates ---------------------------------------------
 me = close.index.to_series().groupby(close.index.to_period("M")).max()
 me = me[(me >= "2010-01-01")]
-me = me.iloc[:-1] if me.iloc[-1].month == pd.Timestamp.today().month else me
+# the last COMPLETE month: the data's last session may be mid-month (collected
+# on the 19th), whatever the date this is run
+me = me.iloc[:-1] if me.iloc[-1] < me.iloc[-1] + pd.offsets.BMonthEnd(0) else me
 dates = list(me.values)
 
 def members_on(t):

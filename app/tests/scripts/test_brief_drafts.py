@@ -54,10 +54,10 @@ def origin():
 
 
 def body(private=True):
-    lines = ["## The week in brief", "", "- **Last week:** 2 companies.", "",
-             wb.INSIDER_HEADING if hasattr(wb, "INSIDER_HEADING") else "## Insider buying clusters", "",
-             "| Symbol | Company |", "|---|---|", "| AAA | Alpha |", "",
-             "## The week ahead — US releases, Nov 16 to Nov 20", "", "| Wed Nov 18 | 8:30 AM | CPI m/m |", ""]
+    lines = ["## Markets and economy", "", "| 10-year Treasury | 4.92% |", "",
+             "## Stocks", "",
+             "| Insider buying | Company |", "|---|---|", "| AAA | Alpha |", "",
+             "## Week ahead, Nov 16–20", "", "| Wed 18 | 8:30 CPI |", ""]
     if private:
         lines += wb.private_block(["## Private: IPOs ahead (Nasdaq calendar — only you see this; never published)",
                                    "", "| 2026-11-19 | SECRETCO | Secret Co |"])
@@ -110,14 +110,14 @@ def test_check_body():
     m = {"kind": "weekly"}
     assert "empty" in bd.check_body(m, "  ")
     assert "endraw" in bd.check_body(m, "## Insider buying clusters\n{% endraw %}")
-    assert "Keep" in bd.check_body(m, "## Something else")
+    assert bd.check_body(m, "## Something else") is None  # no heading is needed: sections are the owner's choice
     assert "private" in bd.check_body(m, "## Insider buying clusters\n<!-- private -->\nx")
     assert bd.check_body({"kind": "theme"}, "## The theme\ntext") is None
 
 
 # ── edit ─────────────────────────────────────────────────────────────────────
 
-def test_save_marks_edited_restamps_and_evergreen_follows():
+def test_save_marks_edited_restamps_and_evergreen_stays_generated():
     m = make_weekly("weekly-save")
     got = bd.get(m["id"])
     edited = got["body"].replace("| AAA | Alpha |", "| AAA | Alpha Corp (corrected) |")
@@ -125,15 +125,18 @@ def test_save_marks_edited_restamps_and_evergreen_follows():
     assert not r.get("error") and r["edited"], r
     post = bd._file(m, POST).read_text(encoding="utf-8")
     ever = bd._file(m, "site/insider-cluster-buys.md").read_text(encoding="utf-8")
-    assert "Alpha Corp (corrected)" in post and "Alpha Corp (corrected)" in ever
-    assert "_Updated November 14, 2026" in ever and "SECRETCO" not in ever  # lead kept; only the insider section
+    assert "Alpha Corp (corrected)" in post and "| AAA | Alpha |" in ever  # the full list is not the issue's table
+    assert "_Updated November 14, 2026" in ever and "SECRETCO" not in ever
     stamp = bd.split_page(post)[1]
-    assert stamp != "<!-- issue 2026-W46 stamp 20261114T000000Z -->" and stamp in ever
+    assert stamp != "<!-- issue 2026-W46 stamp 20261114T000000Z -->"
     issue = json.loads(bd._file(m, "site/issue.json").read_text())
     assert stamp.endswith(f"stamp {issue['stamp']} -->"), (stamp, issue["stamp"])
-    # back to the generated text: not edited any more
+    # back to the generated text: not edited any more — the evergreen too, should
+    # it carry a correction from before it was separate
+    bd._file(m, "site/insider-cluster-buys.md").write_text(ever.replace("Alpha", "Old correction"))
     r = bd.revert(m["id"])
     assert not r.get("error") and not r["edited"], r
+    assert "Old correction" not in bd._file(m, "site/insider-cluster-buys.md").read_text()
 
 
 def test_x_text_must_keep_the_link_and_lands_in_issue_json():
@@ -165,7 +168,7 @@ def test_publish_pushes_public_files_only():
     assert not r.get("error") and r["state"] == "published", r
     shown = subprocess.run(["git", "--git-dir", str(bare), "show", f"main:{POST}"], capture_output=True,
                            text=True).stdout
-    assert "Insider buying clusters" in shown and "The week ahead" in shown
+    assert "| Insider buying |" in shown and "## Week ahead" in shown
     assert "SECRETCO" not in shown and "private" not in shown, "a private section was published"
     # published drafts are frozen
     assert "already published" in bd.save(m["id"], body="## Insider buying clusters\nx")["error"]
@@ -194,9 +197,9 @@ def test_settings_validate_and_drive_the_build():
     assert "error" in bd.settings_set({"topics": ["ipo_private"]})  # nothing public: refused
     assert "error" in bd.settings_set({"platforms": ["myspace"]})
     assert "error" in bd.settings_set({"detail": "huge"})
-    out = bd.settings_set({"topics": ["macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
+    out = bd.settings_set({"v": 2, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
                            "auto": "publish"})
-    assert out["topics"] == ["summary", "macro"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
+    assert out["topics"] == ["summary", "macro", "funds"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
     assert bd.settings_get() == out
     bd.settings_set(bd.DEFAULT_SETTINGS)
 
@@ -215,10 +218,20 @@ def test_post_to_replaces_post_x_and_older_drafts_still_read():
     assert texts["x"].endswith(URL), texts
 
 
-def test_summary_alone_is_not_a_brief():
+def test_settings_from_before_the_one_page_brief():
+    bd.settings_path().parent.mkdir(parents=True, exist_ok=True)
+    bd.settings_path().write_text(json.dumps({"topics": ["summary", "insider", "screens"], "detail": "short"}))
+    st = bd.settings_get()
+    assert st["topics"] == ["summary", "insider", "funds", "screens"] and st["detail"] == "short" and st["v"] == 2, st
+    # A screen without a box for fund moves does not switch them off...
+    assert "funds" in bd.settings_set({"topics": ["insider", "screens"], "detail": "full"})["topics"]
+    # ...one with a box does, for good.
+    bd.settings_set({"v": 2, "topics": ["summary", "insider", "screens"]})
+    assert bd.settings_get()["topics"] == ["summary", "insider", "screens"], bd.settings_get()
     assert "error" in bd.settings_set({"topics": ["summary"]})
-    assert "error" in bd.settings_set({"topics": ["summary", "ipo_private"]})
-    assert "error" not in bd.settings_set({"topics": ["summary", "screens"]})
+    assert "error" in bd.settings_set({"v": 2, "topics": ["summary", "ipo_private"]})
+    bd.settings_path().write_text("[1]")  # not a settings file: the defaults
+    assert bd.settings_get()["topics"] == list(bd.TOPICS)
     bd.settings_set(bd.DEFAULT_SETTINGS)
 
 

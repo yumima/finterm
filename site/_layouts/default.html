@@ -7,7 +7,7 @@
   {% feed_meta %}
   <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
 </head>
-<body>
+<body{% if page.compact %} class="compact"{% endif %}>
   {% if site.hearth_url and site.hearth_url != "" %}<nav class="projects" aria-label="Projects"><a href="/">yumima</a><a href="{{ '/' | relative_url }}" aria-current="page">finterm</a><a href="{{ site.hearth_url }}">hearth</a></nav>{% endif %}
   <header class="top">
     <a class="brand" href="{{ '/' | relative_url }}">finterm</a>
@@ -19,7 +19,7 @@
     </nav>
   </header>
 
-  <main>
+  <main{% if page.compact %} class="wide"{% endif %}>
     {% if page.title and page.url != "/" and page.layout != "post" and page.url != "/brief/" %}<h1>{{ page.title }}</h1>{% endif %}
     {{ content }}
   </main>
@@ -32,8 +32,8 @@
       <a href="{{ '/feed.xml' | relative_url }}">RSS</a>
     </p>
     <p class="fine">
-      General information from public filings; not investment advice or a recommendation to buy or sell any
-      security. Past patterns do not predict future returns. Filings can be late, amended or wrong; verify
+      General, impersonal information from public data and fixed rules; not advice fitted to anyone's circumstances
+      or a recommendation of any security. Past patterns do not predict future returns. Filings can be late, amended or wrong; verify
       against the originals. Built with substantial AI assistance.
     </p>
   </footer>

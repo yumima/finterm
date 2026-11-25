@@ -24,10 +24,13 @@ DURATION = {  # flows over the fiscal year
     "WeightedAverageNumberOfDilutedSharesOutstanding": "shares",
     "PaymentsForRepurchaseOfCommonStock": "USD", "PaymentsOfDividends": "USD",
     "PaymentsOfDividendsCommonStock": "USD",
+    "PaymentsToAcquirePropertyPlantAndEquipment": "USD", "PaymentsToAcquireProductiveAssets": "USD",
 }
 INSTANT = {  # balances at fiscal year end
     "Assets": "USD", "AssetsCurrent": "USD", "LiabilitiesCurrent": "USD",
     "LongTermDebtNoncurrent": "USD", "LongTermDebt": "USD",
+    "DebtAndCapitalLeaseObligations": "USD", "LongTermDebtAndCapitalLeaseObligations": "USD",
+    "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities": "USD",
     "CashAndCashEquivalentsAtCarryingValue": "USD",
     "PropertyPlantAndEquipmentNet": "USD", "StockholdersEquity": "USD",
 }
@@ -71,6 +74,9 @@ for i, (concept, unit, period) in enumerate(jobs):
 pickle.dump(data, open(OUT, "wb"))
 
 tick = get("https://www.sec.gov/files/company_tickers.json")
-pickle.dump({v["ticker"].replace(".", "-"): v["cik_str"] for v in tick.values()},
-            open(os.path.join(HERE, "data", "cik.pkl"), "wb"))
+CIK = os.path.join(HERE, "data", "cik.pkl")
+# Merged: SEC drops a ticker when the company is acquired or renamed, and the
+# backtest still holds it.
+old = pickle.load(open(CIK, "rb")) if os.path.exists(CIK) else {}
+pickle.dump({**old, **{v["ticker"].replace(".", "-"): v["cik_str"] for v in tick.values()}}, open(CIK, "wb"))
 print("done", len(data))

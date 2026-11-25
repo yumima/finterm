@@ -1692,8 +1692,9 @@ void ScreenerScreen::fill_band() {
             card_head(QStringLiteral("Overview"), QStringLiteral("How to read the screens and their records"),
                       QStringLiteral("The screens come from practitioners — US Investing Champions Minervini and "
                                      "Luk, O'Neil's CAN SLIM (with which David Ryan won), Kullamägi's "
-                                     "self-reported method — and from the academic literature; Quality + "
-                                     "Momentum is this terminal's combination of two published factors. Most "
+                                     "self-reported method, and Buffett's letters made exact — and from the "
+                                     "academic literature; Quality + Momentum is this terminal's combination of "
+                                     "two published factors. Most "
                                      "code only the SELECTION rules (the Leader Pullback also codes entry, stop, "
                                      "size and exits); what the practitioners add — entries, stops, sizing, "
                                      "judgment — is described under each strategy and is not in the list."));
@@ -1701,7 +1702,8 @@ void ScreenerScreen::fill_band() {
             << part(QStringLiteral("1 · HOW TO READ THE RECORDS")) +
                    QStringLiteral(
                        "<p style='margin-top:2px'>Every screen but CAN SLIM was backtested on the S&amp;P 500 "
-                       "as it stood on each date, 2010-2026, monthly, after costs (the Leader Pullback as "
+                       "as it stood on each date, from 2010 or from when its data allows (Buffett Value needs "
+                       "seven years of filings: 2015) to 2026, monthly, after costs (the Leader Pullback as "
                        "individual trades). <b>None beat the equal-weighted index with statistical significance</b>. "
                        "The "
                        "t-stat measures how far an average excess is from zero relative to its month-to-month "
@@ -1759,6 +1761,8 @@ void ScreenerScreen::fill_band() {
         line += QStringLiteral("%1 / yr vs index &nbsp;·&nbsp; t %2 &nbsp;·&nbsp; max drawdown %3")
                     .arg(signed_pct_html(ev.excess), t_text(ev).toHtmlEscaped(),
                          ev.max_dd ? fmtn::format_percent(*ev.max_dd * 100.0, 0) : fmtn::placeholder());
+        if (!ev.from.isEmpty() && !ev.to.isEmpty())
+            line += QStringLiteral(" &nbsp;·&nbsp; %1 to %2").arg(ev.from, ev.to);
         if (ev.trades && ev.avg_R)
             line += QStringLiteral(" &nbsp;·&nbsp; %1R / trade").arg(QString::number(*ev.avg_R, 'f', 2));
     } else {
@@ -1797,6 +1801,10 @@ void ScreenerScreen::fill_band() {
                             "<tr><td style='color:%1'>Max drawdown</td><td align='right'>&nbsp;%4</td></tr>")
                  .arg(dim, signed_pct_html(ev.excess), t_text(ev).toHtmlEscaped(),
                       ev.max_dd ? fmtn::format_percent(*ev.max_dd * 100.0, 1) : fmtn::placeholder());
+        if (!ev.from.isEmpty() && !ev.to.isEmpty())
+            d += QStringLiteral("<tr><td style='color:%1'>Months with names</td><td align='right'>&nbsp;%2 to "
+                                "%3</td></tr>")
+                     .arg(dim, ev.from.toHtmlEscaped(), ev.to.toHtmlEscaped());
         if (ev.trades)
             d += QStringLiteral("<tr><td style='color:%1'>Trades / win rate / avg</td><td align='right'>&nbsp;%2 / %3 "
                                 "/ %4R</td></tr>")
@@ -1865,7 +1873,7 @@ void ScreenerScreen::fill_band() {
                                      "it."));
         else
             d += para(
-                QStringLiteral("What it did, 2010-2026 on the S&P 500: %1 of these names were on %7 %2, against %3 "
+                QStringLiteral("What it did, %9 on the S&P 500: %1 of these names were on %7 %2, against %3 "
                                "of %8. Held as a list it returned %4 / yr against the index, t %5 (%6). Being next in "
                                "line is not the same as rising next.")
                     .arg(
@@ -1885,7 +1893,9 @@ void ScreenerScreen::fill_band() {
                             : QStringLiteral("the ") + result_.strategy(s->setups_from)->name,
                         // the Trend Template's base counts every non-passer (setups_backtest.py)
                         s->setups_from == QLatin1String("trend_template") ? QStringLiteral("all non-passers")
-                                                                          : QStringLiteral("every other name")));
+                                                                          : QStringLiteral("every other name"),
+                        QStringLiteral("%1 to %2").arg(rec.value(QStringLiteral("from")).toString(),
+                                                       rec.value(QStringLiteral("to")).toString())));
         if (s->setups_from == QLatin1String("trend_template") && !trap.isEmpty())
             d += para(
                 QStringLiteral("Left out on purpose: names whose price trend passes all seven rules but whose RS is "

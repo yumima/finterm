@@ -113,8 +113,8 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     auto* top = new QHBoxLayout;
     top->setSpacing(6);
     auto* gen = button(QStringLiteral("Generate weekly brief"),
-                       QStringLiteral("Build this week's brief now: last week's insider buying, next week's US "
-                                      "releases, the screens, and (privately) the IPOs ahead. Takes a few minutes."));
+                       QStringLiteral("Build this week's brief now: markets and economy, the week ahead, stocks "
+                                      "(insider buying, fund moves, the screens) and (privately) the IPOs ahead. Takes a few minutes."));
     connect(gen, &QPushButton::clicked, this, [this]() { generate_weekly(false); });
     top->addWidget(gen);
     auto* theme = button(QStringLiteral("New theme brief…"),

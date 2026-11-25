@@ -1,0 +1,190 @@
+{
+ "all": {
+  "dd10": 0.136,
+  "mean": 0.0292,
+  "up": 0.728,
+  "week_move": 0.0168,
+  "weeks": 1904
+ },
+ "always": {
+  "cagr": 0.1082,
+  "changes_a_year": 0.0,
+  "halves": [
+   0.0962,
+   0.1204
+  ],
+  "vol": 0.1665,
+  "worst": -0.547
+ },
+ "basis": "S&P 500, 1990-03 to 2026-08, weekly, next 63 sessions",
+ "compared": {
+  "half when bearish only": {
+   "cagr": 0.105,
+   "changes_a_year": 4.4,
+   "halves": [
+    0.1023,
+    0.1078
+   ],
+   "vol": 0.1514,
+   "worst": -0.52
+  },
+  "none below the average": {
+   "cagr": 0.0841,
+   "changes_a_year": 3.4,
+   "halves": [
+    0.0819,
+    0.0863
+   ],
+   "vol": 0.1121,
+   "worst": -0.288
+  },
+  "none when bearish only": {
+   "cagr": 0.1001,
+   "changes_a_year": 4.4,
+   "halves": [
+    0.1065,
+    0.0937
+   ],
+   "vol": 0.146,
+   "worst": -0.5
+  }
+ },
+ "from": "1990",
+ "rule": {
+  "cagr": 0.0982,
+  "changes_a_year": 3.4,
+  "halves": [
+   0.0905,
+   0.106
+  ],
+  "vol": 0.1278,
+  "worst": -0.353
+ },
+ "states": {
+  "bearish": {
+   "dd10": 0.321,
+   "dd10_diff_95": [
+    0.0795,
+    0.279
+   ],
+   "halves": [
+    {
+     "dd10": 0.322,
+     "mean": -0.0007,
+     "up": 0.519,
+     "week_move": 0.0193,
+     "weeks": 214
+    },
+    {
+     "dd10": 0.318,
+     "mean": 0.0195,
+     "up": 0.674,
+     "week_move": 0.0241,
+     "weeks": 132
+    }
+   ],
+   "mean": 0.007,
+   "mean_diff_95": [
+    -0.0464,
+    0.0057
+   ],
+   "up": 0.578,
+   "week_move": 0.0211,
+   "weeks": 346
+  },
+  "bullish": {
+   "dd10": 0.082,
+   "dd10_diff_95": [
+    -0.0962,
+    -0.015
+   ],
+   "halves": [
+    {
+     "dd10": 0.052,
+     "mean": 0.0255,
+     "up": 0.737,
+     "week_move": 0.012,
+     "weeks": 537
+    },
+    {
+     "dd10": 0.109,
+     "mean": 0.0229,
+     "up": 0.731,
+     "week_move": 0.0118,
+     "weeks": 595
+    }
+   ],
+   "mean": 0.0241,
+   "mean_diff_95": [
+    -0.0146,
+    0.0049
+   ],
+   "up": 0.734,
+   "week_move": 0.0119,
+   "weeks": 1132
+  },
+  "bullish_nervous": {
+   "dd10": 0.067,
+   "dd10_diff_95": [
+    -0.1248,
+    -0.0088
+   ],
+   "halves": [
+    {
+     "dd10": 0.086,
+     "mean": 0.044,
+     "up": 0.796,
+     "week_move": 0.0208,
+     "weeks": 152
+    },
+    {
+     "dd10": 0.048,
+     "mean": 0.0676,
+     "up": 0.904,
+     "week_move": 0.0205,
+     "weeks": 146
+    }
+   ],
+   "mean": 0.0556,
+   "mean_diff_95": [
+    0.0129,
+    0.0404
+   ],
+   "up": 0.849,
+   "week_move": 0.0206,
+   "weeks": 298
+  },
+  "fear": {
+   "dd10": 0.273,
+   "dd10_diff_95": [
+    -0.0418,
+    0.3388
+   ],
+   "halves": [
+    {
+     "dd10": 0.163,
+     "mean": 0.0942,
+     "up": 0.939,
+     "week_move": 0.0334,
+     "weeks": 49
+    },
+    {
+     "dd10": 0.342,
+     "mean": 0.0597,
+     "up": 0.709,
+     "week_move": 0.0433,
+     "weeks": 79
+    }
+   ],
+   "mean": 0.0729,
+   "mean_diff_95": [
+    -0.0029,
+    0.0878
+   ],
+   "up": 0.797,
+   "week_move": 0.0395,
+   "weeks": 128
+  }
+ },
+ "to": "2026"
+}

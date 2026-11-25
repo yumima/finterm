@@ -1317,7 +1317,7 @@ if(Python3_Interpreter_FOUND)
         NAME clarity_market
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_clarity_market.py
     )
-    # Weekly brief: week-ahead macro + top name per screen; no vendor figures published
+    # Weekly brief: the one-page issue and its posts; no vendor figures published
     add_test(
         NAME weekly_brief
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_weekly_brief.py

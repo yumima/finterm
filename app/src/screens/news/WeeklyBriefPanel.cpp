@@ -32,10 +32,11 @@ struct Opt {
     const char* tip;
 };
 const Opt kTopics[] = {
-    {"summary", "The week in brief", "Three lines at the top: last week, next week, the screens"},
-    {"insider", "Insider buying (last week)", "Companies where two or more insiders bought on the open market (SEC Form 4)"},
-    {"macro", "The week ahead (US releases)", "Top-tier US releases next week: day, time and name"},
-    {"screens", "Screen leaders", "The top name from each of finterm's screens, with each screen's own record"},
+    {"summary", "At a glance", "The market stance with its record since 1990, the past week and the week ahead in a line each"},
+    {"macro", "Markets and economy", "Rates, dollar, oil, GDP, inflation and jobs with their trend; the week's US releases ahead"},
+    {"insider", "Insider buying", "Companies where two or more insiders bought on the open market (SEC Form 4)"},
+    {"funds", "Fund moves", "What institutions added and trimmed, net by stock (SEC 13F)"},
+    {"screens", "Screen leaders", "The first names of each of finterm's screens, with each screen's own record"},
     {"ipo_private", "IPO calendar (private)",
      "The coming IPOs from Nasdaq's calendar — in your draft only; never published or posted"},
 };
@@ -114,9 +115,9 @@ WeeklyBriefPanel::WeeklyBriefPanel(QWidget* parent) : QWidget(parent) {
 
     v->addWidget(caption(QStringLiteral("LEVEL OF DETAIL")));
     detail_ = new QComboBox;
-    detail_->addItem(QStringLiteral("Short — the top 5 of each"), QStringLiteral("short"));
-    detail_->addItem(QStringLiteral("Standard — the top 15"), QStringLiteral("standard"));
-    detail_->addItem(QStringLiteral("Full — everything (up to 25)"), QStringLiteral("full"));
+    detail_->addItem(QStringLiteral("Short — 3 rows a table"), QStringLiteral("short"));
+    detail_->addItem(QStringLiteral("Standard — 5 rows a table (one page)"), QStringLiteral("standard"));
+    detail_->addItem(QStringLiteral("Full — 10 rows a table"), QStringLiteral("full"));
     connect(detail_, &QComboBox::currentIndexChanged, this, [this](int) { save_settings(); });
     v->addWidget(detail_);
 
@@ -351,7 +352,8 @@ void WeeklyBriefPanel::save_settings() {
     for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
         if (it.value()->isChecked())
             plats.append(it.key());
-    const QJsonObject s{{"topics", topics},
+    const QJsonObject s{{"v", 2}, // this list has a box for every section (brief_drafts.settings_set)
+                        {"topics", topics},
                         {"detail", detail_->currentData().toString()},
                         {"platforms", plats},
                         {"auto", auto_->checkedId() == 1 ? QStringLiteral("publish") : QStringLiteral("draft")}};

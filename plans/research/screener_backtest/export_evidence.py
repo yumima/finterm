@@ -46,7 +46,10 @@ def stats(col):
         "max_dd": num((eq / eq.cummax() - 1).min(), 4),
         "hit": num((ex > 0).mean(), 3),
         "subperiods": [num((ex.loc[a:b]).mean() * 12, 4) for a, b in PERIODS],
-        "median_names": int(res[col + "|n"].median()) if col + "|n" in res else None,
+        # the months that held names: a screen whose data starts later has a
+        # shorter record, and says so
+        "from": f"{s.index[0]:%Y-%m}", "to": f"{s.index[-1]:%Y-%m}", "months_held": int(len(s)),
+        "median_names": int(res.loc[s.index, col + "|n"].median()) if col + "|n" in res else None,
         **({"trades": int(len(TRADES[col])), "win_rate": num((TRADES[col]["R"] > 0).mean(), 3),
             "avg_R": num(TRADES[col]["R"].mean(), 2)} if col in TRADES else {}),
     }
@@ -96,15 +99,16 @@ def setup_stats(col):
             "t": num(ex.mean() / ex.std() * np.sqrt(len(ex)) if ex.std() > 0 else np.nan, 2),
             "max_dd": num((eq / eq.cummax() - 1).min(), 4),
             "subperiods": [num(((s - setups.loc[s.index, "EW"]).loc[a:b]).mean() * 12, 4) for a, b in PERIODS],
-            "median_names": int(setups[col + "|n"].median()),
+            "median_names": int(setups.loc[held, col + "|n"].median()),
+            "from": f"{s.index[0]:%Y-%m}", "to": f"{s.index[-1]:%Y-%m}",
             "months_held": int(held.sum()), "months": int(len(setups))}
 
 
 out["setups"] = {
     # what the tab lists: RS >= 70 and exactly one of the 7 price criteria missed
     "trend_template": {**setup_stats("TT one rule away, the rule = a price criterion (RS >= 70)"),
-                       "qualify_next": num(grad["tt_price_one_away"], 3),
-                       "qualify_base": num(grad["tt_non_passer"], 3)},
+                       "qualify_next": num(grad["tt_price_one_away"], 4),
+                       "qualify_base": num(grad["tt_non_passer"], 4)},
     # what it leaves out, and why: the full price trend without the RS
     "rs_trap": setup_stats("TT one rule away, the rule = RS (price trend complete)"),
 }
@@ -115,7 +119,7 @@ assert setups_all.index.equals(res.index), "the setups backtest must cover the s
 setups = setups_all  # setup_stats reads the module-level frame
 for sid, (g1, g0) in grad_all.items():
     out["setups"][sid] = {**setup_stats(f"{sid} | setting up"),
-                          "qualify_next": num(g1, 3), "qualify_base": num(g0, 3)}
+                          "qualify_next": num(g1, 4), "qualify_base": num(g0, 4)}
 with open(OUT, "w") as fh:
     json.dump(out, fh, indent=1, sort_keys=True, allow_nan=False)
 print(f"wrote {len(cols)} backtests to {os.path.normpath(OUT)}")

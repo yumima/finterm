@@ -17,8 +17,9 @@ draft asks for it, the X post goes out once the page shows this version
 whose record means nothing is ever posted twice.
 
 Kinds and their fixed structure:
-  weekly  tools/weekly_brief.py --site: insider clusters, the week ahead,
-          the top name per screen (built in the worktree, then copied out)
+  weekly  tools/weekly_brief.py --site: one page — at a glance, markets and economy,
+          the week ahead, stocks (insider buying, fund moves, screen leaders)
+          (built in a scratch folder, then copied out)
   theme   theme_create(): The theme (overview — written by the app's AI or
           by hand, always reviewed) · The companies (SEC SIC industry) ·
           Insider buying, last 30 days (Form 4) · Recent SEC filings, last
@@ -26,7 +27,7 @@ Kinds and their fixed structure:
 
 What may be edited: a page's BODY (between front matter and disclaimer — the
 code keeps those and the per-version stamp) and the X text. A weekly draft's
-evergreen /insider-cluster-buys/ page follows its edited insider section.
+evergreen /insider-cluster-buys/ page stays the generated full list.
 
     brief_drafts.py build-weekly [--if-unedited]   (blocking; the timer)
     brief_drafts.py tick                            publish what is due, post what is live
@@ -51,7 +52,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import finterm_paths  # noqa: E402
 import weekly_brief_core as wb  # noqa: E402
 
-INSIDER_HEADING = "## Insider buying clusters"
 BUILD_TIMEOUT_S = 3 * 3600
 X_POST_GIVE_UP_S = 6 * 3600  # a page that never goes live is reported, not retried forever
 _RAW = ("{% raw %}", "{% endraw %}")
@@ -76,11 +76,12 @@ THEME_DISCLAIMER = (
 # --topics/--detail), by tick() (where to post) and by tools/weekly_publish.sh
 # (auto-mode). Set from finterm › NEWS › What's On › WEEKLY BRIEF.
 
-TOPICS = ("summary", "insider", "macro", "screens", "ipo_private")
+TOPICS = ("summary", "macro", "insider", "funds", "screens", "ipo_private")
 DETAILS = ("full", "standard", "short")
 AUTO_MODES = ("draft", "publish")
-PUBLIC_SECTIONS = ("insider", "macro", "screens")  # what a published issue can hold
-DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft"}
+PUBLIC_SECTIONS = ("macro", "insider", "funds", "screens")  # what a published issue can hold
+DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft",
+                    "v": 2}  # 2: the one-page brief (fund moves)
 
 
 def settings_path():
@@ -90,11 +91,16 @@ def settings_path():
 def settings_get():
     s = dict(DEFAULT_SETTINGS)
     try:
-        s.update(json.loads(settings_path().read_text(encoding="utf-8")))
-    except (OSError, ValueError):
+        saved = json.loads(settings_path().read_text(encoding="utf-8"))
+        # Saved before fund moves existed: they are on, as a new section is by
+        # default; what was chosen of the rest stands.
+        if saved.get("v", 1) < 2 and isinstance(saved.get("topics"), list):
+            saved["topics"] = [*saved["topics"], "funds"]
+        s.update(saved, v=2)
+    except (OSError, ValueError, AttributeError, TypeError):
         pass
     import social_post as sp
-    s["topics"] = [t for t in s.get("topics", []) if t in TOPICS]
+    s["topics"] = [t for t in TOPICS if t in s.get("topics", [])]
     if not [t for t in s["topics"] if t in PUBLIC_SECTIONS]:  # a hand-edited file: never an empty issue
         s["topics"] = list(DEFAULT_SETTINGS["topics"])
     s["detail"] = s.get("detail") if s.get("detail") in DETAILS else "standard"
@@ -108,12 +114,16 @@ def settings_set(new):
     import social_post as sp
     cur = settings_get()
     if "topics" in new:
+        new = dict(new, topics=list(new["topics"]))
         bad = [t for t in new["topics"] if t not in TOPICS]
         if bad:
             return {"error": f"unknown topic(s): {', '.join(bad)}"}
         if not [t for t in new["topics"] if t in PUBLIC_SECTIONS]:
-            return {"error": "Pick insider buying, the week ahead or the screen leaders — the summary only "
-                             "recaps those, and a brief with nothing in it is not published."}
+            return {"error": "Pick at least one section: a brief with nothing in it is not published."}
+        # A screen from before fund moves (an app still running, or not yet
+        # updated) has no box for them and sends none: its list is not a choice.
+        if int(new.get("v") or 1) < 2 and "funds" in cur["topics"] and "funds" not in new["topics"]:
+            new["topics"].append("funds")
         cur["topics"] = [t for t in TOPICS if t in new["topics"]]
     if "detail" in new:
         if new["detail"] not in DETAILS:
@@ -398,18 +408,6 @@ def join_page(front, stamp, body, disclaimer, lead=()):
     return "\n".join(out)
 
 
-def section(body_lines, heading):
-    try:
-        i = next(k for k, ln in enumerate(body_lines) if ln.strip() == heading)
-    except StopIteration:
-        return None
-    j = next((k for k in range(i + 1, len(body_lines)) if body_lines[k].startswith("## ")), len(body_lines))
-    sec = body_lines[i:j]
-    while sec and not sec[-1].strip():
-        sec.pop()
-    return sec
-
-
 def check_body(m, text):
     if not text.strip():
         return "The page body is empty."
@@ -419,8 +417,6 @@ def check_body(m, text):
     closes = sum(ln.strip() == wb.PRIVATE_CLOSE for ln in text.split("\n"))
     if opens != closes:
         return "Each <!-- private --> needs its <!-- /private --> (everything after an unclosed one is withheld)."
-    if m.get("kind") == "weekly" and not any(ln.strip() == INSIDER_HEADING for ln in text.split("\n")):
-        return f"Keep the \"{INSIDER_HEADING}\" heading: the always-current insider page is cut from it."
     return None
 
 
@@ -791,12 +787,8 @@ def save(did, body=None, x_text=None, post_x=None, post_to_list=None):
             front, _, _, disc = split_page(main.read_text(encoding="utf-8"))
             main.write_text(join_page(front, stamp, lines, disc), encoding="utf-8")
             if m["kind"] == "weekly":
-                ev = _file(m, "site/insider-cluster-buys.md")
-                e_front, _, e_body, e_disc = split_page(ev.read_text(encoding="utf-8"))
-                cut = next((k for k, ln in enumerate(e_body) if ln.strip() == INSIDER_HEADING), 0)
-                lead = [ln for ln in e_body[:cut] if ln.strip()]
-                ev.write_text(join_page(e_front, stamp, section(lines, INSIDER_HEADING), e_disc,
-                                        lead=lead + [""] if lead else ()), encoding="utf-8")
+                # The evergreen insider page is the generated list: a
+                # correction of the issue does not touch it.
                 for rel in ("site/issue.json", "site/_data/announce.json"):
                     p = _file(m, rel)
                     d = json.loads(p.read_text(encoding="utf-8"))
@@ -835,6 +827,11 @@ def revert(did):
     gen = _file(m, m["main"], "generated")
     if not gen.exists():
         return {"error": "The generated copy is missing; rebuild the draft."}
+    # The evergreen page too: a draft corrected before it was separate from the
+    # issue carries that correction.
+    ever = "site/insider-cluster-buys.md"
+    if m.get("kind") == "weekly" and _file(m, ever, "generated").exists():
+        shutil.copy2(_file(m, ever, "generated"), _file(m, ever))
     return save(did, body="\n".join(split_page(gen.read_text(encoding="utf-8"))[2]),
                 x_text=m.get("x_generated") or None)
 

@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`c20815439`](https://github.com/yumima/finterm/commit/c20815439) site: what the review found
 - [`caf64d837`](https://github.com/yumima/finterm/commit/caf64d837) site: titles without the name twice
 - [`2e30a81e1`](https://github.com/yumima/finterm/commit/2e30a81e1) site: the counter is downloads only and rises after one; concise technical copy
 

@@ -9,6 +9,8 @@ shipped definitions. For each screen, "next in line" is:
                    (Momentum / Low vol: the next decile; Magic Formula:
                    ranks 31-60; Quality+Momentum / Trending Value: ranks
                    26-50 inside their pools)
+  Buffett          good businesses not on the list, the 30 nearest to it: above
+                   their estimated value, or below it outside the 30 widest
   Piotroski        F-score exactly 7 (one test short of 8)
   Breakout         a top-5% leader failing exactly one of its four filters
   Leader Pullback  a leader resting (higher lows, contracting, above the 9
@@ -93,6 +95,7 @@ SCREENS = {
                  lambda t, u: (lambda lf: list(lf[0].index[lf[0] & (lf[1] == 1)]))(breakout(t, u))),
     "magic_formula": (lambda t, u: ranked(F.metrics(t, u)["magic"], 0, 30),
                       lambda t, u: ranked(F.metrics(t, u)["magic"], 30, 60)),
+    "buffett": (F.buffett_list, F.buffett_wait),
     "piotroski": (lambda t, u: (lambda m: list(m.index[m["f"] >= 8]))(F.metrics(t, u)),
                   lambda t, u: (lambda m: list(m.index[m["f"] == 7]))(F.metrics(t, u))),
     "quality_momentum": (
@@ -120,6 +123,8 @@ def graduation(sid):
         t0, t1 = pd.Timestamp(B.dates[i]), pd.Timestamp(B.dates[i + 1])
         u0 = universe(t0)
         nxt_set = set(setup(t0, u0))
+        if not nxt_set:  # both rates over the same months: those with names next in line
+            continue
         on0 = set(screen(t0, u0))
         others = set(u0) - on0 - nxt_set
         if sid == "luk_pullback":

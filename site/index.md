@@ -11,7 +11,7 @@ permalink: /
   </p>
   <p>
     <a class="button" href="{{ site.download_url }}">Download</a>
-    <a class="button ghost" href="{{ '/insider-cluster-buys/' | relative_url }}">Weekly insider buying</a>
+    <a class="button ghost" href="{{ '/brief/' | relative_url }}">Weekly brief</a>
   </p>
   {% include counter.html %}
 </section>
@@ -40,8 +40,8 @@ permalink: /
 
 ## Weekly brief
 
-Companies where two or more insiders reported open-market purchases in SEC Form 4 filings, with method and historical results.
-[Latest]({{ '/insider-cluster-buys/' | relative_url }}) · [all issues]({{ '/brief/' | relative_url }}) ·
+One page: the market at a glance, markets and the economy, the week ahead, and stocks — insider buying (Form 4), fund moves (13F), screen leaders with their backtest records.
+[All issues]({{ '/brief/' | relative_url }}) · [insider buying, full list]({{ '/insider-cluster-buys/' | relative_url }}) ·
 [RSS]({{ '/feed.xml' | relative_url }})
 
 {% assign latest = site.posts.first %}

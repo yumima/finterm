@@ -123,7 +123,7 @@ def _brief(_payload):
         "texts": texts, "posted": sp.posted(issue["issue"]),
         "page_live": _page_live(issue["url"], issue.get("stamp", "")),
         "current_week": issue["issue"] == wb.issue_key(date.today()),
-        "disclaimer": wb.DISCLAIMER,
+        "disclaimer": wb.ISSUE_DISCLAIMER,
     }
 
 

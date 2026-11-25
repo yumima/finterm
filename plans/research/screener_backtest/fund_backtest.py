@@ -16,6 +16,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import backtest as B
+sd = B.sd
 
 D = B.D
 frames = pickle.load(open(os.path.join(D, "frames.pkl"), "rb"))
@@ -42,8 +43,11 @@ FIELDS = {  # output field -> concepts in priority order
     "ltd": ["LongTermDebtNoncurrent", "LongTermDebt"],
     "cash": ["CashAndCashEquivalentsAtCarryingValue"], "ppe": ["PropertyPlantAndEquipmentNet"],
     "equity": ["StockholdersEquity"],
+    "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"],
+    "debt": ["LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "DebtAndCapitalLeaseObligations",
+             "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebtNoncurrent"],
 }
-FLOWS = {"rev", "gp", "cogs", "ebit", "ni", "ocf", "shares", "buyback", "div"}
+FLOWS = {"rev", "gp", "cogs", "ebit", "ni", "ocf", "shares", "buyback", "div", "capex"}
 
 # rec[cik][year] = {field: value, "end": fiscal year end, "float_end": date}
 rec = defaultdict(lambda: defaultdict(dict))
@@ -63,7 +67,12 @@ for (concept, period), rows in frames.items():
             # from the CY..Q4I (Dec 31) frame, which for a June fiscal year is
             # a 10-Q filed months after the 10-K that carries the flows. Dating
             # the record by the flows alone used Dec balances before they existed.
-            r["end"] = max(r.get("end", end), end)
+            # (Capex and total debt are read by the Buffett screen only: they do
+            # not move the other strategies' dates, and buffett_at drops one
+            # that ends after the record does.)
+            r[(field, "end")] = end
+            if field not in ("capex", "debt"):
+                r["end"] = max(r.get("end", end), end)
 
 # Public float is stamped at the company's fiscal Q2 end, in whichever calendar
 # quarter that falls, and becomes public with the 10-K about 8 months later
@@ -153,6 +162,38 @@ def piotroski(r, p):
     s += bool(np.isfinite(rev) and np.isfinite(rev0) and rev / a > rev0 / a0)
     return float(s)
 
+# The shipped Buffett tests (screener_data.buffett_*) on SEC annual records.
+# XBRL begins in 2009, so ten years of history do not exist before 2020: here
+# 7 to 10 consecutive years are read (the first lists come in 2015). Return on
+# capital = net income / (equity + debt). Debt is what the filing tags as
+# long-term debt, with its current part and leases where tagged; a filer that
+# tags none has UNKNOWN debt and fails, as a null does on the live screen
+# (reading it as zero put Comcast and DaVita on the list as debt-free).
+BUFFETT_MIN_YEARS = 7
+
+def buffett_at(cik, t, r, mc):
+    lst = avail.get(cik)
+    i = bisect.bisect_right(lst, (t, 10**6)) - 1
+    y = lst[i][1]
+    recs = [rec[cik].get(y - k) or {} for k in range(sd.BUFFETT["years"])]
+    def val(q, k):
+        if k not in q or not np.isfinite(q[k]) or ((k, "end") in q and q[(k, "end")] > q.get("end", "")):
+            return None
+        return float(q[k])
+    def fcf(q):
+        o, c = val(q, "ocf"), val(q, "capex")
+        return None if o is None or c is None else o - c
+    gp = [(lambda x: None if not np.isfinite(x) else x)(gross_profit(q)) for q in recs]
+    ni = [val(q, "ni") for q in recs]
+    x = sd.buffett_facts(ni, [fcf(q) for q in recs], gp, [val(q, "rev") for q in recs],
+                         latest_ni=ni[0], min_years=BUFFETT_MIN_YEARS)
+    eq, debt = g(r, "equity"), val(r, "debt")
+    roe = ni[0] / eq if ni[0] is not None and np.isfinite(eq) and eq > 0 else None
+    roic = (ni[0] / (eq + debt) if None not in (ni[0], debt) and np.isfinite(eq) and eq + debt > 0 else None)
+    good = all(ok for _, ok in sd.buffett_quality(x, roe, roic, debt))
+    v = x.get("value")
+    return good, (1 - mc / v if v and np.isfinite(mc) and mc > 0 else np.nan), bool(x)
+
 cache = {}
 def metrics(t, u):
     key = pd.Timestamp(t)
@@ -187,6 +228,8 @@ def metrics(t, u):
             "ep": g(r, "ni") / mc, "bp": g(r, "equity") / mc, "sp": g(r, "rev") / mc,
             "cfp": g(r, "ocf") / mc, "shy": shy / mc if np.isfinite(mc) else np.nan,
             "mc": mc,
+            **dict(zip(("buf_good", "buf_mos", "buf_hist"), buffett_at(cik, key, r, mc) if operating(cik)
+                       else (False, np.nan, False))),
         }
     m = pd.DataFrame.from_dict(rows, orient="index")
     if not m.empty:
@@ -244,6 +287,23 @@ def _(t, u):
     pool = top(metrics(t, u)["gpa"], frac=0.30)
     return top(B.mom12_1.loc[t, pool], n=25)
 
+def buffett_list(t, u):
+    """The shipped list, ranks 1-30; and the good businesses priced above value."""
+    m = metrics(t, u)
+    good = m["buf_mos"][m["buf_good"].astype(bool)]
+    return top(good[good >= 0], n=sd.BUFFETT["n"])
+
+def buffett_wait(t, u):
+    m = metrics(t, u)
+    return top(m["buf_mos"][m["buf_good"].astype(bool)].drop(buffett_list(t, u)), n=sd.BUFFETT["n"])
+
+@strat("Buffett: quality at or below estimated value (max 30)")
+def _(t, u): return buffett_list(t, u)
+
+@strat("Buffett: all quality passers, any price")
+def _(t, u):
+    m = metrics(t, u); return list(m.index[m["buf_good"].astype(bool)])
+
 def ic(col):
     def f(t, u):
         return metrics(t, u)[col].reindex(u)
@@ -262,7 +322,8 @@ if __name__ == "__main__":
     keys = sorted(cache)[-24:]
     for name, metric in [("Magic Formula (top 30)", "ey"), ("Magic Formula (top 30)", "roc"),
                          ("Gross profitability GP/A (top decile)", "gpa"),
-                         ("Value composite (top decile)", "value")]:
+                         ("Value composite (top decile)", "value"),
+                         ("Buffett: quality at or below estimated value (max 30)", "buf_mos")]:
         fn = STRATS[name]
         better = 0
         for k in keys:
