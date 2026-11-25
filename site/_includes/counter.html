@@ -9,15 +9,21 @@
   var ext = { linux: ".run", windows: ".exe", macos: ".dmg" }, known = counts.total;
   var day = 864e5, knownKey = "finterm-downloads-known", clickKey = "finterm-downloads-clicked";
 
-  function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }
-  function store(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
-  function clicks() { return clicked.filter(function (c) { return Date.now() - c.at < day; }); }
+  // (Without browser storage, what this page stored is kept in it.)
+  var page = {};
+  function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return page[key]; } }
+  function store(key, v) { page[key] = v; try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {} }
+  // Read again each time: another tab may have added one.
+  function clicks() {
+    var all = load(clickKey);
+    return Array.isArray(all) ? all.filter(function (c) { return c && Date.now() - c.at < day && typeof c.known === "number"; }) : [];
+  }
 
   // GitHub's count lags a download. A click here counts until GitHub's has risen
   // by it, for a day at most.
   function shown(os) {
     var mine = clicks().filter(function (c) { return c.os === os; });
-    return mine.length ? Math.max(known[os], mine[0].known + mine.length) : known[os];
+    return Math.max(known[os], mine.reduce(function (n, c) { return Math.max(n, c.known) + 1; }, 0));
   }
   function render() {
     var sum = 0;
@@ -30,7 +36,7 @@
   }
   function raise(n) {
     var rose = false;
-    Object.keys(ext).forEach(function (os) { if (n[os] > known[os]) { known[os] = n[os]; rose = true; } });
+    Object.keys(ext).forEach(function (os) { if (typeof n[os] === "number" && n[os] > known[os]) { known[os] = n[os]; rose = true; } });
     return rose;
   }
   function refresh() {
@@ -48,16 +54,19 @@
       }).catch(function () {});
   }
 
-  var last = load(knownKey), clicked = load(clickKey) || [];
-  if (last && Date.now() - last.at < day) raise(last.n);
-  render();
+  function recall() {
+    var last = load(knownKey);
+    if (last && last.n && Date.now() - last.at < day) raise(last.n);
+    render();
+  }
+  recall();
   refresh();
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { recall(); refresh(); } });
+  addEventListener("storage", recall);
   Object.keys(ext).forEach(function (os) {
     var tile = document.getElementById("count-" + os), link = tile && tile.parentNode.querySelector("a");
     if (link) link.addEventListener("click", function () {
-      clicked = clicks().concat({ os: os, at: Date.now(), known: known[os] });
-      store(clickKey, clicked);
+      store(clickKey, clicks().concat({ os: os, at: Date.now(), known: known[os] }));
       render();
     });
   });

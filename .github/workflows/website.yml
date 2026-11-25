@@ -9,7 +9,7 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/scripts/site_counts.py", ".github/workflows/website.yml"]
+    paths: ["site/**", ".github/scripts/site_counts.py", ".github/scripts/keep_download_counts.py", ".github/workflows/website.yml"]
   schedule:
     - cron: "17 6 * * *"  # the download counts in the pages
   workflow_dispatch:
@@ -40,7 +40,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s . > /tmp/releases.json
+          for wait in 5 15 45 0; do
+            ok=1
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' > /tmp/releases.jsonl && break
+            ok=0
+            sleep "${wait}"
+          done
+          [ "${ok}" -eq 1 ] || { echo "::error::no release list from GitHub"; exit 1; }
+          jq -s . /tmp/releases.jsonl > /tmp/releases.json
           python3 .github/scripts/site_counts.py site/_data/downloads.json /tmp/releases.json site/_data/counts.json
       - uses: actions/configure-pages@v5
       - uses: actions/jekyll-build-pages@v1

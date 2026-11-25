@@ -22,15 +22,14 @@ Version {{ r.version }}{% if r.released %} · released <time datetime="{{ r.rele
 
 **Windows 10/11 (x64)**
 
-1. Run the installer. At SmartScreen: **More info → Run anyway**. No administrator rights; installs per user to `%LOCALAPPDATA%\Programs\finterm`.
-2. Start **finterm** from the Start Menu.
-
-Uninstall an older copy in `C:\Program Files\finterm` first and answer **No** to removing data.
+1. If an older copy is in `C:\Program Files\finterm`, uninstall it first. Answer **No** to removing data; the new version uses it.
+2. Run the installer. At SmartScreen: **More info → Run anyway**. No administrator rights; installs per user to `%LOCALAPPDATA%\Programs\finterm`.
+3. Start **finterm** from the Start Menu.
 
 **macOS 13+ (Apple Silicon)**
 
 1. Open the disk image and drag **finterm** to Applications.
-2. First launch: **right-click → Open → Open**.
+2. First launch: **right-click → Open → Open**, or System Settings → Privacy & Security → **Open Anyway** (macOS 15+).
 
 **Linux (x86-64)**
 
@@ -40,7 +39,7 @@ Uninstall an older copy in `C:\Program Files\finterm` first and answer **No** to
 ## First start
 
 1. **Setup** — downloads Python and builds the data environment: 5–15 minutes, internet required, once.
-2. **Local account** — username and PIN, then a 6-digit security PIN. Stored locally.
+2. **Local account** — username and 4–6 digit PIN, then a 6-digit security PIN. Stored locally; neither PIN can be recovered.
 3. **Dashboard** — the data process starts in the background. Later starts go to the PIN.
 
 ## Troubleshooting
@@ -58,4 +57,4 @@ Every release passes the self-test on all three systems before publication.
 ## Signing and updates
 
 - **Signing** — installers are unsigned, hence the Windows and macOS prompts. Built from [source]({{ site.repo_url }}) by public CI.
-- **Updates** — off by default. Enable the daily check at the **Auto update?** prompt, or run Help › Check for Updates. Updates download in the background and install on restart or quit; workspace and data are kept, and a version that fails to start is rolled back.
+- **Updates** — off by default. Enable the daily check at the status-bar prompt or in About, or run Help › Check for Updates. Updates download in the background and install on restart or quit; workspace and data are kept, and a version that fails to start is rolled back.

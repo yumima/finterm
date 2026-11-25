@@ -1429,6 +1429,7 @@ jobs:
       # Pass the tag so update-readme can use it
       tag: ${{ github.ref_name }}
       replaced: ${{ steps.replaced.outputs.counts }}
+      replaced_key: ${{ steps.replaced.outputs.key }}
 
     steps:
       - name: Download Windows installer
@@ -1467,6 +1468,8 @@ jobs:
           fi
           rm -f was.json
           echo "counts=${c}" >> "${GITHUB_OUTPUT}"
+          # Named here: this job runs once per replacement, the one that keeps it may run again.
+          echo "key=${GITHUB_REF_NAME}@${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
 
       - name: Create GitHub Release and attach installers
         uses: softprops/action-gh-release@v2
@@ -1664,6 +1667,15 @@ jobs:
           echo "=== README diff preview (first 60 lines) ==="
           git diff README.md | head -60 || true
 
+      # The build's own files, not the release's: fetching those would count as
+      # downloads. They are compared with the release's hashes below.
+      - name: Download the built assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: finterm-*-installer
+          merge-multiple: true
+          path: ${{ runner.temp }}/assets
+
       # ── Regenerate updates.json (auto-updater manifest) ───────────────────
       - name: Regenerate updates.json from release assets
         env:
@@ -1676,9 +1688,14 @@ jobs:
           # Strip leading 'v' so "v4.0.2" → "4.0.2" for latest-version
           VERSION="${TAG#v}"
 
-          WORK="$(mktemp -d)"
-          echo "Downloading release assets to ${WORK}..."
-          gh release download "${TAG}" --dir "${WORK}" --pattern "finterm-*setup*" --pattern "finterm-*-update.zip" || true
+          WORK="${RUNNER_TEMP}/assets"
+          gh api "repos/${REPO}/releases/tags/${TAG}" \
+            --jq '.assets[] | "\(.digest | ltrimstr("sha256:"))  \(.name)"' > "${RUNNER_TEMP}/SHA256SUMS"
+          (cd "${WORK}" && sha256sum finterm-*) > "${RUNNER_TEMP}/built"
+          if other=$(grep -vxFf "${RUNNER_TEMP}/SHA256SUMS" "${RUNNER_TEMP}/built"); then
+            echo "::error::not what the release has: ${other}"
+            exit 1
+          fi
 
           # What the assets were built from (GITHUB_SHA: the tag's commit).
           COMMIT="${GITHUB_SHA}"
@@ -1770,6 +1787,27 @@ jobs:
           fi
           echo "Repo metadata pushed to main"
 
+      # What the purge deletes takes its download counts with it. Nothing depends
+      # on these: a failure here holds nothing up. Before the redeploy, which shows them.
+      - name: Keep the download counts
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPLACED: ${{ needs.release.outputs.replaced }}
+          REPLACED_KEY: ${{ needs.release.outputs.replaced_key }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s . > /tmp/releases.json
+          python3 .github/scripts/keep_download_counts.py site/_data/downloads.json /tmp/releases.json "${TAG}" \
+            "${REPLACED:-null}" "${REPLACED_KEY}"
+          git diff --quiet site/_data/downloads.json && exit 0
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/_data/downloads.json
+          git commit -q -m "chore(release): download counts of the releases before ${TAG}"
+          git push origin main || { git pull --rebase origin main && git push origin main; }
+
       # A push made with GITHUB_TOKEN starts no workflow, so the site would
       # keep the previous release's links: start its deploy explicitly, and wait
       # for it. The purge below deletes the files those links point at, so it
@@ -1813,27 +1851,6 @@ jobs:
           done
           echo "::error::the website did not deploy; the previous release is kept"
           exit 1
-
-      # What the purge deletes takes its download counts with it. Nothing depends
-      # on these: a failure here holds nothing up.
-      - name: Keep the download counts
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          REPLACED: ${{ needs.release.outputs.replaced }}
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s . > /tmp/releases.json
-          python3 .github/scripts/keep_download_counts.py site/_data/downloads.json /tmp/releases.json "${TAG}" \
-            "${REPLACED:-null}" "${TAG}@${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
-          git diff --quiet site/_data/downloads.json && exit 0
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add site/_data/downloads.json
-          git commit -q -m "chore(release): download counts of the releases before ${TAG}"
-          git push origin main || { git pull --rebase origin main && git push origin main; }
-          gh workflow run website.yml --ref main
 
       # Policy: one release on GitHub — the current one. After this release
       # and its metadata are out, delete every release published BEFORE it,

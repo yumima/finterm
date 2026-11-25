@@ -30,7 +30,7 @@ permalink: /
 - **Equity research** — charts, technical rating with its components, fundamentals, earnings history with call audio, pre-market, after-hours and overnight moves.
 - **Company report** — quarterly report from filings, estimates, prices and news: segments, valuation against its own history, risks. PDF and HTML export.
 - **Markets** — configurable widget pages: Treasury curve, credit, volatility, valuation, cross-asset correlation.
-- **Futures** — forward curves for 57 contracts, calendar spreads, roll yield, CFTC positioning, paper trading with stops and targets.
+- **Futures** — forward curves for 55 contracts, calendar spreads, roll yield, CFTC positioning, paper trading with stops and targets.
 - **Ownership** — Form 4 insider trades with cluster detection; 13F changes adjusted for splits and CUSIP changes; 13D/13G stakes.
 - **Private market** — secondary-market prices, funding rounds, and the IPO calendar by SEC filing stage.
 - **Portfolio** — multiple accounts, performance, broker CSV/JSON import and export. Stored locally.

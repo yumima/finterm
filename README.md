@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`caf64d837`](https://github.com/yumima/finterm/commit/caf64d837) site: titles without the name twice
 - [`2e30a81e1`](https://github.com/yumima/finterm/commit/2e30a81e1) site: the counter is downloads only and rises after one; concise technical copy
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
@@ -65,7 +66,7 @@ Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 The report says `"ok": true`, or names the stage that failed (setup or data) and why. Every release is installed and put through this check on all three systems before it is published.
 
 - **Unsigned** — the installers are free, so they carry no paid certificate; that is the one extra click on Windows and macOS. They are built from this source by the public CI.
-- **Updates** — off until you turn them on: finterm asks once (**Auto update?**) whether to check daily (or Help › Check for Updates, any time). A new version downloads in the background and installs when you restart or quit finterm, keeping your workspace and data; a version that fails to start is rolled back.
+- **Updates** — off until you turn them on: finterm asks once, in the status bar, whether to check daily (later: About; or Help › Check for Updates, any time). A new version downloads in the background and installs when you restart or quit finterm, keeping your workspace and data; a version that fails to start is rolled back.
 
 ## What's inside
 
