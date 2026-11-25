@@ -1,5 +1,5 @@
 ---
-title: finterm — open-source financial research terminal
+title: finterm
 description: Open-source desktop financial research terminal for Linux, Windows and macOS. Equity research, SEC ownership filings, futures, IPO pipeline, portfolio, local or cloud AI. Local-first, no telemetry.
 permalink: /
 ---

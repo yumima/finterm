@@ -1,5 +1,5 @@
 ---
-title: Download finterm
+title: Download
 description: finterm installers for Linux (x86-64), Windows 10/11 (x64) and macOS 13+ (Apple Silicon).
 permalink: /download/
 ---
