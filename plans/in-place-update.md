@@ -45,7 +45,7 @@ Differences from "check at restart → ask → relaunch":
 
 ### Consent (conflicts with 243296cc0)
 
-An automatic check is a request the user didn't make each time. Proposed rule: **one setting, "Check for updates automatically"**, put to
+An automatic check is a request the user didn't make each time. Proposed rule: **one setting, "Auto update"**, put to
 the user once through a non-modal notice on the first launch of the build that ships this ("finterm can check GitHub once a day for
 new versions. [Turn on] [Not now]"). Until they turn it on, behaviour is exactly as today. The request carries only
 `finterm/<version> (<platform>)`, nothing about the user.

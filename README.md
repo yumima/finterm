@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`25e826bd0`](https://github.com/yumima/finterm/commit/25e826bd0) updater: the question and the setting are called Auto update
 - [`5c6eebd50`](https://github.com/yumima/finterm/commit/5c6eebd50) site: the line under the tiles is the total
 - [`b798ae424`](https://github.com/yumima/finterm/commit/b798ae424) site: each platform's downloads under its tile
 - [`20307f4d4`](https://github.com/yumima/finterm/commit/20307f4d4) site: version, date, and how many clones and downloads

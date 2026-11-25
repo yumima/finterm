@@ -1,11 +1,13 @@
 {% assign r = site.data.release %}{% assign d = site.data.downloads %}{% assign linux = 0 %}{% assign windows = 0 %}{% assign macos = 0 %}{% for e in d.earlier_releases %}{% assign linux = linux | plus: e[1].linux %}{% assign windows = windows | plus: e[1].windows %}{% assign macos = macos | plus: e[1].macos %}{% endfor %}{% assign base = d.clones | plus: linux | plus: windows | plus: macos %}
 <p class="counter">
   {% unless include.short %}Version {{ r.version }}{% if r.released %} · <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y" }}</time>{% endif %} ·{% endunless %}
-  {% if include.short %}Total: {% endif %}<span id="count" data-clones="{{ d.clones }}" data-linux="{{ linux }}" data-windows="{{ windows }}" data-macos="{{ macos }}" title="{{ d.clones }} clones of the source that GitHub counted from {{ d.clones_from | date: "%-d %B" }} to {{ d.clones_to | date: "%-d %B %Y" }}, automated ones included, and the downloads of every installer">{{ base }}</span> clones and downloads
+  {% if include.short %}Total: {% endif %}<span id="count" data-clones="{{ d.clones }}" data-kept="{% for e in d.earlier_releases %}{{ e[0] }} {% endfor %}" data-linux="{{ linux }}" data-windows="{{ windows }}" data-macos="{{ macos }}">{{ base }}</span> clones and downloads<br>
+  <small>{{ d.clones }} clones of the source, counted by GitHub from {{ d.clones_from | date: "%-d" }} to {{ d.clones_to | date: "%-d %B %Y" }}, automated ones included; the rest are installer downloads.</small>
 </p>
 <script>
 (function () {
-  var el = document.getElementById("count"), d = el.dataset, ext = { linux: ".run", windows: ".exe", macos: ".dmg" };
+  // (A kept release is in the page's numbers already, also while GitHub still lists it.)
+  var el = document.getElementById("count"), d = el.dataset, kept = d.kept.split(" "), ext = { linux: ".run", windows: ".exe", macos: ".dmg" };
   function show(live) {
     var total = +d.clones;
     Object.keys(ext).forEach(function (os) {
@@ -21,6 +23,7 @@
     .then(function (releases) {
       var live = { linux: 0, windows: 0, macos: 0 };
       releases.forEach(function (rel) {
+        if (kept.indexOf(rel.tag_name) >= 0) return;
         rel.assets.forEach(function (a) {
           Object.keys(ext).forEach(function (os) {
             if (a.name.endsWith("-setup" + ext[os])) live[os] += a.download_count;

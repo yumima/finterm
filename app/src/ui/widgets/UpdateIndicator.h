@@ -12,8 +12,8 @@ namespace finterm::ui {
 ///    then "DOWNLOADING vX…" and "vX INSTALLER STARTED" as it proceeds.
 ///  - automatic checks were never decided: a one-time question,
 ///    "AUTO UPDATE?  TURN ON · NO THANKS". Either answer is stored
-///    and the question does not come back. About › Check for updates
-///    automatically changes it later.
+///    and the question does not come back. About › Auto update
+///    changes it later.
 ///  - otherwise nothing.
 /// Dev builds (no release version) show nothing.
 class UpdateIndicator : public QWidget {

@@ -1428,6 +1428,7 @@ jobs:
     outputs:
       # Pass the tag so update-readme can use it
       tag: ${{ github.ref_name }}
+      replaced: ${{ steps.replaced.outputs.counts }}
 
     steps:
       - name: Download Windows installer
@@ -1450,6 +1451,22 @@ jobs:
 
       - name: List release assets
         run: find dist -type f | sort
+
+      # A version released again replaces its files, and their download counts
+      # with them: kept for the site's counter.
+      - name: Download counts of what is replaced
+        id: replaced
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          c='{}'
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" > was.json 2>/dev/null; then
+            c=$(jq -c '.assets as $a | def n($e): [$a[] | select(.name | endswith("-setup." + $e)) | .download_count] | add // 0;
+                       {linux: n("run"), windows: n("exe"), macos: n("dmg")}' was.json)
+          fi
+          rm -f was.json
+          echo "counts=${c}" >> "${GITHUB_OUTPUT}"
 
       - name: Create GitHub Release and attach installers
         uses: softprops/action-gh-release@v2
@@ -1702,16 +1719,6 @@ jobs:
                 '{version:$version, released:$released, build:$build, page:$page, linux:$linux, windows:$windows, macos:$macos}' \
                 > site/_data/release.json
           cat site/_data/release.json
-          # The releases the purge below deletes take their download counts with
-          # them: kept for the site's counter (site/_includes/counter.html).
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s --arg tag "${TAG}" \
-            'map(select(.tag_name != $tag and (.draft | not))
-                 | .assets as $a | def n($ext): [$a[] | select(.name | endswith("-setup." + $ext)) | .download_count] | add // 0;
-                   {key: .tag_name, value: {linux: n("run"), windows: n("exe"), macos: n("dmg")}})
-             | from_entries' > /tmp/leaving.json
-          jq --slurpfile l /tmp/leaving.json '.earlier_releases += $l[0]' site/_data/downloads.json > /tmp/downloads.json
-          mv /tmp/downloads.json site/_data/downloads.json
-          cat site/_data/downloads.json
 
       # ── Single atomic commit + push ───────────────────────────────────────
       # Both files in one commit → one push → no race with anything. If
@@ -1731,7 +1738,7 @@ jobs:
           git diff --quiet README.md    || README_CHANGED=1
           git diff --quiet updates.json || MANIFEST_CHANGED=1
           # May be a brand-new file, which `git diff` does not see.
-          [ -z "$(git status --porcelain -- site/_data/release.json site/_data/downloads.json)" ] || SITE_CHANGED=1
+          [ -z "$(git status --porcelain -- site/_data/release.json)" ] || SITE_CHANGED=1
 
           if [ "${README_CHANGED}" -eq 0 ] && [ "${MANIFEST_CHANGED}" -eq 0 ] && [ "${SITE_CHANGED}" -eq 0 ]; then
             echo "Nothing changed — nothing to commit"
@@ -1742,7 +1749,7 @@ jobs:
           # stray artefact from an earlier step would sneak into main.
           [ "${README_CHANGED}"   -eq 1 ] && git add README.md
           [ "${MANIFEST_CHANGED}" -eq 1 ] && git add updates.json
-          [ "${SITE_CHANGED}"     -eq 1 ] && git add site/_data/release.json site/_data/downloads.json
+          [ "${SITE_CHANGED}"     -eq 1 ] && git add site/_data/release.json
 
           git commit -m "chore(release): update README download links and updates.json for ${TAG}
 
@@ -1806,6 +1813,27 @@ jobs:
           done
           echo "::error::the website did not deploy; the previous release is kept"
           exit 1
+
+      # What the purge deletes takes its download counts with it. Nothing depends
+      # on these: a failure here holds nothing up.
+      - name: Keep the download counts
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPLACED: ${{ needs.release.outputs.replaced }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s . > /tmp/releases.json
+          python3 .github/scripts/keep_download_counts.py site/_data/downloads.json /tmp/releases.json "${TAG}" \
+            "${REPLACED:-null}" "${TAG}@${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          git diff --quiet site/_data/downloads.json && exit 0
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/_data/downloads.json
+          git commit -q -m "chore(release): download counts of the releases before ${TAG}"
+          git push origin main || { git pull --rebase origin main && git push origin main; }
+          gh workflow run website.yml --ref main
 
       # Policy: one release on GitHub — the current one. After this release
       # and its metadata are out, delete every release published BEFORE it,
