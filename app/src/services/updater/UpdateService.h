@@ -31,7 +31,7 @@ namespace finterm::services {
 ///  - On request (Help › Check for Updates, About): always runs, and reports
 ///    the result in a dialog — up to date, the error, or the offer.
 ///  - Automatically, once a day, ONLY after the user turned it on (the
-///    "Check for updates automatically" setting; finterm makes no network
+///    "Auto update" setting; finterm makes no network
 ///    request the user didn't agree to). It never opens a dialog: a newer
 ///    version becomes an offer, which the status bar shows as a badge the
 ///    user can open when they choose.

@@ -58,6 +58,6 @@ Every release is installed and put through this check on all three systems befor
 The installers are free, so they carry no paid signing certificate; that is the one extra click on Windows and
 macOS. They are built from the [public source]({{ site.repo_url }}) by its public CI.
 
-**Updates** — off until you turn them on: finterm asks once whether to check daily (or Help › Check for Updates, any
+**Updates** — off until you turn them on: finterm asks once (**Auto update?**) whether to check daily (or Help › Check for Updates, any
 time). A new version downloads in the background and installs when you restart or quit finterm, keeping your
 workspace and data; a version that fails to start is rolled back.

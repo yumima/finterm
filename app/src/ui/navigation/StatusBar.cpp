@@ -42,7 +42,7 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
         hl->addWidget(mk(" ", "sbSpacer"));
     }
     hl->addStretch();
-    // A newer version, or the one-time "check daily?" question — hidden
+    // A newer version, or the one-time "auto update?" question — hidden
     // otherwise (UpdateIndicator).
     hl->addWidget(new UpdateIndicator(this));
     hl->addWidget(new EngineIndicator(this)); // the one-time question about hearth

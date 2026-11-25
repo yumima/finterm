@@ -20,13 +20,11 @@ UpdateIndicator::UpdateIndicator(QWidget* parent) : QWidget(parent) {
     hl->setContentsMargins(0, 0, 0, 0);
     hl->setSpacing(0);
 
-    question_ = new QLabel(QStringLiteral("CHECK FOR UPDATES DAILY?"));
+    question_ = new QLabel(QStringLiteral("AUTO UPDATE?"));
     question_->setObjectName("sbUpdateQuestion");
-    question_->setToolTip(QStringLiteral("Once a day, finterm would fetch its update list from github.com "
-                                         "(sending only its version and platform). A new version is downloaded "
-                                         "in the background and installs when you restart or quit finterm — "
-                                         "a note here says when it is ready.\n"
-                                         "Change it later in About › Check for updates automatically."));
+    question_->setToolTip(QStringLiteral("Checks github.com once a day (sends only the version and platform). "
+                                         "A new version downloads in the background and installs when you "
+                                         "restart or quit.\nChange it in About › Auto update."));
     primary_ = new QPushButton;
     primary_->setObjectName("sbUpdatePrimary");
     secondary_ = new QPushButton(QStringLiteral("NO THANKS"));
@@ -127,9 +125,8 @@ void UpdateIndicator::refresh() {
         primary_->setText(QStringLiteral("TURN ON"));
         primary_->setToolTip(question_->toolTip());
         primary_->show();
-        secondary_->setToolTip(QStringLiteral("Don't check automatically (not asked again). Help › Check for "
-                                              "Updates still works; About › Check for updates automatically "
-                                              "turns it on."));
+        secondary_->setToolTip(QStringLiteral("Off, and not asked again. Help › Check for Updates still works; "
+                                              "About › Auto update turns it on."));
         secondary_->show();
         show();
         return;

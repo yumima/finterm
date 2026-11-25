@@ -11,7 +11,7 @@ namespace finterm::ui {
 ///    install prompt when clicked (a check never opens a dialog by itself);
 ///    then "DOWNLOADING vX…" and "vX INSTALLER STARTED" as it proceeds.
 ///  - automatic checks were never decided: a one-time question,
-///    "CHECK FOR UPDATES DAILY?  TURN ON · NO THANKS". Either answer is stored
+///    "AUTO UPDATE?  TURN ON · NO THANKS". Either answer is stored
 ///    and the question does not come back. About › Check for updates
 ///    automatically changes it later.
 ///  - otherwise nothing.

@@ -158,11 +158,10 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
 
         // The automatic daily check — off until the user turns it on (here,
         // or the status bar's one-time question). Dev builds never check.
-        auto* auto_box = new QCheckBox(QStringLiteral("Check for updates automatically (daily)"));
+        auto* auto_box = new QCheckBox(QStringLiteral("Auto update"));
         auto_box->setStyleSheet(MUTED());
-        auto_box->setToolTip(QStringLiteral("Once a day, fetch finterm's update list from github.com (only the "
-                                            "version and platform are sent). A new version shows as a note in "
-                                            "the status bar; it downloads in the background and installs when you restart or quit."));
+        auto_box->setToolTip(QStringLiteral("Checks github.com once a day (sends only the version and platform). A new "
+                                            "version downloads in the background and installs when you restart or quit."));
         auto sync_auto_box = [auto_box]() {
             auto& svc = services::UpdateService::instance();
             const QSignalBlocker block(auto_box);
