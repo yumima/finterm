@@ -903,7 +903,7 @@ QWidget* WhatsOnPanel::make_brief_row() {
     auto* kind = new QLabel(QStringLiteral("BRIEF"));
     kind->setStyleSheet(QStringLiteral("color:%1; font-weight:700;").arg(ui::colors::AMBER()));
     h->addWidget(kind);
-    auto* title = new QLabel(QStringLiteral("Weekly brief — insider buying →"));
+    auto* title = new QLabel(QStringLiteral("Weekly brief →"));
     title->setWordWrap(true);
     h->addWidget(title, 1);
     row->setToolTip(QStringLiteral("Opens the weekly brief's workspace beside this list (the WEEKLY BRIEF tab "
