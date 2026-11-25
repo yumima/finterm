@@ -1,8 +1,9 @@
 title: finterm
-tagline: Open-source desktop financial research terminal
+tagline: Comprehensive financial research terminal
 description: >-
-  Open-source desktop financial research terminal for Linux, Windows and macOS:
-  equity research, SEC filings, futures, IPO pipeline, portfolio. Publishes a
+  Comprehensive, Bloomberg-style financial research terminal that runs on your own
+  computer: equity research, SEC filings, futures, IPO pipeline, portfolio. Free and
+  open source, for Linux, Windows and macOS. Publishes a
   one-page weekly brief: markets, economy, insider and fund moves, screen leaders.
 url: https://yumima.github.io
 baseurl: /finterm

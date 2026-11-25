@@ -1,13 +1,14 @@
 ---
 title: finterm
-description: Open-source desktop financial research terminal for Linux, Windows and macOS. Equity research, SEC ownership filings, futures, IPO pipeline, portfolio, local or cloud AI. Local-first, no telemetry.
+description: Comprehensive, Bloomberg-style financial research terminal that runs on your own computer. Markets, company research, SEC ownership filings, futures, IPOs, news, screeners, portfolio, optional AI. Free and open source, for Linux, Windows and macOS.
 permalink: /
 ---
 <section class="hero">
-  <h1>Desktop financial research terminal</h1>
+  <h1>Comprehensive financial research terminal</h1>
   <p class="lede">
-    Native C++20/Qt 6 application for Linux, Windows and macOS with a Python data layer. Local-first: no
-    cloud account, no backend, no telemetry. Free, AGPL-3.0.
+    A Bloomberg-style terminal for markets, company research, SEC filings, futures, IPOs, news and portfolio,
+    with optional AI. It runs on your own computer and stores your portfolio, keys and settings there: no
+    online account, no telemetry. Free and open source, for Linux, Windows and macOS.
   </p>
   <p>
     <a class="button" href="{{ site.download_url }}">Download</a>

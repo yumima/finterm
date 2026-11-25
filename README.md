@@ -1,11 +1,12 @@
 # finterm
 
-A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
+A comprehensive, Bloomberg-style financial research terminal for markets, company research, SEC filings, futures, IPOs, news and portfolio, with optional AI. It runs on your own computer and stores your portfolio, keys and settings there: no online account, no telemetry. Free and open source, for Linux, Windows and macOS.
 
 ## Today's commits (2026-11-25)
 
 Latest first.
 
+- [`6d441b4cb`](https://github.com/yumima/finterm/commit/6d441b4cb) site: the counter is clones and downloads
 - [`6eb95c04e`](https://github.com/yumima/finterm/commit/6eb95c04e) Weekly brief: track record, earnings ahead, holdings, card, alerts
 - [`821a3c92d`](https://github.com/yumima/finterm/commit/821a3c92d) Weekly brief: ACCOUNTS is its name
 - [`63e4434dd`](https://github.com/yumima/finterm/commit/63e4434dd) Weekly brief: the page gets the room
