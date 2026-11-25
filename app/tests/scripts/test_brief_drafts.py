@@ -9,6 +9,7 @@ touching the real site or the real worktree. No network.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -272,6 +273,146 @@ def test_not_connected_is_skipped_and_old_x_error_kept():
 def test_post_now_needs_a_published_brief():
     make_weekly("weekly-not-yet")
     assert "Publish the brief first" in bd.post_now("weekly-not-yet", ["x"]).get("error", "")
+
+
+class FakeNetworks:
+    """Posting without a network: what was sent, and with which arguments."""
+
+    def __init__(self):
+        self.sent = []
+
+    def post(self, name):
+        def go(text, creds, issue, **kw):
+            self.sent.append((name, text, kw))
+            return f"{name}-{len(self.sent)}"
+        return go
+
+    def __enter__(self):
+        import social_post as sp
+        self.saved = (sp.NETWORKS, sp.credentials, dict(sp._configured), bd.page_live)
+        sp.NETWORKS = [("x", (), self.post("x")), ("bluesky", (), self.post("bluesky"))]
+        sp.credentials = lambda keys: {}
+        sp._configured.update({"x": True, "bluesky": True})
+        self.live = True
+        bd.page_live = lambda m: self.live
+        return self
+
+    def __exit__(self, *a):
+        import social_post as sp
+        sp.NETWORKS, sp.credentials, conf, bd.page_live = self.saved
+        sp._configured.clear()
+        sp._configured.update(conf)
+
+
+def test_post_on_demand_publishes_first_and_again_only_when_asked():
+    origin()
+    with FakeNetworks() as net:
+        m = make_weekly("weekly-demand")
+        m["key"] = "2026-W77"
+        bd.store(m)
+        assert "Tick a platform" in bd.post_now("weekly-demand", [], publish_first=True)["error"]
+        net.live = False  # published, the page not up yet: posted by the next tick
+        m["post_to"] = ["x", "bluesky"]  # an earlier choice: only what was asked for goes out
+        bd.store(m)
+        r = bd.post_now("weekly-demand", ["x"], publish_first=True)
+        assert r["state"] == "published" and r["waiting"] and "as soon as it is" in r["error"] and not net.sent, r
+        assert bd.load("weekly-demand")["post_to"] == ["x"]
+        net.live = True
+        bd.tick(log=lambda *_: None)
+        assert [s[0] for s in net.sent] == ["x"], net.sent
+        bd.tick(log=lambda *_: None)
+        bd.post_now("weekly-demand", ["x"])  # already there, not asked for again
+        assert len(net.sent) == 1, net.sent
+        # a repeat is never left for a tick: not live, nothing is kept
+        net.live = False
+        r = bd.post_now("weekly-demand", ["x"], again=True)
+        assert r["waiting"] and "post again once it is" in r["error"], r
+        net.live = True
+        bd.tick(log=lambda *_: None)
+        assert len(net.sent) == 1, net.sent
+        # ...nor by a tick that runs while it is being sent
+        real = net.post("x")
+        import social_post as sp
+
+        def slow(text, creds, issue, **kw):
+            # what a tick would send meanwhile: never the repeat
+            assert "x" not in bd.pending_posts(bd.load("weekly-demand"))
+            return real(text, creds, issue, **kw)
+        sp.NETWORKS[0] = ("x", (), slow)
+        r = bd.post_now("weekly-demand", ["x", "bluesky"], again=True)
+        sp.NETWORKS[0] = ("x", (), real)
+        # (Bluesky had not had it: an ordinary post, whoever sends it first)
+        assert sorted(s[0] for s in net.sent) == ["bluesky", "x", "x"], net.sent
+        again = [s for s in net.sent if s[0] == "x"][1]
+        assert again[2] == {"trust_duplicate": False}, net.sent  # X's duplicate refusal is then a failure
+        assert r["posted"]["x"] != "x-1", r
+        bd.tick(log=lambda *_: None)
+        assert len(net.sent) == 3
+        bd.post_now("weekly-demand", ["bluesky"], again=True)
+        assert net.sent[3][2] == {"again": True}, net.sent
+        sp._configured["bluesky"] = False
+        assert "Not connected: bluesky" in bd.post_now("weekly-demand", ["bluesky"], again=True)["error"]
+        assert bd.post_now("weekly-demand", ["x", "bluesky"])["off"] == ["bluesky"]
+        # an earlier failure of another platform is not this call's answer
+        sp._configured["bluesky"] = True
+        late = bd.load("weekly-demand")
+        late["post_errors"] = {"x": "failed: 403"}
+        bd.store(late)
+        assert bd.post_now("weekly-demand", ["bluesky"], again=True)["post_errors"] == {}
+        # a new edition: published, its page waited for, then posted again
+        late = bd.load("weekly-demand")
+        late.update({"state": "ready"})
+        bd.store(late)
+        sleep, seen = bd.time.sleep, []
+        net.live = False
+        bd.time.sleep = lambda s: (seen.append(s), setattr(net, "live", True))
+        before = len(net.sent)
+        r = bd.post_now("weekly-demand", ["x"], publish_first=True, again=True)
+        bd.time.sleep = sleep
+        assert seen == [10] and [s[0] for s in net.sent[before:]] == ["x"], (seen, r)
+        net.sent = net.sent[:4]
+        sp._configured["bluesky"] = True
+        # incomplete: refused until confirmed, and nothing is posted
+        m = make_weekly("weekly-demand2", complete=False)
+        assert bd.post_now("weekly-demand2", ["x"], publish_first=True).get("needs_confirm")
+        left = bd.load("weekly-demand2")
+        assert left["state"] == "ready" and len(net.sent) == 4 and bd.post_to(left) == [], left  # nothing left armed
+
+
+def test_a_published_brief_can_be_generated_again():
+    origin()
+    did = bd.weekly_id()
+    m = make_weekly(did)
+    m.update({"state": "published", "published_at": bd._iso(bd._now())})
+    bd.store(m)
+    r = bd.start_weekly_build()
+    assert r.get("needs_new_edition") and not r.get("needs_force") and "new edition" in r["error"], r
+    assert bd.load(did)["state"] == "published"
+    # the build fails: the published brief stands
+    started, popen, real = [], subprocess.Popen, bd.repo_root
+    bd.subprocess.Popen = lambda *a, **k: started.append(a)
+    bd.repo_root = lambda: Path(TMP) / "no-such-repo"
+    try:
+        bd.start_weekly_build(force=True)
+        assert "--again" in started[0][0] and bd.load(did)["state"] == "building"
+        # killed: it reads as the published brief, and a second try still knows it
+        dead = bd.load(did)
+        dead["pid"] = 2 ** 22 + 1
+        bd.store(dead)
+        assert bd.get(did)["state"] == "published", bd.get(did)
+        bd.start_weekly_build(force=True)
+        assert "--again" in started[1][0]
+        bd.subprocess.Popen = popen
+        assert bd.build_weekly(again=True) == 1
+    finally:
+        bd.subprocess.Popen, bd.repo_root = popen, real
+    after = bd.load(did)
+    assert after["state"] == "published" and "the published one stands" in after["error"], after
+    # a new edition waiting to be published is not deleted under the live page
+    after.update({"state": "ready"})
+    bd.store(after)
+    assert "new edition" in bd.delete(did)["error"]
+    shutil.rmtree(bd._dir(did))
 
 
 # ── theme briefs ─────────────────────────────────────────────────────────────

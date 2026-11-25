@@ -6,15 +6,16 @@
 // next, to read and to share. This panel:
 //   THIS WEEK    the current issue — built / being built / published — and
 //                where it has been posted, with its link
-//   ACTIONS      Generate now (a fresh snapshot, on demand) · Review &
-//                publish (the full workspace opens beside the drawer: read,
-//                correct, schedule, publish) · Post now (a published brief,
-//                to the platforms ticked below that it has not gone to yet)
+//   ACTIONS      Generate (a fresh snapshot, also of a published brief) ·
+//                Review (the workspace beside the drawer: read, correct,
+//                schedule, publish) · Post (a draft is published first; to
+//                the platforms ticked below, again only when asked). Always
+//                on: a click does it, or says what it needs.
 //   TOPICS       which sections it carries (at a glance, markets and economy, insider
 //                buying, fund moves, screen leaders, your private IPO calendar)
 //   DETAIL       how many rows each shows (full / standard / short)
 //   PLATFORMS    where it is posted once its page is live — each platform
-//                once, ever; a platform not connected says so (connect it in
+//                once, unless Post is asked for again; a platform not connected says so (connect it in
 //                the workspace's CHANNELS)
 //   AUTOMATION   Sunday's run builds a draft for your review, or publishes
 //                and posts on its own
@@ -52,14 +53,19 @@ class WeeklyBriefPanel : public QWidget {
     void load_settings();
     void save_settings();
     void render();
-    void generate();
-    void post_now();
+    void generate(bool force);
+    void post();
+    /// Begin a call to the backend, or say that one is still running.
+    bool start(const QString& what);
+    void say(const QString& text, const QString& colour = {});
+    bool ask(const QString& title, const QString& question);
     QJsonObject current_weekly() const;
 
     QJsonObject settings_;
     QJsonObject drafts_;
     QJsonObject channels_;
     bool busy_ = false;
+    bool building_ = false; ///< a build was seen running: its end is said
     bool loading_ = false; ///< settings being applied to the controls: no save
 
     QLabel* issue_ = nullptr;
@@ -72,7 +78,6 @@ class WeeklyBriefPanel : public QWidget {
     QMap<QString, QCheckBox*> platforms_;
     QMap<QString, QLabel*> platform_notes_;
     QButtonGroup* auto_ = nullptr;
-    QString generate_tip_;
     bool refresh_inflight_ = false;
     bool settings_loaded_ = false;
     QTimer* poll_ = nullptr;

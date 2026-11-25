@@ -236,7 +236,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     });
     v->addWidget(x_edit_);
     // Where it goes once its page is live — each platform once, ever. Before
-    // publishing: saved on the draft. After: Post now sends the ticked ones
+    // publishing: saved on the draft. After: Post sends the ticked ones
     // it has not gone to yet. A platform already posted shows ✓.
     auto* prow = new QHBoxLayout;
     prow->setSpacing(10);
@@ -252,7 +252,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
         post_to_.insert(k, c);
         prow->addWidget(c);
     }
-    post_now_btn_ = new QPushButton(QStringLiteral("Post now"));
+    post_now_btn_ = new QPushButton(QStringLiteral("Post"));
     post_now_btn_->setObjectName(QStringLiteral("socialBtn"));
     connect(post_now_btn_, &QPushButton::clicked, this, &BriefsPanel::post_now);
     prow->addWidget(post_now_btn_);
@@ -541,10 +541,10 @@ void BriefsPanel::render_controls() {
     revert_btn_->setEnabled(ready && !busy_ &&
                             (draft_.value("edited").toBool() || d));
     rebuild_btn_->setVisible(weekly);
-    rebuild_btn_->setEnabled(weekly && st != "building" && st != "published" && !busy_);
+    rebuild_btn_->setEnabled(weekly && st != "building" && !busy_);
     delete_btn_->setEnabled(have && st != "published" && st != "building" && !busy_);
     // Posting: chosen before publishing (saved on the draft), sent after it
-    // (Post now). Each control says why when it can't be used.
+    // (Post). Each control says why when it can't be used.
     const bool published_now = have && st == "published";
     const QJsonObject posted = draft_.value("posted").toObject();
     QStringList pending;
@@ -568,10 +568,10 @@ void BriefsPanel::render_controls() {
     else if (st == "failed")
         why = QStringLiteral("The build failed — rebuild it before choosing where it goes.");
     else if (published_now && pending.isEmpty())
-        why = posted.isEmpty() ? QStringLiteral("Published. Tick a platform, then Post now.")
+        why = posted.isEmpty() ? QStringLiteral("Published. Tick a platform, then Post.")
                                : QStringLiteral("Published and posted where ticked (✓).");
     else if (published_now)
-        why = QStringLiteral("Published — Post now sends it to %1 (its page is live).").arg(pending.join(", "));
+        why = QStringLiteral("Published — Post sends it to %1.").arg(pending.join(", "));
     else if (ready)
         why = QStringLiteral("Posted to the ticked platforms as soon as the page is live after publishing. A "
                              "platform not connected (CHANNELS) is skipped.");
@@ -600,11 +600,8 @@ void BriefsPanel::generate_weekly(bool force) {
     call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
                  [this](const QJsonObject& o, const QString& err, Outcome) {
                      busy_ = false;
-                     if (o.value("needs_force").toBool()) {
-                         if (confirm(this, QStringLiteral("Rebuild this week's brief"),
-                                     QStringLiteral("This week's draft has corrections. Rebuilding replaces them "
-                                                    "with freshly generated text."),
-                                     QStringLiteral("Rebuild")))
+                     if (o.value("needs_force").toBool() || o.value("needs_new_edition").toBool()) {
+                         if (confirm(this, QStringLiteral("Generate"), err.toHtmlEscaped(), QStringLiteral("Generate")))
                              generate_weekly(true);
                          else
                              set_status({});
@@ -706,7 +703,7 @@ QStringList BriefsPanel::ticked_platforms() const {
 
 void BriefsPanel::set_post_to() {
     if (draft_.value("state").toString() != QLatin1String("ready")) {
-        render_controls(); // after publishing the ticks only choose what Post now sends
+        render_controls(); // after publishing the ticks only choose what Post sends
         return;
     }
     call_backend(this, QStringLiteral("draft_save"),
@@ -739,10 +736,15 @@ void BriefsPanel::post_now() {
                  kFactsMs, [this](const QJsonObject& o, const QString& err, Outcome) {
                      busy_ = false;
                      const QJsonObject errs = o.value("post_errors").toObject();
+                     QStringList off;
+                     for (const auto& n : o.value("off").toArray())
+                         off << n.toString();
                      set_status(!err.isEmpty() ? err.toHtmlEscaped()
-                                : errs.isEmpty() ? QStringLiteral("Posted.")
-                                                 : QStringLiteral("Some platforms were not posted — see below."),
-                                !err.isEmpty() || !errs.isEmpty());
+                                : !errs.isEmpty() ? QStringLiteral("Some platforms were not posted — see below.")
+                                : off.isEmpty()   ? QStringLiteral("Posted.")
+                                                : QStringLiteral("Posted, except %1: not connected.")
+                                                      .arg(off.join(QStringLiteral(", "))),
+                                !err.isEmpty() || !errs.isEmpty() || !off.isEmpty());
                      draft_ = {};
                      load_list();
                      emit published();
@@ -802,7 +804,7 @@ void BriefsPanel::confirm_publish() {
     if (has_private)
         html += QStringLiteral("<br>Private sections (🔒) are removed first.");
     html += ticked_platforms().isEmpty()
-                ? QStringLiteral("<br>Nothing is posted anywhere (tick a platform for that — or Post now later).")
+                ? QStringLiteral("<br>Nothing is posted anywhere (tick a platform for that, or Post later).")
                 : QStringLiteral("<br>Then it is posted to %1 as soon as the page is live.")
                       .arg(ticked_platforms().join(QStringLiteral(", ")));
     if (incomplete)

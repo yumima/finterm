@@ -10,7 +10,7 @@
 //                 from anything published.
 //   posting       the X text (edited here; Bluesky / Mastodon use the
 //                 issue's own text for their limits), the platforms ticked
-//                 for it, and — once published — Post now for any not yet
+//                 for it, and — once published — Post for any not yet
 //                 posted. Every disabled control says why.
 //   publishing    Schedule (the tick timer, or this screen while open) or
 //                 Publish now — both confirm, neither runs on unsaved edits

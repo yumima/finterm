@@ -141,7 +141,7 @@ def _link_facets(text):
 BSKY_XRPC = "https://bsky.social/xrpc"
 
 
-def bsky_post(text, env, issue=None, **_):
+def bsky_post(text, env, issue=None, again=False, **_):
     base = BSKY_XRPC
     sess = _req("POST", f"{base}/com.atproto.server.createSession",
                 json_body={"identifier": env["BSKY_HANDLE"], "password": env["BSKY_APP_PASSWORD"]})
@@ -150,7 +150,7 @@ def bsky_post(text, env, issue=None, **_):
     # already on the account, the record of it was lost — don't post again.
     facets = _link_facets(text)
     url = next((f["features"][0]["uri"] for f in facets), None)
-    if url:
+    if url and not again:
         feed = _req("GET", f"{base}/app.bsky.feed.getAuthorFeed?" +
                     urllib.parse.urlencode({"actor": sess["did"], "limit": 30}), headers=auth)
         for item in feed.get("feed", []):
@@ -168,12 +168,12 @@ def bsky_post(text, env, issue=None, **_):
 
 
 # ---------------------------------------------------------------- Mastodon
-def mastodon_post(text, env, issue, **_):
+def mastodon_post(text, env, issue, again=False, **_):
     base = env["MASTODON_BASE_URL"].rstrip("/")
     out = _req("POST", f"{base}/api/v1/statuses",
                headers={"Authorization": f"Bearer {env['MASTODON_TOKEN']}",
                         # Server-side dedupe too, if a retry lands after a lost response.
-                        "Idempotency-Key": f"finterm-brief-{issue}"},
+                        "Idempotency-Key": f"finterm-brief-{issue}" + (f"-{secrets.token_hex(8)}" if again else "")},
                data={"status": text, "visibility": "public", "language": "en"})
     return out.get("url") or out.get("id")
 
@@ -575,24 +575,26 @@ def posted(issue, state_path=None):
     return dict(load_state(state_path or default_state_path()).get(issue, {}))
 
 
-def announce(issue, texts, *, only=None, state_path=None, dry_run=False, log=print, generated=True):
+def announce(issue, texts, *, only=None, state_path=None, dry_run=False, log=print, generated=True, again=()):
     """Post @texts ({network: text}) for @issue to each configured network
     (or just those in @only). @generated: the texts are the issue's own
-    (so X's duplicate refusal means "already posted"). Returns
+    (so X's duplicate refusal means "already posted"). @again: networks the
+    owner asked to post to once more (the record then holds the new post;
+    there a duplicate refusal is a failure). Returns
     (results {network: status}, failed)."""
     state_path = state_path or default_state_path()
     with _Locked(state_path):
-        return _announce_locked(issue, texts, only, state_path, dry_run, log, generated)
+        return _announce_locked(issue, texts, only, state_path, dry_run, log, generated, again)
 
 
-def _announce_locked(issue, texts, only, state_path, dry_run, log, generated):
+def _announce_locked(issue, texts, only, state_path, dry_run, log, generated, again=()):
     state = load_state(state_path)
     done = state.setdefault(issue, {})
     results, failed, configured = {}, False, 0
     for name, keys, post in NETWORKS:
         if only and name not in only:
             continue
-        if name in done:
+        if name in done and name not in again:
             configured += 1
             results[name] = f"already posted ({done[name]})"
             log(f"{name}: already posted for {issue} ({done[name]})")
@@ -623,7 +625,9 @@ def _announce_locked(issue, texts, only, state_path, dry_run, log, generated):
             log(f"--- {name}{who} (dry run) ---\n{text}\n")
             continue
         try:
-            ref = post(text, creds, issue, **({"trust_duplicate": generated} if name == "x" else {}))
+            once_more = name in again
+            ref = post(text, creds, issue, **({"trust_duplicate": generated and not once_more} if name == "x"
+                                              else {"again": True} if once_more else {}))
             done[name] = ref
             results[name] = f"posted {ref}"
             log(f"{name}: posted {ref}")

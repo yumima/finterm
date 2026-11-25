@@ -83,17 +83,15 @@ WeeklyBriefPanel::WeeklyBriefPanel(QWidget* parent) : QWidget(parent) {
     auto* actions = new QHBoxLayout;
     actions->setSpacing(4);
     generate_btn_ = new QPushButton(QStringLiteral("Generate"));
-    generate_btn_->setToolTip(QStringLiteral("Build this week's brief now from the latest data — the week just "
-                                             "ended and the one ahead (takes a few minutes). A draft you corrected "
-                                             "asks before it is replaced."));
-    connect(generate_btn_, &QPushButton::clicked, this, &WeeklyBriefPanel::generate);
-    review_btn_ = new QPushButton(QStringLiteral("Review ▸"));
-    review_btn_->setToolTip(QStringLiteral("Read and correct the brief, schedule it or publish it now — beside this "
-                                           "drawer"));
+    generate_btn_->setToolTip(QStringLiteral("Build this week's brief from the latest data (a few minutes)"));
+    connect(generate_btn_, &QPushButton::clicked, this, [this]() { generate(false); });
+    review_btn_ = new QPushButton(QStringLiteral("Review"));
+    review_btn_->setToolTip(QStringLiteral("Read, correct, schedule or publish the brief"));
     connect(review_btn_, &QPushButton::clicked, this,
             [this]() { emit open_beside(QStringLiteral("social"), {{QStringLiteral("tab"), QStringLiteral("briefs")}}); });
-    post_btn_ = new QPushButton(QStringLiteral("Post now"));
-    connect(post_btn_, &QPushButton::clicked, this, &WeeklyBriefPanel::post_now);
+    post_btn_ = new QPushButton(QStringLiteral("Post"));
+    post_btn_->setToolTip(QStringLiteral("Post to the platforms ticked below; a draft is published first"));
+    connect(post_btn_, &QPushButton::clicked, this, &WeeklyBriefPanel::post);
     actions->addWidget(generate_btn_);
     actions->addWidget(review_btn_);
     actions->addWidget(post_btn_);
@@ -157,9 +155,7 @@ WeeklyBriefPanel::WeeklyBriefPanel(QWidget* parent) : QWidget(parent) {
                                      "do it"));
     v->addWidget(draft);
     v->addWidget(publish);
-    auto* hint = new QLabel(QStringLiteral("Topics and detail apply to the next build — Generate now to rebuild this "
-                                           "week's draft. Publishing puts the page on the website; nothing is posted "
-                                           "anywhere before that."));
+    auto* hint = new QLabel(QStringLiteral("Topics and detail apply to the next build."));
     hint->setWordWrap(true);
     hint->setStyleSheet(QStringLiteral("color:%1;font-size:11px;padding-top:6px;").arg(ui::colors::TEXT_TERTIARY()));
     v->addWidget(hint);
@@ -281,7 +277,7 @@ void WeeklyBriefPanel::render() {
     const QString st = d.value("state").toString();
     QStringList lines;
     if (d.isEmpty()) {
-        lines << QStringLiteral("No brief yet this week — <b>Generate now</b>, or Sunday's run builds one.");
+        lines << QStringLiteral("No brief yet this week.");
     } else {
         const QString key = d.value("key").toString(d.value("title").toString());
         QString state = st == QLatin1String("building")    ? QStringLiteral("being built…")
@@ -296,7 +292,7 @@ void WeeklyBriefPanel::render() {
                                                                      .toString(QStringLiteral("ddd d MMM HH:mm")))
                             : QStringLiteral("draft ready for review");
         lines << QStringLiteral("<b>%1</b> · %2").arg(key.toHtmlEscaped(), state);
-        if (st == QLatin1String("published") && !d.value("url").toString().isEmpty())
+        if (!d.value("published_at").toString().isEmpty() && !d.value("url").toString().isEmpty())
             lines << QStringLiteral("<a href='%1' style='color:%2'>Open the page ↗</a>")
                          .arg(d.value("url").toString().toHtmlEscaped(), ui::colors::CYAN());
         const QJsonObject posted = d.value("posted").toObject();
@@ -322,24 +318,13 @@ void WeeklyBriefPanel::render() {
     }
     issue_->setText(lines.join(QStringLiteral("<br>")));
 
-    // Actions, each saying why when it cannot run.
-    if (generate_tip_.isEmpty())
-        generate_tip_ = generate_btn_->toolTip();
-    generate_btn_->setEnabled(!busy_ && st != QLatin1String("building") && st != QLatin1String("published"));
-    generate_btn_->setToolTip(st == QLatin1String("published")
-                                  ? QStringLiteral("This week's brief is already published; next week's builds on Sunday")
-                                  : generate_tip_);
-    review_btn_->setEnabled(!d.isEmpty());
-    // Post now: a published brief, to the ticked platforms it has not gone to.
-    QStringList pending;
-    for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
-        if (it.value()->isChecked() && !d.value("posted").toObject().contains(it.key()))
-            pending << it.key();
-    post_btn_->setEnabled(!busy_ && st == QLatin1String("published") && !pending.isEmpty());
-    post_btn_->setToolTip(st != QLatin1String("published")
-                              ? QStringLiteral("Publish the brief first — a post links to its page")
-                          : pending.isEmpty() ? QStringLiteral("Already posted to every platform ticked below")
-                                              : QStringLiteral("Post now to: %1").arg(pending.join(QStringLiteral(", "))));
+    // The actions are always on: a click does it, or says what it needs.
+    if (st == QLatin1String("building")) {
+        building_ = true;
+    } else if (building_) { // seen running, and now it is not
+        building_ = false;
+        say(st == QLatin1String("ready") ? QStringLiteral("Built.") : QString());
+    }
 }
 
 void WeeklyBriefPanel::save_settings() {
@@ -374,56 +359,92 @@ void WeeklyBriefPanel::save_settings() {
                  });
 }
 
-void WeeklyBriefPanel::generate() {
-    const QJsonObject d = current_weekly();
-    bool force = false;
-    if (d.value("edited").toBool()) {
-        if (QMessageBox::question(this, QStringLiteral("Rebuild the brief"),
-                                  QStringLiteral("This week's draft has your corrections. Rebuilding replaces them "
-                                                 "with a fresh snapshot. Rebuild?")) != QMessageBox::Yes)
-            return;
-        force = true;
+bool WeeklyBriefPanel::start(const QString& what) {
+    if (busy_ || current_weekly().value("state").toString() == QLatin1String("building")) {
+        say(QStringLiteral("Still working — one thing at a time."));
+        return false;
     }
     busy_ = true;
-    status_->setText(QStringLiteral("Building this week's brief — a few minutes…"));
-    render();
+    say(what);
+    return true;
+}
+
+void WeeklyBriefPanel::say(const QString& text, const QString& colour) {
+    status_->setText(colour.isEmpty() ? text.toHtmlEscaped()
+                                      : QStringLiteral("<span style='color:%1'>%2</span>").arg(colour, text.toHtmlEscaped()));
+}
+
+bool WeeklyBriefPanel::ask(const QString& title, const QString& question) {
+    return QMessageBox::question(this, title, question) == QMessageBox::Yes;
+}
+
+void WeeklyBriefPanel::generate(bool force) {
+    if (!start(QStringLiteral("Building — a few minutes.")))
+        return;
     QPointer<WeeklyBriefPanel> self = this;
     call_backend(this, QStringLiteral("draft_build_weekly"), {{QStringLiteral("force"), force}}, kQuickMs,
-                 [self](const QJsonObject&, const QString& err, Outcome) {
+                 [self](const QJsonObject& o, const QString& err, Outcome) {
                      if (!self)
                          return;
                      self->busy_ = false;
-                     self->status_->setText(err.isEmpty() ? QStringLiteral("Building — this panel updates when it is "
-                                                                           "ready.")
-                                                          : QStringLiteral("<span style='color:%1'>%2</span>")
-                                                                .arg(ui::colors::NEGATIVE(), err.toHtmlEscaped()));
+                     // Corrections, or a published brief: the backend says which.
+                     if (o.value("needs_force").toBool() || o.value("needs_new_edition").toBool()) {
+                         self->say({});
+                         if (self->ask(QStringLiteral("Generate"), err) && self)
+                             self->generate(true);
+                         return;
+                     }
+                     if (!err.isEmpty())
+                         self->say(err, ui::colors::NEGATIVE());
                      self->refresh();
                  });
 }
 
-void WeeklyBriefPanel::post_now() {
+void WeeklyBriefPanel::post() {
     const QJsonObject d = current_weekly();
-    QJsonArray nets;
-    QStringList names;
-    for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
-        if (it.value()->isChecked() && !d.value("posted").toObject().contains(it.key())) {
-            nets.append(it.key());
-            names << it.value()->text();
+    const QString st = d.value("state").toString();
+    const bool published = st == QLatin1String("published");
+    if (!published && st != QLatin1String("ready")) {
+        say(st == QLatin1String("building") ? QStringLiteral("Still building.") : QStringLiteral("Generate it first."));
+        return;
+    }
+    QJsonArray fresh, ticked;
+    QStringList fresh_names, names;
+    for (auto it = platforms_.begin(); it != platforms_.end(); ++it) {
+        if (!it.value()->isChecked())
+            continue;
+        ticked.append(it.key());
+        names << it.value()->text();
+        if (!d.value("posted").toObject().contains(it.key())) {
+            fresh.append(it.key());
+            fresh_names << it.value()->text();
         }
-    if (nets.isEmpty())
+    }
+    if (ticked.isEmpty()) {
+        say(QStringLiteral("Tick a platform below."));
         return;
-    if (QMessageBox::question(this, QStringLiteral("Post the brief"),
-                              QStringLiteral("Post %1 to %2 now? Each platform is posted once.")
-                                  .arg(d.value("key").toString(), names.join(QStringLiteral(", ")))) !=
-        QMessageBox::Yes)
-        return;
-    busy_ = true;
-    status_->setText(QStringLiteral("Posting…"));
-    render();
+    }
+    const bool again = fresh.isEmpty(); // every ticked platform has it: asked for once more
+    const bool incomplete = !published && !d.value("complete").toBool(true);
+    const QString key = d.value("key").toString();
+    const QString where = (again ? names : fresh_names).join(QStringLiteral(", "));
+    QString q = published ? QStringLiteral("Post %1 to %2?").arg(key, where)
+                          : QStringLiteral("Publish %1 and post it to %2?").arg(key, where);
+    if (again)
+        q = published ? QStringLiteral("%1 is already on %2. Post again?").arg(key, where)
+                      : QStringLiteral("Publish the new edition of %1 and post it to %2 again? (Waits for the page.)").arg(key, where);
+    if (incomplete)
+        q += QStringLiteral("\n\nSome days of filings could not be read.");
     QPointer<WeeklyBriefPanel> self = this;
+    if (!ask(QStringLiteral("Post"), q) || !self || !start(published ? QStringLiteral("Posting…") : QStringLiteral("Publishing…")))
+        return;
     call_backend(this, QStringLiteral("draft_post_now"),
-                 {{QStringLiteral("id"), d.value("id").toString()}, {QStringLiteral("networks"), nets}}, kPostMs,
-                 [self](const QJsonObject& o, const QString& err, Outcome) {
+                 {{QStringLiteral("id"), d.value("id").toString()},
+                  {QStringLiteral("networks"), again ? ticked : fresh},
+                  {QStringLiteral("publish"), !published},
+                  {QStringLiteral("again"), again},
+                  {QStringLiteral("accept_incomplete"), incomplete}},
+                 published ? kPostMs : kTickMs, [self](const QJsonObject& o, const QString& err, Outcome) {
                      if (!self)
                          return;
                      self->busy_ = false;
@@ -431,12 +452,16 @@ void WeeklyBriefPanel::post_now() {
                      QStringList bad;
                      for (auto it = errs.begin(); it != errs.end(); ++it)
                          bad << QStringLiteral("%1: %2").arg(it.key(), it.value().toString());
-                     self->status_->setText(
-                         !err.isEmpty() ? QStringLiteral("<span style='color:%1'>%2</span>")
-                                              .arg(ui::colors::WARNING(), err.toHtmlEscaped())
-                         : bad.isEmpty() ? QStringLiteral("Posted.")
-                                         : QStringLiteral("<span style='color:%1'>Not posted — %2</span>")
-                                               .arg(ui::colors::NEGATIVE(), bad.join(QStringLiteral("; ")).toHtmlEscaped()));
+                     for (const auto& v : o.value("off").toArray())
+                         bad << QStringLiteral("%1: not connected").arg(v.toString());
+                     if (o.value("waiting").toBool())
+                         self->say(err); // published; the post follows the page
+                     else if (!err.isEmpty())
+                         self->say(err, ui::colors::WARNING());
+                     else if (bad.isEmpty())
+                         self->say(QStringLiteral("Posted."));
+                     else
+                         self->say(QStringLiteral("Not posted to ") + bad.join(QStringLiteral("; ")), ui::colors::NEGATIVE());
                      self->refresh();
                  });
 }

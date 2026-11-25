@@ -264,9 +264,13 @@ def _dir(did):
 
 def load(did):
     try:
-        return json.loads((_dir(did) / "meta.json").read_text(encoding="utf-8"))
+        m = json.loads((_dir(did) / "meta.json").read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         return None
+    # A new edition whose build died: its files are still the published ones.
+    if m.get("state") == "building" and m.get("prev_published") and not _alive(m.get("pid")):
+        m.update({"state": "published", "pid": None})
+    return m
 
 
 def store(m):
@@ -296,7 +300,7 @@ def summary(m):
             "schedule_at": m.get("schedule_at", ""), "accept_incomplete": bool(m.get("accept_incomplete")),
             "post_x": "x" in post_to(m), "x_ref": m.get("x_ref", ""), "x_error": m.get("x_error", ""),
             "post_to": post_to(m), "post_errors": post_errors(m),
-            # Ticked but not connected: skipped, never retried (connect it, then Post now).
+            # Ticked but not connected: skipped, never retried (connect it, then Post).
             "skipped": _not_connected(post_to(m)),
             # What is posted where — the shared record (timer, app, by hand).
             "posted": _posted_record(m),
@@ -367,6 +371,8 @@ def delete(did):
         return {"ok": True}
     if _effective_state(m) == "building":
         return {"error": "That draft is still being built."}
+    if m.get("published_at") and m.get("state") != "published":
+        return {"error": "A new edition of a published brief is not deleted; publish it or generate it again."}
     shutil.rmtree(_dir(did), ignore_errors=True)
     return {"ok": True}
 
@@ -439,22 +445,31 @@ def start_weekly_build(force=False):
     m = load(did)
     if m and _effective_state(m) == "building":
         return {"error": "This week's brief is already being built."}
-    if m and m.get("state") == "published":
-        return {"error": f"{m.get('key')} is already published; it can't be rebuilt."}
+    if m and m.get("state") == "published" and not force:
+        waiting = pending_posts(m)
+        return {"error": "This week's brief is published. Generate a new edition? The page changes when it is "
+                         "published again."
+                         + (f" Not posted yet to {', '.join(waiting)}: that waits for the new edition." if waiting else ""),
+                # Not needs_force: an older screen answers that with its own
+                # question, about corrections.
+                "needs_new_edition": True}
     if m and m.get("edited") and not force:
-        return {"error": "This week's draft has corrections; rebuilding replaces them.", "needs_force": True}
+        return {"error": "This week's draft has corrections; generating replaces them.", "needs_force": True}
     # "building" is stored BEFORE the child starts (under the lock, from a
     # fresh load), so the child's own result can never be overwritten by it.
     with Lock(wait=True):
         base = load(did) or {"id": did, "kind": "weekly", "created": _iso(_now())}
-        base["prev_ready"] = base.get("state") == "ready" and bool(base.get("main"))
+        if base.get("state") != "building":  # a build that died keeps what was there before it
+            base["prev_ready"] = base.get("state") == "ready" and bool(base.get("main"))
+            base["prev_published"] = base.get("state") == "published"
+        again = bool(base.get("prev_published"))
         base.update({"state": "building", "pid": os.getpid(), "error": "", "title": base.get("title") or
                      f"Weekly brief {wb.issue_key(date.today())}"})
         store(base)
     with open(log_path(), "a", encoding="utf-8") as log:
         log.write(f"\n=== {_iso(_now())} weekly build (Social screen)\n")
         log.flush()
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly"], stdout=log,
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly", *(["--again"] if again else [])], stdout=log,
                          stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
                          cwd=os.path.dirname(os.path.abspath(__file__)))
     time.sleep(0.5)  # the child records its own pid at once; this one exits
@@ -490,7 +505,7 @@ def _reset_worktree():
     _git("clean", "-fdq", "site")
 
 
-def build_weekly(if_unedited=False):
+def build_weekly(if_unedited=False, again=False):
     """Build this week's draft (blocking). The generator writes into a
     scratch folder of the draft's own — never the publishing worktree, so a
     publish can run meanwhile — and only a successful build replaces the
@@ -498,7 +513,7 @@ def build_weekly(if_unedited=False):
     did = weekly_id()
     with BuildLock(wait=True):
         m = load(did) or {"id": did, "kind": "weekly", "created": _iso(_now())}
-        if m.get("state") == "published":
+        if m.get("state") == "published" and not again:
             print(f"{did} is already published")
             return 0
         # The timer must not replace text the owner has looked at: corrected,
@@ -508,6 +523,9 @@ def build_weekly(if_unedited=False):
             return 0
         had = (m.get("state") == "ready" or (m.get("state") == "building" and m.get("prev_ready"))) \
             and bool(m.get("main"))
+        # A new edition of a published brief: if it cannot be built, the brief
+        # is the published one again.
+        was_published = again or (m.get("state") == "building" and bool(m.get("prev_published")))
         m.update({"state": "building", "pid": os.getpid(), "error": "",
                   "title": f"Weekly brief {wb.issue_key(date.today())}"})
         with Lock(wait=True):
@@ -547,6 +565,7 @@ def build_weekly(if_unedited=False):
                           "complete": bool(issue.get("complete", True)), "notes": issue.get("notes", []),
                           "x_text": issue.get("x", ""), "x_generated": issue.get("x", ""), "pid": None,
                           "schedule_at": "", "accept_incomplete": False, "error": "",
+                          "prev_ready": False, "prev_published": False,
                           # Where it posts once live: the settings' platforms,
                           # unless the owner already chose for this draft.
                           "post_to": post_to(m) if post_to_chosen(m) else st["platforms"],
@@ -558,7 +577,10 @@ def build_weekly(if_unedited=False):
         except Exception as e:  # noqa: BLE001 — recorded for the screen
             with Lock(wait=True):
                 m = load(did) or m
-                if had:
+                if was_published:
+                    m.update({"state": "published", "pid": None,
+                              "error": f"the new edition was not built ({str(e)[:300]}); the published one stands"})
+                elif had:
                     m.update({"state": "ready", "pid": None,
                               "error": f"rebuild failed ({str(e)[:300]}); this is the previous build"})
                 else:
@@ -968,16 +990,16 @@ def pending_posts(m):
     import social_post as sp
     done = sp.posted(m["key"]) if m.get("key") else {}
     # A platform not connected is skipped, not retried (the UI says so);
-    # connecting it and Post now sends it.
+    # connecting it and Post sends it.
     return [n for n in post_to(m) if n not in done and n in sp.ENABLED_NETWORKS and sp.is_configured(n) is not False]
 
 
-def post_live(m, log=print):
+def post_live(m, log=print, again=()):
     """Post a published draft to every platform still pending — once its page
     shows this version. Records each platform's reference or error on the
     draft. True when it tried."""
     import social_post as sp
-    pending = pending_posts(m)
+    pending = list(dict.fromkeys([*pending_posts(m), *again]))
     if not pending:
         return False
     pub = _parse(m.get("published_at"))
@@ -1004,7 +1026,8 @@ def post_live(m, log=print):
     send = [n for n in pending if n not in too_long]
     try:
         results, _failed = (sp.announce(m["key"], {n: texts.get(n, "") for n in send}, only=set(send),
-                                        log=log, generated=(m.get("x_text") == m.get("x_generated")))
+                                        log=log, generated=(m.get("x_text") == m.get("x_generated")),
+                                        again=again)
                             if send else ({}, False))
     except Exception as e:  # noqa: BLE001
         results = {n: f"failed: {type(e).__name__}: {e}" for n in send}
@@ -1029,28 +1052,57 @@ def post_live(m, log=print):
     return True
 
 
-def post_now(did, networks):
-    """A published brief, posted to @networks now (its page must be live).
-    Adds them to the draft's platforms: tick() finishes any that fail."""
+PAGE_WAIT_S = 240  # for a page just pushed, when the post cannot be left to a tick
+
+
+def post_now(did, networks, publish_first=False, again=False, accept_incomplete=False):
+    """A brief posted on demand, to @networks and no other. A draft is published
+    first when @publish_first (the screen confirms it); what is not yet posted
+    then goes out once its page is live, from here or by tick().
+
+    @again: also to platforms that already have this week's brief. Only ever
+    from here and only once: it is not stored, so no timer, poll or rerun can
+    send it, and a run that dies sends nothing twice."""
     import social_post as sp
     m = load(did)
     if not m:
         return {"error": "no such brief"}
-    if m.get("state") != "published":
-        return {"error": "Publish the brief first — a post links to its page."}
     bad = [n for n in networks if n not in sp.ENABLED_NETWORKS]
     if bad:
         return {"error": f"not a platform this build posts to: {', '.join(bad)}"}
+    off = _not_connected(networks)
+    networks = [n for n in networks if n not in off]
+    if not networks:
+        return {"error": f"Not connected: {', '.join(off)}." if off else "Tick a platform."}
+    pushed = m.get("state") != "published"
+    if pushed:
+        if not publish_first:
+            return {"error": "Publish the brief first — a post links to its page."}
+        r = publish(did, accept_incomplete=accept_incomplete)
+        if r.get("error"):
+            return r
     with Lock(wait=True):
         m = load(did)
-        m["post_to"] = list(dict.fromkeys(post_to(m) + list(networks)))
+        done = sp.posted(m["key"])
+        # These, and where it already is: not what an earlier choice had listed.
+        m["post_to"] = list(dict.fromkeys([*(n for n in post_to(m) if n in done), *networks]))
+        m["post_to_chosen"] = True
         m["posted_late_ok"] = True  # asked for now: the 6-hour give-up does not apply
         store(m)
-    if not page_live(m):
-        return {"error": "The page does not show this version yet — it is posted as soon as it does.",
-                **get(did)}
-    post_live(m)
-    return get(did)
+    repeat = {n for n in networks if n in done} if again else set()
+    live, until = page_live(m), time.time() + (PAGE_WAIT_S if pushed and repeat else 0)
+    while not live and time.time() < until:
+        time.sleep(10)
+        live = page_live(m)
+    if not live:
+        return {**get(did), "waiting": True,
+                "error": "Published. The page is not live yet: "
+                         + ("post again once it is." if repeat else "posted as soon as it is.")}
+    post_live(m, again=repeat)
+    out = get(did)
+    # What THIS call could not post: an error of another platform, or of an
+    # earlier try, is on the draft and not this call's answer.
+    return {**out, "off": off, "post_errors": {n: e for n, e in (out.get("post_errors") or {}).items() if n in networks}}
 
 
 def tick(log=print):
@@ -1085,7 +1137,7 @@ def tick(log=print):
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else ""
     if cmd == "build-weekly":
-        return build_weekly(if_unedited="--if-unedited" in argv)
+        return build_weekly(if_unedited="--if-unedited" in argv, again="--again" in argv)
     if cmd == "tick":
         try:
             print(json.dumps(tick()))
@@ -1125,7 +1177,8 @@ def main(argv):
         return 0
     if cmd == "posted-all" and len(argv) > 2:  # exit 0 when nothing is left to post
         m = load(argv[2]) or {}
-        return 0 if m and not pending_posts(m) else 1
+        # (A new edition not yet published: there is nothing live to wait for.)
+        return 0 if m and (m.get("state") != "published" or not pending_posts(m)) else 1
     if cmd == "auto-mode":
         print(settings_get()["auto"])
         return 0
