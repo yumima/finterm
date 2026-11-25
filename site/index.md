@@ -1,15 +1,14 @@
 ---
 title: finterm
-description: Comprehensive, Bloomberg-style financial research terminal that runs on your own computer. Markets, company research, SEC ownership filings, futures, IPOs, news, screeners, portfolio, quant experiments, strategy building, optional AI. Free and open source, for Linux, Windows and macOS.
+description: A Bloomberg-like financial research terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 permalink: /
 ---
 <section class="hero">
-  <h1>Comprehensive financial research terminal</h1>
+  <h1>Bloomberg-like financial research terminal</h1>
   <p class="lede">
-    A Bloomberg-style terminal for markets, company research, SEC filings, futures, IPOs, news and portfolio,
-    with quant experiments, strategy building and optional AI. It runs on your own computer and stores your
-    portfolio, keys and settings there: no online account, no telemetry. Free and open source, for Linux,
-    Windows and macOS.
+    Markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to
+    local or external AI engines for chat, agents and MCP tools. 100% local, no signup. Built on open data
+    (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
   </p>
   <p>
     <a class="button" href="{{ site.download_url }}">Download</a>
@@ -39,7 +38,7 @@ permalink: /
 - **Quant experiments** — Quant Lab: factor discovery and evaluation, machine-learning models, forecasting, portfolio optimization.
 - **Strategy building** — entry and exit conditions, stops and targets; backtests, parameter optimization, walk-forward tests.
 - **Screeners, news, maps.**
-- **AI** — optional; local OpenAI-compatible servers (Ollama, vLLM, llama.cpp, LM Studio) or cloud providers.
+- **AI** — chat, voice, agents, skills and MCP tools on local engines (Ollama, vLLM, llama.cpp, LM Studio) or external providers.
 - **Data** — public sources by default; optional Tiingo, Polygon, Alpaca, Finnhub or FMP keys.
 
 ## Weekly brief

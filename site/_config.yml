@@ -1,10 +1,9 @@
 title: finterm
-tagline: Comprehensive financial research terminal
+tagline: Bloomberg-like financial research terminal
 description: >-
-  Comprehensive, Bloomberg-style financial research terminal that runs on your own
-  computer: equity research, SEC filings, futures, IPO pipeline, portfolio,
-  quant experiments, strategy building. Free and
-  open source, for Linux, Windows and macOS. Publishes a
+  Bloomberg-like financial research terminal for markets, stocks and the economy:
+  quant experiments, strategy building, backtesting, AI agents. 100% local, no signup.
+  Linux, Windows and macOS. Publishes a
   one-page weekly brief: markets, economy, insider and fund moves, screen leaders.
 url: https://yumima.github.io
 baseurl: /finterm
