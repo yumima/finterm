@@ -1,11 +1,12 @@
 # finterm
 
-A comprehensive, Bloomberg-style financial research terminal for markets, company research, SEC filings, futures, IPOs, news and portfolio, with optional AI. It runs on your own computer and stores your portfolio, keys and settings there: no online account, no telemetry. Free and open source, for Linux, Windows and macOS.
+A comprehensive, Bloomberg-style financial research terminal for markets, company research, SEC filings, futures, IPOs, news and portfolio, with quant experiments, strategy building and optional AI. It runs on your own computer and stores your portfolio, keys and settings there: no online account, no telemetry. Free and open source, for Linux, Windows and macOS.
 
 ## Today's commits (2026-11-25)
 
 Latest first.
 
+- [`5564fe8c6`](https://github.com/yumima/finterm/commit/5564fe8c6) site: 1,214 clones, Nov 11-24
 - [`e8cc7f5b9`](https://github.com/yumima/finterm/commit/e8cc7f5b9) site: the lead says what finterm is, not what it is written in
 - [`6d441b4cb`](https://github.com/yumima/finterm/commit/6d441b4cb) site: the counter is clones and downloads
 - [`6eb95c04e`](https://github.com/yumima/finterm/commit/6eb95c04e) Weekly brief: track record, earnings ahead, holdings, card, alerts
@@ -88,6 +89,7 @@ The report says `"ok": true`, or names the stage that failed (setup or data) and
 - **Portfolio** — multi-account holdings, performance, heatmap, blotter, CSV/JSON import and export.
 - **Screener, Ownership** — screens, and insider (Form 4), institutional (13F) and 5% (13D/13G) views built on public SEC EDGAR filings.
 - **Private Market** — private-company marketplace prices, funding rounds and the C50 index on a dashboard of movable widgets, plus the IPO calendar from filing to pricing with the SEC stage each projected date rests on.
+- **Quant Lab, strategy building** — experiments with factors, machine-learning models, forecasting and portfolio optimization; strategies built from entry and exit conditions with stops and targets, then backtested, optimized and walk-forward tested ([guide](docs/how-to/quant-features.md)).
 - **AI chat** — text or live voice conversation with the provider you choose, cloud or local.
 - **Knowledge** — a markets and quant curriculum with calculators and a 47-strategy catalogue.
 - **Workspaces** — multi-window docking with saved layouts, and local multi-user profiles behind a PIN.
