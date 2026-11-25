@@ -1,10 +1,10 @@
 ---
 title: finterm
-description: A Bloomberg-like financial research terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
+description: A financial terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 permalink: /
 ---
 <section class="hero">
-  <h1>Bloomberg-like financial research terminal</h1>
+  <h1>Financial terminal</h1>
   <p class="lede">
     Markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to
     local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on

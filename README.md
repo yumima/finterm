@@ -1,11 +1,12 @@
 # finterm
 
-A Bloomberg-like financial research terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
+A financial terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 
 ## Today's commits (2026-11-25)
 
 Latest first.
 
+- [`a8bd13a04`](https://github.com/yumima/finterm/commit/a8bd13a04) site: free to use
 - [`4a26344f6`](https://github.com/yumima/finterm/commit/4a26344f6) site: a shorter lead; AI is part of it
 - [`c1741ad60`](https://github.com/yumima/finterm/commit/c1741ad60) site: quant experiments and strategy building
 - [`5564fe8c6`](https://github.com/yumima/finterm/commit/5564fe8c6) site: 1,214 clones, Nov 11-24
