@@ -943,12 +943,22 @@ void NewsScreen::open_beside(const QString& screen_id, const QVariantMap& args) 
     } else if (screen_id == QLatin1String("social")) {
         // The weekly brief's workspace: accounts (CHANNELS), the briefs to
         // review, correct, schedule and publish, what is live and posted.
-        peek_->show_view(QStringLiteral("social"), QStringLiteral("WEEKLY BRIEF"), []() { return new SocialScreen; },
-                         {});
+        auto* social = static_cast<SocialScreen*>(peek_->show_view(QStringLiteral("social"), QStringLiteral("WEEKLY BRIEF"),
+                                                                   []() { return new SocialScreen; }, {}));
+        social->show_accounts(args.value("tab").toString() == QLatin1String("channels"));
     } else {
         return;
     }
-    if (!was_open) {
+    // A page to read takes the headlines' room too, until it is closed.
+    const bool page = screen_id == QLatin1String("social");
+    const bool reflow = !was_open || page == !feed_panel_->isHidden();
+    feed_panel_->setVisible(!page);
+    if (page) {
+        detail_panel_->hide();
+        const int drawer = content_splitter_->sizes().value(0);
+        if (reflow)
+            set_content_sizes(drawer, content_splitter_->width() - drawer);
+    } else if (reflow) {
         // The article detail steps aside while the pane is open: drawer +
         // pane + headlines + detail left the headlines a column of source
         // names. Reading an article (or ×) brings it back.
@@ -970,6 +980,7 @@ void NewsScreen::close_peek() {
         return;
     const int drawer = content_splitter_->sizes().value(0);
     peek_->hide();
+    feed_panel_->show();
     detail_panel_->show();
     set_content_sizes(drawer, 0);
 }

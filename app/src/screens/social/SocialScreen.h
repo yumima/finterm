@@ -46,12 +46,17 @@ class SocialScreen : public QWidget {
     Q_OBJECT
   public:
     explicit SocialScreen(QWidget* parent = nullptr);
+    /// The accounts beside the brief (the drawer\'s "Connect accounts").
+    void show_accounts(bool on);
 
   protected:
     void showEvent(QShowEvent* e) override;
 
   private:
     QWidget* build_channels_pane();
+    QWidget* channels_pane_ = nullptr;
+    QWidget* composer_pane_ = nullptr;
+    QPushButton* accounts_btn_ = nullptr;
     QWidget* build_issue_pane();
     QWidget* build_composer_pane();
     QWidget* build_manual_page();

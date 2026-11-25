@@ -29,6 +29,7 @@ class QDateTimeEdit;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
@@ -52,6 +53,7 @@ class BriefsPanel : public QWidget {
   protected:
     void showEvent(QShowEvent* e) override;
     void hideEvent(QHideEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
 
   private:
     void load_list();
@@ -115,6 +117,8 @@ class BriefsPanel : public QWidget {
     QLabel* status_ = nullptr;
     QLabel* log_ = nullptr;
     BuildProgressView* build_ = nullptr;
+    QSplitter* split_ = nullptr;
+    QWidget* post_box_ = nullptr;
     QTimer* poll_ = nullptr;
     bool setting_ = false;
 };

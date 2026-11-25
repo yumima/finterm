@@ -110,7 +110,23 @@ bool confirm(QWidget* parent, const QString& title, const QString& html, const Q
 BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     auto* v = new QVBoxLayout(this);
     v->setContentsMargins(0, 0, 0, 0);
-    v->setSpacing(6);
+    v->setSpacing(0);
+    // The page, and beside it (under it when narrow) everything done with it.
+    split_ = new QSplitter(Qt::Horizontal);
+    split_->setChildrenCollapsible(false);
+    auto* page = new QWidget;
+    auto* pv = new QVBoxLayout(page);
+    pv->setContentsMargins(0, 0, 8, 0);
+    pv->setSpacing(6);
+    auto* side = new QWidget;
+    auto* sv = new QVBoxLayout(side);
+    sv->setContentsMargins(0, 0, 0, 0);
+    sv->setSpacing(6);
+    split_->addWidget(page);
+    split_->addWidget(side);
+    split_->setStretchFactor(0, 5);
+    split_->setStretchFactor(1, 2);
+    v->addWidget(split_, 1);
 
     // ── actions ──
     auto* top = new QHBoxLayout;
@@ -128,7 +144,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     auto* refresh_btn = button(QStringLiteral("Refresh"));
     connect(refresh_btn, &QPushButton::clicked, this, &BriefsPanel::refresh);
     top->addWidget(refresh_btn);
-    v->addLayout(top);
+    sv->addLayout(top);
 
     table_ = ou::make_table({QStringLiteral("Brief"), QStringLiteral("Kind"), QStringLiteral("Status")});
     table_->setMaximumHeight(130);
@@ -149,19 +165,19 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
         draft_ = {};
         load_draft(id);
     });
-    v->addWidget(table_);
+    sv->addWidget(table_);
 
     // ── the draft ──
     title_ = new QLabel;
     title_->setObjectName("socialTitle");
     title_->setWordWrap(true);
-    v->addWidget(title_);
+    pv->addWidget(title_);
     chips_ = new QLabel;
     chips_->setObjectName("socialDim");
     chips_->setWordWrap(true);
     chips_->setTextFormat(Qt::RichText);
     chips_->setOpenExternalLinks(true);
-    v->addWidget(chips_);
+    pv->addWidget(chips_);
 
     auto* tools = new QHBoxLayout;
     tools->setSpacing(6);
@@ -195,7 +211,7 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     for (auto* b : {save_btn_, revert_btn_, rebuild_btn_, delete_btn_})
         tools->addWidget(b);
     tools->addStretch(1);
-    v->addLayout(tools);
+    pv->addLayout(tools);
 
     view_ = new QStackedWidget;
     preview_ = new QTextBrowser;
@@ -213,8 +229,8 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     auto& watch = BuildWatch::instance();
     connect(&watch, &BuildWatch::updated, this, &BriefsPanel::show_build);
     connect(&watch, &BuildWatch::finished, this, &BriefsPanel::load_list);
-    v->addWidget(build_);
-    v->addWidget(view_, 1);
+    sv->addWidget(build_);
+    pv->addWidget(view_, 1);
 
     log_ = new QLabel;
     log_->setObjectName("socialDim");
@@ -222,7 +238,13 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     log_->setTextFormat(Qt::PlainText);
     log_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     log_->hide();
-    v->addWidget(log_);
+    sv->addWidget(log_);
+    // Everything about posting and publishing: nothing to do with it while a build runs.
+    post_box_ = new QWidget;
+    auto* bv = new QVBoxLayout(post_box_);
+    bv->setContentsMargins(0, 0, 0, 0);
+    bv->setSpacing(6);
+    sv->addWidget(post_box_);
 
     // ── the X text ──
     auto* xrow = new QHBoxLayout;
@@ -237,14 +259,14 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     x_count_ = new QLabel;
     x_count_->setObjectName("socialDim");
     xrow->addWidget(x_count_);
-    v->addLayout(xrow);
+    bv->addLayout(xrow);
     x_edit_ = new QPlainTextEdit;
-    x_edit_->setFixedHeight(96);
+    x_edit_->setFixedHeight(170);
     connect(x_edit_, &QPlainTextEdit::textChanged, this, [this]() {
         if (!setting_)
             render_controls();
     });
-    v->addWidget(x_edit_);
+    bv->addWidget(x_edit_);
     // Where it goes once its page is live — each platform once, ever. Before
     // publishing: saved on the draft. After: Post sends the ticked ones
     // it has not gone to yet. A platform already posted shows ✓.
@@ -267,11 +289,11 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     connect(post_now_btn_, &QPushButton::clicked, this, &BriefsPanel::post_now);
     prow->addWidget(post_now_btn_);
     prow->addStretch(1);
-    v->addLayout(prow);
+    bv->addLayout(prow);
     post_why_ = new QLabel;
     post_why_->setObjectName(QStringLiteral("socialDim"));
     post_why_->setWordWrap(true);
-    v->addWidget(post_why_);
+    bv->addWidget(post_why_);
 
     // ── publishing ──
     auto* pub = new QHBoxLayout;
@@ -293,13 +315,14 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
     publish_btn_->setCursor(Qt::PointingHandCursor);
     connect(publish_btn_, &QPushButton::clicked, this, &BriefsPanel::confirm_publish);
     pub->addWidget(publish_btn_);
-    v->addLayout(pub);
+    bv->addLayout(pub);
 
     status_ = new QLabel;
     status_->setWordWrap(true);
     status_->setTextFormat(Qt::RichText);
     status_->setOpenExternalLinks(true);
-    v->addWidget(status_);
+    sv->addWidget(status_);
+    sv->addStretch(1);
 
     poll_ = new QTimer(this);
     poll_->setInterval(15'000);
@@ -312,6 +335,11 @@ BriefsPanel::BriefsPanel(QWidget* parent) : QWidget(parent) {
 void BriefsPanel::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     refresh(); // also restarts the poll if something is in motion
+}
+
+void BriefsPanel::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    split_->setOrientation(width() < 720 ? Qt::Vertical : Qt::Horizontal);
 }
 
 void BriefsPanel::hideEvent(QHideEvent* e) {
@@ -496,6 +524,7 @@ void BriefsPanel::render_draft() {
         chips_->clear();
         log_->hide();
         build_->hide();
+        post_box_->hide();
         render_controls();
         return;
     }
@@ -540,6 +569,7 @@ void BriefsPanel::render_draft() {
         notes << n.toString();
     const QString err = draft_.value("note").toString(); // the draft's stored note (not a call error)
     build_->setVisible(st == "building");
+    post_box_->setVisible(st != "building");
     if (st == "building") {
         log_->hide();
         show_build();

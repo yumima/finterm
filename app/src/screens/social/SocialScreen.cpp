@@ -96,7 +96,8 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
     auto* split = new QSplitter(Qt::Horizontal, this);
     split->setObjectName("socialSplitter");
     split->setChildrenCollapsible(false);
-    split->addWidget(build_channels_pane());
+    channels_pane_ = build_channels_pane();
+    split->addWidget(channels_pane_);
     // BRIEFS (generate · review · correct · schedule · publish) and the
     // PUBLISHED issue (what is live, and what was posted) share the middle.
     auto* middle = new QWidget;
@@ -114,6 +115,11 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
         tabs->addWidget(b);
     }
     tabs->addStretch(1);
+    accounts_btn_ = small_button(QStringLiteral("ACCOUNTS"));
+    accounts_btn_->setCheckable(true);
+    accounts_btn_->setToolTip(QStringLiteral("Where briefs are posted: connect and disconnect"));
+    connect(accounts_btn_, &QPushButton::toggled, channels_pane_, &QWidget::setVisible);
+    tabs->addWidget(accounts_btn_);
     mv->addLayout(tabs);
     auto* stack = new QStackedWidget;
     briefs_ = new BriefsPanel;
@@ -121,13 +127,15 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
     stack->addWidget(build_issue_pane());
     mv->addWidget(stack, 1);
     briefs_btn->setChecked(true);
-    connect(briefs_btn, &QPushButton::clicked, this, [stack, briefs_btn, published_btn]() {
+    connect(briefs_btn, &QPushButton::clicked, this, [this, stack, briefs_btn, published_btn]() {
         stack->setCurrentIndex(0);
+        composer_pane_->hide(); // the published issue's; a brief has its own
         briefs_btn->setChecked(true);
         published_btn->setChecked(false);
     });
-    connect(published_btn, &QPushButton::clicked, this, [stack, briefs_btn, published_btn]() {
+    connect(published_btn, &QPushButton::clicked, this, [this, stack, briefs_btn, published_btn]() {
         stack->setCurrentIndex(1);
+        composer_pane_->show();
         briefs_btn->setChecked(false);
         published_btn->setChecked(true);
     });
@@ -136,7 +144,10 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
         load_history();
     });
     split->addWidget(middle);
-    split->addWidget(build_composer_pane());
+    composer_pane_ = build_composer_pane();
+    split->addWidget(composer_pane_);
+    composer_pane_->hide();
+    channels_pane_->hide();
     split->setStretchFactor(0, 1);
     split->setStretchFactor(1, 3);
     split->setStretchFactor(2, 2);
@@ -155,6 +166,10 @@ SocialScreen::SocialScreen(QWidget* parent) : QWidget(parent) {
     render_brief();
     render_history();
     render_composer();
+}
+
+void SocialScreen::show_accounts(bool on) {
+    accounts_btn_->setChecked(on);
 }
 
 void SocialScreen::apply_styles() {

@@ -118,9 +118,12 @@ WeeklyBriefPanel::WeeklyBriefPanel(QWidget* parent) : QWidget(parent) {
 
     v->addWidget(caption(QStringLiteral("LEVEL OF DETAIL")));
     detail_ = new QComboBox;
-    detail_->addItem(QStringLiteral("Short — 3 rows a table"), QStringLiteral("short"));
-    detail_->addItem(QStringLiteral("Standard — 5 rows a table (one page)"), QStringLiteral("standard"));
-    detail_->addItem(QStringLiteral("Full — 10 rows a table"), QStringLiteral("full"));
+    detail_->setToolTip(QStringLiteral("Rows a table holds; Standard fits one page"));
+    detail_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    detail_->setMinimumContentsLength(8);
+    detail_->addItem(QStringLiteral("Short — 3 rows"), QStringLiteral("short"));
+    detail_->addItem(QStringLiteral("Standard — 5 rows"), QStringLiteral("standard"));
+    detail_->addItem(QStringLiteral("Full — 10 rows"), QStringLiteral("full"));
     connect(detail_, &QComboBox::currentIndexChanged, this, [this](int) { save_settings(); });
     v->addWidget(detail_);
 
