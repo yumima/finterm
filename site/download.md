@@ -5,11 +5,11 @@ permalink: /download/
 ---
 {% assign r = site.data.release %}
 {% if r %}
-<p>
-  <a class="button" href="{{ r.linux }}">Linux · AppImage</a>
-  <a class="button" href="{{ r.windows }}">Windows · installer</a>
-  <a class="button" href="{{ r.macos }}">macOS · disk image</a>
-</p>
+<div class="tiles">
+  <div><a class="button" href="{{ r.linux }}">Linux · AppImage</a><span class="tile-count" id="count-linux"></span></div>
+  <div><a class="button" href="{{ r.windows }}">Windows · installer</a><span class="tile-count" id="count-windows"></span></div>
+  <div><a class="button" href="{{ r.macos }}">macOS · disk image</a><span class="tile-count" id="count-macos"></span></div>
+</div>
 
 {% include counter.html short=true %}
 

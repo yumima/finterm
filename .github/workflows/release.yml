@@ -1706,7 +1706,8 @@ jobs:
           # them: kept for the site's counter (site/_includes/counter.html).
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[]' | jq -s --arg tag "${TAG}" \
             'map(select(.tag_name != $tag and (.draft | not))
-                 | {key: .tag_name, value: ([.assets[] | select(.name | test("-setup\\.(run|exe|dmg)$")) | .download_count] | add // 0)})
+                 | .assets as $a | def n($ext): [$a[] | select(.name | endswith("-setup." + $ext)) | .download_count] | add // 0;
+                   {key: .tag_name, value: {linux: n("run"), windows: n("exe"), macos: n("dmg")}})
              | from_entries' > /tmp/leaving.json
           jq --slurpfile l /tmp/leaving.json '.earlier_releases += $l[0]' site/_data/downloads.json > /tmp/downloads.json
           mv /tmp/downloads.json site/_data/downloads.json

@@ -1,21 +1,33 @@
-{% assign r = site.data.release %}{% assign d = site.data.downloads %}{% assign earlier = 0 %}{% for e in d.earlier_releases %}{% assign earlier = earlier | plus: e[1] %}{% endfor %}{% assign base = d.clones | plus: earlier %}
+{% assign r = site.data.release %}{% assign d = site.data.downloads %}{% assign linux = 0 %}{% assign windows = 0 %}{% assign macos = 0 %}{% for e in d.earlier_releases %}{% assign linux = linux | plus: e[1].linux %}{% assign windows = windows | plus: e[1].windows %}{% assign macos = macos | plus: e[1].macos %}{% endfor %}{% assign base = d.clones | plus: linux | plus: windows | plus: macos %}
 <p class="counter">
   {% unless include.short %}Version {{ r.version }}{% if r.released %} · <time datetime="{{ r.released }}">{{ r.released | date: "%-d %B %Y" }}</time>{% endif %} ·{% endunless %}
-  <span id="count" data-base="{{ base }}" title="{{ d.clones }} clones of the source that GitHub counted from {{ d.clones_from | date: "%-d %B" }} to {{ d.clones_to | date: "%-d %B %Y" }}, automated ones included, and the downloads of every installer">{{ base }}</span> clones and downloads
+  <span id="count" data-clones="{{ d.clones }}" data-linux="{{ linux }}" data-windows="{{ windows }}" data-macos="{{ macos }}" title="{{ d.clones }} clones of the source that GitHub counted from {{ d.clones_from | date: "%-d %B" }} to {{ d.clones_to | date: "%-d %B %Y" }}, automated ones included, and the downloads of every installer">{{ base }}</span> clones and downloads
 </p>
 <script>
 (function () {
-  var el = document.getElementById("count"), base = +el.dataset.base;
-  function show(n) { el.textContent = n.toLocaleString("en"); }
-  show(base);
+  var el = document.getElementById("count"), d = el.dataset, ext = { linux: ".run", windows: ".exe", macos: ".dmg" };
+  function show(live) {
+    var total = +d.clones;
+    Object.keys(ext).forEach(function (os) {
+      var n = +d[os] + (live ? live[os] : 0), tile = document.getElementById("count-" + os);
+      total += n;
+      if (tile && live) tile.textContent = n.toLocaleString("en") + (n === 1 ? " download" : " downloads");
+    });
+    el.textContent = total.toLocaleString("en");
+  }
+  show(null);
   fetch("https://api.github.com/repos/yumima/finterm/releases?per_page=100")
-    .then(function (x) { return x.ok ? x.json() : []; })
+    .then(function (x) { if (!x.ok) throw x.status; return x.json(); })
     .then(function (releases) {
-      var n = 0;
+      var live = { linux: 0, windows: 0, macos: 0 };
       releases.forEach(function (rel) {
-        rel.assets.forEach(function (a) { if (/-setup\.(run|exe|dmg)$/.test(a.name)) n += a.download_count; });
+        rel.assets.forEach(function (a) {
+          Object.keys(ext).forEach(function (os) {
+            if (a.name.endsWith("-setup" + ext[os])) live[os] += a.download_count;
+          });
+        });
       });
-      show(base + n);
+      show(live);
     }).catch(function () {});
 })();
 </script>

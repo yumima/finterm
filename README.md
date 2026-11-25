@@ -6,6 +6,7 @@ A local-first financial-research terminal for your own machine: a native Qt6/C++
 
 Latest first.
 
+- [`20307f4d4`](https://github.com/yumima/finterm/commit/20307f4d4) site: version, date, and how many clones and downloads
 - [`85228fe61`](https://github.com/yumima/finterm/commit/85228fe61) **chore(release):** update README download links and updates.json for v4.2.0
 - [`2d68e42b6`](https://github.com/yumima/finterm/commit/2d68e42b6) 4.2.0: Get hearth installs hearth 0.2.0; the site's tabs
 - [`a5c78b2ad`](https://github.com/yumima/finterm/commit/a5c78b2ad) hearth's commands as they are called now; the site's tabs
