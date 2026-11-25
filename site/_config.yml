@@ -17,7 +17,7 @@ download_url: https://yumima.github.io/finterm/download/
 install_url: https://github.com/yumima/finterm#install
 # The tabs to the other projects; "" = none. Set to /hearth/ once that site and
 # yumima.github.io are published, or the tabs lead nowhere.
-hearth_url: ""
+hearth_url: /hearth/
 
 permalink: /brief/:year-:month-:day/
 

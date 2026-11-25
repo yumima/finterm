@@ -51,7 +51,7 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 - [x] 3.9 `hearth client install`: builds the window (source tree or release) and adds it to the app menu
 - [x] 3.10 One name: mantel is hearth-client, shown as "Hearth"; plain `hearth` is the coding agent;
       commands grouped (model, voice, provider)
-- [ ] 3.8 Switch the developer machine over (asks first): merge `engine` into main of hearth and
+- [x] 3.8 Switch the developer machine over (asks first): merge `engine` into main of hearth and
       finterm, run from there; then delete the mantel repository (local and GitHub; user
       decided 2026-11-24, every commit is in hearth) and the *-engine worktrees and branches
 
@@ -73,12 +73,11 @@ hearth, asks, connects and can disconnect; it does not install, update or remove
 - [x] 5.1 Installers and login services
 - [x] 5.2 Kokoro voices and speech recognition; Piper tutor voices Linux-only at first
 - [x] 5.3 CI with a tiny model, then clean-machine tests (CI computers, all three systems)
-- [ ] 5.4 Website: tabs at yumima.github.io, hearth's pages and `install.sh` (written; creating the
-      repository asks first, then `hearth_url` in site/_config.yml)
-- [ ] 5.5 First release on all three (asks first)
+- [x] 5.4 Website: tabs at yumima.github.io, hearth's pages and `install.sh` (yumima.github.io)
+- [x] 5.5 First release on all three: hearth 0.2.0, finterm 4.2.0
 
 **6. Get hearth**
-- [x] 6.1 finterm button (idle until `EngineRelease.h` has the first release's hashes), then offer to connect; AppImage library paths do not reach hearth
+- [x] 6.1 finterm button (`EngineRelease.h` has hearth 0.2.0's hashes), then offer to connect; AppImage library paths do not reach hearth
 - [x] 6.2 End-to-end tests and docs
 
 **Later:** native signed installers, llama.cpp, other engines, remote hearth,

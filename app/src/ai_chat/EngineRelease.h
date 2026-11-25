@@ -16,9 +16,9 @@ struct InstallScript {
     QString sha256;
 };
 
-inline constexpr const char* kReleaseVersion = "";
-inline constexpr const char* kInstallShSha256 = "";
-inline constexpr const char* kInstallPs1Sha256 = "";
+inline constexpr const char* kReleaseVersion = "0.2.0";
+inline constexpr const char* kInstallShSha256 = "39eee73a396f0cbef98969560cae90db1043c3cef06c0b8f047ab77d358ecf2a";
+inline constexpr const char* kInstallPs1Sha256 = "3db89eade5c376303c32fd42811022849666596fe64b187dab590849da1428c8";
 
 /// The script for this system, empty when there is none.
 inline InstallScript install_script(const QString& version, const QString& sh, const QString& ps1, bool windows) {
