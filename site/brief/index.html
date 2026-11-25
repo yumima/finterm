@@ -1,16 +1,16 @@
 ---
 title: Weekly brief — insider-buying clusters from SEC Form 4
-description: Every issue of finterm's free weekly brief, built from SEC filings.
+description: Issue archive of finterm's weekly insider-buying brief, from SEC Form 4 filings.
 ---
 <h1>Weekly brief</h1>
 <p>
-  Every week: companies where two or more insiders reported buying their own company's shares on the open
-  market, from SEC Form 4 filings, with the method and how such clusters have done before. Follow by <a href="{{ '/feed.xml' | relative_url }}">RSS</a>.
+  Companies where two or more insiders reported open-market purchases in SEC Form 4 filings, with method and
+  historical results. <a href="{{ '/feed.xml' | relative_url }}">RSS</a>.
 </p>
 <ul class="issues">
 {% for post in site.posts %}
   <li><a href="{{ post.url | relative_url }}">{{ post.title }}</a> <span class="meta">{{ post.date | date: "%b %-d, %Y" }}</span></li>
 {% else %}
-  <li>The first issue is on its way.</li>
+  <li>No issues yet.</li>
 {% endfor %}
 </ul>

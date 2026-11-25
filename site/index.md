@@ -1,19 +1,17 @@
 ---
-title: finterm — free, open-source research terminal for investors
-description: Free desktop research terminal for Linux, Windows and macOS. Equity research, insider buying from SEC filings, IPO pipeline, portfolio import from your broker, local AI. No account, no subscription.
+title: finterm — open-source financial research terminal
+description: Open-source desktop financial research terminal for Linux, Windows and macOS. Equity research, SEC ownership filings, futures, IPO pipeline, portfolio, local or cloud AI. Local-first, no telemetry.
 permalink: /
 ---
 <section class="hero">
-  <h1>Research stocks like a terminal user. Pay nothing.</h1>
+  <h1>Desktop financial research terminal</h1>
   <p class="lede">
-    finterm is a free, open-source desktop research terminal for Linux, Windows and macOS: charts and
-    technicals, fundamentals, earnings, insider buying straight from SEC filings, the IPO pipeline, news,
-    and your own portfolio imported from your broker's CSV. Its AI runs on your machine if you want it to.
-    No account, no subscription; your data stays on your computer.
+    Native C++20/Qt 6 application for Linux, Windows and macOS with a Python data layer. Local-first: no
+    cloud account, no backend, no telemetry. Free, AGPL-3.0.
   </p>
   <p>
-    <a class="button" href="{{ site.download_url }}">Download for free</a>
-    <a class="button ghost" href="{{ '/insider-cluster-buys/' | relative_url }}">See this week's insider buying</a>
+    <a class="button" href="{{ site.download_url }}">Download</a>
+    <a class="button ghost" href="{{ '/insider-cluster-buys/' | relative_url }}">Weekly insider buying</a>
   </p>
   {% include counter.html %}
 </section>
@@ -27,24 +25,24 @@ permalink: /
 </section>
 {% endif %}
 
-## What's in it
+## Features
 
-- **Equity research** — price, technicals with a rating you can audit, fundamentals, earnings history, extended-hours moves (pre-market, after-hours, overnight) and each earnings call playable in the app.
-- **Company report** — one investor report per company from filings, estimates, prices and news: what changed, segments, valuation against its own past, risks; export to PDF.
-- **Markets** — market conditions for every asset class on pages of widgets you arrange: the Treasury curve, credit stress, valuation and correlation; futures curves for 57 contracts with spreads, trader positioning and a paper account with working stops and targets.
-- **Fund moves** — the largest stake changes by every 13F filer, corrected for splits and CUSIP changes and linked to the filing; 5% stakes (13D / 13G) as they are filed.
-- **Insider buying** — every SEC Form 4 scanned as it lands; clusters of insiders buying their own stock surface on their own.
-- **Private market** — marketplace prices and funding rounds for private companies, and IPO deals from filing to pricing with the SEC filing stage each projected date rests on.
-- **Your portfolio** — import holdings from a broker CSV; nothing is uploaded anywhere.
-- **Quant Lab, backtesting, screeners, news, maps** — and more screens, all in one window.
-- **Bring your own data** — works on free data out of the box; plug in a Tiingo, Polygon, Alpaca, Finnhub or FMP key for prices if you have one.
+- **Equity research** — charts, technical rating with its components, fundamentals, earnings history with call audio, pre-market, after-hours and overnight moves.
+- **Company report** — quarterly report from filings, estimates, prices and news: segments, valuation against its own history, risks. PDF and HTML export.
+- **Markets** — configurable widget pages: Treasury curve, credit, volatility, valuation, cross-asset correlation.
+- **Futures** — forward curves for 57 contracts, calendar spreads, roll yield, CFTC positioning, paper trading with stops and targets.
+- **Ownership** — Form 4 insider trades with cluster detection; 13F changes adjusted for splits and CUSIP changes; 13D/13G stakes.
+- **Private market** — secondary-market prices, funding rounds, and the IPO calendar by SEC filing stage.
+- **Portfolio** — multiple accounts, performance, broker CSV/JSON import and export. Stored locally.
+- **Quant Lab, backtesting, screeners, news, maps.**
+- **AI** — optional; local OpenAI-compatible servers (Ollama, vLLM, llama.cpp, LM Studio) or cloud providers.
+- **Data** — public sources by default; optional Tiingo, Polygon, Alpaca, Finnhub or FMP keys.
 
-## The weekly brief
+## Weekly brief
 
-Every week finterm publishes the companies where two or more insiders reported open-market purchases,
-straight from SEC filings, with the method and how such clusters have done before.
-[Read the latest]({{ '/insider-cluster-buys/' | relative_url }}) · [all issues]({{ '/brief/' | relative_url }}) ·
+Companies where two or more insiders reported open-market purchases in SEC Form 4 filings, with method and historical results.
+[Latest]({{ '/insider-cluster-buys/' | relative_url }}) · [all issues]({{ '/brief/' | relative_url }}) ·
 [RSS]({{ '/feed.xml' | relative_url }})
 
 {% assign latest = site.posts.first %}
-{% if latest %}Latest: [{{ latest.title }}]({{ latest.url | relative_url }}){% endif %}
+{% if latest %}Latest issue: [{{ latest.title }}]({{ latest.url | relative_url }}){% endif %}

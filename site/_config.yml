@@ -1,11 +1,9 @@
 title: finterm
-tagline: Free, open-source research terminal for investors
+tagline: Open-source desktop financial research terminal
 description: >-
-  finterm is a free, open-source desktop research terminal for Linux, Windows
-  and macOS — equity research, insider buying from SEC filings, the IPO
-  pipeline, your portfolio and a local AI that keeps your data on your machine.
-  Every week it publishes a brief of insider-buying clusters from SEC Form 4
-  filings.
+  Open-source desktop financial research terminal for Linux, Windows and macOS:
+  equity research, SEC filings, futures, IPO pipeline, portfolio. Publishes a
+  weekly brief of insider-buying clusters from SEC Form 4.
 url: https://yumima.github.io
 baseurl: /finterm
 lang: en

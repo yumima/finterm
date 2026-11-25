@@ -1,6 +1,6 @@
 ---
 title: Download finterm
-description: Free installers for Linux, Windows and macOS. No account, no subscription.
+description: finterm installers for Linux (x86-64), Windows 10/11 (x64) and macOS 13+ (Apple Silicon).
 permalink: /download/
 ---
 {% assign r = site.data.release %}
@@ -18,34 +18,34 @@ Version {{ r.version }}{% if r.released %} · released <time datetime="{{ r.rele
 <p><a class="button" href="{{ site.repo_url }}/releases/latest">Get the latest release</a></p>
 {% endif %}
 
-## Install and start
+## Install
 
 **Windows 10/11 (x64)**
 
-1. Run the installer. At the SmartScreen warning choose **More info → Run anyway**, and click through — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` with Start Menu and Desktop shortcuts. (Have an older finterm in `C:\Program Files\finterm`? Uninstall it first and answer **No** to removing your data — the new one keeps it.)
+1. Run the installer. At SmartScreen: **More info → Run anyway**. No administrator rights; installs per user to `%LOCALAPPDATA%\Programs\finterm`.
 2. Start **finterm** from the Start Menu.
+
+Uninstall an older copy in `C:\Program Files\finterm` first and answer **No** to removing data.
 
 **macOS 13+ (Apple Silicon)**
 
 1. Open the disk image and drag **finterm** to Applications.
-2. The first time, **right-click the app → Open → Open**. After that, start it like any app.
+2. First launch: **right-click → Open → Open**.
 
 **Linux (x86-64)**
 
 1. `chmod +x finterm-*.run`
-2. `./finterm-*.run` — an AppImage: nothing is installed, no root needed. On Ubuntu 22.04+ run `sudo apt install libfuse2` once.
+2. `./finterm-*.run` (AppImage; no install, no root). Ubuntu 22.04+: `sudo apt install libfuse2` once.
 
-## The first start
+## First start
 
-1. **Setup, once.** finterm downloads its own Python and builds its data environment: about 5–15 minutes, with a progress screen, and it needs internet. You install nothing else.
-2. **Create a local account:** a username and PIN, then a 6-digit security PIN. Both stay on your machine.
-3. **The dashboard opens with live data.** finterm runs its own data process in the background; there is nothing else to launch.
+1. **Setup** — downloads Python and builds the data environment: 5–15 minutes, internet required, once.
+2. **Local account** — username and PIN, then a 6-digit security PIN. Stored locally.
+3. **Dashboard** — the data process starts in the background. Later starts go to the PIN.
 
-Later starts go straight to the PIN.
+## Troubleshooting
 
-## If no data appears
-
-Run the built-in check. Close finterm first. It repeats the setup, starts the data process, fetches one quote and writes a report that says `"ok": true` or names what failed:
+If no data appears, close finterm and run the self-test. It repeats setup, starts the data process, fetches one quote and reports `"ok": true` or the stage that failed:
 
 ```
 Windows   "%LOCALAPPDATA%\Programs\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
@@ -53,11 +53,9 @@ macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finte
 Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
 ```
 
-Every release is installed and put through this check on all three systems before it is published.
+Every release passes the self-test on all three systems before publication.
 
-The installers are free, so they carry no paid signing certificate; that is the one extra click on Windows and
-macOS. They are built from the [public source]({{ site.repo_url }}) by its public CI.
+## Signing and updates
 
-**Updates** — off until you turn them on: finterm asks once (**Auto update?**) whether to check daily (or Help › Check for Updates, any
-time). A new version downloads in the background and installs when you restart or quit finterm, keeping your
-workspace and data; a version that fails to start is rolled back.
+- **Signing** — installers are unsigned, hence the Windows and macOS prompts. Built from [source]({{ site.repo_url }}) by public CI.
+- **Updates** — off by default. Enable the daily check at the **Auto update?** prompt, or run Help › Check for Updates. Updates download in the background and install on restart or quit; workspace and data are kept, and a version that fails to start is rolled back.

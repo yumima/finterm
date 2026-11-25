@@ -173,3 +173,4 @@ docs/superpowers/
 # looks like an SSL/credential marker side effect. Empty file,
 # harmless. Ignored at repo root only.
 /b_*=
+site/_data/counts.json

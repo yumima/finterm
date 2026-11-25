@@ -2,42 +2,10 @@
 
 A local-first financial-research terminal for your own machine: a native Qt6/C++ desktop app with a thin Python data layer and a built-in AI stack. No account, no cloud backend, no telemetry.
 
-## Today's commits (2026-11-24)
+## Today's commits (2026-11-25)
 
 Latest first.
 
-- [`25e826bd0`](https://github.com/yumima/finterm/commit/25e826bd0) updater: the question and the setting are called Auto update
-- [`5c6eebd50`](https://github.com/yumima/finterm/commit/5c6eebd50) site: the line under the tiles is the total
-- [`b798ae424`](https://github.com/yumima/finterm/commit/b798ae424) site: each platform's downloads under its tile
-- [`20307f4d4`](https://github.com/yumima/finterm/commit/20307f4d4) site: version, date, and how many clones and downloads
-- [`85228fe61`](https://github.com/yumima/finterm/commit/85228fe61) **chore(release):** update README download links and updates.json for v4.2.0
-- [`2d68e42b6`](https://github.com/yumima/finterm/commit/2d68e42b6) 4.2.0: Get hearth installs hearth 0.2.0; the site's tabs
-- [`a5c78b2ad`](https://github.com/yumima/finterm/commit/a5c78b2ad) hearth's commands as they are called now; the site's tabs
-- [`498e290c8`](https://github.com/yumima/finterm/commit/498e290c8) Tools: a worker waiting for another thread gives up when nobody will do it, tested
-- [`8432cd9cf`](https://github.com/yumima/finterm/commit/8432cd9cf) hearth in finterm, news, tools: a tool does not hold up the exit; analyses queue and stay
-- [`7be628ccb`](https://github.com/yumima/finterm/commit/7be628ccb) hearth in finterm: choosing a provider is done where the user's clicks are; site tabs, plan
-- [`add66765a`](https://github.com/yumima/finterm/commit/add66765a) hearth in finterm, news: what the second review found
-- [`b963a56e2`](https://github.com/yumima/finterm/commit/b963a56e2) hearth in finterm: one walk over a config's models, tested
-- [`59b5441da`](https://github.com/yumima/finterm/commit/59b5441da) hearth in finterm: what the review found
-- [`9da8360f9`](https://github.com/yumima/finterm/commit/9da8360f9) Get hearth: run hearth's own installer, the one this finterm knows
-- [`f6a80eaea`](https://github.com/yumima/finterm/commit/f6a80eaea) hearth: a busy engine is not a dead one; its own voice folder
-- [`57fb47f85`](https://github.com/yumima/finterm/commit/57fb47f85) hearth: finterm finds it, asks once, connects and disconnects
-- [`029e6c7d4`](https://github.com/yumima/finterm/commit/029e6c7d4) hearth: no web search unless the user turns it on; one address for it; uv is verified
-- [`6d771b282`](https://github.com/yumima/finterm/commit/6d771b282) review: a draft is not a decision; a cell's output grows in place; user code has slots of its own
-- [`8add4d09c`](https://github.com/yumima/finterm/commit/8add4d09c) alpha arena: a model on hearth is not given a web search the others don't have
-- [`1f0c6dcde`](https://github.com/yumima/finterm/commit/1f0c6dcde) alpha arena, notebook: what the review found
-- [`18807b311`](https://github.com/yumima/finterm/commit/18807b311) alpha arena: portfolios come from the fills; no answer is no decision; the tabs show what there is
-- [`307e860ab`](https://github.com/yumima/finterm/commit/307e860ab) updater: a version released again is offered; About and the download page name the build
-- [`da59ae310`](https://github.com/yumima/finterm/commit/da59ae310) notebook: its cells run in one Python of their own; a restored tab no longer saves over its file
-- [`c62926437`](https://github.com/yumima/finterm/commit/c62926437) **chore(release):** update README download links and updates.json for v4.1.0
-- [`023279470`](https://github.com/yumima/finterm/commit/023279470) review: a resumed RD-Agent job does its work; a key goes to its own endpoint only; the panel says what is so
-- [`a959f384e`](https://github.com/yumima/finterm/commit/a959f384e) voice: the app opens the microphone; nothing is installed by hand
-- [`4ae5fa611`](https://github.com/yumima/finterm/commit/4ae5fa611) agents: their skills' text reaches them; a local model that only thinks is asked not to
-- [`5083d9593`](https://github.com/yumima/finterm/commit/5083d9593) rd-agent: jobs run in a process the app keeps; the MCP server serves finterm's own tools
-- [`3191ad542`](https://github.com/yumima/finterm/commit/3191ad542) deep agent: it runs, with the chosen model and finterm's own read-only tools
-- [`29bad85d1`](https://github.com/yumima/finterm/commit/29bad85d1) python: a script's arguments never reach the command line; long jobs have slots of their own
-- [`cfba7bb81`](https://github.com/yumima/finterm/commit/cfba7bb81) ai: an id that reads as a huge exponent no longer fails the whole answer
-- [`ac7003051`](https://github.com/yumima/finterm/commit/ac7003051) site: the download page says when the files went up, next to the version
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
