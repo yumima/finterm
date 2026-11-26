@@ -84,7 +84,17 @@ check("stderr has its name", text(k.run("import sys\nprint('warn', file=sys.stde
 # inherit_std_handles).
 check("a subprocess's output too", text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(7)'])\npass")) == "7\n")
 check("...and its stderr", text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'import sys; print(8, file=sys.stderr)'])\npass"), "stderr") == "8\n")
-check("...through the shell too", text(k.run("import os, sys\nos.system(f'\"{sys.executable}\" -c \"print(9)\"')\npass")).strip() == "9")
+# cmd /c strips a line's first and last quote when it has more than two: wrap it once more
+check("...through the shell too", text(k.run("import os, sys\nc = f'\"{sys.executable}\" -c \"print(9)\"'\n"
+                                             "os.system(f'\"{c}\"' if os.name == 'nt' else c)\npass")).strip() == "9")
+check("a STARTUPINFO's own handles are kept", os.name != "nt" or text(k.run(
+    "import subprocess, sys, msvcrt, tempfile, os\nf = tempfile.TemporaryFile()\nsi = subprocess.STARTUPINFO()\n"
+    "si.dwFlags |= subprocess.STARTF_USESTDHANDLES\nh = msvcrt.get_osfhandle(f.fileno())\nos.set_handle_inheritable(h, True)\n"
+    "si.hStdOutput = si.hStdError = h\nsubprocess.run([sys.executable, '-c', 'print(6)'], startupinfo=si, close_fds=False)\n"
+    "f.seek(0)\nprint(f.read().strip() == b'6')")) == "True\n")
+check("a closed fd 1 does not stop a program starting", text(k.run(
+    "import os, subprocess, sys\nkeep = os.dup(1)\nos.close(1)\ntry:\n    r = subprocess.run([sys.executable, '-c', 'pass']).returncode\n"
+    "finally:\n    os.dup2(keep, 1)\n    os.close(keep)\nprint(r)")) == "0\n")
 check("a captured subprocess is still captured", text(k.run("import subprocess, sys\nprint(subprocess.run([sys.executable, '-c', 'print(5)'], capture_output=True, text=True).stdout.strip() + '!')")) == "5!\n")
 check("a write to the descriptor", text(k.run("import os\nos.write(1, b'raw')\npass")) == "raw")
 

@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`c08f8a7bf`](https://github.com/yumima/finterm/commit/c08f8a7bf) notebook: on Windows a program a cell starts writes to the cell
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
