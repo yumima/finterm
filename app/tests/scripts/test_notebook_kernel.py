@@ -59,6 +59,12 @@ def text(events, name="stdout"):
     return "".join(e["text"] for e in events if e["t"] == "stream" and e["name"] == name)
 
 
+def program_output(cell, name="stdout"):
+    """A cell's output with Windows' \\r\\n as \\n, and as it came."""
+    out = text(k.run(cell), name)
+    return out.replace("\r\n", "\n"), repr(out)
+
+
 def error(events):
     return next((e for e in events if e["t"] == "error"), None)
 
@@ -80,16 +86,16 @@ check("unicode", text(k.run("print('é😀')")) == "é😀\n")
 check("a lone surrogate does not break it", "\\ud83d" in text(k.run("print('\\ud83d')")))
 check("stderr has its name", text(k.run("import sys\nprint('warn', file=sys.stderr)"), "stderr") == "warn\n")
 # Windows too (checked on CI): a program a cell starts writes to the cell's
-# pipes; it ends its lines with \r\n.
-nl = lambda t: t.replace("\r\n", "\n")  # a Windows program ends its lines with \r\n
-out = text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(7)'])\npass"))
-check("a subprocess's output too", nl(out) == "7\n", repr(out))
-out = text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'import sys; print(8, file=sys.stderr)'])\npass"), "stderr")
-check("...and its stderr", nl(out) == "8\n", repr(out))
+# pipes; it ends its lines with \r\n, so the checks compare without it.
+out, seen = program_output("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(7)'])\npass")
+check("a subprocess's output too", out == "7\n", seen)
+out, seen = program_output("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'import sys; print(8, file=sys.stderr)'])\npass", "stderr")
+check("...and its stderr", out == "8\n", seen)
 # cmd /c strips a line's first and last quote when it has more than two: wrap it once more
-check("...through the shell too", text(k.run("import os, sys\nc = f'\"{sys.executable}\" -c \"print(9)\"'\n"
-                                             "os.system(f'\"{c}\"' if os.name == 'nt' else c)\npass")).strip() == "9")
-check("a captured subprocess is still captured", text(k.run("import subprocess, sys\nprint(subprocess.run([sys.executable, '-c', 'print(5)'], capture_output=True, text=True).stdout.strip() + '!')")) == "5!\n")
+out, seen = program_output("import os, sys\nc = f'\"{sys.executable}\" -c \"print(9)\"'\nos.system(f'\"{c}\"' if os.name == 'nt' else c)\npass")
+check("...through the shell too", out == "9\n", seen)
+out, seen = program_output("import subprocess, sys\nprint(subprocess.run([sys.executable, '-c', 'print(5)'], capture_output=True, text=True).stdout + '!')")
+check("a captured subprocess is still captured", out == "5\n!\n", seen)
 check("a write to the descriptor", text(k.run("import os\nos.write(1, b'raw')\npass")) == "raw")
 
 r = k.run("a = 1\nraise ValueError('no')")
