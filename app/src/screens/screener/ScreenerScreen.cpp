@@ -1678,11 +1678,11 @@ void ScreenerScreen::fill_band() {
             beat.isEmpty()
                 ? QStringLiteral("No screen beat the equal-weighted S&amp;P 500 with significance, 2010-2026.")
                 : beat.size() == 1
-                ? QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more), on "
-                                 "the months it held names; read its record before trusting it.")
+                ? QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more); "
+                                 "read its record before trusting it.")
                       .arg(who)
-                : QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more), on "
-                                 "the months they held names; read their records before trusting them.")
+                : QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more); "
+                                 "read their records before trusting them.")
                       .arg(who);
         const QString record_bold =
             beat.isEmpty() ? QStringLiteral("<b>None beat the equal-weighted index with statistical significance</b>.")
@@ -1837,7 +1837,7 @@ void ScreenerScreen::fill_band() {
         if (ev.median_names)
             d += QStringLiteral("<tr><td style='color:%1'>Names in a month (median)</td><td align='right'>&nbsp;%2"
                                 "</td></tr>")
-                     .arg(dim, QString::number(*ev.median_names));
+                     .arg(dim, QString::number(*ev.median_names, 'g', 3));
         if (ev.trades)
             d += QStringLiteral("<tr><td style='color:%1'>Trades / win rate / avg</td><td align='right'>&nbsp;%2 / %3 "
                                 "/ %4R</td></tr>")

@@ -22,6 +22,16 @@ Lynch ran Fidelity Magellan from 1977 to 1990. He published no screen, but *One 
 
 AAII's published Lynch screen (2019) adds a cap of 50% a year on 5-year earnings growth and excludes financials.
 
+TradingView has no built-in Lynch field. Its "Peter Lynch Value" is community indicators: the most used (Uptrader,
+"Peter Lynch Value (Dynamic Growth)", 2025) draws fair price = EPS × growth rate with the multiple capped at 25 (15
+when growth is unknown); an older one (AntoineLeo, 2020) draws the earnings line of Lynch's charts, EPS × 15. Both are
+columns here: **Lynch val.** (P/E = growth, at most 25) and **15× earn.** Neither changes the list; the ratio does.
+
+Checked against TradingView's own fields on the 21 names listed or setting up on 2026-11-25: our 5-year growth equals
+its `net_income_cagr_5y` on every one, and our P/E (market cap / net income) is within a few percent of
+`price_earnings_ttm` (per diluted share). Its `price_earnings_growth_ttm` (PEG) does not match and is not meant to: it
+divides by ONE year's EPS growth (USLM 10.5, NXT 5.4 against 0.6 and 0.5 here); Lynch's is the long-term rate.
+
 ## Rules and where each comes from
 
 | Rule | Source |
@@ -29,10 +39,11 @@ AAII's published Lynch screen (2019) adds a cap of 50% a year on 5-year earnings
 | Six consecutive fiscal years reported, a profit in every one | needed for a 5-year rate; never across a loss (AAII's screen implies it) |
 | Growth = net income, last fiscal year vs five years before, a year; above 0%, at most 50% | 5 years: AAII and GuruFocus; 50%: AAII. Net income, not EPS: the SEC history's share counts are not split-safe, and the live screen must be the tested one |
 | Last twelve months' earnings positive; P/E = market cap / those earnings | a P/E must exist; whole-company numbers on both sides of the ratio |
-| Total debt ≤ ⅓ of equity, equity positive | "75 percent equity and 25 percent debt": no weaker than his normal |
+| Total debt ≤ 25% of debt + equity, equity positive | "75 percent equity and 25 percent debt": no weaker than his normal |
 | (growth % + dividend yield %) / P/E ≥ 2, ranked, at most 30 | "a 2 or better" |
 | Setting up: every other test passed, ratio 1.5 to 2 (or ≥ 2 outside the 30) | "1.5 is okay" |
-| Lynch value = the price at which P/E = growth | "fairly priced will equal its growth rate" |
+| Lynch value = the price at which P/E = growth, the P/E at most 25 | "fairly priced will equal its growth rate"; the cap is TradingView's indicator's |
+| Earnings line = 15 × earnings a share | the line his charts draw the price against |
 | Excludes Finance and Utilities | as every fundamental screen here |
 
 The thresholds are the book's and AAII's, written once and not tuned. The inventory test is left out because the

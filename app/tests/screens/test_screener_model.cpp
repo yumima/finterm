@@ -76,7 +76,7 @@ class TestScreenerModel : public QObject {
         QCOMPARE(*m->evidence.excess, 0.019);
         QCOMPARE(m->evidence.subperiods.size(), 4);
         QCOMPARE(*m->evidence.months_held, 108);
-        QCOMPARE(*m->evidence.median_names, 1);
+        QCOMPARE(*m->evidence.median_names, 1.0);
         QVERIFY(!m->evidence.subperiods[2].has_value()); // null sub-period stays absent
         QVERIFY(!r.strategy("nope"));
     }
@@ -118,8 +118,12 @@ class TestScreenerModel : public QObject {
         QCOMPARE(format_value(Kind::Int, 87.4), QStringLiteral("87"));
         QCOMPARE(format_value(Kind::Percentile, 0.934), QStringLiteral("93"));
         QCOMPARE(format_value(Kind::Ratio, 14.25), QStringLiteral("14.3"));
-        QCOMPARE(format_value(Kind::Ratio2, 1.996), QStringLiteral("2.00"));
-        QCOMPARE(format_value(Kind::Ratio2, 1.954), QStringLiteral("1.95"));
+        QCOMPARE(format_value(Kind::Ratio2, 1.996), QStringLiteral("1.99")); // below 2 never reads as 2
+        QCOMPARE(format_value(Kind::Ratio2, 1.15), QStringLiteral("1.15"));  // 114.99999999999999 snapped
+        QCOMPARE(format_value(Kind::Ratio2, 2.0), QStringLiteral("2.00"));
+        QCOMPARE(format_value(Kind::PctUp, 0.2501), QStringLiteral("25.1%")); // above 25% never reads as 25.0
+        QCOMPARE(format_value(Kind::PctUp, 0.25), QStringLiteral("25.0%"));
+        QCOMPARE(format_value(Kind::PctUp, 0.07), QStringLiteral("7.0%"));
         QCOMPARE(format_value(Kind::Pct, 0.0), QStringLiteral("0.0%")); // a real zero is a value
         QVERIFY(!colour_for(Kind::Pct, 0.3).size());       // unsigned quantities are not coloured
         QVERIFY(colour_for(Kind::PctSigned, 0.3).size());

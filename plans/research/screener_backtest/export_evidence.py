@@ -49,7 +49,7 @@ def stats(col):
         # the months that held names: a screen whose data starts later has a
         # shorter record, and says so
         "from": f"{s.index[0]:%Y-%m}", "to": f"{s.index[-1]:%Y-%m}", "months_held": int(len(s)),
-        "median_names": int(round(res.loc[s.index, col + "|n"].median())) if col + "|n" in res else None,
+        "median_names": num(res.loc[s.index, col + "|n"].median(), 1) if col + "|n" in res else None,
         **({"trades": int(len(TRADES[col])), "win_rate": num((TRADES[col]["R"] > 0).mean(), 3),
             "avg_R": num(TRADES[col]["R"].mean(), 2)} if col in TRADES else {}),
     }
@@ -99,7 +99,7 @@ def setup_stats(col):
             "t": num(ex.mean() / ex.std() * np.sqrt(len(ex)) if ex.std() > 0 else np.nan, 2),
             "max_dd": num((eq / eq.cummax() - 1).min(), 4),
             "subperiods": [num(((s - setups.loc[s.index, "EW"]).loc[a:b]).mean() * 12, 4) for a, b in PERIODS],
-            "median_names": int(round(setups.loc[held, col + "|n"].median())),
+            "median_names": num(setups.loc[held, col + "|n"].median(), 1),
             "from": f"{s.index[0]:%Y-%m}", "to": f"{s.index[-1]:%Y-%m}",
             "months_held": int(held.sum()), "months": int(len(setups))}
 

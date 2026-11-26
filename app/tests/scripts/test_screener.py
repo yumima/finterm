@@ -335,7 +335,7 @@ grow = lambda r: sd.lynch_facts([100.0 * (1 + r) ** -i for i in range(6)], None)
 check(lfails(grow(0.50)) == [] and lfails(grow(0.51)) == ["growth"], "growth up to 50% a year, not above")
 check(lfails(grow(-0.05)) == ["growth"] and lfails(grow(0.0)) == ["growth"], "a shrinking or flat company has no growth")
 check(lfails(e=0.0) == ["earnings"] and lfails(e=None) == ["earnings"], "no earnings in the last 12 months: no P/E")
-check(lfails(debt=33.33) == [] and lfails(debt=33.34) == ["debt"], "debt at most a third of equity (25/75)")
+check(lfails(debt=100.0 / 3) == [] and lfails(debt=33.34) == ["debt"], "debt at most 25% of debt + equity (25/75)")
 check(lfails(debt=None) == ["debt"] and lfails(eq=None) == ["debt"] and lfails(debt=0.0, eq=-5.0) == ["debt"],
       "unknown debt or equity fails, and so does negative equity")
 check(lfails({}) == ["years", "profit", "growth"], "no history passes nothing it measures")
@@ -364,7 +364,14 @@ check(ll["lynch"] == want_l, f"ratio >= 2, highest first, no bank: {ll['lynch'][
 check(abs(ldf.at[want_l[0], "lynch_ratio"] - lrat[want_l[0]]) < 1e-9
       and abs(ldf.at[want_l[0], "lynch_value"] - 50.0 * 15.0 / (lf[want_l[0]]["mcap"] / 100.0)) < 1e-9,
       "the ratio, and the price at which P/E = growth")
-check(abs(ldf.at[want_l[0], "debt_equity"] - 0.1) < 1e-12, "debt / equity")
+check(abs(ldf.at[want_l[0], "debt_cap"] - 10.0 / 110.0) < 1e-12, "debt / (debt + equity)")
+pe0 = lf[want_l[0]]["mcap"] / 100.0
+check(abs(ldf.at[want_l[0], "lynch_line"] - 50.0 * 15 / pe0) < 1e-9, "the earnings line: 15 x earnings a share")
+fast_g = {s: dict(r, ni_h=[100.0 * 1.4 ** -i for i in range(8)]) for s, r in lynch_market(lambda i: 2.5).items()}
+fg = sd.compute(fast_g, fr60)[0]
+s0 = sorted(fast_g)[0]
+check(abs(fg.at[s0, "lynch_value"] - 50.0 * 25 / (fast_g[s0]["mcap"] / 100.0)) < 1e-9,
+      "40% growth: the value's P/E is capped at 25, not 40")
 lwait = [d["symbol"] for d in lex["setups"]["lynch"]]
 want_w = sorted((s for s in lops if 1.5 <= lrat[s] < 2.0), key=lambda s: -lrat[s])[:30]
 check(lwait == want_w, f"the wait list: 1.5 to 2, highest first: {lwait[:4]} vs {want_w[:4]}")
@@ -391,7 +398,7 @@ lex2 = {}
 _, ll2, _, _ = sd.compute(lf2, fr60, lex2)
 lw0 = lex2["setups"]["lynch"][0]
 check(len(ll2["lynch"]) == 30 and lw0["symbol"] == sorted(lf2)[30] and abs(lw0["gap"] - 0.01) < 1e-9
-      and "to reach #30" in lw0["gap_text"], f"#31 is told how far its ratio is from #30's: {lw0}")
+      and "to pass #30" in lw0["gap_text"], f"#31 is told how far its ratio is from #30's: {lw0}")
 check(sd.compute({s: dict(r, fy_h=None) for s, r in lf.items()}, fr60)[1]["lynch"] == [],
       "unknown fiscal periods are not consecutive ones")
 check(sd.compute({s: dict(r, div_yield=None) for s, r in lf.items()}, fr60)[1]["lynch"] == [],

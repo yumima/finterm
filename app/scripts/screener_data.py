@@ -741,9 +741,11 @@ def buffett_quality(x, roe, roic, debt):
 LYNCH = {
     "years": 6,             # consecutive profitable fiscal years: five years of growth
     "growth_max": 0.50,     # a year; a faster rate is not believed (AAII's Lynch screen)
-    "debt_equity": 1 / 3,   # 25% debt to 75% equity: no weaker than his "normal"
+    "debt_share": 0.25,     # debt / (debt + equity): his "normal" 25 to 75, no weaker
     "ratio": 2.0,           # (growth + yield) / P/E: "a 2 or better"
     "ratio_ok": 1.5,        # "1.5 is okay": the setting-up list's floor
+    "value_pe_max": 25,     # Lynch value: growth as the P/E, at most this (TradingView's Peter Lynch Value)
+    "line_pe": 15,          # the earnings line on his charts: 15 x earnings
     "n": 30,
 }
 
@@ -789,7 +791,8 @@ def lynch_tests(x, earnings, debt, equity):
         ("profit", n > 0 and x["ni_pos"] == n),
         ("growth", num(x.get("growth")) and 0 < x["growth"] <= L["growth_max"]),
         ("earnings", num(earnings) and earnings > 0),
-        ("debt", num(debt) and num(equity) and equity > 0 and debt <= L["debt_equity"] * equity),
+        ("debt", num(debt) and num(equity) and equity > 0 and debt >= 0
+                 and debt <= L["debt_share"] * (debt + equity)),
     ]
 
 
@@ -914,7 +917,7 @@ def setting_up(df, sig, lists, ctx):
                                            "0.00", f"ties #{L['n']}; any rise puts it on the list"))
                 continue
             out["lynch"].append(_setup(s_, f"A ratio of {L['ratio']:g} or better, outside the {L['n']} highest",
-                                       "outside the cut", g, up(g), f"the ratio must rise {up(g)} to reach #{L['n']}"))
+                                       "outside the cut", g, up(g), f"the ratio must rise more than {up(g)} to pass #{L['n']}"))
             continue
         g = float(L["ratio"] - r_)
         out["lynch"].append(_setup(s_, f"Ratio {down(r_)}: 'okay', not yet {L['ratio']:g}", f"ratio < {L['ratio']:g}",
@@ -1085,10 +1088,11 @@ STRATEGIES = [
         "rules": ["Six consecutive fiscal years reported, a profit in every one: five years of growth, never across a loss",
                   "Earnings growth = net income, last fiscal year against five years before, a year; above 0% and at most 50% (AAII's Lynch screen: a faster rate is not believed)",
                   "Last twelve months' earnings positive; P/E = market cap / those earnings",
-                  "Total debt ≤ one third of equity ('a normal corporate balance sheet has 75 percent equity and 25 percent debt'), equity positive",
+                  "Total debt ≤ 25% of debt + equity ('a normal corporate balance sheet has 75 percent equity and 25 percent debt'), equity positive",
                   "Lynch ratio = (growth rate + dividend yield) / P/E, rates in percent: 'less than a 1 is poor, and 1.5 is okay, but what you're really looking for is a 2 or better'",
                   "Ratio ≥ 2; ranked by the ratio, the 30 highest",
-                  "Lynch value = the price at which the P/E equals the growth rate ('the p/e ratio of any company that's fairly priced will equal its growth rate')",
+                  "Lynch value = the price at which the P/E equals the growth rate ('the p/e ratio of any company that's fairly priced will equal its growth rate'), the P/E at most 25 as in TradingView's Peter Lynch Value indicator",
+                  "Earnings line = 15 × the last twelve months' earnings a share: the line his charts draw the price against",
                   "Excludes Finance and Utilities, as the other fundamental screens do"],
         "idea": "Lynch ran Fidelity Magellan from 1977 to 1990 and wrote down the numbers he used. The first: a fairly priced company's P/E equals its growth rate, so 'a p/e ratio that's half the growth rate is very positive, and one that's twice the growth rate is very negative'. The second adds the dividend, so a slow grower that pays is not called dear: 12% growth plus a 3% yield over a P/E of 10 is 1.5. Both ask how much growth a dollar of price buys, and a balance sheet without much debt is what lets a company survive long enough to deliver it.",
         "use": "The ratio was one number in his two-minute story, not the story. He sorted companies first — slow growers, stalwarts, fast growers, cyclicals, turnarounds, asset plays — and the ratio misleads on cyclicals: their P/E is lowest at the top of the cycle, when growth is about to turn. He also wanted inventories growing no faster than sales, few institutions holding the stock, and insiders buying; this feed carries none of those. Read the latest 10-K before trusting a ratio built on five years of history.",
@@ -1100,7 +1104,7 @@ STRATEGIES = [
         "rank_key": 'lynch_ratio',
         "setup_desc": 'companies that pass every test before the price but are not on the list, the 30 highest ratios of at least 1.5 (Lynch\'s "okay")',
         "rank_by": "Lynch ratio, highest first",
-        "columns": ["lynch_ratio", "lynch_value", "lynch_growth", "lynch_pe", "div_yield", "debt_equity"],
+        "columns": ["lynch_ratio", "lynch_value", "lynch_line", "lynch_growth", "lynch_pe", "div_yield", "debt_cap"],
         "backtest": 'Lynch: (growth + yield) / P/E >= 2 (max 30)',
         "note": "Strong but thin: rarely more than two S&P 500 stocks pass at once, and the same few companies stay on for years, a homebuilder (a cyclical, where Lynch warned the ratio misleads) most of all. The record survives leaving out its biggest names and beats random picks from the same passers, but the 'okay' names between 1.5 and 2 did not beat the index. Lynch gave the ratio as a rule of thumb, never as a screen; his Magellan record came from company visits and judgement no rule here contains.",
     },
@@ -1585,12 +1589,17 @@ def compute(fund, frames, extras=None, now=None):
     df["lynch_ratio"] = lcol(lambda l_, r_: l_["ratio"])
     df["lynch_pe"] = lcol(lambda l_, r_: l_["pe"])
     df["lynch_growth"] = lcol(lambda l_, r_: l_["facts"].get("growth"))
-    # the price at which the P/E equals the growth rate ("fairly priced"), a
-    # share at the price the market cap was struck on (see fair_value)
-    df["lynch_value"] = lcol(lambda l_, r_: r_["q_close"] * l_["facts"]["growth"] * 100 / l_["pe"]
-                             if l_["pe"] and (l_["facts"].get("growth") or 0) > 0 and r_.get("q_close") else None)
-    df["debt_equity"] = lcol(lambda l_, r_: r_["total_debt"] / r_["total_equity"]
-                             if r_.get("total_debt") is not None and (r_.get("total_equity") or 0) > 0 else None)
+    # the price at which the P/E equals the growth rate ("fairly priced"),
+    # the multiple capped as TradingView's Peter Lynch Value caps it; and his
+    # chart's earnings line, 15 x earnings. A share, at the price the market
+    # cap was struck on (see fair_value).
+    a_share = lambda l_, r_, mult: (r_["q_close"] * mult / l_["pe"] if l_["pe"] and r_.get("q_close") else None)
+    df["lynch_value"] = lcol(lambda l_, r_: a_share(l_, r_, min(l_["facts"]["growth"] * 100, LYNCH["value_pe_max"]))
+                             if (l_["facts"].get("growth") or 0) > 0 else None)
+    df["lynch_line"] = lcol(lambda l_, r_: a_share(l_, r_, LYNCH["line_pe"]))
+    df["debt_cap"] = lcol(lambda l_, r_: r_["total_debt"] / (r_["total_debt"] + r_["total_equity"])
+                          if r_.get("total_debt") is not None and r_["total_debt"] >= 0
+                          and (r_.get("total_equity") or 0) > 0 else None)
     lgood = pd.Series({s_: l_["good"] for s_, l_ in lyn.items()}, dtype=bool).reindex(syms, fill_value=False)
 
     lists = {}
@@ -1843,7 +1852,7 @@ def worked_examples(df, sig, lists, ctx):
             return [first]
         x, ok, r_ = l_["facts"], l_["tests"], ctx["fund"].get(sym) or {}
         n = x.get("years", 0)
-        de = v("debt_equity", sym)
+        dc = v("debt_cap", sym)
         ratio = l_["ratio"]
         return [
             first,
@@ -1852,8 +1861,9 @@ def worked_examples(df, sig, lists, ctx):
             C(f"Earnings growth over 5 years above 0% and at most {_pc(L['growth_max'])} a year",
               _pc(x.get("growth")), ok["growth"]),
             C("Last 12 months' earnings positive (a P/E exists)", _m(r_.get("net_income")), ok["earnings"]),
-            C(f"Debt at most {L['debt_equity']:.2f}x equity (25% debt, 75% equity)",
-              f"{de:.2f}x" if np.isfinite(de) else "debt or equity unknown, or equity negative", ok["debt"]),
+            C(f"Debt at most {_pc(L['debt_share'])} of debt + equity (75% equity)",
+              f"{math.ceil(round(dc * 1000, 6)) / 10:.1f}%" if np.isfinite(dc)
+              else "debt or equity unknown, or equity negative", ok["debt"]),
             C(f"(growth + dividend yield) / P/E at least {L['ratio']:g}",
               f"({_pc(x.get('growth'))} + {_pc(r_.get('div_yield'))}) / P/E "
               f"{l_['pe']:.1f} = {_floor2(ratio):.2f}" if ratio is not None else "—",
@@ -1945,7 +1955,7 @@ OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
               "div_yield", "shareholder_yield", "value_score", "next_earnings",
               "mos", "fair_value", "owner_yield", "ni_growth", "debt_years",
-              "lynch_ratio", "lynch_value", "lynch_growth", "lynch_pe", "debt_equity",
+              "lynch_ratio", "lynch_value", "lynch_line", "lynch_growth", "lynch_pe", "debt_cap",
               "entry", "stop", "risk_pct", "target3", "target5", "group_rs", "group_leaders"]
 CHART_BARS = 126  # closes per listed name: the table's 6-month trend line (kSparkBars)
 

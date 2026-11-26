@@ -45,7 +45,8 @@ struct Evidence {
     std::optional<double> max_dd; // fraction, negative
     QVector<std::optional<double>> subperiods;
     QString from, to; // "2015-03": the months that held names
-    std::optional<int> months_held, median_names; // how many months, and how many names in one
+    std::optional<int> months_held;      // how many months held names
+    std::optional<double> median_names;  // the median names in one of them
     QString note;
     // trade-simulated strategies only (the Luk pullback)
     std::optional<int> trades;
@@ -211,8 +212,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.evidence.to = eo.value(QStringLiteral("to")).toString();
         if (const auto m = num(eo, QStringLiteral("months_held")))
             s.evidence.months_held = int(*m);
-        if (const auto m = num(eo, QStringLiteral("median_names")))
-            s.evidence.median_names = int(*m);
+        s.evidence.median_names = num(eo, QStringLiteral("median_names"));
         for (const auto& x : eo.value(QStringLiteral("subperiods")).toArray()) {
             const double d = x.toDouble(std::nan(""));
             s.evidence.subperiods << (x.isDouble() && std::isfinite(d) ? std::optional<double>(d) : std::nullopt);
@@ -251,7 +251,8 @@ enum class Kind {
     Pct,        // fraction -> "12.3%"
     PctSigned,  // fraction -> "+12.3%", green/red
     Ratio,      // plain multiple -> "14.2"
-    Ratio2,     // a ratio read against a cut -> "1.96" (one decimal would print 2.0)
+    Ratio2,     // a ratio held to a floor ("at least 2") -> "1.99" for 1.996: rounded DOWN, never shown as reaching it
+    PctUp,      // a share held to a ceiling ("at most 25%") -> "25.1%" for 25.01%: rounded UP, never shown as within it
     Int,        // "87"
     Percentile, // 0..1 -> "93"
     Money,      // "$123.45"
@@ -303,12 +304,16 @@ inline const QVector<ColumnDef>& column_defs() {
         {"lynch_ratio", "Lynch", Kind::Ratio2,
          "Peter Lynch's (earnings growth % + dividend yield %) ÷ P/E: under 1 poor, 1.5 okay, 2 or better wanted"},
         {"lynch_value", "Lynch val.", Kind::Money,
-         "The price at which the P/E equals the 5-year earnings growth rate (Lynch: 'fairly priced')"},
+         "The price at which the P/E equals the 5-year earnings growth rate (Lynch: 'fairly priced'), the P/E at "
+         "most 25"},
+        {"lynch_line", "15× earn.", Kind::Money,
+         "Lynch's earnings line: 15 × the last twelve months' earnings a share"},
         {"lynch_growth", "Earn. 5Y", Kind::PctSigned,
          "Net income growth a year, last fiscal year against five years before"},
         {"lynch_pe", "P/E (cap)", Kind::Ratio,
          "Market cap ÷ net income, last twelve months: the P/E in the Lynch ratio"},
-        {"debt_equity", "Debt/eq.", Kind::Ratio2, "Total debt ÷ shareholders' equity, latest quarter"},
+        {"debt_cap", "Debt/cap.", Kind::PctUp,
+         "Total debt ÷ (debt + shareholders' equity), latest quarter; Lynch's normal is 25% debt, 75% equity"},
         {"earnings_yield", "EBIT/EV", Kind::Pct, "Earnings yield: EBIT ÷ enterprise value"},
         {"pe", "P/E", Kind::Ratio, "Price ÷ earnings, trailing"},
         {"pb", "P/B", Kind::Ratio, "Price ÷ book value"},
@@ -350,8 +355,10 @@ inline QString format_value(Kind k, const std::optional<double>& v) {
             return fmt::format_percent(*v * 100.0, 1, true);
         case Kind::Ratio:
             return QString::number(*v, 'f', 1);
-        case Kind::Ratio2:
-            return QString::number(*v, 'f', 2);
+        case Kind::Ratio2: // snapped first: 1.15 * 100 is 114.99999999999999
+            return QString::number(std::floor(std::round(*v * 1e8) / 1e6) / 100.0, 'f', 2);
+        case Kind::PctUp:
+            return fmt::format_percent(std::ceil(std::round(*v * 1e9) / 1e6) / 10.0, 1);
         case Kind::Int:
             return QString::number(qRound64(*v));
         case Kind::Percentile:
