@@ -47,6 +47,7 @@ class IpoCalendarWidget : public BaseWidget {
     QVector<QLabel*> header_labels_;
 
     QVector<IpoEntry> entries_;
+    int unlisted_upcoming_ = 0; ///< on the calendar as upcoming, but undated or outside the 60 days
 };
 
 } // namespace finterm::screens::widgets

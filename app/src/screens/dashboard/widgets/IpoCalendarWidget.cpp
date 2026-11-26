@@ -2,6 +2,8 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 
+#include <algorithm>
+
 #include "services/pre_ipo/IpoDealsFeed.h"
 #include "ui/theme/Theme.h"
 
@@ -134,6 +136,7 @@ void IpoCalendarWidget::rebuild_entries() {
         return; // still loading, or the failure is shown
     const QDate today = QDate::currentDate();
     entries_.clear();
+    unlisted_upcoming_ = 0;
     // The newest rows (a plain fast pass carries today's pricings even while
     // EDGAR is failing); dates as the feed parses them for every surface.
     const QJsonArray rows = feed.latest_root().value("deals").toArray();
@@ -147,8 +150,10 @@ void IpoCalendarWidget::rebuild_entries() {
         if (d.status == QLatin1String("upcoming")) {
             // Scheduled on the exchange calendar. No date = its date slipped
             // (overdue / late): not "upcoming" in any sense a reader can use.
-            if (!d.when.isValid() || today.daysTo(d.when) < -3 || today.daysTo(d.when) > 60)
+            if (!d.when.isValid() || today.daysTo(d.when) < -3 || today.daysTo(d.when) > 60) {
+                ++unlisted_upcoming_; // still said: "None scheduled" must not hide it
                 continue;
+            }
             entry.status = QStringLiteral("upcoming");
             entry.date = d.when;
         } else if (d.status == QLatin1String("priced")) {
@@ -189,13 +194,6 @@ void IpoCalendarWidget::populate() {
         delete item;
     }
 
-    if (entries_.isEmpty()) {
-        status_label_->setText("No IPO data available");
-        status_label_->setVisible(true);
-        scroll_area_->setVisible(false);
-        list_layout_->addStretch();
-        return;
-    }
 
     status_label_->setVisible(false);
     scroll_area_->setVisible(true);
@@ -210,6 +208,30 @@ void IpoCalendarWidget::populate() {
 
     QString current_status;
     bool alt = false;
+
+    // No deal scheduled is an answer, not a gap: say it, or a PRICED-only tile
+    // reads as a calendar that stopped updating. Nasdaq's calendar, the only
+    // source of scheduled dates, lists about a week ahead.
+    const bool any_upcoming = std::any_of(entries_.cbegin(), entries_.cend(),
+                                          [](const auto& e) { return e.status == QLatin1String("upcoming"); });
+    if (!any_upcoming) {
+        const QString fs = QString("font-size:%1px;").arg(ui::fonts::font_px(0));
+        auto* sec = new QLabel(QStringLiteral("── UPCOMING ──"));
+        sec->setStyleSheet(QString("color: %1; font-weight: bold; padding: 4px 8px; background: %2; %3")
+                               .arg(ui::colors::AMBER(), ui::colors::BG_RAISED(), fs));
+        list_layout_->addWidget(sec);
+        auto* none = new QLabel(
+            unlisted_upcoming_ > 0
+                ? QStringLiteral("None dated in the next 60 days — %1 on Nasdaq's calendar with a slipped or later "
+                                 "date: PRIVATE MARKET › IPO CALENDAR.")
+                      .arg(unlisted_upcoming_)
+                : QStringLiteral("None scheduled — Nasdaq's calendar lists about a week ahead. "
+                                 "Estimates for filed deals: PRIVATE MARKET › IPO CALENDAR."));
+        none->setWordWrap(true);
+        none->setStyleSheet(
+            QString("color: %1; padding: 4px 8px; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
+        list_layout_->addWidget(none);
+    }
 
     for (const auto& entry : std::as_const(entries_)) {
         // Section caps
@@ -279,6 +301,16 @@ void IpoCalendarWidget::populate() {
             ++priced_shown;
     }
 
+    if (priced_shown == 0) {
+        const QString fs = QString("font-size:%1px;").arg(ui::fonts::font_px(0));
+        auto* sec = new QLabel(QStringLiteral("── PRICED ──"));
+        sec->setStyleSheet(QString("color: %1; font-weight: bold; padding: 4px 8px; background: %2; %3")
+                               .arg(ui::colors::POSITIVE(), ui::colors::BG_RAISED(), fs));
+        list_layout_->addWidget(sec);
+        auto* none = new QLabel(QStringLiteral("None in the last 31 days."));
+        none->setStyleSheet(QString("color: %1; padding: 4px 8px; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
+        list_layout_->addWidget(none);
+    }
     list_layout_->addStretch();
 }
 

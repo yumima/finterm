@@ -44,9 +44,9 @@ struct Evidence {
     std::optional<double> t;      // t-stat of the monthly excess
     std::optional<double> max_dd; // fraction, negative
     QVector<std::optional<double>> subperiods;
-    QString from, to; // "2015-03": the months that held names
-    std::optional<int> months_held;      // how many months held names
-    std::optional<double> median_names;  // the median names in one of them
+    QString from, to;                   // "2015-03": the months that held names
+    std::optional<int> months_held;     // how many months held names
+    std::optional<double> median_names; // the median names in one of them
     QString note;
     // trade-simulated strategies only (the Luk pullback)
     std::optional<int> trades;
