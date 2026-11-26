@@ -6,10 +6,13 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
-- [`e2382cced`](https://github.com/yumima/finterm/commit/e2382cced) Private Market: split-adjusted returns, SPACs found, lock-ups on time
-- [`7ce9633f1`](https://github.com/yumima/finterm/commit/7ce9633f1) Ownership: refreshes judged per round, 13F views kept on new filings
-- [`b07f6d53e`](https://github.com/yumima/finterm/commit/b07f6d53e) IPO tile: says when nothing is scheduled
-- [`012da8a66`](https://github.com/yumima/finterm/commit/012da8a66) Ownership: kept current automatically, never blanking under a reader
+- [`bee80c7ae`](https://github.com/yumima/finterm/commit/bee80c7ae) Weekly brief: IPOs priced and ahead, a box for each table
+- [`6a3905d2f`](https://github.com/yumima/finterm/commit/6a3905d2f) Private Market: split-adjusted returns, SPACs found, lock-ups on time
+- [`bd656a9c1`](https://github.com/yumima/finterm/commit/bd656a9c1) Ownership: refreshes judged per round, 13F views kept on new filings
+- [`ef96fb77a`](https://github.com/yumima/finterm/commit/ef96fb77a) IPO tile: says when nothing is scheduled
+- [`d45855cc7`](https://github.com/yumima/finterm/commit/d45855cc7) Ownership: kept current automatically, never blanking under a reader
+- [`dec583fbb`](https://github.com/yumima/finterm/commit/dec583fbb) **chore(release):** download counts of the releases before v4.2.1
+- [`b70eae2e5`](https://github.com/yumima/finterm/commit/b70eae2e5) **chore(release):** update README download links and updates.json for v4.2.1
 - [`82282b2e4`](https://github.com/yumima/finterm/commit/82282b2e4) finterm 4.2.1
 - [`1c39b0222`](https://github.com/yumima/finterm/commit/1c39b0222) Ownership: the loading bars while a panel waits, not a blank table
 - [`b91bf1bc0`](https://github.com/yumima/finterm/commit/b91bf1bc0) Screener: price holes judged on the sessions most names traded

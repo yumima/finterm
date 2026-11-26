@@ -253,8 +253,12 @@ class TestDataHub : public QObject {
             hub.subscribe(&owner, topic, [&](const QVariant&) { ++got; });
             QCoreApplication::processEvents(); // the initial delivery, if any
             hub.publish(topic, QVariant(9));   // unchanged refresh
-            QCoreApplication::processEvents();
-            QVERIFY2(got >= 1, qPrintable(QStringLiteral("iteration %1: nothing delivered").arg(i)));
+            // The initial delivery is a queued event: one processEvents() pass
+            // does not always drain it on macOS's event loop (CI, 2026-11-26,
+            // iteration 71 of 300), so wait for it — a primed subscriber that
+            // is never handed the value still fails here.
+            QTRY_VERIFY2_WITH_TIMEOUT(got >= 1, qPrintable(QStringLiteral("iteration %1: nothing delivered").arg(i)),
+                                      200);
             hub.unsubscribe(&owner);
         }
     }
