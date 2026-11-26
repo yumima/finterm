@@ -2220,8 +2220,25 @@ void PreIpoService::finalize_load() {
                            .arg(funds_.size())
                            .arg(failed_bits_));
     if (any_failed) {
+        // The probe was stamped up front, which held a failed load off for
+        // six hours, across restarts, while saying "will retry". Unstamp it
+        // and try again in half an hour.
+        // the six-hour gate then opens in 30 minutes (opens of the screen
+        // meanwhile do not re-probe), and one timer asks then
+        cursors_[QStringLiteral("last_checked")] =
+            QDateTime::currentDateTime().addSecs(-(6 * 60 * 60 - 30 * 60)).toString(Qt::ISODate);
+        save_cursors();
+        if (!retry_timer_) {
+            retry_timer_ = new QTimer(this);
+            retry_timer_->setSingleShot(true);
+            connect(retry_timer_, &QTimer::timeout, this, [this]() {
+                if (!loading_)
+                    load_data();
+            });
+        }
+        retry_timer_->start(30 * 60 * 1000 + 5000);
         emit error_occurred(QStringLiteral("One or more SEC sources failed; partial data shown. "
-                                           "The screen will retry on next open."));
+                                           "Trying again in 30 minutes."));
     }
 }
 

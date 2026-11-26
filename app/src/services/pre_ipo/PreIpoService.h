@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVector>
 
 class QJsonArray;
@@ -296,6 +297,7 @@ class PreIpoService : public QObject {
     int pending_bits_ = 0;
     int failed_bits_ = 0;
     bool loading_ = false;
+    QTimer* retry_timer_ = nullptr; // after a failed SEC load: one retry, 30 minutes on
     bool force_refresh_ = false; // set for the duration of a forced refresh
     QJsonObject cursors_;        // per-source change markers (cursors.json)
 

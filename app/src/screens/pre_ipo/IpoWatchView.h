@@ -148,6 +148,10 @@ class IpoWatchView : public QWidget {
         bool range_from_overview = false;  // filed deal: range from Nasdaq's deal page
         QString final_price_raw;           // priced only
         double final_price = 0;            // priced only — parsed dollars
+        // the splits since pricing (a 1:20 reverse split is 0.05): the IPO
+        // price on today's share basis is final_price / split_factor
+        double split_factor = 1;
+        double ipo_basis() const { return final_price / (split_factor > 0 ? split_factor : 1); }
         QString shares_raw;
         double shares = 0;
         double overallot = 0; // greenshoe shares, 0 = unknown
@@ -175,7 +179,7 @@ class IpoWatchView : public QWidget {
         // Performance enrichment via yfinance batch_quotes — pre-fetched on load.
         bool perf_fetched = false;
         double last_price = 0;
-        double pop_pct = 0; // (last - final) / final * 100, priced only
+        double pop_pct = 0; // (last - basis) / basis * 100, priced only; basis = ipo_basis() (split-adjusted)
         // Company profile via yfinance batch_info — pre-fetched on load too.
         bool profile_fetched = false;
         QString sector;

@@ -224,6 +224,16 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     // store's own 30-minute copy of a month, so each run really re-reads it.
     // refresh() keeps the rows on screen while it loads.
     ui::refresh_while_visible(this, 32 * 60, [this]() { refresh(); });
+    // The marketplace too: load() re-reads the index when its copy is older
+    // than the service's limit (and only then), so this costs nothing when
+    // fresh; before, a screen left open never re-read Clarity at all.
+    auto* clarity_tick = new QTimer(this);
+    clarity_tick->setInterval(30 * 60 * 1000);
+    connect(clarity_tick, &QTimer::timeout, this, [this]() {
+        if (isVisible() && !window()->isMinimized())
+            services::ClarityService::instance().load();
+    });
+    clarity_tick->start();
 
     // Deep link from News › WHAT'S ON: open one deal's dossier. Published on
     // the GUI thread after nav.switch_screen, so this view exists by then; the
@@ -1197,6 +1207,9 @@ IpoWatchView::Entry IpoWatchView::entry_from_json(const QJsonObject& o) {
 
     if (x.status == "priced") {
         x.final_price = num("final_price");
+        // RPGL: $4.00, then 1:20, 1:40 and 1:16 reverse splits, read +125%
+        const double sf = num("split_factor");
+        x.split_factor = sf > 0 ? sf : 1;
         x.final_price_raw = x.final_price > 0 ? QString::number(x.final_price, 'f', 2) : QString();
         if (x.final_price > 0)
             x.price_range = x.final_price_raw;
@@ -1262,7 +1275,10 @@ void IpoWatchView::apply_calendar(const QJsonObject& root, bool enriched) {
             // SINCE IPO at the session's first quote).
             x.perf_fetched = it->perf_fetched && x.status == "priced";
             x.last_price = it->last_price;
-            x.pop_pct = it->pop_pct;
+            // recomputed: the split factor may be new since the quote came
+            x.pop_pct = (x.final_price > 0 && x.last_price > 0)
+                            ? (x.last_price - x.ipo_basis()) / x.ipo_basis() * 100.0
+                            : std::numeric_limits<double>::quiet_NaN();
             x.profile_fetched = it->profile_fetched;
             x.sector = it->sector;
             x.industry = it->industry;
@@ -1929,7 +1945,7 @@ void IpoWatchView::follow_priced() {
                 if (e.status != "priced" || e.ticker != q.symbol || e.last_price == q.price)
                     continue;
                 e.last_price = q.price;
-                e.pop_pct = e.final_price > 0 ? (e.last_price - e.final_price) / e.final_price * 100.0
+                e.pop_pct = e.final_price > 0 ? (e.last_price - e.ipo_basis()) / e.ipo_basis() * 100.0
                                               : std::numeric_limits<double>::quiet_NaN();
                 e.perf_fetched = true;
                 moved = true;
@@ -2014,7 +2030,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
                     e.last_price = it.value();
                     // No offer price or no usable quote → return since IPO is unknown.
                     e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
-                                    ? (e.last_price - e.final_price) / e.final_price * 100.0
+                                    ? (e.last_price - e.ipo_basis()) / e.ipo_basis() * 100.0
                                     : std::numeric_limits<double>::quiet_NaN();
                     e.perf_fetched = true;
                 }
@@ -2502,7 +2518,11 @@ void IpoWatchView::render_kpis() {
                                               finite(idx.chg_1y_pct) && idx.chg_1y_pct < 0 ? NEGATIVE() : POSITIVE(),
                                               pct_text(idx.chg_1y_pct))
                                    : QStringLiteral("<b>C50 INDEX</b><br>—"));
-            kpi_week_->setToolTip(QStringLiteral("Clarity Liquidity Index: equal-weight, 50 most liquid names"));
+            kpi_week_->setToolTip(
+                QStringLiteral("Clarity Liquidity Index: equal-weight, 50 most liquid names%1; the 1Y change is "
+                               "computed from the index's own points")
+                    .arg(idx.updated.isValid() ? QStringLiteral(", as of ") + idx.updated.toString("d MMM yyyy")
+                                               : QString()));
         }
         if (kpi_month_) {
             kpi_month_->setText(QString("<b>WITH A PRICE</b><br>%1 of %2").arg(priced).arg(listed));
@@ -2580,6 +2600,10 @@ void IpoWatchView::render_kpis() {
     // counted separately and never added into the firm dollar total.
     int week_est = 0, month_est = 0;
     for (const auto& e : entries_) {
+        // operating companies only, as on MARKET: a SPAC's $10 unit is no IPO
+        // return, and its blank-check clock is not an operating filer's
+        if (e.spac)
+            continue;
         if (e.pending()) {
             const QDate w = e.when();
             if (!w.isValid())
@@ -2632,7 +2656,9 @@ void IpoWatchView::render_kpis() {
     };
     if (kpi_week_) {
         kpi_week_->setText(QString("<b>NEXT 7 DAYS</b><br>%1%2").arg(fmt(week_n, week_dollars), est(week_est)));
-        kpi_week_->setToolTip(QStringLiteral("Firm = scheduled or imminent · est. = from comparables"));
+        kpi_week_->setToolTip(QStringLiteral("Operating companies (SPACs excluded). Firm = scheduled or imminent · "
+                                             "est. = a date estimated from comparables, which only some of them "
+                                             "reach — the count is of dates, not expected IPOs"));
     }
     if (kpi_month_) {
         kpi_month_->setText(QString("<b>NEXT 30 DAYS</b><br>%1%2").arg(fmt(month_n, month_dollars), est(month_est)));
@@ -2659,7 +2685,8 @@ void IpoWatchView::render_kpis() {
                                                   : QString());
         kpi_pop_->setText(
             QString("<b>30D AVG SINCE IPO</b><br><span style='color:%1;'>%2</span>%3").arg(color, s, n_txt));
-        kpi_pop_->setToolTip(QStringLiteral("Mean return from IPO price, deals priced in the last 30 days"));
+        kpi_pop_->setToolTip(QStringLiteral("Mean return from the IPO price (split-adjusted), operating companies "
+                                            "priced in the last 30 days; SPACs excluded"));
     }
     if (kpi_above_)
         kpi_above_->setText(QString("<b>ABOVE IPO (&gt;+2%)</b><br><span style='color:%1;'>%2 (%3)</span>")
@@ -2837,7 +2864,9 @@ void IpoWatchView::render_performance() {
             pop_str = QString("%1%2%").arg(e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1);
             pop_col = QColor(e.pop_pct >= 0 ? POSITIVE() : NEGATIVE());
         } else {
-            pop_str = "…";
+            // "…" only while a quote is still coming: no offer price, or a
+            // quote that came and could not give a return, is an answer
+            pop_str = (e.final_price > 0 && !e.perf_fetched) ? QStringLiteral("…") : QStringLiteral("—");
         }
         auto* pop = new NumSortItem(pop_str, (e.perf_fetched && std::isfinite(e.pop_pct)) ? e.pop_pct : -1e9);
         pop->setForeground(QBrush(pop_col));

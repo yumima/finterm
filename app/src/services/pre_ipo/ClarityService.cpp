@@ -14,6 +14,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 
 namespace finterm::services {
 
@@ -105,6 +106,22 @@ ClarityMember ClarityService::parse_member(const QJsonObject& m) {
     return x;
 }
 
+/// The change, in percent, from the last point on or before @days before the
+/// newest point to the newest — what the chart drawn from these points shows.
+static double change_over(const QVector<pre_ipo::PricePoint>& pts, int days) {
+    if (pts.size() < 2)
+        return std::numeric_limits<double>::quiet_NaN();
+    const auto& last = pts.last();
+    const QDate from = last.day.addDays(-days);
+    const pre_ipo::PricePoint* base = nullptr;
+    for (const auto& p : pts)
+        if (p.day <= from)
+            base = &p;
+    if (!base || !(base->value > 0) || !(last.value > 0))
+        return std::numeric_limits<double>::quiet_NaN();
+    return (last.value / base->value - 1.0) * 100.0;
+}
+
 ClarityIndex ClarityService::parse_index(const QJsonObject& idx) {
     ClarityIndex x;
     x.level = num(idx.value("level"));
@@ -114,6 +131,18 @@ ClarityIndex ClarityService::parse_index(const QJsonObject& idx) {
     x.chg_1y_pct = num(idx.value("chg_1y"));
     x.chg_max_pct = num(idx.value("chg_max"));
     x.points = points(idx.value("points"));
+    // From the points, not the page's labels: on 2026-11-26 its "1Y +52.97%"
+    // matched a base three months older than a year (the points give +41.6%),
+    // so the figure contradicted the chart drawn under it. Its "max" agrees.
+    // (a window the points do not reach keeps the page's own figure)
+    const auto from_points = [&](double& field, int days) {
+        const double v = change_over(x.points, days);
+        if (std::isfinite(v))
+            field = v;
+    };
+    from_points(x.chg_3m_pct, 91);
+    from_points(x.chg_6m_pct, 182);
+    from_points(x.chg_1y_pct, 365);
     for (const auto& m : idx.value("members").toArray())
         x.members.append(parse_member(m.toObject()));
     return x;

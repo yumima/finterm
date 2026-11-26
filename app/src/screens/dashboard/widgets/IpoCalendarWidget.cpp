@@ -64,9 +64,9 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR
     vl->addWidget(scroll_area_, 1);
 
     connect(this, &BaseWidget::refresh_requested, this, &IpoCalendarWidget::refresh_data);
-    // Was: constructor only. refresh_data() empties the list while it loads,
-    // so it runs when someone comes back to the tile, never under a reader.
-    ui::refresh_on_return(this, 30 * 60, [this] { refresh_data(); });
+    // Every half hour while on screen (and on return): refresh_data() keeps
+    // the rows shown while the shared feed re-reads.
+    ui::refresh_while_visible(this, 30 * 60, [this] { refresh_data(); });
 
     auto& feed = services::IpoDealsFeed::instance();
     connect(&feed, &services::IpoDealsFeed::updated, this, &IpoCalendarWidget::rebuild_entries);
@@ -137,6 +137,9 @@ void IpoCalendarWidget::rebuild_entries() {
     const QDate today = QDate::currentDate();
     entries_.clear();
     unlisted_upcoming_ = 0;
+    unnamed_upcoming_ = 0;
+    // months Nasdaq did not answer: "none" is then not known
+    partial_ = !feed.latest_root().value("months_failed").toArray().isEmpty(); // not EDGAR gaps or cached months
     // The newest rows (a plain fast pass carries today's pricings even while
     // EDGAR is failing); dates as the feed parses them for every surface.
     const QJsonArray rows = feed.latest_root().value("deals").toArray();
@@ -167,6 +170,8 @@ void IpoCalendarWidget::rebuild_entries() {
         entry.date_str = entry.date.isValid() ? entry.date.toString("MMM d") : QString();
         if (!entry.company.isEmpty())
             entries_.append(entry);
+        else if (entry.status == QLatin1String("upcoming"))
+            ++unnamed_upcoming_; // a scheduled deal without a name is still not "none"
     }
 
     // Sort: upcoming closest-date first (e.g. May 14 before May 15),
@@ -221,10 +226,13 @@ void IpoCalendarWidget::populate() {
                                .arg(ui::colors::AMBER(), ui::colors::BG_RAISED(), fs));
         list_layout_->addWidget(sec);
         auto* none = new QLabel(
-            unlisted_upcoming_ > 0
-                ? QStringLiteral("None dated in the next 60 days — %1 on Nasdaq's calendar with a slipped or later "
-                                 "date: PRIVATE MARKET › IPO CALENDAR.")
-                      .arg(unlisted_upcoming_)
+            partial_ ? QStringLiteral("None found — the calendar was only partly read; there may be more.")
+            : unlisted_upcoming_ + unnamed_upcoming_ > 0
+                ? QStringLiteral("None listed here — %1 on Nasdaq's calendar %2: PRIVATE MARKET › IPO CALENDAR.")
+                      .arg(unlisted_upcoming_ + unnamed_upcoming_)
+                      .arg(unnamed_upcoming_ == 0 ? QStringLiteral("with a slipped or later date")
+                           : unlisted_upcoming_ == 0 ? QStringLiteral("without a company name yet")
+                                                     : QStringLiteral("with a slipped date or no name yet"))
                 : QStringLiteral("None scheduled — Nasdaq's calendar lists about a week ahead. "
                                  "Estimates for filed deals: PRIVATE MARKET › IPO CALENDAR."));
         none->setWordWrap(true);
@@ -307,7 +315,8 @@ void IpoCalendarWidget::populate() {
         sec->setStyleSheet(QString("color: %1; font-weight: bold; padding: 4px 8px; background: %2; %3")
                                .arg(ui::colors::POSITIVE(), ui::colors::BG_RAISED(), fs));
         list_layout_->addWidget(sec);
-        auto* none = new QLabel(QStringLiteral("None in the last 31 days."));
+        auto* none = new QLabel(partial_ ? QStringLiteral("None found — the calendar was only partly read.")
+                                         : QStringLiteral("None in the last 31 days."));
         none->setStyleSheet(QString("color: %1; padding: 4px 8px; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
         list_layout_->addWidget(none);
     }

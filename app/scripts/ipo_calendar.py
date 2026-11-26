@@ -275,9 +275,10 @@ def _fetch_month_net(yyyymm):
 
 
 def fetch_months(cache, months, today):
-    """→ (docs in month order, errors). Misses are fetched concurrently; a
+    """→ (docs in month order, errors, months with no copy at all). Misses are fetched concurrently; a
     failed month falls back to its last cached copy and says so."""
     docs, errors, miss = {}, [], []
+    failed = []  # months with no copy at all
     for m in months:
         hit = cache.get(f"month:{m}", _month_ttl(m, today, cache.written_at(f"month:{m}")))
         if hit is not None:
@@ -293,7 +294,9 @@ def fetch_months(cache, months, today):
                 old = cache.stale(f"month:{m}")
                 docs[m] = old or {}
                 errors.append(f"Nasdaq calendar {m} unavailable" + (" (showing cached)" if old else ""))
-    return [docs[m] for m in months], errors
+                if not old:
+                    failed.append(m)
+    return [docs[m] for m in months], errors, failed
 
 
 def months_to_read(today, back=MONTHS_BACK):
@@ -363,7 +366,7 @@ def merge_months(month_docs):
                 d["filed_date"] = fd
 
     for d in deals.values():
-        d["spac"] = is_spac(d["company"], d["ticker"], d["final_price"])
+        d["spac"] = is_spac(d["company"], d["ticker"], _unit_price(d))
         d["status"] = lifecycle_status(d)
     return deals
 
@@ -494,12 +497,61 @@ def _late(basis, due, today):
     return {"kind": kind, "basis": basis}
 
 
+def _easter(y):
+    """Gregorian Easter Sunday (anonymous algorithm)."""
+    a, b, c = y % 19, y // 100, y % 100
+    d, e = b // 4, b % 4
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l_ = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 19 * l_) // 433
+    month = (h + l_ - 7 * m + 90) // 25
+    return date(y, month, (h + l_ - 7 * m + 33 * month + 19) % 32)
+
+
+def _observed(d):
+    return d - timedelta(days=1) if d.weekday() == 5 else d + timedelta(days=1) if d.weekday() == 6 else d
+
+
+def _nth(y, month, weekday, n):
+    """The n-th @weekday (0=Mon) of the month; n=-1 the last."""
+    if n > 0:
+        first = date(y, month, 1)
+        return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+    last = date(y + (month == 12), month % 12 + 1, 1) - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def market_holidays(y):
+    """NYSE full-day closures of year @y (the standing rules; a one-off
+    closure is not known)."""
+    days = {_observed(date(y, 1, 1)), _nth(y, 1, 0, 3), _nth(y, 2, 0, 3), _easter(y) - timedelta(days=2),
+            _nth(y, 5, 0, -1), _observed(date(y, 7, 4)), _nth(y, 9, 0, 1), _nth(y, 11, 3, 4),
+            _observed(date(y, 12, 25))}
+    if y >= 2022:
+        days.add(_observed(date(y, 6, 19)))
+    return days
+
+
+def is_trading_day(d):
+    return d.weekday() < 5 and d not in market_holidays(d.year)
+
+
 def _weekday(d):
-    """The first weekday on or after d. Deals price on trading days; the
+    """The first trading day on or after d. Deals price on trading days; the
     lags are calendar days, and clamping a window to today put a projected
-    pricing on a Saturday ("Nov 14 · ≤Nov 14"). No holiday calendar — a
-    window is p10–p90, not a booking."""
-    return d + timedelta(days=(7 - d.weekday()) % 7 if d.weekday() >= 5 else 0)
+    pricing on a Saturday ("Nov 14 · ≤Nov 14"), or on Christmas."""
+    while not is_trading_day(d):
+        d += timedelta(days=1)
+    return d
+
+
+def prev_trading_day(d):
+    d -= timedelta(days=1)
+    while not is_trading_day(d):
+        d -= timedelta(days=1)
+    return d
 
 
 def project(d, comps, today):
@@ -715,7 +767,10 @@ def apply_submissions(d, sub, today):
         return
     if sub.get("sic"):
         d["sic"] = sub["sic"]
-        d["spac"] = is_spac(d["company"], d.get("ticker"), _unit_price(d), sic=sub["sic"])
+    # always re-tested: a new blank-check has NO SIC yet (EDGAR gives ""), and
+    # then the $10.00 unit or the name decides (CXIVU, RACV, GIAU were read
+    # as operating companies)
+    d["spac"] = is_spac(d["company"], d.get("ticker"), _unit_price(d), sic=sub.get("sic") or None)
     # No filing date in the window (first filed >13 months ago; only the
     # upcoming row is here): bound the ladder anyway, or an old 424B4 from an
     # earlier offering reads as this deal having priced.
@@ -732,6 +787,74 @@ def apply_submissions(d, sub, today):
         d["status"], d["priced_date"], d["priced_from"] = "priced", sd, "edgar"
     elif d["stage"] == "withdrawn" and d["status"] != "withdrawn":
         d["status"], d["withdrawn_date"], d["withdrawn_from"] = "withdrawn", sd, "edgar"
+
+
+SPLIT_TTL = 86400
+
+
+def _yahoo(t):
+    return t.replace(".", "-").replace("/", "-")
+
+
+def split_factors(cache, deals, today, offline=False):
+    """Sets split_factor on each priced deal of the last 400 days: the product
+    of the split ratios after it priced (a 1:20 reverse split is 0.05), so the
+    IPO price on today's share basis is final_price / split_factor; None when
+    the splits are not known. Yahoo's split events, read once a day by the
+    enrich pass; the fast pass and the system-Python brief read the cache.
+    (RPGL, $4.00, reverse-split 1:20, 1:40, 1:16, read +125% from IPO.)"""
+    priced = [d for d in deals.values() if d.get("priced_date") and d.get("ticker")
+              and (today - d["priced_date"]).days <= LOCKUP_LOOKBACK]
+    got, miss = {}, []
+    for t in sorted({d["ticker"] for d in priced}):
+        hit = cache.get(f"splits:{t}", SPLIT_TTL)
+        if hit is None and offline:
+            hit = cache.stale(f"splits:{t}")
+        if hit is not None:
+            got[t] = hit
+        else:
+            miss.append(t)
+    fetched = set()
+    if miss and not offline:
+        try:
+            import yfinance as yf
+        except ImportError:
+            yf = None
+        for i in range(0, len(miss) if yf else 0, 100):
+            chunk = miss[i:i + 100]
+            try:
+                data = yf.download([_yahoo(t) for t in chunk], period="2y", interval="1d", actions=True,
+                                   auto_adjust=False, group_by="ticker", progress=False, threads=True)
+            except Exception:
+                continue
+            for t in chunk:
+                try:
+                    f = data[_yahoo(t)] if _yahoo(t) in data.columns.get_level_values(0) else None
+                except Exception:
+                    f = None
+                if f is None or "Stock Splits" not in f.columns or f["Close"].dropna().empty:
+                    continue  # no history: unknown, asked again tomorrow
+                sp = f["Stock Splits"].fillna(0)
+                got[t] = [[ix.strftime("%Y-%m-%d"), float(v)] for ix, v in sp[sp > 0].items()]
+                cache.put(f"splits:{t}", got[t])
+                fetched.add(t)
+    # not fetched now (no yfinance — the brief's system Python — or Yahoo did
+    # not answer): the last copy, however old, beats the unadjusted price
+    for t in miss:
+        if t not in fetched and t not in got:
+            old = cache.stale(f"splits:{t}")
+            if old is not None:
+                got[t] = old
+    for d in priced:
+        sp = got.get(d["ticker"])
+        if sp is None:
+            d["split_factor"] = None
+            continue
+        f = 1.0
+        for day, ratio in sp:
+            if day > d["priced_date"].isoformat() and ratio > 0:
+                f *= ratio
+        d["split_factor"] = f
 
 
 def _ser(d):
@@ -795,7 +918,7 @@ def build(today=None, enrich=False, cache=None):
     # history nobody asks for without touching a row still in use.
     cache = cache or Cache(keep_days=730)
     months = months_to_read(today)
-    docs, errors = fetch_months(cache, months, today)
+    docs, errors, months_failed = fetch_months(cache, months, today)
     deals = merge_months(docs)
 
     enriched_from = enriched_at = None
@@ -813,6 +936,7 @@ def build(today=None, enrich=False, cache=None):
             deals, enriched_from = trial, "cache"
             enriched_at = cache.written_at(ENRICH_RUN_KEY)
     lockups = lockup_rows(deals, today) if enriched_from else []
+    split_factors(cache, deals, today, offline=not enrich)
 
     # Project only after every stage is known: comparables read the others.
     # Terminal deals return before reading comparables — don't build them.
@@ -826,7 +950,10 @@ def build(today=None, enrich=False, cache=None):
             "enriched_at": (datetime.fromtimestamp(enriched_at).isoformat(timespec="seconds")
                             if enriched_at else None),
             "deals": sorted((_ser(d) for d in deals.values()), key=lambda r: r["deal_id"]),
-            "lockups": lockups, "errors": errors, "months": months}
+            "lockups": lockups, "errors": errors, "months": months,
+            # months of the calendar not read at all (no cached copy either):
+            # only then is a "none" unknown
+            "months_failed": months_failed}
 
 
 LOCKUP_LOOKBACK = 400   # longest term we expect (365) plus slack
@@ -845,7 +972,10 @@ def lockup_rows(deals, today, ahead=180, behind=7):
         days = d.get("lockup_days")
         basis = "term" if days else "assumed"
         days = days or LOCKUP_DEFAULT
-        exp = p + timedelta(days=days)
+        # Nasdaq's priced date is the first trading day; the term runs from the
+        # prospectus, dated the evening before (ANT: Nov 18 prospectus, first
+        # trade Nov 19; 180 days end May 17, not 18)
+        exp = prev_trading_day(p) + timedelta(days=days)
         if not (today - timedelta(days=behind) <= exp <= today + timedelta(days=ahead)):
             continue
         out.append({"deal_id": d["deal_id"], "ticker": d["ticker"], "company": d["company"],

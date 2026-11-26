@@ -280,8 +280,61 @@ def test_lockup_uses_the_deal_term_and_skips_spacs():
     }
     rows = {r["ticker"]: r for r in ic.lockup_rows(deals, T)}
     assert set(rows) == {"AAA", "BBB", "DDD"}, rows
-    assert rows["AAA"]["expiry"] == (T + timedelta(days=10)).isoformat() and rows["AAA"]["basis"] == "term"
+    # the term runs from the prospectus, the trading day before the first trade
+    want = ic.prev_trading_day(T - timedelta(days=80)) + timedelta(days=90)
+    assert rows["AAA"]["expiry"] == want.isoformat() and rows["AAA"]["basis"] == "term", rows["AAA"]
     assert rows["BBB"]["basis"] == "assumed" and rows["BBB"]["lockup_days"] == 180
+    ant = {"x": {"deal_id": "x", "ticker": "ANT", "company": "Anthropic", "priced_date": date(2026, 11, 19),
+                 "lockup_days": 180, "spac": False}}
+    assert ic.lockup_rows(ant, date(2027, 5, 1))[0]["expiry"] == "2027-05-17"  # prospectus Nov 18 + 180
+
+
+def test_new_blank_check_without_sic_is_a_spac():
+    # Churchill Capital Corp XIV: filed, ranged at $10.00 units, EDGAR's SIC still ""
+    d = {"company": "Churchill Capital Corp XIV", "ticker": "CXIVU", "price_range": "10.00", "final_price": None,
+         "filed_date": date(2026, 11, 4), "expected_date": None, "spac": False}
+    ic.apply_submissions(d, {"sic": "", "filings": {"recent": {}}}, date(2026, 11, 26))
+    assert d["spac"] is True
+    op = {"company": "Zeno42 Inc.", "ticker": "ZENO", "price_range": "", "final_price": None,
+          "filed_date": date(2026, 11, 19), "expected_date": None, "spac": False}
+    ic.apply_submissions(op, {"sic": "", "filings": {"recent": {}}}, date(2026, 11, 26))
+    assert op["spac"] is False
+
+
+def test_market_holidays_and_trading_days():
+    assert ic.market_holidays(2026) == {date(2026, 1, 1), date(2026, 1, 19), date(2026, 2, 16), date(2026, 4, 3),
+                                        date(2026, 5, 25), date(2026, 6, 19), date(2026, 7, 3), date(2026, 9, 7),
+                                        date(2026, 11, 26), date(2026, 12, 25)}
+    assert ic._easter(2027) == date(2027, 3, 28) and date(2027, 3, 26) in ic.market_holidays(2027)
+    assert ic._weekday(date(2026, 12, 25)) == date(2026, 12, 28)   # Christmas (Fri) -> Monday
+    assert ic.prev_trading_day(date(2026, 11, 27)) == date(2026, 11, 25)  # over Thanksgiving
+
+
+def test_split_factor_from_cached_splits():
+    class C:
+        def __init__(self, d): self.d = d
+        def get(self, k, ttl): return self.d.get(k)
+        def stale(self, k): return self.d.get(k)
+        def put(self, k, v): self.d[k] = v
+    deals = {"r": {"ticker": "RPGL", "priced_date": date(2026, 1, 10)},
+             "n": {"ticker": "NEW", "priced_date": date(2026, 11, 1)}}
+    cache = C({"splits:RPGL": [["2025-12-01", 0.5], ["2026-02-24", 0.05], ["2026-05-28", 0.025]],
+               "splits:NEW": []})
+    ic.split_factors(cache, deals, date(2026, 11, 26), offline=True)
+    assert abs(deals["r"]["split_factor"] - 0.05 * 0.025) < 1e-15   # only the splits after pricing
+    assert deals["n"]["split_factor"] == 1.0
+    # an old copy beats the unadjusted price when it cannot be fetched now
+    old = {"o": {"ticker": "OLD", "priced_date": date(2026, 1, 10)}}
+
+    class Expired(C):
+        def get(self, k, ttl): return None
+    ic.split_factors(Expired({"splits:OLD": [["2026-03-01", 0.1]]}), old, date(2026, 11, 26), offline=False) \
+        if __import__("importlib").util.find_spec("yfinance") is None else None
+    if __import__("importlib").util.find_spec("yfinance") is None:
+        assert old["o"]["split_factor"] == 0.1, old
+    miss = {"m": {"ticker": "MISS", "priced_date": date(2026, 11, 1)}}
+    ic.split_factors(C({}), miss, date(2026, 11, 26), offline=True)
+    assert miss["m"]["split_factor"] is None   # unknown, not "no split"
 
 
 def test_overview_dashes_are_absent():
