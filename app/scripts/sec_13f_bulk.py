@@ -1583,20 +1583,28 @@ def _ensure_breadth(con, cur_q, prior_q):
                SUM(had), SUM(is_new), SUM(is_closed), SUM(is_added), SUM(is_reduced),
                SUM(focused_delta)
           FROM (
-            SELECT COALESCE(c.cusip, p.cusip) AS cusip,
-                   CASE WHEN p.cik IS NOT NULL THEN 1 ELSE 0 END AS had,
-                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NULL THEN 1 ELSE 0 END AS is_new,
-                   CASE WHEN c.cik IS NULL AND p.cik IS NOT NULL THEN 1 ELSE 0 END AS is_closed,
-                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NOT NULL
-                             AND c.shares > p.shares * 1.01 THEN 1 ELSE 0 END AS is_added,
-                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NOT NULL
-                             AND c.shares < p.shares * 0.99 THEN 1 ELSE 0 END AS is_reduced,
-                   CASE WHEN COALESCE(c.focused, p.focused) = 1
-                        THEN COALESCE(c.shares, 0) - COALESCE(p.shares, 0) ELSE 0 END
+            SELECT cusip,
+                   CASE WHEN p_cik IS NOT NULL THEN 1 ELSE 0 END AS had,
+                   CASE WHEN c_cik IS NOT NULL AND p_cik IS NULL THEN 1 ELSE 0 END AS is_new,
+                   CASE WHEN c_cik IS NULL AND p_cik IS NOT NULL THEN 1 ELSE 0 END AS is_closed,
+                   CASE WHEN c_cik IS NOT NULL AND p_cik IS NOT NULL
+                             AND c_shares > p_shares * 1.01 THEN 1 ELSE 0 END AS is_added,
+                   CASE WHEN c_cik IS NOT NULL AND p_cik IS NOT NULL
+                             AND c_shares < p_shares * 0.99 THEN 1 ELSE 0 END AS is_reduced,
+                   CASE WHEN COALESCE(c_focused, p_focused) = 1
+                        THEN COALESCE(c_shares, 0) - COALESCE(p_shares, 0) ELSE 0 END
                         AS focused_delta
-              FROM _c c
-              FULL OUTER JOIN _p p ON p.cusip = c.cusip AND p.cik = c.cik
-             WHERE COALESCE(c.cik, p.cik) IN (SELECT cik FROM _both))
+              -- _c FULL OUTER JOIN _p, written so SQLite before 3.39 runs it
+              -- (Ubuntu 22.04's Python has 3.37): every _c row with its _p
+              -- match or none, then the _p rows no _c row matched.
+              FROM (SELECT c.cusip AS cusip, c.cik AS c_cik, c.shares AS c_shares, c.focused AS c_focused,
+                           p.cik AS p_cik, p.shares AS p_shares, p.focused AS p_focused
+                      FROM _c c LEFT JOIN _p p ON p.cusip = c.cusip AND p.cik = c.cik
+                    UNION ALL
+                    SELECT p.cusip, NULL, NULL, NULL, p.cik, p.shares, p.focused
+                      FROM _p p
+                     WHERE NOT EXISTS (SELECT 1 FROM _c c WHERE c.cusip = p.cusip AND c.cik = p.cik))
+             WHERE COALESCE(c_cik, p_cik) IN (SELECT cik FROM _both))
          GROUP BY cusip""", (cur_q, prior_q))
     for tag in ("_c", "_p", "_both"):
         con.execute(f"DROP TABLE IF EXISTS {tag}")

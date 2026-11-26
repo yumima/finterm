@@ -150,7 +150,7 @@ def test_browse_and_sitemap():
 
 def test_cache_stale_fallback(tmp="/tmp"):
     import tempfile
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         cache = cm.Cache(os.path.join(d, "c.sqlite"))
         calls = []
         v, _, stale = cm._cached(cache, "k", 3600, lambda: calls.append(1) or "body", lambda b: {"ok": b})
@@ -166,7 +166,7 @@ def test_404_and_failure_are_different_answers():
     import tempfile
     real = cm._get
     try:
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             cache = cm.Cache(os.path.join(d, "c.sqlite"))
             cm._get = lambda url: "" if "gone" in url else None  # 404 vs no answer
             r = cm.build_companies(cache, ["gone-co", "flaky-co", "BAD SLUG"])

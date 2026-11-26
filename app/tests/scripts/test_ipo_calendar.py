@@ -98,7 +98,7 @@ def test_cache_drops_rows_past_keep_days():
     """Rows are only ever replaced; keep_days is what retires a superseded
     key generation (earn: -> earn2:) or an entry nothing asks for."""
     import tempfile, time as _t
-    with tempfile.TemporaryDirectory() as d:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         path = os.path.join(d, "kv.sqlite")
         c = ic.Cache(path)
         c.put("old", 1)

@@ -351,9 +351,9 @@ def is_fresh(fetched_ts, now=None):
 def _locked(path):
     """An exclusive advisory lock beside the cache: a universe switch can leave
     two scans running, and both rewrite the same file."""
-    import fcntl
-    fh = open(path + ".lock", "w")
-    fcntl.flock(fh, fcntl.LOCK_EX)
+    import file_lock
+    fh = file_lock.open_lock_file(path + ".lock")
+    file_lock.lock(fh)
     return fh
 
 

@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`585f3c2f6`](https://github.com/yumima/finterm/commit/585f3c2f6) Python: the system proxy (a VPN in system-proxy mode) for yfinance too
 - [`491fbffb3`](https://github.com/yumima/finterm/commit/491fbffb3) tests: build and pass on Windows (MSVC), GCC 12 and macOS runners
 - [`557efaab1`](https://github.com/yumima/finterm/commit/557efaab1) **ci:** ctest on Windows, macOS and Linux; a release waits for it
 - [`7e72d5945`](https://github.com/yumima/finterm/commit/7e72d5945) sqlite: one connection per thread; a fill does not run without its transaction

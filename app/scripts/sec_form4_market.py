@@ -206,31 +206,25 @@ def _read_all(paths):
 
 class _ScanLock:
     """One scan at a time, across the app, a brief's build and the read-ahead:
-    two would read the same filings and count their trades twice. Where there
-    is no flock (Windows) the store's own keys still keep a filing from being
-    counted twice (scan)."""
+    two would read the same filings and count their trades twice."""
 
     def __init__(self, wait_s=0, waiting=None):
         self.wait_s, self.waiting, self.f = wait_s, waiting, None
 
     def __enter__(self):
-        try:
-            import fcntl
-        except ImportError:
-            return True
-        self.f = open(f"{db_path()}.scan.lock", "a")
+        import file_lock
+
+        self.f = file_lock.open_lock_file(f"{db_path()}.scan.lock")
         until, told = time.monotonic() + self.wait_s, False
         while True:
-            try:
-                fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if file_lock.try_lock(self.f):
                 return True
-            except OSError:
-                if time.monotonic() >= until:
-                    return False
-                if self.waiting and not told:
-                    self.waiting()
-                    told = True
-                time.sleep(1)
+            if time.monotonic() >= until:
+                return False
+            if self.waiting and not told:
+                self.waiting()
+                told = True
+            time.sleep(1)
 
     def __exit__(self, *exc):
         if self.f:

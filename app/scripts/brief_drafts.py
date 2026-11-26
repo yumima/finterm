@@ -204,20 +204,20 @@ class Lock:
         self.wait = wait
 
     def __enter__(self):
-        import fcntl
+        import file_lock
 
-        self.f = open(drafts_dir() / self.NAME, "a")
-        try:
-            fcntl.flock(self.f, fcntl.LOCK_EX | (0 if self.wait else fcntl.LOCK_NB))
-        except OSError:
+        self.f = file_lock.open_lock_file(drafts_dir() / self.NAME)
+        if self.wait:
+            file_lock.lock(self.f)
+        elif not file_lock.try_lock(self.f):
             self.f.close()
-            raise RuntimeError("another brief is being built or published; try again in a minute") from None
+            raise RuntimeError("another brief is being built or published; try again in a minute")
         return self
 
     def __exit__(self, *exc):
-        import fcntl
+        import file_lock
 
-        fcntl.flock(self.f, fcntl.LOCK_UN)
+        file_lock.unlock(self.f)
         self.f.close()
 
 

@@ -93,6 +93,18 @@ jobs:
           "$VCPKG_ROOT/vcpkg" install openssl:x64-windows --no-print-usage
           echo "OPENSSL_ROOT_DIR=$VCPKG_ROOT/installed/x64-windows" >> "$GITHUB_ENV"
 
+      # The app's venv is Python 3.12 (uv) and carries tzdata — Windows has no
+      # system zoneinfo. The rest of the app venv (yfinance, pandas, …) is not
+      # installed: the tests that need it skip themselves (exit 77).
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependencies
+        shell: bash
+        run: python -m pip install --disable-pip-version-check -q "tzdata==2025.2"
+
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
         with:

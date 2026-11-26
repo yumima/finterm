@@ -535,16 +535,16 @@ class _Locked:
         self.path = f"{path}.lock"
 
     def __enter__(self):
-        import fcntl
+        import file_lock
 
-        self.f = open(self.path, "a")
-        fcntl.flock(self.f, fcntl.LOCK_EX)
+        self.f = file_lock.open_lock_file(self.path)
+        file_lock.lock(self.f)
         return self
 
     def __exit__(self, *exc):
-        import fcntl
+        import file_lock
 
-        fcntl.flock(self.f, fcntl.LOCK_UN)
+        file_lock.unlock(self.f)
         self.f.close()
 
 
