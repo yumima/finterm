@@ -88,10 +88,10 @@ check("...and its stderr", text(k.run("import subprocess, sys\nsubprocess.run([s
 check("...through the shell too", text(k.run("import os, sys\nc = f'\"{sys.executable}\" -c \"print(9)\"'\n"
                                              "os.system(f'\"{c}\"' if os.name == 'nt' else c)\npass")).strip() == "9")
 check("a STARTUPINFO's own handles are kept", os.name != "nt" or text(k.run(
-    "import subprocess, sys, msvcrt, tempfile, os\nf = tempfile.TemporaryFile()\nsi = subprocess.STARTUPINFO()\n"
-    "si.dwFlags |= subprocess.STARTF_USESTDHANDLES\nh = msvcrt.get_osfhandle(f.fileno())\nos.set_handle_inheritable(h, True)\n"
+    "import subprocess, sys, msvcrt, tempfile, os\ntf = tempfile.TemporaryFile()\nsi = subprocess.STARTUPINFO()\n"
+    "si.dwFlags |= subprocess.STARTF_USESTDHANDLES\nh = msvcrt.get_osfhandle(tf.fileno())\nos.set_handle_inheritable(h, True)\n"
     "si.hStdOutput = si.hStdError = h\nsubprocess.run([sys.executable, '-c', 'print(6)'], startupinfo=si, close_fds=False)\n"
-    "f.seek(0)\nprint(f.read().strip() == b'6')")) == "True\n")
+    "tf.seek(0)\nprint(tf.read().strip() == b'6')")) == "True\n")
 check("a closed fd 1 does not stop a program starting", text(k.run(
     "import os, subprocess, sys\nkeep = os.dup(1)\nos.close(1)\ntry:\n    r = subprocess.run([sys.executable, '-c', 'pass']).returncode\n"
     "finally:\n    os.dup2(keep, 1)\n    os.close(keep)\nprint(r)")) == "0\n")
