@@ -1343,6 +1343,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_orderbook.py
     )
     set_tests_properties(orderbook PROPERTIES SKIP_RETURN_CODE 77)
+    # The OS proxy (a VPN in system-proxy mode) reaches curl_cffi/yfinance.
+    add_test(
+        NAME system_proxy
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_system_proxy.py
+    )
+    set_tests_properties(system_proxy PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
     # FRED keyless (fred_data.py): error page ≠ empty series, "." ≠ 0, keyed shape
     add_test(
         NAME fred_data
