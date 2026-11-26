@@ -85,7 +85,9 @@ TV_COLUMNS = {
     # the SEC backtest; the TTM score differs by several points (KO 9 vs 7)
     "piotroski_f_score_fy": ("piotroski", None),
     # Greenblatt's capital: net working capital + net fixed assets. The scanner
-    # has no net PP&E; it is TTM revenue / its fixed-asset turnover.
+    # has no net PP&E; it is TTM revenue / its fixed-asset turnover, which is a
+    # TTM ratio: checked against 10-Q/10-K net PP&E 2026-11-26, XOM within 1%,
+    # AAPL 2%, KO 8% (not the 4x a quarterly ratio would give).
     "working_capital_fq": ("working_capital", None),
     "fixed_assets_turnover_fq": ("fa_turnover", None),
     "return_on_invested_capital_fq": ("roic", 0.01),
@@ -214,6 +216,9 @@ def load_universe(min_mcap, now=None):
             json.dump({"at": now, "day": datetime.fromtimestamp(now, _et()).strftime("%Y-%m-%d"), "fund": fund}, fh,
                       default=_clean)
         os.replace(tmp, path)
+        old = os.path.join(os.path.dirname(path), f"universe_{int(min_mcap)}.json")  # before v2
+        if os.path.exists(old):
+            os.remove(old)
     except OSError as e:
         print(f"universe not kept: {e}", file=sys.stderr)
     return fund, None
@@ -312,9 +317,10 @@ def parse_universe(rows):
         if is_primary is not False:
             primary.add(company)
         prev = by_company.get(company)
-        both_quoted = prev is not None and rec.get("q_close") and prev.get("q_close")
-        traded = (lambda x: (x.get("avg_volume_30d") or 0) * x["q_close"]) if both_quoted \
-            else (lambda x: x.get("avg_volume_30d") or 0)
+        # a quoted class beats an unquoted one; between quoted ones the most
+        # dollars, between unquoted ones the most shares
+        traded = lambda x: (1, (x.get("avg_volume_30d") or 0) * x["q_close"]) if x.get("q_close") \
+            else (0, x.get("avg_volume_30d") or 0)
         if prev is None or traded(rec) > traded(prev):
             by_company[company] = rec
     return {rec["symbol"]: rec for company, rec in by_company.items() if company in primary}
@@ -1519,13 +1525,17 @@ def price_gaps(close, exempt=()):
     missing. A history that starts inside the window (a new listing) has no
     hole for it; one missing only the last row is a name today's live bar did
     not reach, ranked on its last close as before."""
-    recent = close.iloc[-PRICE_GAP_WINDOW:]
+    # judged on the sessions most names traded: a stray date (a holiday bar
+    # for a few names) must not make every other history look holed
+    window = close.iloc[-PRICE_GAP_WINDOW:]
+    recent = window[window.notna().mean(axis=1) >= 0.5] if window.shape[1] else window
     out = []
     for c in recent.columns:
         s_ = recent[c]
         first, last = s_.first_valid_index(), s_.last_valid_index()
         if first is None:
-            out.append(c)
+            if c not in exempt:  # an old cache ending before the window is "older prices"
+                out.append(c)
             continue
         inside = s_.loc[first:last].isna().any()
         tail_gone = c not in exempt and len(s_) >= 2 and s_.iloc[-2:].isna().all()
@@ -1999,7 +2009,7 @@ def worked_examples(df, sig, lists, ctx):
             C("Return on capital: EBIT / (net working capital + net fixed assets)", _pc(v("roc", s_)),
               np.isfinite(v("roc", s_))),
             ranked("Combined rank in the best 30", magic, s_, 30)]),
-        "piotroski": ((-df["pb"].where(df["pb"] > 0)).where(df["piotroski"].notna()), lambda s_: [
+        "piotroski": ((-df["pb"].where(df["pb"] > 0)).fillna(-np.inf).where(df["piotroski"].notna()), lambda s_: [
             C("F-score at least 8 (then cheapest P/B first; no or negative book value last)",
               "—" if not np.isfinite(v("piotroski", s_)) else f"{v('piotroski', s_):.0f} of 9"
               + (f", P/B {v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else ", no P/B"),

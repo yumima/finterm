@@ -344,6 +344,12 @@ pg.iloc[-2:, 2] = np.nan            # the last two sessions missing
 pg.iloc[:30, 3] = np.nan            # listed 10 sessions ago: no hole
 pg.iloc[-1, 4] = np.nan             # only today's bar missing (intraday, no live bar)
 check(sd.price_gaps(pg) == ["HOLE", "TAIL"], f"holes inside the last 21 sessions or the last two gone: {sd.price_gaps(pg)}")
+many = pd.DataFrame({f"N{i}": base for i in range(20)}, index=ix)
+stray = pd.concat([many, pd.DataFrame({"N0": [15.0]}, index=[ix[35] + pd.Timedelta(hours=12)])]).sort_index()
+check(sd.price_gaps(stray) == [], f"a stray date a few names have is no hole for the rest: {sd.price_gaps(stray)}")
+old = pg.copy(); old["OLD"] = np.nan; old.iloc[:5, -1] = 10.0
+check("OLD" in sd.price_gaps(old) and "OLD" not in sd.price_gaps(old, exempt={"OLD"}),
+      "an older cache ending before the window is 'older prices', not missing sessions")
 check(sd.price_gaps(pg, exempt={"TAIL"}) == ["HOLE"],
       "a name served from an older cache (download failed) ends early by design: reported stale, not a hole")
 gf = {s_: f.copy() for s_, f in frames.items()}

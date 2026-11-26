@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`069adc0a0`](https://github.com/yumima/finterm/commit/069adc0a0) Screener: every screen checked against its source and recomputed
 - [`556c5b9e8`](https://github.com/yumima/finterm/commit/556c5b9e8) Screener: Lynch value as TradingView draws it; cuts never print as passed
 - [`40bce469f`](https://github.com/yumima/finterm/commit/40bce469f) Screener: Peter Lynch Value
 - [`19c568ff3`](https://github.com/yumima/finterm/commit/19c568ff3) tests: every program-output check says what came and compares exactly
