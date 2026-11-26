@@ -5,6 +5,10 @@
 
 class QLabel;
 
+namespace finterm::ui {
+class LoadingOverlay;
+}
+
 namespace finterm::screens {
 
 /// SHORT INTEREST — FINRA's settled position, twice a month, drawn as a bar
@@ -27,6 +31,7 @@ class ShortInterestPanel : public QWidget {
     class Chart;
     QLabel* title_note_ = nullptr;
     Chart* chart_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* figures_ = nullptr;
     QLabel* foot_ = nullptr;
 };

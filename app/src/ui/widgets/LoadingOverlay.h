@@ -24,6 +24,10 @@ class LoadingOverlay : public QWidget {
     /// happening nor repaints 10x a second for as long as it stands.
     void show_message(const QString& message);
     void hide_loading();
+    /// For a view that re-renders while it waits: shows the bars when `on`
+    /// (keeping a running animation as it is — show_loading restarts it, a
+    /// stutter on every repaint of the view), hides them when not.
+    void set_loading(bool on, const QString& message = "LOADING\xe2\x80\xa6");
 
   protected:
     void paintEvent(QPaintEvent* e) override;

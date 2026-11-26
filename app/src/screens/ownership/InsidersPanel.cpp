@@ -5,6 +5,7 @@
 #include "screens/ownership/OwnershipFlags.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "ui/components/TooltipText.h"
+#include "ui/widgets/LoadingOverlay.h"
 
 #include <QCheckBox>
 #include <QHBoxLayout>
@@ -72,6 +73,7 @@ InsidersPanel::InsidersPanel(QWidget* parent) : QWidget(parent) {
                          QStringLiteral("Role"), QStringLiteral("Action"), QStringLiteral("Shares"),
                          QStringLiteral("Price"), QStringLiteral("Value"), QStringLiteral("Held after"),
                          QStringLiteral("10b5-1"), QStringLiteral("1w"), QStringLiteral("1m"), QStringLiteral("3m")});
+    busy_ = new ui::LoadingOverlay(table_); // the table has the room; the timeline strip is 64 px
     table_->setMinimumHeight(80);
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         auto* it = table_->item(row, 0);
@@ -99,6 +101,7 @@ InsidersPanel::InsidersPanel(QWidget* parent) : QWidget(parent) {
 void InsidersPanel::clear() {
     snap_ = {};
     loading_ = false;
+    busy_->hide_loading();
     table_->setRowCount(0);
     timeline_->set_transactions({}, {});
     timeline_->set_empty_text({});
@@ -114,6 +117,8 @@ void InsidersPanel::set_snapshot(const OwnershipSnapshot& snap, bool loading) {
 
 void InsidersPanel::render() {
     const auto& s = snap_;
+    busy_->set_loading(!s.edgar_ok && loading_ && s.edgar_error.isEmpty(),
+                       QStringLiteral("READING FORM 4 FILINGS\u2026"));
     if (!s.edgar_ok) {
         table_->setRowCount(0);
         timeline_->set_transactions({}, {});

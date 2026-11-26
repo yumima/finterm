@@ -8,6 +8,10 @@ class QComboBox;
 class QLabel;
 class QTableWidget;
 
+namespace finterm::ui {
+class LoadingOverlay;
+}
+
 namespace finterm::screens {
 
 /// HOLDERS — the 13F register, in the industry's columns.
@@ -48,6 +52,7 @@ class HoldersTable : public QWidget {
     QButtonGroup* filters_ = nullptr;
     QComboBox* sort_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 

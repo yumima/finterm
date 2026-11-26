@@ -131,6 +131,7 @@ InsiderBuysPanel::InsiderBuysPanel(QWidget* parent) : QWidget(parent) {
                          QStringLiteral("Roles"), QStringLiteral("Value"), QStringLiteral("Shares"),
                          QStringLiteral("Avg price"), QStringLiteral("Stake +"), QStringLiteral("Traded"),
                          QStringLiteral("Filed"), QStringLiteral("1w"), QStringLiteral("1m")});
+    busy_ = new ui::LoadingOverlay(table_);
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
@@ -156,6 +157,7 @@ void InsiderBuysPanel::refresh() {
 void InsiderBuysPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const auto& ib = svc.insider_buys();
+    busy_->set_loading(!ib.loaded && svc.insider_buys_loading(), QStringLiteral("READING FORM 4 FILINGS\u2026"));
 
     QStringList head;
     head << QStringLiteral("open-market purchases (code P), last %1 days, one row per issuer").arg(ib.query.days);
@@ -267,6 +269,7 @@ ShortRankPanel::ShortRankPanel(QWidget* parent) : QWidget(parent) {
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("SI ÷ 13F"),
                          QStringLiteral("Days to cover"), QStringLiteral("Shares short"), QStringLiteral("vs prior"),
                          QStringLiteral("13F shares"), QStringLiteral("Holders"), QStringLiteral("Avg daily vol")});
+    busy_ = new ui::LoadingOverlay(table_);
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
@@ -285,6 +288,7 @@ void ShortRankPanel::refresh() {
 void ShortRankPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const auto& sr = svc.short_rank();
+    busy_->set_loading(!sr.loaded && svc.short_rank_loading(), QStringLiteral("FETCHING FINRA SHORT INTEREST\u2026"));
     if (!sr.loaded) {
         table_->setRowCount(0);
         title_note_->setText(
@@ -377,6 +381,7 @@ MoversPanel::MoversPanel(QWidget* parent) : QWidget(parent) {
                          QStringLiteral("Δ holders"), QStringLiteral("New"), QStringLiteral("Closed"),
                          QStringLiteral("Added"), QStringLiteral("Reduced"), QStringLiteral("Focused net shares"),
                          QStringLiteral("Top-10 %"), QStringLiteral("13F value")});
+    busy_ = new ui::LoadingOverlay(table_);
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
@@ -395,6 +400,7 @@ void MoversPanel::refresh() {
 void MoversPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const auto& m = svc.movers();
+    busy_->set_loading(!m.loaded && svc.movers_loading(), QStringLiteral("COMPUTING 13F BREADTH\u2026"));
     if (!m.loaded) {
         table_->setRowCount(0);
         title_note_->setText(svc.movers_loading()
@@ -514,6 +520,7 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
                          QStringLiteral("Move"), QStringLiteral("Est. $"), QStringLiteral("% of book"),
                          QStringLiteral("Shares now"), QStringLiteral("Shares before"), QStringLiteral("Filed for"),
                          QStringLiteral("Filed"), QStringLiteral("Traded between")});
+    busy_ = new ui::LoadingOverlay(table_);
     table_->horizontalHeaderItem(10)->setToolTip(ui::tooltip_wrap(QStringLiteral(
         "The stock's low and high between the two filings: the shares changed hands somewhere in this range. "
         "A 13F gives no trade prices or dates, so no average price is made up.")));
@@ -554,6 +561,7 @@ void BigMovesPanel::refresh() {
 void BigMovesPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const auto& b = svc.big_moves();
+    busy_->set_loading(!b.loaded && svc.big_moves_loading(), QStringLiteral("COMPARING 13F FILINGS\u2026"));
     if (!b.loaded || svc.big_moves_loading()) {
         if (!b.loaded)
             table_->setRowCount(0);
@@ -687,6 +695,7 @@ StakesPanel::StakesPanel(QWidget* parent) : QWidget(parent) {
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Holder"),
                          QStringLiteral("Form"), QStringLiteral("% of class"), QStringLiteral("Change"),
                          QStringLiteral("Shares"), QStringLiteral("Event"), QStringLiteral("Filed")});
+    busy_ = new ui::LoadingOverlay(table_);
     table_->horizontalHeaderItem(7)->setToolTip(ui::tooltip_wrap(QStringLiteral(
         "The date the holder crossed the threshold or the stake changed — the filing is due 5 business days after "
         "for a 13D")));
@@ -722,6 +731,7 @@ void StakesPanel::refresh() {
 void StakesPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const auto& st = svc.stakes();
+    busy_->set_loading(!st.loaded && svc.stakes_loading(), QStringLiteral("READING 13D / 13G FILINGS\u2026"));
     if (!st.loaded) {
         table_->setRowCount(0);
         title_note_->setText(svc.stakes_loading() ? QStringLiteral("reading the local 13D / 13G store…") : QString());

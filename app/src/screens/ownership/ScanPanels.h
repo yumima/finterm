@@ -48,6 +48,7 @@ class InsiderBuysPanel : public QWidget {
     QCheckBox* exclude_ten_pct_ = nullptr;
     QCheckBox* exclude_plan_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 
@@ -64,6 +65,7 @@ class ShortRankPanel : public QWidget {
     QLabel* title_note_ = nullptr;
     QComboBox* sort_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 
@@ -80,6 +82,7 @@ class MoversPanel : public QWidget {
     QLabel* title_note_ = nullptr;
     QComboBox* sort_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 
@@ -103,6 +106,7 @@ class BigMovesPanel : public QWidget {
     QComboBox* filed_within_ = nullptr;
     QCheckBox* active_only_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 
@@ -127,6 +131,7 @@ class StakesPanel : public QWidget {
     QComboBox* days_ = nullptr;
     QCheckBox* new_only_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 

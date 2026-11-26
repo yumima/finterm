@@ -7,6 +7,10 @@ class QCheckBox;
 class QLabel;
 class QTableWidget;
 
+namespace finterm::ui {
+class LoadingOverlay;
+}
+
 namespace finterm::screens {
 
 class InsiderTimeline;
@@ -41,6 +45,7 @@ class InsidersPanel : public QWidget {
     QCheckBox* show_all_ = nullptr;
     InsiderTimeline* timeline_ = nullptr;
     QTableWidget* table_ = nullptr;
+    ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
     QLabel* foot_ = nullptr;
 };
 

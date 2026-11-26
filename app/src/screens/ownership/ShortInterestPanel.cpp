@@ -3,6 +3,7 @@
 #include "screens/ownership/OwnershipFlags.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "ui/components/TooltipText.h"
+#include "ui/widgets/LoadingOverlay.h"
 
 #include <QHBoxLayout>
 #include <QHelpEvent>
@@ -176,6 +177,7 @@ ShortInterestPanel::ShortInterestPanel(QWidget* parent) : QWidget(parent) {
     auto* body = new QHBoxLayout;
     body->setSpacing(16);
     chart_ = new Chart;
+    busy_ = new ui::LoadingOverlay(chart_);
     body->addWidget(chart_, 3);
     figures_ = new QLabel;
     figures_->setWordWrap(true);
@@ -193,6 +195,7 @@ ShortInterestPanel::ShortInterestPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void ShortInterestPanel::clear() {
+    busy_->hide_loading();
     chart_->set({}, std::nullopt, {});
     title_note_->clear();
     figures_->clear();
@@ -202,6 +205,8 @@ void ShortInterestPanel::clear() {
 void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) {
     const HeaderStats h = derive_header(s);
     const auto& hist = s.short_history;
+    busy_->set_loading(!hist.has_data() && loading && hist.error.isEmpty(),
+                       QStringLiteral("READING FINRA SHORT INTEREST\u2026"));
     const auto dim = [](const QString& t) {
         return QStringLiteral("<span style='color:%1;'>%2</span>").arg(ui::colors::TEXT_SECONDARY(), t);
     };

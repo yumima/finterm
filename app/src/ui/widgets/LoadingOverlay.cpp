@@ -72,6 +72,22 @@ void LoadingOverlay::hide_loading() {
     hide();
 }
 
+void LoadingOverlay::set_loading(bool on, const QString& message) {
+    if (!on) {
+        if (!isHidden())
+            hide_loading();
+        return;
+    }
+    if (!isHidden() && animated_ && anim_timer_->isActive()) {
+        if (message_ != message) {
+            message_ = message;
+            update();
+        }
+        return;
+    }
+    show_loading(message);
+}
+
 void LoadingOverlay::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);

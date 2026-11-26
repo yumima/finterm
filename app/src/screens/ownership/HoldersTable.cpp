@@ -3,6 +3,7 @@
 #include "screens/ownership/OwnershipUi.h"
 #include "ui/components/ExternalLink.h"
 #include "ui/components/TooltipText.h"
+#include "ui/widgets/LoadingOverlay.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
@@ -114,6 +115,7 @@ HoldersTable::HoldersTable(QWidget* parent) : QWidget(parent) {
             ui::open_external_link(url);
     });
     root->addWidget(table_, 1);
+    busy_ = new ui::LoadingOverlay(table_);
 
     foot_ = note_label();
     root->addWidget(foot_);
@@ -123,6 +125,7 @@ HoldersTable::HoldersTable(QWidget* parent) : QWidget(parent) {
 void HoldersTable::clear() {
     snap_ = {};
     loading_ = false;
+    busy_->hide_loading();
     table_->setRowCount(0);
     title_note_->clear();
     foot_->clear();
@@ -141,6 +144,8 @@ void HoldersTable::set_snapshot(const OwnershipSnapshot& snap, bool loading) {
 void HoldersTable::render() {
     const auto& s = snap_;
     const auto& sum = s.summary;
+    busy_->set_loading(!s.holders_ok && loading_ && s.holders_error.isEmpty(),
+                       QStringLiteral("READING THE 13F INDEX\u2026"));
 
     if (!s.holders_ok) {
         table_->setRowCount(0);
