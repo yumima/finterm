@@ -1631,3 +1631,14 @@ target_include_directories(test_db_threads PRIVATE ../src)
 target_link_libraries(test_db_threads PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
 set_target_properties(test_db_threads PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME db_threads COMMAND test_db_threads)
+
+# ── all_tests: build every test executable without the app ───────────────────
+# CI (.github/workflows/tests.yml) builds this target and runs ctest.
+get_property(_finterm_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+add_custom_target(all_tests)
+foreach(_t IN LISTS _finterm_test_targets)
+    get_target_property(_type ${_t} TYPE)
+    if(_type STREQUAL "EXECUTABLE")
+        add_dependencies(all_tests ${_t})
+    endif()
+endforeach()

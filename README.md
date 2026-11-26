@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`7e72d5945`](https://github.com/yumima/finterm/commit/7e72d5945) sqlite: one connection per thread; a fill does not run without its transaction
 - [`0a2b39aca`](https://github.com/yumima/finterm/commit/0a2b39aca) site: financial terminal
 - [`a8bd13a04`](https://github.com/yumima/finterm/commit/a8bd13a04) site: free to use
 - [`4a26344f6`](https://github.com/yumima/finterm/commit/4a26344f6) site: a shorter lead; AI is part of it

@@ -1,0 +1,137 @@
+name: Tests — Windows, macOS, Linux
+
+# The ctest suite on the three platforms we ship, with the same Qt as the
+# installers. Run by hand (Actions tab, or `gh workflow run tests.yml`) and
+# called by release.yml, whose publish job waits for it: an installer is not
+# released from a commit whose tests fail on its platform.
+#
+# Tests that need finterm's Python environment or the network skip themselves
+# here, as they do on any machine without them.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  BUILD_TYPE: Release
+  QT_VERSION: "6.8.3"
+  QT_MODULES: "qtcharts qtwebsockets qtmultimedia"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: Windows
+            qt_arch: win64_msvc2022_64
+          - os: macos-15
+            platform: macOS
+            qt_arch: clang_64
+          - os: ubuntu-22.04
+            platform: Linux
+            qt_arch: linux_gcc_64
+
+    runs-on: ${{ matrix.os }}
+    name: ctest ${{ matrix.platform }}
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up ccache
+        if: runner.os != 'Windows'
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: tests-${{ matrix.platform }}-${{ env.QT_VERSION }}
+          max-size: 500M
+
+      # Same compiler and system libraries as release.yml's Linux job
+      # (ubuntu-22.04's g++ 11 is below the GCC 12.3 CMakeLists requires).
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository universe -y
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            cmake ninja-build gcc-12 g++-12 \
+            libssl-dev \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-cursor-dev \
+            libxcb-icccm4 libxcb-icccm4-dev \
+            libxcb-image0  libxcb-image0-dev \
+            libxcb-keysyms1 libxcb-keysyms1-dev \
+            libxcb-randr0 \
+            libxcb-render-util0 libxcb-render-util0-dev \
+            libxcb-shape0-dev \
+            libxcb-sync-dev \
+            libxcb-xfixes0-dev \
+            libxcb-xinerama0 libxcb-xinerama0-dev \
+            libxcb-xkb1 libxkbcommon-x11-dev \
+            libdbus-1-dev libfontconfig1-dev libfreetype6-dev \
+            libsecret-1-dev \
+            pkg-config
+          echo "CC=gcc-12"  >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja cmake || brew upgrade ninja cmake || true
+
+      - name: Install OpenSSL (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VCPKG_ROOT="${VCPKG_INSTALLATION_ROOT:-C:/vcpkg}"
+          "$VCPKG_ROOT/vcpkg" install openssl:x64-windows --no-print-usage
+          echo "OPENSSL_ROOT_DIR=$VCPKG_ROOT/installed/x64-windows" >> "$GITHUB_ENV"
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt_arch }}
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-${{ matrix.platform }}-tests
+
+      - name: Configure
+        shell: bash
+        working-directory: app
+        run: |
+          EXTRA=""
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            EXTRA="-G Ninja -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
+          if [ -n "${OPENSSL_ROOT_DIR:-}" ]; then
+            EXTRA="$EXTRA -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
+          fi
+          cmake -B build $EXTRA \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DFINTERM_QT_STRICT=ON \
+            -DFINTERM_BUILD_TESTS=ON
+
+      - name: Build tests
+        shell: bash
+        working-directory: app
+        run: |
+          cmake --build build --config ${{ env.BUILD_TYPE }} --target all_tests \
+            --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
+
+      # No display on the runners: Qt's offscreen platform for widget tests.
+      - name: Run ctest
+        shell: bash
+        working-directory: app/build/tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ctest -C ${{ env.BUILD_TYPE }} --output-on-failure --timeout 300 \
+            --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)

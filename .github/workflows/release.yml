@@ -29,6 +29,12 @@ env:
 # JOB 1 — Windows x64 Installer (QtIFW .exe)
 # ═════════════════════════════════════════════════════════════════════════════
 jobs:
+  # ctest on Windows, macOS, Linux (tests.yml). Runs beside the builds; the
+  # release job does not publish unless it passed.
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
   build-windows:
     name: Windows x64 Installer
     runs-on: windows-2022
@@ -1414,10 +1420,11 @@ jobs:
 # ═════════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: [tests, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     if: >-
       !cancelled() &&
+      needs.tests.result == 'success' &&
       needs.build-windows.result == 'success' &&
       needs.build-linux.result == 'success' &&
       needs.build-macos.result == 'success' &&
