@@ -1665,15 +1665,40 @@ void ScreenerScreen::fill_band() {
     details_tail_ = basis;
 
     if (current_id_ == kOverview) {
+        // which screens' records beat the index (|t| >= 2, verdict_of): counted
+        // from the records, never written in — a new screen can change it
+        QStringList beat;
+        for (const auto& st : result_.strategies)
+            if (verdict_of(st.evidence) == QLatin1String("beat the index"))
+                beat << st.name.toHtmlEscaped();
+        const QString who = beat.size() == 1 ? beat.first()
+                                             : beat.mid(0, beat.size() - 1).join(QStringLiteral(", ")) +
+                                                   QStringLiteral(" and ") + beat.value(beat.size() - 1);
+        const QString record_line =
+            beat.isEmpty()
+                ? QStringLiteral("No screen beat the equal-weighted S&amp;P 500 with significance, 2010-2026.")
+                : beat.size() == 1
+                ? QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more), on "
+                                 "the months it held names; read its record before trusting it.")
+                      .arg(who)
+                : QStringLiteral("Only %1 beat the equal-weighted S&amp;P 500 with significance (t 2 or more), on "
+                                 "the months they held names; read their records before trusting them.")
+                      .arg(who);
+        const QString record_bold =
+            beat.isEmpty() ? QStringLiteral("<b>None beat the equal-weighted index with statistical significance</b>.")
+                           : QStringLiteral("<b>Only %1 beat the equal-weighted index with statistical significance"
+                                            "</b>, and %2 how many names and months that rests on; none of the "
+                                            "others did.")
+                                 .arg(who, beat.size() == 1 ? QStringLiteral("its card says")
+                                                            : QStringLiteral("their cards say"));
         band_html_ =
             card_head(QStringLiteral("Overview"),
                       QStringLiteral("Names on two or more screens (RS Leaders, nested in the Trend Template, counts "
                                      "once)"),
                       QStringLiteral("Where independent methods agree today. Pick a strategy on the left for its "
                                      "own list; click any stock to open it in Equity Research.")) +
-            QStringLiteral("<div style='margin-top:4px'><span style='color:%1'>RECORD</span>&nbsp; No screen beat "
-                           "the equal-weighted S&amp;P 500 with significance, 2010-2026.</div>")
-                .arg(dim);
+            QStringLiteral("<div style='margin-top:4px'><span style='color:%1'>RECORD</span>&nbsp; %2</div>")
+                .arg(dim, record_line);
 
         QString t = head(QStringLiteral("EVERY SCREEN'S RECORD &nbsp;<span style='font-weight:400;color:%1'>"
                                         "excess / yr vs index &nbsp;·&nbsp; t-stat</span>")
@@ -1694,7 +1719,7 @@ void ScreenerScreen::fill_band() {
             card_head(QStringLiteral("Overview"), QStringLiteral("How to read the screens and their records"),
                       QStringLiteral("The screens come from practitioners — US Investing Champions Minervini and "
                                      "Luk, O'Neil's CAN SLIM (with which David Ryan won), Kullamägi's "
-                                     "self-reported method, and Buffett's letters made exact — and from the "
+                                     "self-reported method, Buffett's letters and Lynch's ratio made exact — and from the "
                                      "academic literature; Quality + Momentum is this terminal's combination of "
                                      "two published factors. Most "
                                      "code only the SELECTION rules (the Leader Pullback also codes entry, stop, "
@@ -1704,11 +1729,12 @@ void ScreenerScreen::fill_band() {
             << part(QStringLiteral("1 · HOW TO READ THE RECORDS")) +
                    QStringLiteral(
                        "<p style='margin-top:2px'>Every screen but CAN SLIM was backtested on the S&amp;P 500 "
-                       "as it stood on each date, from 2010 or from when its data allows (Buffett Value needs "
-                       "seven years of filings: 2015) to 2026, monthly, after costs (the Leader Pullback as "
-                       "individual trades). <b>None beat the equal-weighted index with statistical significance</b>. "
-                       "The "
-                       "t-stat measures how far an average excess is from zero relative to its month-to-month "
+                       "as it stood on each date, from 2010 or from when its data allows (Buffett Value and "
+                       "Peter Lynch Value need six or seven years of filings: 2014-15) to 2026, monthly, after "
+                       "costs (the Leader Pullback as individual trades). ") +
+                   record_bold +
+                   QStringLiteral(
+                       " The t-stat measures how far an average excess is from zero relative to its month-to-month "
                        "noise: |t| &lt; 2 is indistinguishable from luck. A list here is where a method would "
                        "look, not a forecast.</p>") +
                    t;
@@ -1805,8 +1831,13 @@ void ScreenerScreen::fill_band() {
                       ev.max_dd ? fmtn::format_percent(*ev.max_dd * 100.0, 1) : fmtn::placeholder());
         if (!ev.from.isEmpty() && !ev.to.isEmpty())
             d += QStringLiteral("<tr><td style='color:%1'>Months with names</td><td align='right'>&nbsp;%2 to "
-                                "%3</td></tr>")
-                     .arg(dim, ev.from.toHtmlEscaped(), ev.to.toHtmlEscaped());
+                                "%3%4</td></tr>")
+                     .arg(dim, ev.from.toHtmlEscaped(), ev.to.toHtmlEscaped(),
+                          ev.months_held ? QStringLiteral(" (%1)").arg(*ev.months_held) : QString());
+        if (ev.median_names)
+            d += QStringLiteral("<tr><td style='color:%1'>Names in a month (median)</td><td align='right'>&nbsp;%2"
+                                "</td></tr>")
+                     .arg(dim, QString::number(*ev.median_names));
         if (ev.trades)
             d += QStringLiteral("<tr><td style='color:%1'>Trades / win rate / avg</td><td align='right'>&nbsp;%2 / %3 "
                                 "/ %4R</td></tr>")

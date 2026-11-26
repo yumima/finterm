@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`19c568ff3`](https://github.com/yumima/finterm/commit/19c568ff3) tests: every program-output check says what came and compares exactly
 - [`60bb7c299`](https://github.com/yumima/finterm/commit/60bb7c299) notebook: no Windows handle patch — the subprocess output was never lost
 - [`a96d1abca`](https://github.com/yumima/finterm/commit/a96d1abca) tests: the STARTUPINFO check's file does not overwrite the notebook's f
 - [`f156c7713`](https://github.com/yumima/finterm/commit/f156c7713) notebook: the Windows handle fix leaves a caller's own handles alone

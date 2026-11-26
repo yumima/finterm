@@ -29,7 +29,8 @@ QJsonObject sample() {
          "source": "Greenblatt", "summary": "s", "rules": ["a", "b"], "rank_by": "Combined rank",
          "columns": ["earnings_yield", "roic", "no_such_column"],
          "evidence": {"tested": true, "excess": 0.019, "t": 1.01, "max_dd": -0.242,
-                      "subperiods": [0.031, 0.008, null, 0.061], "note": "n"},
+                      "subperiods": [0.031, 0.008, null, 0.061], "note": "n",
+                      "months_held": 108, "median_names": 1},
          "symbols": ["HRB", "NOFUND"]},
         {"id": "canslim", "name": "CAN SLIM", "family": "Practitioner", "rules": [],
          "columns": [], "evidence": {"tested": false, "note": "not backtested"}, "symbols": []},
@@ -74,6 +75,8 @@ class TestScreenerModel : public QObject {
         QVERIFY(m->evidence.tested);
         QCOMPARE(*m->evidence.excess, 0.019);
         QCOMPARE(m->evidence.subperiods.size(), 4);
+        QCOMPARE(*m->evidence.months_held, 108);
+        QCOMPARE(*m->evidence.median_names, 1);
         QVERIFY(!m->evidence.subperiods[2].has_value()); // null sub-period stays absent
         QVERIFY(!r.strategy("nope"));
     }
@@ -84,6 +87,7 @@ class TestScreenerModel : public QObject {
         QVERIFY(c);
         QVERIFY(!c->evidence.tested);
         QVERIFY(!c->evidence.excess.has_value());
+        QVERIFY(!c->evidence.months_held.has_value());
         QVERIFY(!c->evidence.t.has_value());
         QCOMPARE(c->evidence.note, QStringLiteral("not backtested"));
     }
@@ -114,6 +118,8 @@ class TestScreenerModel : public QObject {
         QCOMPARE(format_value(Kind::Int, 87.4), QStringLiteral("87"));
         QCOMPARE(format_value(Kind::Percentile, 0.934), QStringLiteral("93"));
         QCOMPARE(format_value(Kind::Ratio, 14.25), QStringLiteral("14.3"));
+        QCOMPARE(format_value(Kind::Ratio2, 1.996), QStringLiteral("2.00"));
+        QCOMPARE(format_value(Kind::Ratio2, 1.954), QStringLiteral("1.95"));
         QCOMPARE(format_value(Kind::Pct, 0.0), QStringLiteral("0.0%")); // a real zero is a value
         QVERIFY(!colour_for(Kind::Pct, 0.3).size());       // unsigned quantities are not coloured
         QVERIFY(colour_for(Kind::PctSigned, 0.3).size());

@@ -147,6 +147,54 @@
    "trades": 1529,
    "win_rate": 0.255
   },
+  "Lynch: (growth + yield) / P/E >= 2 (max 30)": {
+   "excess": 0.253,
+   "from": "2014-04",
+   "hit": 0.676,
+   "max_dd": -0.3286,
+   "median_names": 1,
+   "months_held": 108,
+   "subperiods": [
+    0.2771,
+    0.27,
+    0.2115,
+    0.2628
+   ],
+   "t": 3.02,
+   "to": "2026-06"
+  },
+  "Lynch: every test before the price, any ratio": {
+   "excess": 0.0094,
+   "from": "2014-03",
+   "hit": 0.487,
+   "max_dd": -0.2761,
+   "median_names": 24,
+   "months_held": 150,
+   "subperiods": [
+    0.0505,
+    -0.019,
+    0.0435,
+    0.0108
+   ],
+   "t": 0.47,
+   "to": "2026-08"
+  },
+  "Lynch: ratio >= 1.5 (research, not shipped)": {
+   "excess": 0.0525,
+   "from": "2014-04",
+   "hit": 0.555,
+   "max_dd": -0.4804,
+   "median_names": 2,
+   "months_held": 146,
+   "subperiods": [
+    0.1103,
+    -0.0107,
+    0.1527,
+    0.0407
+   ],
+   "t": 0.76,
+   "to": "2026-08"
+  },
   "Magic Formula (top 30)": {
    "excess": 0.0015,
    "from": "2010-01",
@@ -503,6 +551,24 @@
     0.0041
    ],
    "t": -0.56,
+   "to": "2026-08"
+  },
+  "lynch": {
+   "excess": -0.0793,
+   "from": "2014-10",
+   "max_dd": -0.4683,
+   "median_names": 1,
+   "months": 200,
+   "months_held": 108,
+   "qualify_base": 0.0001,
+   "qualify_next": 0.1106,
+   "subperiods": [
+    -0.482,
+    -0.1489,
+    0.027,
+    -0.0211
+   ],
+   "t": -0.79,
    "to": "2026-08"
   },
   "magic_formula": {

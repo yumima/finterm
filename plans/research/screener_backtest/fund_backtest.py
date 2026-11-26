@@ -171,28 +171,51 @@ def piotroski(r, p):
 # (reading it as zero put Comcast and DaVita on the list as debt-free).
 BUFFETT_MIN_YEARS = 7
 
+def tagged(q, k):
+    """A record's value, or None when untagged or when it ends after the
+    record does (capex and debt do not date the record: see rec)."""
+    if k not in q or not np.isfinite(q[k]) or ((k, "end") in q and q[(k, "end")] > q.get("end", "")):
+        return None
+    return float(q[k])
+
 def buffett_at(cik, t, r, mc):
     lst = avail.get(cik)
     i = bisect.bisect_right(lst, (t, 10**6)) - 1
     y = lst[i][1]
     recs = [rec[cik].get(y - k) or {} for k in range(sd.BUFFETT["years"])]
-    def val(q, k):
-        if k not in q or not np.isfinite(q[k]) or ((k, "end") in q and q[(k, "end")] > q.get("end", "")):
-            return None
-        return float(q[k])
     def fcf(q):
-        o, c = val(q, "ocf"), val(q, "capex")
+        o, c = tagged(q, "ocf"), tagged(q, "capex")
         return None if o is None or c is None else o - c
     gp = [(lambda x: None if not np.isfinite(x) else x)(gross_profit(q)) for q in recs]
-    ni = [val(q, "ni") for q in recs]
-    x = sd.buffett_facts(ni, [fcf(q) for q in recs], gp, [val(q, "rev") for q in recs],
+    ni = [tagged(q, "ni") for q in recs]
+    x = sd.buffett_facts(ni, [fcf(q) for q in recs], gp, [tagged(q, "rev") for q in recs],
                          latest_ni=ni[0], min_years=BUFFETT_MIN_YEARS)
-    eq, debt = g(r, "equity"), val(r, "debt")
+    eq, debt = g(r, "equity"), tagged(r, "debt")
     roe = ni[0] / eq if ni[0] is not None and np.isfinite(eq) and eq > 0 else None
     roic = (ni[0] / (eq + debt) if None not in (ni[0], debt) and np.isfinite(eq) and eq + debt > 0 else None)
     good = all(ok for _, ok in sd.buffett_quality(x, roe, roic, debt))
     v = x.get("value")
     return good, (1 - mc / v if v and np.isfinite(mc) and mc > 0 else np.nan), bool(x)
+
+# The shipped Lynch tests (screener_data.lynch_*) on SEC annual records. The
+# "last twelve months" are the last fiscal year. Dividends paid that are not
+# tagged are none paid (XBRL filers omit zero lines): that can only LOWER a
+# ratio, never admit a name. Debt untagged is unknown and fails, as for Buffett.
+def lynch_at(cik, t, mc):
+    lst = avail.get(cik)
+    i = bisect.bisect_right(lst, (t, 10**6)) - 1
+    y = lst[i][1]
+    recs = [rec[cik].get(y - k) or {} for k in range(sd.LYNCH["years"])]
+    ni = [tagged(q, "ni") for q in recs]
+    x = sd.lynch_facts(ni)
+    r = recs[0]
+    eq = tagged(r, "equity")
+    pe = mc / ni[0] if ni[0] is not None and ni[0] > 0 and np.isfinite(mc) and mc > 0 else None
+    div = tagged(r, "div")
+    yld = (div or 0.0) / mc if np.isfinite(mc) and mc > 0 else None
+    good = all(ok for _, ok in sd.lynch_tests(x, ni[0], tagged(r, "debt"), eq))
+    ratio = sd.lynch_ratio(x.get("growth"), yld, pe)
+    return good, (np.nan if ratio is None else ratio)
 
 cache = {}
 def metrics(t, u):
@@ -230,6 +253,7 @@ def metrics(t, u):
             "mc": mc,
             **dict(zip(("buf_good", "buf_mos", "buf_hist"), buffett_at(cik, key, r, mc) if operating(cik)
                        else (False, np.nan, False))),
+            **dict(zip(("lyn_good", "lyn_ratio"), lynch_at(cik, key, mc) if operating(cik) else (False, np.nan))),
         }
     m = pd.DataFrame.from_dict(rows, orient="index")
     if not m.empty:
@@ -304,6 +328,33 @@ def _(t, u): return buffett_list(t, u)
 def _(t, u):
     m = metrics(t, u); return list(m.index[m["buf_good"].astype(bool)])
 
+def lynch_list(t, u):
+    """The shipped list: every test passed, ratio >= 2, the 30 highest."""
+    m = metrics(t, u)
+    r = m["lyn_ratio"][m["lyn_good"].astype(bool)]
+    return top(r[r >= sd.LYNCH["ratio"]], n=sd.LYNCH["n"])
+
+def lynch_wait(t, u):
+    """Its setting-up list: every test passed, not on the list, ratio >= 1.5."""
+    m = metrics(t, u)
+    r = m["lyn_ratio"][m["lyn_good"].astype(bool)].drop(lynch_list(t, u))
+    return top(r[r >= sd.LYNCH["ratio_ok"]], n=sd.LYNCH["n"])
+
+@strat("Lynch: (growth + yield) / P/E >= 2 (max 30)")
+def _(t, u): return lynch_list(t, u)
+
+# research only, not shipped: the book's "okay" as the cut, to see what the
+# rarity of 2 costs (plans/research/lynch_screen_2026-11.md)
+@strat("Lynch: ratio >= 1.5 (research, not shipped)")
+def _(t, u):
+    m = metrics(t, u)
+    r = m["lyn_ratio"][m["lyn_good"].astype(bool)]
+    return top(r[r >= sd.LYNCH["ratio_ok"]], n=sd.LYNCH["n"])
+
+@strat("Lynch: every test before the price, any ratio")
+def _(t, u):
+    m = metrics(t, u); return list(m.index[m["lyn_good"].astype(bool)])
+
 def ic(col):
     def f(t, u):
         return metrics(t, u)[col].reindex(u)
@@ -323,14 +374,18 @@ if __name__ == "__main__":
     for name, metric in [("Magic Formula (top 30)", "ey"), ("Magic Formula (top 30)", "roc"),
                          ("Gross profitability GP/A (top decile)", "gpa"),
                          ("Value composite (top decile)", "value"),
-                         ("Buffett: quality at or below estimated value (max 30)", "buf_mos")]:
+                         ("Buffett: quality at or below estimated value (max 30)", "buf_mos"),
+                         ("Lynch: (growth + yield) / P/E >= 2 (max 30)", "lyn_ratio")]:
         fn = STRATS[name]
-        better = 0
+        better = held = 0
         for k in keys:
             m = cache[k]
             picks = fn(k, list(m.index))
+            if not picks:  # an empty list has no direction to get wrong (Lynch: some months)
+                continue
+            held += 1
             better += m.loc[picks, metric].median() > m[metric].median()
-        assert better == len(keys), f"{name}: picks not better on {metric} ({better}/{len(keys)})"
+        assert held and better == held, f"{name}: picks not better on {metric} ({better}/{held})"
     print("\ndirection guard: picks beat the universe median on their own metric — ok")
     # how much of the universe each month had a usable record
     n = [len(cache[k].dropna(subset=["gpa"])) for k in sorted(cache)]

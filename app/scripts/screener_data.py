@@ -11,9 +11,11 @@ Read plans/research/screener_research_2026-10.md before changing a rule. In
 short: the screens are the published, rule-exact versions of strategies from
 investing-competition winners (Minervini, CAN SLIM, Kullamaggie) and from the
 academic literature (momentum, Magic Formula, Piotroski, Novy-Marx, Trending
-Value, low volatility). Measured on point-in-time S&P 500 membership 2010-2026
-NONE beat the equal-weighted index with statistical significance; the best
-were inside noise and earned their excess in 2023-26 alone. Every strategy
+Value, low volatility), Buffett's letters and Lynch's ratio made exact.
+Measured on point-in-time S&P 500 membership 2010-2026 none beat the
+equal-weighted index with statistical significance but Peter Lynch Value
+(t 3.0 on the months it held names, one or two stocks at a time: read
+plans/research/lynch_screen_2026-11.md before quoting it). Every strategy
 therefore carries its measured record in EVIDENCE, and the tab shows it next
 to the list. A screen finds the names a method would look at. It is not
 evidence the method pays — do not relabel any of these "winning".
@@ -76,6 +78,7 @@ TV_COLUMNS = {
     "net_income_ttm": ("net_income", None),
     "cash_f_operating_activities_ttm": ("ocf", None),
     "total_debt_fq": ("total_debt", None),
+    "total_equity_fq": ("total_equity", None),
     "piotroski_f_score_ttm": ("piotroski", None),
     "return_on_invested_capital_fq": ("roic", 0.01),
     "return_on_equity_fq": ("roe", 0.01),
@@ -662,20 +665,29 @@ def buffett_multiple(growth):
     return sum(q ** k for k in range(1, 11)) + q ** 10 * (1 + t) / (r - t)
 
 
+def _fiscal_run(cap, periods, *series):
+    """How many fiscal years, newest first and at most `cap`, every series
+    reports, consecutively: a missing year ends the run (it is never read as
+    zero), and so does a skipped fiscal period when `periods` is given (None =
+    the caller's years are consecutive already, as the SEC records are)."""
+    n = 0
+    for i in range(min([cap] + [len(x or []) for x in series])):
+        if any(x[i] is None for x in series):
+            break
+        if periods is not None and i and (i >= len(periods) or periods[i] is None or periods[i - 1] is None
+                                          or periods[i] != periods[i - 1] - 1):
+            break
+        n += 1
+    return n
+
+
 def buffett_facts(ni, fcf, gp, rev, periods=None, latest_ni=None, min_years=None):
     """One company's history as the numbers the rules test, or {} when it has
     fewer than `min_years` consecutive fiscal years of earnings AND free cash
     flow. Lists are newest first; a missing year ends the history — it is
     never read as zero."""
     b = BUFFETT
-    n, need = 0, min_years or b["years"]
-    for i in range(min(len(ni or []), len(fcf or []), b["years"])):
-        if ni[i] is None or fcf[i] is None:
-            break
-        if periods is not None and i and (i >= len(periods) or periods[i] is None or periods[i - 1] is None
-                                          or periods[i] != periods[i - 1] - 1):
-            break
-        n += 1
+    n, need = _fiscal_run(b["years"], periods, ni, fcf), min_years or b["years"]
     if n < need:
         return {}
     e, f = ni[:n], fcf[:n]
@@ -714,6 +726,70 @@ def buffett_quality(x, roe, roic, debt):
         ("debt", num(debt) and n > 0 and x["ni_avg"] > 0 and debt <= b["debt_years"] * x["ni_avg"]),
         ("margin", n > 0 and (x["gm_years"] == 0 or (x["gm_low"] is not None and x["gm_low"] >= b["gm_low"]))),
         ("trend", num(x.get("trend")) and x["trend"] >= b["trend"]),
+    ]
+
+
+# ── Growth at a reasonable price (Peter Lynch) ───────────────────────────────
+#
+# Lynch's own numbers, from 'One Up on Wall Street' (1989), "Some Famous
+# Numbers": a fairly priced company's P/E equals its growth rate; (growth rate
+# + dividend yield) / P/E "less than a 1 is poor, and 1.5 is okay, but what
+# you're really looking for is a 2 or better"; "a normal corporate balance sheet
+# has 75 percent equity and 25 percent debt". The growth cap is AAII's Lynch
+# screen. Sources per rule: plans/research/lynch_screen_2026-11.md. The
+# definitions below are the only ones: fund_backtest.py imports them.
+LYNCH = {
+    "years": 6,             # consecutive profitable fiscal years: five years of growth
+    "growth_max": 0.50,     # a year; a faster rate is not believed (AAII's Lynch screen)
+    "debt_equity": 1 / 3,   # 25% debt to 75% equity: no weaker than his "normal"
+    "ratio": 2.0,           # (growth + yield) / P/E: "a 2 or better"
+    "ratio_ok": 1.5,        # "1.5 is okay": the setting-up list's floor
+    "n": 30,
+}
+
+
+def lynch_facts(ni, periods=None):
+    """Five-year earnings growth from the last six fiscal years (newest
+    first), or {} when fewer than six consecutive years are reported. Growth is
+    end to end and only between profits: across a loss there is no rate."""
+    L = LYNCH
+    n = _fiscal_run(L["years"], periods, ni)
+    if n < L["years"]:
+        return {}
+    e = ni[:n]
+    pos = sum(x > 0 for x in e)
+    return {"years": n, "ni_pos": pos, "ni_fy": e[0],
+            "growth": (e[0] / e[-1]) ** (1 / (n - 1)) - 1 if pos == n else None}
+
+
+def lynch_ratio(growth, div_yield, pe):
+    """Lynch's (growth rate + dividend yield) / P/E, both rates in percent
+    as he writes them: 12% growth + 3% yield over a P/E of 10 is 1.5. None
+    when any part is unknown or the P/E is not positive (no earnings)."""
+    num = lambda v: v is not None and math.isfinite(v)
+    if not (num(growth) and num(div_yield) and num(pe)) or pe <= 0:
+        return None
+    return (growth + div_yield) * 100 / pe
+
+
+def _floor2(x):
+    """Down to 2 places, so a ratio printed beside a cut never reads as
+    reaching it (1.9955 is 1.99); snapped first, as 1.15 * 100 is 114.99999999999999."""
+    return math.floor(round(x * 100, 6)) / 100
+
+
+def lynch_tests(x, earnings, debt, equity):
+    """The tests before the price, in order: [(rule, passed)]. An absent
+    number fails its test."""
+    L = LYNCH
+    num = lambda v: v is not None and math.isfinite(v)
+    n = x.get("years", 0)
+    return [
+        ("years", n > 0),
+        ("profit", n > 0 and x["ni_pos"] == n),
+        ("growth", num(x.get("growth")) and 0 < x["growth"] <= L["growth_max"]),
+        ("earnings", num(earnings) and earnings > 0),
+        ("debt", num(debt) and num(equity) and equity > 0 and debt <= L["debt_equity"] * equity),
     ]
 
 
@@ -819,6 +895,30 @@ def setting_up(df, sig, lists, ctx):
         g = 1 - 1 / (1 - float(m_))  # the fall from the price to the estimated value
         out["buffett"].append(_setup(s_, "Good business, priced above its estimated value", "above value", g,
                                      f"{g * 100:.1f}%", f"the price must fall {g * 100:.1f}%"))
+    # Lynch: names passing every test before the price, not on the list, with
+    # a ratio of at least "okay" (1.5), highest first. The tested definition.
+    L = LYNCH
+    on = set(lists["lynch"])
+    r_ok = df["lynch_ratio"][ctx["lgood"] & (df["lynch_ratio"] >= L["ratio_ok"])].drop(list(on), errors="ignore")
+    out["lynch"] = []
+    # printed to 2 places, the ratio rounded down and the gap up: 1.9955 is
+    # "1.99, 0.01 to go", never "2.00, not yet 2"
+    # (snapped first: 1.93 * 100 is 192.99999999999997, 2 - 1.93 is 0.07000000000000006)
+    down = lambda x: f"{_floor2(x):.2f}"
+    up = lambda x: f"{max(math.ceil(round(x * 100, 6)), 1) / 100:.2f}"
+    for s_, r_ in r_ok.sort_values(ascending=False, kind="stable").head(L["n"]).items():
+        if r_ >= L["ratio"]:  # 2 or better, outside the 30 highest
+            g = float(df["lynch_ratio"][lists["lynch"][-1]] - r_)
+            if g <= 0:  # the same ratio as #30, cut by order alone
+                out["lynch"].append(_setup(s_, f"The same ratio as #{L['n']}, cut by order", "tied at the cut", 0.0,
+                                           "0.00", f"ties #{L['n']}; any rise puts it on the list"))
+                continue
+            out["lynch"].append(_setup(s_, f"A ratio of {L['ratio']:g} or better, outside the {L['n']} highest",
+                                       "outside the cut", g, up(g), f"the ratio must rise {up(g)} to reach #{L['n']}"))
+            continue
+        g = float(L["ratio"] - r_)
+        out["lynch"].append(_setup(s_, f"Ratio {down(r_)}: 'okay', not yet {L['ratio']:g}", f"ratio < {L['ratio']:g}",
+                                   g, up(g), f"the ratio must rise {up(g)} to {L['ratio']:g}"))
     pool_q = df["mom12_1"].reindex(ctx["gpa_pool"])
     out["quality_momentum"] = next_in_line(pool_q, set(lists["quality_momentum"]), 25,
                                            what="12-1 return must rise")
@@ -936,6 +1036,7 @@ def evidence(strategy, ev_doc):
         out.update({"tested": True, "excess": _clean(row.get("excess")), "t": _clean(row.get("t")),
                     "max_dd": _clean(row.get("max_dd")), "hit": _clean(row.get("hit")),
                     "from": row.get("from"), "to": row.get("to"),
+                    "months_held": _clean(row.get("months_held")), "median_names": _clean(row.get("median_names")),
                     "subperiods": [_clean(x) for x in (row.get("subperiods") or [])]})
         for k in ("trades", "win_rate", "avg_R"):  # trade-simulated strategies only
             if row.get(k) is not None:
@@ -975,6 +1076,33 @@ STRATEGIES = [
         "columns": ["mos", "fair_value", "owner_yield", "ni_growth", "roe", "roic", "debt_years"],
         "backtest": 'Buffett: quality at or below estimated value (max 30)',
         "note": "Buffett publishes no formula. His own record came from cheap, safe, high-quality stocks held with leverage (Frazzini, Kabiller & Pedersen) and from judgement no rule here contains.",
+    },
+    {
+        "id": "lynch", "name": "Peter Lynch Value", "family": "Practitioner",
+        "setups": "lynch",
+        "source": "Peter Lynch, 'One Up on Wall Street' (1989), \"Some Famous Numbers\", made exact",
+        "summary": "Growth at a reasonable price: (earnings growth + dividend yield) / P/E of 2 or better, steady profits, little debt. At most 30.",
+        "rules": ["Six consecutive fiscal years reported, a profit in every one: five years of growth, never across a loss",
+                  "Earnings growth = net income, last fiscal year against five years before, a year; above 0% and at most 50% (AAII's Lynch screen: a faster rate is not believed)",
+                  "Last twelve months' earnings positive; P/E = market cap / those earnings",
+                  "Total debt ≤ one third of equity ('a normal corporate balance sheet has 75 percent equity and 25 percent debt'), equity positive",
+                  "Lynch ratio = (growth rate + dividend yield) / P/E, rates in percent: 'less than a 1 is poor, and 1.5 is okay, but what you're really looking for is a 2 or better'",
+                  "Ratio ≥ 2; ranked by the ratio, the 30 highest",
+                  "Lynch value = the price at which the P/E equals the growth rate ('the p/e ratio of any company that's fairly priced will equal its growth rate')",
+                  "Excludes Finance and Utilities, as the other fundamental screens do"],
+        "idea": "Lynch ran Fidelity Magellan from 1977 to 1990 and wrote down the numbers he used. The first: a fairly priced company's P/E equals its growth rate, so 'a p/e ratio that's half the growth rate is very positive, and one that's twice the growth rate is very negative'. The second adds the dividend, so a slow grower that pays is not called dear: 12% growth plus a 3% yield over a P/E of 10 is 1.5. Both ask how much growth a dollar of price buys, and a balance sheet without much debt is what lets a company survive long enough to deliver it.",
+        "use": "The ratio was one number in his two-minute story, not the story. He sorted companies first — slow growers, stalwarts, fast growers, cyclicals, turnarounds, asset plays — and the ratio misleads on cyclicals: their P/E is lowest at the top of the cycle, when growth is about to turn. He also wanted inventories growing no faster than sales, few institutions holding the stock, and insiders buying; this feed carries none of those. Read the latest 10-K before trusting a ratio built on five years of history.",
+        "tested": "The same tests on SEC annual filings, visible 120 days after period end, point-in-time S&P 500 members, Finance and Utilities excluded (SIC codes), held one month; only the months that held names count (six years of filings, so from 2014). The 'last twelve months' are the last fiscal year; dividends are those the cash-flow statement tags (none tagged = none paid, which can only lower the ratio); debt is what the filing tags (none tagged fails); market cap comes from the filed public float.",
+        "reading": [["Peter Lynch with John Rothchild, 'One Up on Wall Street' (1989): chapters 7 (the six categories) and 13 ('Some Famous Numbers')", 'https://openlibrary.org/search?q=One+Up+on+Wall+Street+Lynch'],
+                    ["Peter Lynch with John Rothchild, 'Beating the Street' (1993)", 'https://openlibrary.org/search?q=Beating+the+Street+Lynch'],
+                    ["AAII, 'Peter Lynch and Investing in What You Know' (2019): a published Lynch screen", 'https://www.aaii.com/journal/article/10631-peter-lynch-and-investing-in-what-you-know']],
+        "practice": "Take the five highest ratios. For each, write Lynch's two-minute story: which of his six categories it is, why it will keep growing, and what would stop it. Strike the cyclicals near a peak and anything you cannot explain. Paper-buy what is left, check each quarter that earnings are still growing at the rate you bought, and compare with SPY over at least three years.",
+        "rank_key": 'lynch_ratio',
+        "setup_desc": 'companies that pass every test before the price but are not on the list, the 30 highest ratios of at least 1.5 (Lynch\'s "okay")',
+        "rank_by": "Lynch ratio, highest first",
+        "columns": ["lynch_ratio", "lynch_value", "lynch_growth", "lynch_pe", "div_yield", "debt_equity"],
+        "backtest": 'Lynch: (growth + yield) / P/E >= 2 (max 30)',
+        "note": "Strong but thin: rarely more than two S&P 500 stocks pass at once, and the same few companies stay on for years, a homebuilder (a cyclical, where Lynch warned the ratio misleads) most of all. The record survives leaving out its biggest names and beats random picks from the same passers, but the 'okay' names between 1.5 and 2 did not beat the index. Lynch gave the ratio as a rule of thumb, never as a screen; his Magellan record came from company visits and judgement no rule here contains.",
     },
     {
         "id": "trend_template", "name": "Minervini Trend Template", "family": "Practitioner",
@@ -1439,9 +1567,36 @@ def compute(fund, frames, extras=None, now=None):
         if b_["facts"] and b_["facts"]["ni_avg"] > 0 and r_.get("total_debt") is not None else None)
     good = pd.Series({s_: b_["good"] for s_, b_ in buf.items()}, dtype=bool).reindex(syms, fill_value=False)
 
+    # Growth at a reasonable price. Whole-company numbers on both sides of the
+    # ratio — net income growth over market cap / net income — because that is
+    # what the SEC history can test (its share counts are not split-safe).
+    lyn = {}
+    for s_ in syms:
+        r_ = fund[s_]
+        if not operating[s_]:
+            continue
+        x = lynch_facts(r_.get("ni_h"), r_.get("fy_h") or [])
+        mc, e = r_.get("mcap"), r_.get("net_income")
+        pe = mc / e if mc is not None and e is not None and mc > 0 and e > 0 else None
+        tests = lynch_tests(x, e, r_.get("total_debt"), r_.get("total_equity"))
+        lyn[s_] = {"facts": x, "tests": dict(tests), "good": all(ok for _, ok in tests), "pe": pe,
+                   "ratio": lynch_ratio(x.get("growth"), r_.get("div_yield"), pe)}
+    lcol = lambda fn: pd.Series({s_: fn(l_, fund[s_]) for s_, l_ in lyn.items()}, dtype=float).reindex(syms)
+    df["lynch_ratio"] = lcol(lambda l_, r_: l_["ratio"])
+    df["lynch_pe"] = lcol(lambda l_, r_: l_["pe"])
+    df["lynch_growth"] = lcol(lambda l_, r_: l_["facts"].get("growth"))
+    # the price at which the P/E equals the growth rate ("fairly priced"), a
+    # share at the price the market cap was struck on (see fair_value)
+    df["lynch_value"] = lcol(lambda l_, r_: r_["q_close"] * l_["facts"]["growth"] * 100 / l_["pe"]
+                             if l_["pe"] and (l_["facts"].get("growth") or 0) > 0 and r_.get("q_close") else None)
+    df["debt_equity"] = lcol(lambda l_, r_: r_["total_debt"] / r_["total_equity"]
+                             if r_.get("total_debt") is not None and (r_.get("total_equity") or 0) > 0 else None)
+    lgood = pd.Series({s_: l_["good"] for s_, l_ in lyn.items()}, dtype=bool).reindex(syms, fill_value=False)
+
     lists = {}
     rs = df["rs"]
     lists["buffett"] = _top(df["mos"][good & (df["mos"] >= 0)], n=BUFFETT["n"])
+    lists["lynch"] = _top(df["lynch_ratio"][lgood & (df["lynch_ratio"] >= LYNCH["ratio"])], n=LYNCH["n"])
     tt = df["tt_core"] & (rs >= 70)
     lists["trend_template"] = _top(rs[tt])
     lists["rs_leaders"] = _top(rs[tt], n=25)
@@ -1538,11 +1693,12 @@ def compute(fund, frames, extras=None, now=None):
         extras["plan_asof"] = plan_asof
         extras["setups"] = setting_up(df, sig, lists, {
             "k": k, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap, "combo": combo,
-            "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1], "good": good})
+            "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1], "good": good, "lgood": lgood})
         extras["examples"] = worked_examples(df, sig, lists, {
             "combo": combo, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap,
             "combo_pb": combo_pb.iloc[-1], "one": {n: v.iloc[-1] for n, v in one.items()},
-            "k": k, "pb_trig": pb_trig, "sector_ok": operating, "good": good, "buffett": buf, "fund": fund})
+            "k": k, "pb_trig": pb_trig, "sector_ok": operating, "good": good, "buffett": buf, "fund": fund,
+            "lgood": lgood, "lynch": lyn})
     return df, lists, market, asof
 
 
@@ -1678,8 +1834,37 @@ def worked_examples(df, sig, lists, ctx):
                    B_["n"]),
         ]
 
+    def lynch(sym):
+        l_, L = ctx["lynch"].get(sym), LYNCH
+        sec = v("sector", sym)
+        first = C("Not Finance or Utilities", sec if isinstance(sec, str) else "sector unknown",
+                  ctx["sector_ok"].get(sym, False))
+        if l_ is None:
+            return [first]
+        x, ok, r_ = l_["facts"], l_["tests"], ctx["fund"].get(sym) or {}
+        n = x.get("years", 0)
+        de = v("debt_equity", sym)
+        ratio = l_["ratio"]
+        return [
+            first,
+            C(f"{L['years']} consecutive fiscal years reported", f"{n} years" if n else "fewer", ok["years"]),
+            C("A profit in every one of them", f"{x.get('ni_pos', 0)} of {n}", ok["profit"]),
+            C(f"Earnings growth over 5 years above 0% and at most {_pc(L['growth_max'])} a year",
+              _pc(x.get("growth")), ok["growth"]),
+            C("Last 12 months' earnings positive (a P/E exists)", _m(r_.get("net_income")), ok["earnings"]),
+            C(f"Debt at most {L['debt_equity']:.2f}x equity (25% debt, 75% equity)",
+              f"{de:.2f}x" if np.isfinite(de) else "debt or equity unknown, or equity negative", ok["debt"]),
+            C(f"(growth + dividend yield) / P/E at least {L['ratio']:g}",
+              f"({_pc(x.get('growth'))} + {_pc(r_.get('div_yield'))}) / P/E "
+              f"{l_['pe']:.1f} = {_floor2(ratio):.2f}" if ratio is not None else "—",
+              ratio is not None and ratio >= L["ratio"]),
+            ranked(f"Then the {L['n']} highest ratios",
+                   df["lynch_ratio"][ctx["lgood"] & (df["lynch_ratio"] >= L["ratio"])], sym, L["n"]),
+        ]
+
     specs = {
         "buffett": (df["mos"], buffett),
+        "lynch": (df["lynch_ratio"], lynch),
         "trend_template": (rs, template),
         "rs_leaders": (rs, lambda s_: template(s_) + [ranked("Top 25 by RS among the passers", rs[tt], s_, 25)]),
         "momentum": (mom, lambda s_: [C("12-1 return", _pc(mom.get(s_), True), np.isfinite(mom.get(s_, np.nan))),
@@ -1760,6 +1945,7 @@ OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
               "div_yield", "shareholder_yield", "value_score", "next_earnings",
               "mos", "fair_value", "owner_yield", "ni_growth", "debt_years",
+              "lynch_ratio", "lynch_value", "lynch_growth", "lynch_pe", "debt_equity",
               "entry", "stop", "risk_pct", "target3", "target5", "group_rs", "group_leaders"]
 CHART_BARS = 126  # closes per listed name: the table's 6-month trend line (kSparkBars)
 

@@ -315,6 +315,88 @@ hr = {"d": [{"name": "HHH", "description": "Hist Co", "market_cap_basic": 5e9}.g
 hu = sd.parse_universe([hr])["HHH"]
 check(hu["ni_h"] == [3.0, None, 1.0] and hu["gp_h"] is None and hu["fy_h"] == [2025.0, 2024.0], f"histories parsed: {hu}")
 
+# ── Peter Lynch Value ────────────────────────────────────────────────────────
+lh = {"ni_h": [100.0 * 1.15 ** -i for i in range(8)], "fy_h": [2025 - i for i in range(8)]}
+lx = sd.lynch_facts(lh["ni_h"], lh["fy_h"])
+check(lx["years"] == 6 and lx["ni_pos"] == 6 and abs(lx["growth"] - 0.15) < 1e-12,
+      f"five years of growth from six fiscal years, end to end: {lx}")
+check(sd.lynch_facts(lh["ni_h"][:5], lh["fy_h"][:5]) == {}, "five years are not six")
+check(sd.lynch_facts(lh["ni_h"][:3] + [None] + lh["ni_h"][4:], lh["fy_h"]) == {},
+      "a missing year ends the history; it is never a zero-earnings year")
+check(sd.lynch_facts(lh["ni_h"], [2025, 2024, 2022, 2021, 2020, 2019, 2018, 2017]) == {},
+      "a skipped fiscal year is not a consecutive one")
+check(sd.lynch_facts(lh["ni_h"], []) == {} and sd.lynch_facts(lh["ni_h"], None)["years"] == 6,
+      "unknown periods are not consecutive; None = consecutive already (the SEC records)")
+lfails = lambda x=lx, e=10.0, debt=30.0, eq=100.0: [k for k, ok in sd.lynch_tests(x, e, debt, eq) if not ok]
+check(lfails() == [], "the model company passes every test before the price")
+loss = sd.lynch_facts([-1.0 if i == 3 else v for i, v in enumerate(lh["ni_h"])], lh["fy_h"])
+check(loss["growth"] is None and lfails(loss) == ["profit", "growth"], f"one loss: no rate across it: {loss}")
+grow = lambda r: sd.lynch_facts([100.0 * (1 + r) ** -i for i in range(6)], None)
+check(lfails(grow(0.50)) == [] and lfails(grow(0.51)) == ["growth"], "growth up to 50% a year, not above")
+check(lfails(grow(-0.05)) == ["growth"] and lfails(grow(0.0)) == ["growth"], "a shrinking or flat company has no growth")
+check(lfails(e=0.0) == ["earnings"] and lfails(e=None) == ["earnings"], "no earnings in the last 12 months: no P/E")
+check(lfails(debt=33.33) == [] and lfails(debt=33.34) == ["debt"], "debt at most a third of equity (25/75)")
+check(lfails(debt=None) == ["debt"] and lfails(eq=None) == ["debt"] and lfails(debt=0.0, eq=-5.0) == ["debt"],
+      "unknown debt or equity fails, and so does negative equity")
+check(lfails({}) == ["years", "profit", "growth"], "no history passes nothing it measures")
+check(abs(sd.lynch_ratio(0.12, 0.03, 10.0) - 1.5) < 1e-12, "the book's example: (12 + 3) / 10 = 1.5")
+check(sd.lynch_ratio(0.12, None, 10.0) is None and sd.lynch_ratio(0.12, 0.0, 0.0) is None
+      and sd.lynch_ratio(None, 0.0, 10.0) is None and sd.lynch_ratio(0.12, 0.0, -4.0) is None,
+      "an unknown part or a P/E that is not positive: no ratio")
+# through compute(): ratio >= 2, the 30 highest, no bank; the wait list from 1.5
+def lynch_market(ratio_of, sector=None):
+    out = {}
+    for i, s in enumerate(sorted(fund60)):
+        r = dict(fund60[s], ni_h=list(lh["ni_h"]), fy_h=list(lh["fy_h"]), net_income=100.0, div_yield=0.0,
+                 total_debt=10.0, total_equity=100.0, q_close=50.0)
+        r["mcap"] = 100.0 * 15.0 / ratio_of(i)  # P/E = 15 / ratio at 15% growth, no dividend
+        if sector:
+            r["sector"] = sector
+        out[s] = r
+    return out
+lf = lynch_market(lambda i: 1.2 + 0.03 * i)
+lex = {}
+ldf, ll, _, _ = sd.compute(lf, fr60, lex)
+lops = [s for s in sorted(lf) if lf[s]["sector"] != "Finance"]
+lrat = {s: 15.0 / (lf[s]["mcap"] / 100.0) for s in lops}
+want_l = sorted((s for s in lops if lrat[s] >= 2.0), key=lambda s: -lrat[s])[:30]
+check(ll["lynch"] == want_l, f"ratio >= 2, highest first, no bank: {ll['lynch'][:4]} vs {want_l[:4]}")
+check(abs(ldf.at[want_l[0], "lynch_ratio"] - lrat[want_l[0]]) < 1e-9
+      and abs(ldf.at[want_l[0], "lynch_value"] - 50.0 * 15.0 / (lf[want_l[0]]["mcap"] / 100.0)) < 1e-9,
+      "the ratio, and the price at which P/E = growth")
+check(abs(ldf.at[want_l[0], "debt_equity"] - 0.1) < 1e-12, "debt / equity")
+lwait = [d["symbol"] for d in lex["setups"]["lynch"]]
+want_w = sorted((s for s in lops if 1.5 <= lrat[s] < 2.0), key=lambda s: -lrat[s])[:30]
+check(lwait == want_w, f"the wait list: 1.5 to 2, highest first: {lwait[:4]} vs {want_w[:4]}")
+check(all(abs(d["gap"] - (2.0 - lrat[d["symbol"]])) < 1e-9 for d in lex["setups"]["lynch"]),
+      "its gap is the rise to 2")
+for k_ in ("pick", "miss"):
+    ch = lex["examples"]["lynch"][k_]["checks"]
+    check(all(c["ok"] for c in ch) == (k_ == "pick"), f"Lynch worked {k_}: {ch}")
+edge = lynch_market(lambda i: 1.9955 if i == 0 else 1.0)
+ed = sd.compute(edge, fr60, ex_e := {})[0]
+e0 = ex_e["setups"]["lynch"][0]
+check(e0["symbol"] == sorted(edge)[0] and "1.99" in e0["rule"] and e0["gap_short"] == "0.01"
+      and "2.00" not in e0["rule"], f"1.9955 reads 1.99 with 0.01 to go, never 2.00: {e0}")
+check(sd._floor2(1.15) == 1.15 and sd._floor2(1.9955) == 1.99, "down to 2 places, float error snapped")
+e7 = sd.compute(lynch_market(lambda i: 1.93 if i == 0 else 1.0), fr60, ex7 := {})[0]
+check(ex7["setups"]["lynch"][0]["gap_short"] == "0.07" and "1.93" in ex7["setups"]["lynch"][0]["rule"],
+      f"1.93 is 0.07 from 2, not 0.08: {ex7['setups']['lynch'][0]}")
+tie = lynch_market(lambda i: 3.0 if i < 31 else 1.0, sector="Technology Services")
+sd.compute(tie, fr60, ext := {})
+check(ext["setups"]["lynch"][0]["short"] == "tied at the cut" and ext["setups"]["lynch"][0]["gap"] == 0.0,
+      f"#31 tied with #30 is told so, not to rise: {ext['setups']['lynch'][0]}")
+lf2 = lynch_market(lambda i: 2.0 + 0.01 * (59 - i), sector="Technology Services")
+lex2 = {}
+_, ll2, _, _ = sd.compute(lf2, fr60, lex2)
+lw0 = lex2["setups"]["lynch"][0]
+check(len(ll2["lynch"]) == 30 and lw0["symbol"] == sorted(lf2)[30] and abs(lw0["gap"] - 0.01) < 1e-9
+      and "to reach #30" in lw0["gap_text"], f"#31 is told how far its ratio is from #30's: {lw0}")
+check(sd.compute({s: dict(r, fy_h=None) for s, r in lf.items()}, fr60)[1]["lynch"] == [],
+      "unknown fiscal periods are not consecutive ones")
+check(sd.compute({s: dict(r, div_yield=None) for s, r in lf.items()}, fr60)[1]["lynch"] == [],
+      "an unknown dividend yield is no ratio, not a zero yield")
+
 # setting up: RS >= 70, exactly 6 of the 7 price criteria, never a passer, the
 # named rule really is the one failed, and its gap is a move still needed
 df60, _, _, _ = sd.compute(fund60, fr60)

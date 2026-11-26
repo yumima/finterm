@@ -11,6 +11,8 @@ shipped definitions. For each screen, "next in line" is:
                    26-50 inside their pools)
   Buffett          good businesses not on the list, the 30 nearest to it: above
                    their estimated value, or below it outside the 30 widest
+  Lynch            every test before the price passed, not on the list, the 30
+                   highest ratios of at least 1.5 ("okay")
   Piotroski        F-score exactly 7 (one test short of 8)
   Breakout         a top-5% leader failing exactly one of its four filters
   Leader Pullback  a leader resting (higher lows, contracting, above the 9
@@ -96,6 +98,7 @@ SCREENS = {
     "magic_formula": (lambda t, u: ranked(F.metrics(t, u)["magic"], 0, 30),
                       lambda t, u: ranked(F.metrics(t, u)["magic"], 30, 60)),
     "buffett": (F.buffett_list, F.buffett_wait),
+    "lynch": (F.lynch_list, F.lynch_wait),
     "piotroski": (lambda t, u: (lambda m: list(m.index[m["f"] >= 8]))(F.metrics(t, u)),
                   lambda t, u: (lambda m: list(m.index[m["f"] == 7]))(F.metrics(t, u))),
     "quality_momentum": (
