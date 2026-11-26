@@ -36,7 +36,9 @@ check("rdagents workspaces are with the user's data",
 check("a task's folder is one of them", str(jobs.folder("t1")).startswith(str(TMP)), jobs.folder("t1"))
 
 # Exchange market lists (ccxt is not needed for the path)
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+_ccxt = types.ModuleType("ccxt")
+_ccxt.Exchange = object  # named in an annotation, evaluated at import before Python 3.14
+sys.modules.setdefault("ccxt", _ccxt)
 sys.path.insert(0, str(SCRIPTS / "exchange"))
 import exchange_client  # noqa: E402
 check("exchange market lists are in the cache",

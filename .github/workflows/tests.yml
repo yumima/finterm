@@ -95,7 +95,8 @@ jobs:
 
       # The app's venv is Python 3.12 (uv) and carries tzdata — Windows has no
       # system zoneinfo. The rest of the app venv (yfinance, pandas, …) is not
-      # installed: the tests that need it skip themselves (exit 77).
+      # installed beyond requests (several tests import it): the tests that need
+      # the rest skip themselves (exit 77).
       - name: Set up Python 3.12
         id: py
         uses: actions/setup-python@v5
@@ -104,7 +105,7 @@ jobs:
 
       - name: Install Python test dependencies
         shell: bash
-        run: '"${{ steps.py.outputs.python-path }}" -m pip install --disable-pip-version-check -q "tzdata==2025.2"'
+        run: '"${{ steps.py.outputs.python-path }}" -m pip install --disable-pip-version-check -q "tzdata==2025.2" "requests==2.32.5"'
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
