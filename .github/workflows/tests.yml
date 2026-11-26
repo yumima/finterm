@@ -154,6 +154,7 @@ jobs:
         working-directory: app/build/tests
         env:
           QT_QPA_PLATFORM: offscreen
+          PYTHONIOENCODING: utf-8  # as finterm runs its Python (PythonRunner::build_python_env)
         run: |
           ctest -C ${{ env.BUILD_TYPE }} --output-on-failure --timeout 300 \
             --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)

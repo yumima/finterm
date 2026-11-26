@@ -501,7 +501,7 @@ def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
     group = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     p = subprocess.Popen([sys.executable, "-c", "import subprocess,sys,time\n"
                           "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
-                          "print(c.pid, flush=True); time.sleep(60)", "build-weekly"],
+                          "print(c.pid, flush=True); time.sleep(60)", "brief_drafts.py", "build-weekly"],
                          stdout=subprocess.PIPE, text=True, start_new_session=True, creationflags=group)
     child = int(p.stdout.readline())
     m.update({"state": "building", "pid": p.pid, "prev_ready": True})
@@ -521,7 +521,8 @@ def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
         ["ps", "-o", "stat=", "-p", str(child)], capture_output=True, text=True).stdout)
     assert gone, "the build's children end with it"
     # a build that finishes while Cancel waits for its turn is left alone
-    q = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "build-weekly"], start_new_session=True,
+    q = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "brief_drafts.py", "build-weekly"],
+                         start_new_session=True,
                          creationflags=group)
     m = bd.load(did)
     m.update({"state": "building", "pid": q.pid, "prev_ready": True})
