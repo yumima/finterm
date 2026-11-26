@@ -12,6 +12,11 @@
       "linux": 2,
       "windows": 2,
       "macos": 2
+    },
+    "v4.2.1@45906014473.1": {
+      "linux": 1,
+      "windows": 1,
+      "macos": 1
     }
   }
 }
