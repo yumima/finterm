@@ -2,38 +2,10 @@
 
 A financial terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 
-## Today's commits (2026-11-25)
+## Today's commits (2026-11-26)
 
 Latest first.
 
-- [`d6f6f23ab`](https://github.com/yumima/finterm/commit/d6f6f23ab) tests: requests on CI as in the app venv; the ccxt stand-in has Exchange
-- [`f769267ce`](https://github.com/yumima/finterm/commit/f769267ce) tests: CI's Python by the setup step's path; the Form 4 deadline case with room for a slow runner
-- [`d7e954321`](https://github.com/yumima/finterm/commit/d7e954321) review: proxy with NO_PROXY alone, loopback, base_url; weekly build on Windows
-- [`27dd74521`](https://github.com/yumima/finterm/commit/27dd74521) Windows: unpadded dates, the weekly build's process, CI's Python
-- [`f4d7815ba`](https://github.com/yumima/finterm/commit/f4d7815ba) system proxy: per request, for curl_cffi only; locks are let go before close
-- [`df2bdacae`](https://github.com/yumima/finterm/commit/df2bdacae) Windows and older SQLite: what the first CI test runs found
-- [`585f3c2f6`](https://github.com/yumima/finterm/commit/585f3c2f6) Python: the system proxy (a VPN in system-proxy mode) for yfinance too
-- [`491fbffb3`](https://github.com/yumima/finterm/commit/491fbffb3) tests: build and pass on Windows (MSVC), GCC 12 and macOS runners
-- [`557efaab1`](https://github.com/yumima/finterm/commit/557efaab1) **ci:** ctest on Windows, macOS and Linux; a release waits for it
-- [`7e72d5945`](https://github.com/yumima/finterm/commit/7e72d5945) sqlite: one connection per thread; a fill does not run without its transaction
-- [`0a2b39aca`](https://github.com/yumima/finterm/commit/0a2b39aca) site: financial terminal
-- [`a8bd13a04`](https://github.com/yumima/finterm/commit/a8bd13a04) site: free to use
-- [`4a26344f6`](https://github.com/yumima/finterm/commit/4a26344f6) site: a shorter lead; AI is part of it
-- [`c1741ad60`](https://github.com/yumima/finterm/commit/c1741ad60) site: quant experiments and strategy building
-- [`5564fe8c6`](https://github.com/yumima/finterm/commit/5564fe8c6) site: 1,214 clones, Nov 11-24
-- [`e8cc7f5b9`](https://github.com/yumima/finterm/commit/e8cc7f5b9) site: the lead says what finterm is, not what it is written in
-- [`6d441b4cb`](https://github.com/yumima/finterm/commit/6d441b4cb) site: the counter is clones and downloads
-- [`6eb95c04e`](https://github.com/yumima/finterm/commit/6eb95c04e) Weekly brief: track record, earnings ahead, holdings, card, alerts
-- [`821a3c92d`](https://github.com/yumima/finterm/commit/821a3c92d) Weekly brief: ACCOUNTS is its name
-- [`63e4434dd`](https://github.com/yumima/finterm/commit/63e4434dd) Weekly brief: the page gets the room
-- [`aa437d5c1`](https://github.com/yumima/finterm/commit/aa437d5c1) Weekly brief: it ends with a link to finterm
-- [`e5d829ff3`](https://github.com/yumima/finterm/commit/e5d829ff3) Weekly brief: a build shows what it does, and takes seconds
-- [`6d94aa910`](https://github.com/yumima/finterm/commit/6d94aa910) What's On: the weekly brief is not only insider buying
-- [`427226961`](https://github.com/yumima/finterm/commit/427226961) Weekly brief: Generate, Review and Post on demand
-- [`90fdf22de`](https://github.com/yumima/finterm/commit/90fdf22de) Screener: Buffett Value; the weekly brief is one page
-- [`c20815439`](https://github.com/yumima/finterm/commit/c20815439) site: what the review found
-- [`caf64d837`](https://github.com/yumima/finterm/commit/caf64d837) site: titles without the name twice
-- [`2e30a81e1`](https://github.com/yumima/finterm/commit/2e30a81e1) site: the counter is downloads only and rises after one; concise technical copy
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
