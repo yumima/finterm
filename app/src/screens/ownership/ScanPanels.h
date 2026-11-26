@@ -36,6 +36,9 @@ class InsiderBuysPanel : public QWidget {
     explicit InsiderBuysPanel(QWidget* parent = nullptr);
     /// Load (or reload) with the current controls. Cheap: a local query.
     void refresh();
+    /// Read again if there is nothing current to show (never read, or cleared
+    /// by new filings); after a failed read, at most every 10 minutes.
+    void ensure_current();
   signals:
     void stock_activated(const QString& symbol);
 
@@ -49,6 +52,7 @@ class InsiderBuysPanel : public QWidget {
     QCheckBox* exclude_plan_ = nullptr;
     QTableWidget* table_ = nullptr;
     ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
+    qint64 tried_ms_ = 0;                // the last ensure_current() read, for the retry interval
     QLabel* foot_ = nullptr;
 };
 
@@ -57,6 +61,9 @@ class ShortRankPanel : public QWidget {
   public:
     explicit ShortRankPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Read again if never read, or the ranking is over half a day old (FINRA
+    /// publishes twice a month); after a failed read, at most every 10 minutes.
+    void ensure_current();
   signals:
     void stock_activated(const QString& symbol);
 
@@ -66,6 +73,7 @@ class ShortRankPanel : public QWidget {
     QComboBox* sort_ = nullptr;
     QTableWidget* table_ = nullptr;
     ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
+    qint64 tried_ms_ = 0;                // the last ensure_current() read, for the retry interval
     QLabel* foot_ = nullptr;
 };
 
@@ -74,6 +82,9 @@ class MoversPanel : public QWidget {
   public:
     explicit MoversPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Read again if there is nothing current to show (never read, or cleared
+    /// by new filings); after a failed read, at most every 10 minutes.
+    void ensure_current();
   signals:
     void stock_activated(const QString& symbol);
 
@@ -83,6 +94,7 @@ class MoversPanel : public QWidget {
     QComboBox* sort_ = nullptr;
     QTableWidget* table_ = nullptr;
     ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
+    qint64 tried_ms_ = 0;                // the last ensure_current() read, for the retry interval
     QLabel* foot_ = nullptr;
 };
 
@@ -95,6 +107,9 @@ class BigMovesPanel : public QWidget {
   public:
     explicit BigMovesPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Read again if there is nothing current to show (never read, or cleared
+    /// by new filings); after a failed read, at most every 10 minutes.
+    void ensure_current();
   signals:
     void stock_activated(const QString& symbol);
 
@@ -107,6 +122,7 @@ class BigMovesPanel : public QWidget {
     QCheckBox* active_only_ = nullptr;
     QTableWidget* table_ = nullptr;
     ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
+    qint64 tried_ms_ = 0;                // the last ensure_current() read, for the retry interval
     QLabel* foot_ = nullptr;
 };
 
@@ -118,6 +134,9 @@ class StakesPanel : public QWidget {
   public:
     explicit StakesPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Read again if there is nothing current to show (never read, or cleared
+    /// by new filings); after a failed read, at most every 10 minutes.
+    void ensure_current();
   signals:
     void stock_activated(const QString& symbol);
 
@@ -132,6 +151,7 @@ class StakesPanel : public QWidget {
     QCheckBox* new_only_ = nullptr;
     QTableWidget* table_ = nullptr;
     ui::LoadingOverlay* busy_ = nullptr; // the bars while the first answer is read
+    qint64 tried_ms_ = 0;                // the last ensure_current() read, for the retry interval
     QLabel* foot_ = nullptr;
 };
 
@@ -148,6 +168,9 @@ class LargestFundsPanel : public QWidget {
   public:
     explicit LargestFundsPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Read again if there is nothing current to show (never read, or cleared
+    /// by new filings); after a failed read, at most every 10 minutes.
+    void ensure_current();
     /// Open a fund in the side pane by CIK — the filer search's route in. A
     /// listed fund also gets its row highlighted; one outside the list opens
     /// all the same, with nothing highlighted.
@@ -170,6 +193,7 @@ class LargestFundsPanel : public QWidget {
     // EDGAR-pulled quarter.
     FirmDetailPanel* detail_ = nullptr;
     ui::LoadingOverlay* loading_ = nullptr; // over the ranking while it (re)loads
+    qint64 tried_ms_ = 0;                   // the last ensure_current() read, for the retry interval
     // The last row: "＋ Add a fund…", which becomes a search field in place;
     // its suggestions drop down under it. Your funds carry a ★; clicking it,
     // or the row's right-click menu, removes them.

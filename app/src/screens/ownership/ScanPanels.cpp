@@ -4,6 +4,7 @@
 #include "screens/ownership/OwnershipUi.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/TooltipText.h"
+#include "ui/VisibleRefresh.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QUrl>
@@ -23,6 +24,7 @@
 #include "ui/widgets/RememberedControls.h"
 #include "ui/widgets/RememberedSplitter.h"
 #include <QTableWidget>
+#include <QDateTime>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -155,6 +157,9 @@ void InsiderBuysPanel::refresh() {
 }
 
 void InsiderBuysPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().insider_buys().loaded &&
+        !services::OwnershipService::instance().insider_buys_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     const auto& ib = svc.insider_buys();
     busy_->set_loading(!ib.loaded && svc.insider_buys_loading(), QStringLiteral("READING FORM 4 FILINGS\u2026"));
@@ -270,6 +275,8 @@ ShortRankPanel::ShortRankPanel(QWidget* parent) : QWidget(parent) {
                          QStringLiteral("Days to cover"), QStringLiteral("Shares short"), QStringLiteral("vs prior"),
                          QStringLiteral("13F shares"), QStringLiteral("Holders"), QStringLiteral("Avg daily vol")});
     busy_ = new ui::LoadingOverlay(table_);
+    // FINRA publishes twice a month: a ranking left on screen is re-read once it is half a day old
+    ui::refresh_while_visible(this, 3600, [this]() { ensure_current(); });
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
@@ -286,6 +293,9 @@ void ShortRankPanel::refresh() {
 }
 
 void ShortRankPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().short_rank().loaded &&
+        !services::OwnershipService::instance().short_rank_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     const auto& sr = svc.short_rank();
     busy_->set_loading(!sr.loaded && svc.short_rank_loading(), QStringLiteral("FETCHING FINRA SHORT INTEREST\u2026"));
@@ -398,6 +408,9 @@ void MoversPanel::refresh() {
 }
 
 void MoversPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().movers().loaded &&
+        !services::OwnershipService::instance().movers_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     const auto& m = svc.movers();
     busy_->set_loading(!m.loaded && svc.movers_loading(), QStringLiteral("COMPUTING 13F BREADTH\u2026"));
@@ -559,6 +572,9 @@ void BigMovesPanel::refresh() {
 }
 
 void BigMovesPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().big_moves().loaded &&
+        !services::OwnershipService::instance().big_moves_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     const auto& b = svc.big_moves();
     busy_->set_loading(!b.loaded && svc.big_moves_loading(), QStringLiteral("COMPARING 13F FILINGS\u2026"));
@@ -729,6 +745,9 @@ void StakesPanel::refresh() {
 }
 
 void StakesPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().stakes().loaded &&
+        !services::OwnershipService::instance().stakes_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     const auto& st = svc.stakes();
     busy_->set_loading(!st.loaded && svc.stakes_loading(), QStringLiteral("READING 13D / 13G FILINGS\u2026"));
@@ -1098,6 +1117,9 @@ void LargestFundsPanel::refresh() {
 }
 
 void LargestFundsPanel::render() {
+    if (isVisible() && !services::OwnershipService::instance().top_firms().loaded &&
+        !services::OwnershipService::instance().top_firms_loading())
+        QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
     pull_btn_->setEnabled(!svc.pulling_latest());
     // Up for the first load and for a reload after an EDGAR pull — the old
@@ -1263,6 +1285,87 @@ void LargestFundsPanel::render() {
                        "most of the world's largest asset managers and sovereign funds (e.g. Norges Bank), but not "
                        "their bonds, private assets or non-US listings. Moves compare each filer's two newest "
                        "filings; ·EDGAR marks a quarter pulled straight from EDGAR ahead of the bulk index."));
+}
+
+
+// ── keeping each scan current ─────────────────────────────────────────────────
+
+void InsiderBuysPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.insider_buys();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.insider_buys_loading() && (!d.loaded || !d.error.isEmpty()))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
+}
+
+void ShortRankPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.short_rank();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.short_rank_loading() && (!d.loaded || !d.error.isEmpty() || !d.fetched.isValid() || d.fetched.secsTo(QDateTime::currentDateTimeUtc()) > 12 * 3600))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
+}
+
+void MoversPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.movers();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.movers_loading() && (!d.loaded || !d.error.isEmpty()))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
+}
+
+void BigMovesPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.big_moves();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.big_moves_loading() && (!d.loaded || !d.error.isEmpty()))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
+}
+
+void StakesPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.stakes();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.stakes_loading() && (!d.loaded || !d.error.isEmpty()))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
+}
+
+void LargestFundsPanel::ensure_current() {
+    auto& svc = services::OwnershipService::instance();
+    const auto& d = svc.top_firms();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
+        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!svc.top_firms_loading() && (!d.loaded || !d.error.isEmpty()))
+    {
+        tried_ms_ = now;
+        refresh();
+    }
 }
 
 } // namespace finterm::screens

@@ -15,6 +15,7 @@
 // its own dates so that nothing on screen has to be aged by guesswork.
 
 #include <QDate>
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QString>
@@ -387,6 +388,7 @@ struct ShortRankRow {
 };
 
 struct ShortRank {
+    QDateTime fetched; ///< when it was read: FINRA publishes twice a month, read again after half a day
     QDate settlement;
     QDate published_after;
     QDate quarter; ///< the 13F quarter the denominator came from

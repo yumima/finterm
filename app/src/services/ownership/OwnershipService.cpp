@@ -57,13 +57,15 @@ constexpr int kScanTimeoutMs = 900'000;
 // at SEC's rate), so the first catch-up after a filing deadline runs as a few
 // passes a minute apart rather than one hour-long process.
 constexpr int kSyncFirstDelayMs = 3 * 60'000;
-constexpr int kSyncEveryMs = 6 * 3600'000;
+constexpr int kSyncEveryMs = 2 * 3600'000; // a pass with nothing new costs one index read
 constexpr int kSyncMoreMs = 60'000;
 constexpr int kSyncRetryMs = 30 * 60'000;
 constexpr int kSyncRefusedMs = 10 * 60'000; // SEC's throttle lifts within minutes
 constexpr int kSyncFilingsPerPass = 3000;
 constexpr int kSyncTimeoutMs = 3600'000;
-constexpr int kScanRecheckMs = 6 * 60 * 60 * 1000;
+// Form 4: EDGAR publishes each day's index after the close; a pass with no new
+// day reads nothing, so checking hourly costs little and lands a day at once
+constexpr int kScanRecheckMs = 60 * 60 * 1000;
 /// How long an alert read may wait in PythonRunner's queue (behind a sync or a
 /// scan) on top of its own run timeout before it is answered as failed.
 constexpr int kQueryQueueGraceMs = 20 * 60'000;
@@ -645,6 +647,25 @@ void OwnershipService::refresh(const QString& symbol) {
 
     OwnershipSnapshot fresh;
     fresh.symbol = sym;
+    // A refresh keeps what is shown until each source's answer replaces its
+    // own part (every handler assigns its fields whole), so a panel can be
+    // refreshed while someone reads it; only the stale errors go.
+    const auto shown = cache_.value(sym);
+    if (shown.edgar_ok || shown.market_ok || shown.holders_ok) {
+        fresh = shown;
+        fresh.edgar_error.clear();
+        fresh.market_error.clear();
+        fresh.holders_error.clear();
+        // not replaced whole by their sources: returns ride on the new
+        // transactions, the percentile only lands with a fresh short history
+        fresh.returns_ok = false;
+        fresh.sirio_percentile.reset();
+        fresh.sirio_universe = 0;
+        if (!index_ready()) {
+            fresh.holders.clear();
+            fresh.holders_ok = false;
+        }
+    }
     cache_.insert(sym, fresh);
     // Not stamped until something comes back: a failure cached as fresh would
     // re-serve an empty snapshot for an hour without going near the network.
@@ -1028,6 +1049,7 @@ void OwnershipService::load_short_rank(const QString& sort) {
             self->short_rank_loading_ = false;
             ShortRank sr;
             sr.loaded = true;
+            sr.fetched = QDateTime::currentDateTimeUtc();
             if (!result.success) {
                 sr.error = result.error.isEmpty() ? QStringLiteral("FINRA ranking failed") : result.error.left(200);
             } else {
@@ -1129,7 +1151,9 @@ void OwnershipService::run_form4_scan() {
     form4_status_ = QStringLiteral("Reading recent Form 4 filings from EDGAR…");
     emit form4_status_changed(form4_status_);
     QPointer<OwnershipService> self = this;
-    python::PythonRunner::instance().run(
+    // the job lane: a pass takes up to 15 minutes, and in an ordinary slot it
+    // held a stock's EDGAR read and the IPO feed behind it
+    python::PythonRunner::instance().run_job(
         QStringLiteral("sec_form4_market.py"),
         {QStringLiteral("scan"), payload_of({{"days", kScanDays}, {"max_new_days", kScanDaysPerPass}})},
         [self](python::PythonResult result) {
@@ -1924,11 +1948,14 @@ void OwnershipService::start_background_sync() {
     if (!stakes_timer_) {
         // The 13D / 13G store fills itself the same way as the Form 4 one:
         // a few business days per pass until the last 30 are read, then a
-        // pass every six hours for the new ones.
+        // pass every kSyncEveryMs (two hours) for the new ones.
         stakes_timer_ = new QTimer(this);
         stakes_timer_->setSingleShot(true);
         connect(stakes_timer_, &QTimer::timeout, this, [this]() { run_stakes_scan(); });
         stakes_timer_->start(kSyncFirstDelayMs + 60'000);
+        // and the Form 4 store from launch too, not from the first visit to
+        // OWNERSHIP: the insider scan and the alerts read it
+        QTimer::singleShot(kSyncFirstDelayMs + 2 * 60'000, this, [this]() { ensure_form4_current(); });
     }
     if (sync_timer_)
         return;
@@ -2011,7 +2038,9 @@ void OwnershipService::run_13f_sync() {
                     self->movers_ = {};
                     self->top_firms_ = {};
                     self->big_moves_ = {};
-                    self->cache_.clear();
+                    // stale, not gone: the next look re-reads each stock in
+                    // place, so a panel open under a reader never blanks
+                    self->fetched_at_.clear();
                     self->index_probed_ = false;
                     self->probe_index();
                     emit self->movers_updated();

@@ -72,7 +72,6 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     StakesPanel* stakes_ = nullptr;
     QWidget* empty_page_ = nullptr;
 
-    bool loaded_[6] = {false, false, false, false, false, false};
     bool shown_once_ = false;
 };
 

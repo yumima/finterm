@@ -214,21 +214,20 @@ void OwnershipScreen::show_filer(const QString& cik) {
 }
 
 void OwnershipScreen::load_tab(int index) {
-    if (index < 0 || index > 5 || loaded_[index])
-        return;
-    loaded_[index] = true;
+    // every time a tab is shown, not once a session: new filings clear the
+    // 13F results, and the FINRA ranking ages
     if (index == 0)
-        insider_buys_->refresh();
+        insider_buys_->ensure_current();
     else if (index == 1)
-        short_rank_->refresh();
+        short_rank_->ensure_current();
     else if (index == 2)
-        movers_->refresh();
+        movers_->ensure_current();
     else if (index == 3)
-        largest_funds_->refresh();
+        largest_funds_->ensure_current();
     else if (index == 4)
-        big_moves_->refresh();
-    else
-        stakes_->refresh();
+        big_moves_->ensure_current();
+    else if (index == 5)
+        stakes_->ensure_current();
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {
@@ -270,8 +269,8 @@ void OwnershipScreen::showEvent(QShowEvent* e) {
     if (!shown_once_) {
         shown_once_ = true;
         svc.check_for_newer_quarter();
-        load_tab(tabs_->currentIndex());
     }
+    load_tab(tabs_->currentIndex());
 }
 
 void OwnershipScreen::restore_state(const QVariantMap& state) {

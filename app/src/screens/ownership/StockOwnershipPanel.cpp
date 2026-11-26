@@ -9,6 +9,7 @@
 #include "screens/ownership/ShortInterestPanel.h"
 #include "services/ownership/OwnershipService.h"
 
+#include <QTimer>
 #include <QAbstractScrollArea>
 #include <QCoreApplication>
 #include <QHBoxLayout>
@@ -50,10 +51,11 @@ StockOwnershipPanel::StockOwnershipPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void StockOwnershipPanel::build_ui() {
-    // A reload empties the panel while EDGAR is re-read, so it runs when
-    // someone comes back to the panel, never under a reader. Just over the
-    // service's own one-hour copy, so it really fetches.
-    ui::refresh_on_return(this, 65 * 60, [this]() { reload(); });
+    // Kept current without a click: every hour while on screen (not minimized),
+    // and on return after an hour. A refresh keeps the figures shown until the new ones
+    // land (OwnershipService::refresh), so it can run under a reader. Just
+    // over the service's own one-hour copy, so it really fetches.
+    ui::refresh_while_visible(this, 65 * 60, [this]() { reload(); });
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(10, 8, 10, 8);
     root->setSpacing(6);

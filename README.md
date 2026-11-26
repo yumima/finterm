@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`82282b2e4`](https://github.com/yumima/finterm/commit/82282b2e4) finterm 4.2.1
 - [`1c39b0222`](https://github.com/yumima/finterm/commit/1c39b0222) Ownership: the loading bars while a panel waits, not a blank table
 - [`b91bf1bc0`](https://github.com/yumima/finterm/commit/b91bf1bc0) Screener: price holes judged on the sessions most names traded
 - [`069adc0a0`](https://github.com/yumima/finterm/commit/069adc0a0) Screener: every screen checked against its source and recomputed
