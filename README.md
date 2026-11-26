@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`b07f6d53e`](https://github.com/yumima/finterm/commit/b07f6d53e) IPO tile: says when nothing is scheduled
 - [`012da8a66`](https://github.com/yumima/finterm/commit/012da8a66) Ownership: kept current automatically, never blanking under a reader
 - [`82282b2e4`](https://github.com/yumima/finterm/commit/82282b2e4) finterm 4.2.1
 - [`1c39b0222`](https://github.com/yumima/finterm/commit/1c39b0222) Ownership: the loading bars while a panel waits, not a blank table

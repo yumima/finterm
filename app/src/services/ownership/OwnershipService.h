@@ -82,6 +82,13 @@ class OwnershipService : public QObject {
     void load_movers(const QString& sort = QStringLiteral("breadth_up"));
     const ownership::Movers& movers() const { return movers_; }
     bool movers_loading() const { return movers_loading_; }
+    /// New 13F data landed after these were computed: shown until re-read.
+    bool movers_stale() const { return movers_stale_; }
+    bool top_firms_stale() const { return top_firms_stale_; }
+    bool big_moves_stale() const { return big_moves_stale_; }
+    bool movers_reread_failed() const { return movers_reread_failed_; }
+    bool top_firms_reread_failed() const { return top_firms_reread_failed_; }
+    bool big_moves_reread_failed() const { return big_moves_reread_failed_; }
 
     /// Keep the Form 4 store current: read any unread business day in the
     /// trailing window, a few days per pass, and check again periodically.
@@ -242,6 +249,16 @@ class OwnershipService : public QObject {
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;
+    // The sources that answered in a stock's latest round: a refresh keeps the
+    // shown snapshot (edgar_ok stays true over an old answer), so "fresh" and
+    // "retry EDGAR" are judged on this round, not on what is shown.
+    QHash<QString, QSet<QString>> round_ok_;
+    // Stocks whose holders predate the newest 13F data: re-read on next look.
+    QSet<QString> holders_stale_;
+    // Results computed before new 13F data landed: kept on screen, re-read.
+    bool movers_stale_ = false, top_firms_stale_ = false, big_moves_stale_ = false;
+    // a re-read of a stale result failed (its rows kept): asked again after the retry interval
+    bool movers_reread_failed_ = false, top_firms_reread_failed_ = false, big_moves_reread_failed_ = false;
     QHash<QString, QSet<QString>> pending_;
     QHash<QString, HolderSort> holder_sort_;
 

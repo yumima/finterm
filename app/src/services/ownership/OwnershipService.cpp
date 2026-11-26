@@ -576,7 +576,7 @@ void OwnershipService::load(const QString& symbol) {
         return;
     const qint64 age = QDateTime::currentMSecsSinceEpoch() - fetched_at_.value(sym, 0);
     if (cache_.contains(sym) && age < kCacheTtlMs) {
-        if (!cache_.value(sym).edgar_ok) {
+        if (!cache_.value(sym).edgar_ok || !round_ok_.value(sym).contains(kSrcEdgar)) {
             // EDGAR refused (or failed) while the other sources answered: the
             // snapshot is fresh, its EDGAR half is not an answer. Ask EDGAR
             // again and keep the rest; note_source_done finishes the load.
@@ -631,7 +631,8 @@ void OwnershipService::ensure_holders(const QString& symbol) {
     if (sym.isEmpty() || !cache_.contains(sym) || !index_ready())
         return;
     const auto& snap = cache_.value(sym);
-    if (snap.holders_ok || !snap.holders_error.isEmpty() || pending_.value(sym).contains(kSrcHolders))
+    if ((snap.holders_ok && !holders_stale_.contains(sym)) || !snap.holders_error.isEmpty() ||
+        pending_.value(sym).contains(kSrcHolders))
         return;
     pending_[sym].insert(kSrcHolders);
     fetch_holders(sym, holder_sort(sym));
@@ -667,6 +668,7 @@ void OwnershipService::refresh(const QString& symbol) {
         }
     }
     cache_.insert(sym, fresh);
+    round_ok_[sym].clear();
     // Not stamped until something comes back: a failure cached as fresh would
     // re-serve an empty snapshot for an hour without going near the network.
     fetched_at_.remove(sym);
@@ -692,8 +694,9 @@ void OwnershipService::note_source_done(const QString& symbol, const QString& so
     emit snapshot_updated(symbol);
     if (set.isEmpty()) {
         pending_.remove(symbol);
-        const auto snap = cache_.value(symbol);
-        if (snap.edgar_ok || snap.market_ok || snap.holders_ok)
+        // fresh only if something answered in THIS round: a failed refresh
+        // over a kept snapshot must be asked again, not served for an hour
+        if (!round_ok_.value(symbol).isEmpty())
             fetched_at_.insert(symbol, QDateTime::currentMSecsSinceEpoch());
         emit load_finished(symbol);
     }
@@ -720,11 +723,13 @@ void OwnershipService::fetch_edgar(const QString& sym) {
                 } else {
                     parse_edgar_into(root, snap);
                     snap.edgar_ok = true;
+                    self->round_ok_[sym].insert(kSrcEdgar);
                 }
             }
             self->cache_.insert(sym, snap);
+            const bool answered = self->round_ok_.value(sym).contains(kSrcEdgar);
             self->note_source_done(sym, kSrcEdgar);
-            if (snap.edgar_ok)
+            if (answered) // not over the old transactions of a failed round
                 self->price_transactions(sym);
         },
         /*on_line=*/{}, kEdgarTimeoutMs);
@@ -746,6 +751,7 @@ void OwnershipService::fetch_market(const QString& sym) {
             } else {
                 parse_market_into(result, snap);
                 snap.market_ok = true;
+                self->round_ok_[sym].insert(kSrcMarket);
                 const QString e = result.value(QStringLiteral("short_error")).toString();
                 if (!e.isEmpty())
                     snap.market_error = QStringLiteral("share count: ") + e.left(120);
@@ -782,6 +788,8 @@ void OwnershipService::fetch_holders(const QString& sym, HolderSort sort) {
                     snap.holders_error.clear();
                     parse_holders_into(root, snap);
                     snap.holders_ok = true;
+                    self->round_ok_[sym].insert(kSrcHolders);
+                    self->holders_stale_.remove(sym);
                 }
             }
             self->cache_.insert(sym, snap);
@@ -1130,7 +1138,17 @@ void OwnershipService::load_movers(const QString& sort) {
                         m.rows.push_back(row);
                 }
             }
-            self->movers_ = m;
+            // A failed re-read of a result kept on screen (stale after new 13F
+            // data) keeps its rows; it stays stale and is asked again after the
+            // panels' retry interval, never an error page under the reader.
+            if (!m.error.isEmpty() && self->movers_stale_ && self->movers_.loaded && self->movers_.error.isEmpty()) {
+                self->movers_reread_failed_ = true;
+                LOG_WARN(TAG, QStringLiteral("movers re-read failed, kept the previous result: ") + m.error);
+            } else {
+                self->movers_ = m;
+                self->movers_stale_ = false;
+                self->movers_reread_failed_ = false;
+            }
             emit self->movers_updated();
         },
         /*on_line=*/{}, kMoversTimeoutMs);
@@ -1588,7 +1606,9 @@ void OwnershipService::query_fund_filings(const QStringList& ciks, std::function
 // ── Filers ───────────────────────────────────────────────────────────────────
 
 void OwnershipService::load_top_firms(bool force) {
-    if (top_firms_loading_ || (top_firms_.loaded && top_firms_.error.isEmpty() && !force))
+    // stale after new 13F data = asked for again (else an open tab re-asked on
+    // every render and this returned at once: a busy loop)
+    if (top_firms_loading_ || (top_firms_.loaded && top_firms_.error.isEmpty() && !top_firms_stale_ && !force))
         return;
     top_firms_loading_ = true;
     QPointer<OwnershipService> self = this;
@@ -1642,7 +1662,17 @@ void OwnershipService::load_top_firms(bool force) {
                         t.firms.push_back(f);
                 }
             }
-            self->top_firms_ = t;
+            // A failed re-read of a result kept on screen (stale after new 13F
+            // data) keeps its rows; it stays stale and is asked again after the
+            // panels' retry interval, never an error page under the reader.
+            if (!t.error.isEmpty() && self->top_firms_stale_ && self->top_firms_.loaded && self->top_firms_.error.isEmpty()) {
+                self->top_firms_reread_failed_ = true;
+                LOG_WARN(TAG, QStringLiteral("top_firms re-read failed, kept the previous result: ") + t.error);
+            } else {
+                self->top_firms_ = t;
+                self->top_firms_stale_ = false;
+                self->top_firms_reread_failed_ = false;
+            }
             emit self->top_firms_updated();
         },
         // The first pass over a new index state also works out splits and
@@ -1687,7 +1717,17 @@ void OwnershipService::load_big_moves(const QString& side, const QString& sort, 
                 if (o.value(QStringLiteral("pending")).toBool())
                     self->ask_for_pending_pass();
             }
-            self->big_moves_ = b;
+            // A failed re-read of a result kept on screen (stale after new 13F
+            // data) keeps its rows; it stays stale and is asked again after the
+            // panels' retry interval, never an error page under the reader.
+            if (!b.error.isEmpty() && self->big_moves_stale_ && self->big_moves_.loaded && self->big_moves_.error.isEmpty()) {
+                self->big_moves_reread_failed_ = true;
+                LOG_WARN(TAG, QStringLiteral("big_moves re-read failed, kept the previous result: ") + b.error);
+            } else {
+                self->big_moves_ = b;
+                self->big_moves_stale_ = false;
+                self->big_moves_reread_failed_ = false;
+            }
             emit self->big_moves_updated();
             if (!self->big_moves_pending_.isEmpty()) {
                 const QStringList p = self->big_moves_pending_.split(QLatin1Char('|'));
@@ -2011,8 +2051,8 @@ void OwnershipService::run_13f_sync() {
             if (refreshed || (!failed && !refused))
                 self->pending_pass_asked_ = false;
             if (failed && refreshed) {
-                self->top_firms_ = {};
-                self->big_moves_ = {};
+                self->top_firms_stale_ = self->big_moves_stale_ = true; // shown until re-read
+                self->top_firms_reread_failed_ = self->big_moves_reread_failed_ = false;
                 emit self->top_firms_updated();
                 emit self->big_moves_updated();
             }
@@ -2035,12 +2075,15 @@ void OwnershipService::run_13f_sync() {
                                       .arg(sets)
                                       .arg(through));
                     // New holdings: every derived view is recomputed on next look.
-                    self->movers_ = {};
-                    self->top_firms_ = {};
-                    self->big_moves_ = {};
-                    // stale, not gone: the next look re-reads each stock in
-                    // place, so a panel open under a reader never blanks
+                    // Stale, not gone: each view keeps its rows until its
+                    // re-read lands, so a panel open under a reader never
+                    // blanks; each stock re-reads in place, holders too.
+                    self->movers_stale_ = self->top_firms_stale_ = self->big_moves_stale_ = true;
+                    self->movers_reread_failed_ = self->top_firms_reread_failed_ = self->big_moves_reread_failed_ =
+                        false;
                     self->fetched_at_.clear();
+                    for (auto it = self->cache_.cbegin(); it != self->cache_.cend(); ++it)
+                        self->holders_stale_.insert(it.key());
                     self->index_probed_ = false;
                     self->probe_index();
                     emit self->movers_updated();

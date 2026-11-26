@@ -146,6 +146,7 @@ InsiderBuysPanel::InsiderBuysPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void InsiderBuysPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     InsiderBuyQuery q;
     q.days = window_->currentData().toInt();
     q.min_insiders = min_insiders_->value();
@@ -288,6 +289,7 @@ ShortRankPanel::ShortRankPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void ShortRankPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     services::OwnershipService::instance().load_short_rank(sort_->currentData().toString());
     render();
 }
@@ -403,12 +405,14 @@ MoversPanel::MoversPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void MoversPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     services::OwnershipService::instance().load_movers(sort_->currentData().toString());
     render();
 }
 
 void MoversPanel::render() {
-    if (isVisible() && !services::OwnershipService::instance().movers().loaded &&
+    if (isVisible() && (!services::OwnershipService::instance().movers().loaded ||
+                        services::OwnershipService::instance().movers_stale()) &&
         !services::OwnershipService::instance().movers_loading())
         QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
@@ -564,6 +568,7 @@ BigMovesPanel::BigMovesPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void BigMovesPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     services::OwnershipService::instance().load_big_moves(side_->currentData().toString(),
                                                           sort_->currentData().toString(),
                                                           active_only_->isChecked(),
@@ -572,7 +577,8 @@ void BigMovesPanel::refresh() {
 }
 
 void BigMovesPanel::render() {
-    if (isVisible() && !services::OwnershipService::instance().big_moves().loaded &&
+    if (isVisible() && (!services::OwnershipService::instance().big_moves().loaded ||
+                        services::OwnershipService::instance().big_moves_stale()) &&
         !services::OwnershipService::instance().big_moves_loading())
         QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
@@ -739,6 +745,7 @@ void StakesPanel::showEvent(QShowEvent* e) {
 }
 
 void StakesPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     services::OwnershipService::instance().load_stakes(days_->currentData().toInt(), kind_->currentData().toString(),
                                                        new_only_->isChecked());
     render();
@@ -1112,12 +1119,14 @@ bool LargestFundsPanel::eventFilter(QObject* obj, QEvent* ev) {
 }
 
 void LargestFundsPanel::refresh() {
+    tried_ms_ = QDateTime::currentMSecsSinceEpoch(); // any read starts the retry interval
     services::OwnershipService::instance().load_top_firms();
     render();
 }
 
 void LargestFundsPanel::render() {
-    if (isVisible() && !services::OwnershipService::instance().top_firms().loaded &&
+    if (isVisible() && (!services::OwnershipService::instance().top_firms().loaded ||
+                        services::OwnershipService::instance().top_firms_stale()) &&
         !services::OwnershipService::instance().top_firms_loading())
         QTimer::singleShot(0, this, [this]() { ensure_current(); }); // not read yet, or cleared while shown
     auto& svc = services::OwnershipService::instance();
@@ -1293,79 +1302,58 @@ void LargestFundsPanel::render() {
 void InsiderBuysPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.insider_buys();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!d.error.isEmpty() && d.loaded && QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
     if (!svc.insider_buys_loading() && (!d.loaded || !d.error.isEmpty()))
-    {
-        tried_ms_ = now;
         refresh();
-    }
 }
 
 void ShortRankPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.short_rank();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!d.error.isEmpty() && d.loaded && QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
     if (!svc.short_rank_loading() && (!d.loaded || !d.error.isEmpty() || !d.fetched.isValid() || d.fetched.secsTo(QDateTime::currentDateTimeUtc()) > 12 * 3600))
-    {
-        tried_ms_ = now;
         refresh();
-    }
 }
 
 void MoversPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.movers();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
-    if (!svc.movers_loading() && (!d.loaded || !d.error.isEmpty()))
-    {
-        tried_ms_ = now;
+    if ((!d.error.isEmpty() || svc.movers_reread_failed()) && d.loaded &&
+        QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
+    if (!svc.movers_loading() && (svc.movers_stale() || !d.loaded || !d.error.isEmpty()))
         refresh();
-    }
 }
 
 void BigMovesPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.big_moves();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
-    if (!svc.big_moves_loading() && (!d.loaded || !d.error.isEmpty()))
-    {
-        tried_ms_ = now;
+    if ((!d.error.isEmpty() || svc.big_moves_reread_failed()) && d.loaded &&
+        QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
+    if (!svc.big_moves_loading() && (svc.big_moves_stale() || !d.loaded || !d.error.isEmpty()))
         refresh();
-    }
 }
 
 void StakesPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.stakes();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
+    if (!d.error.isEmpty() && d.loaded && QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
     if (!svc.stakes_loading() && (!d.loaded || !d.error.isEmpty()))
-    {
-        tried_ms_ = now;
         refresh();
-    }
 }
 
 void LargestFundsPanel::ensure_current() {
     auto& svc = services::OwnershipService::instance();
     const auto& d = svc.top_firms();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!d.error.isEmpty() && d.loaded && now - tried_ms_ < 10 * 60'000)
-        return; // a failed source is asked again in minutes, not on every tab switch
-    if (!svc.top_firms_loading() && (!d.loaded || !d.error.isEmpty()))
-    {
-        tried_ms_ = now;
+    if ((!d.error.isEmpty() || svc.top_firms_reread_failed()) && d.loaded &&
+        QDateTime::currentMSecsSinceEpoch() - tried_ms_ < 10 * 60'000)
+        return; // a failed (or failed-again stale) read is asked again in minutes, not on every render
+    if (!svc.top_firms_loading() && (svc.top_firms_stale() || !d.loaded || !d.error.isEmpty()))
         refresh();
-    }
 }
 
 } // namespace finterm::screens
