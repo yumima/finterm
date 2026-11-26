@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`d7e954321`](https://github.com/yumima/finterm/commit/d7e954321) review: proxy with NO_PROXY alone, loopback, base_url; weekly build on Windows
 - [`27dd74521`](https://github.com/yumima/finterm/commit/27dd74521) Windows: unpadded dates, the weekly build's process, CI's Python
 - [`f4d7815ba`](https://github.com/yumima/finterm/commit/f4d7815ba) system proxy: per request, for curl_cffi only; locks are let go before close
 - [`df2bdacae`](https://github.com/yumima/finterm/commit/df2bdacae) Windows and older SQLite: what the first CI test runs found

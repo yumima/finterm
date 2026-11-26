@@ -97,13 +97,14 @@ jobs:
       # system zoneinfo. The rest of the app venv (yfinance, pandas, …) is not
       # installed: the tests that need it skip themselves (exit 77).
       - name: Set up Python 3.12
+        id: py
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install Python test dependencies
         shell: bash
-        run: python -m pip install --disable-pip-version-check -q "tzdata==2025.2"
+        run: '"${{ steps.py.outputs.python-path }}" -m pip install --disable-pip-version-check -q "tzdata==2025.2"'
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -125,9 +126,11 @@ jobs:
           if [ -n "${OPENSSL_ROOT_DIR:-}" ]; then
             EXTRA="$EXTRA -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
           fi
-          # The setup-python 3.12, by path: on Windows CMake's FindPython reads
-          # the registry first and took the runner's newer Python (no tzdata).
-          EXTRA="$EXTRA -DPython3_EXECUTABLE=$(python -c 'import sys; print(sys.executable)' | tr '\\' '/')"
+          # The setup-python 3.12, by path: CMake's FindPython reads Windows'
+          # registry first, and install-qt-action puts its own newer Python
+          # first on PATH — either way not this one (no tzdata).
+          PY="${{ steps.py.outputs.python-path }}"
+          EXTRA="$EXTRA -DPython3_EXECUTABLE=${PY//\\//}"
           cmake -B build $EXTRA \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \

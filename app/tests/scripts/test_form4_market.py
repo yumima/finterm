@@ -247,8 +247,11 @@ def checks():
     fresh_day = next(x for x in m.business_days(30) if x.isoformat() not in rec and x < today and x.isoformat() not in
                      (flaky, refused))
     m.day_index = lambda dd: {f"{dd}-{i}": f"a/{dd}-{i}.txt" for i in range(40)} if dd == fresh_day else {}
-    m.sec_http.get = lambda url, **_: (time.sleep(0.05) or (Ok(), 200))
-    res = m.scan(days=30, deadline_s=0.2)
+    # 40 filings at 0.3 s over READERS (4) = 3 s; the deadline cuts in after
+    # 1.5 s — after the empty days before it, however slow the machine walks
+    # them (0.2 s was all spent there on a macOS runner).
+    m.sec_http.get = lambda url, **_: (time.sleep(0.3) or (Ok(), 200))
+    res = m.scan(days=30, deadline_s=1.5)
     con = m.connect()
     part = con.execute("SELECT COUNT(*) FROM seen WHERE filed=?", (fresh_day.isoformat(),)).fetchone()[0]
     done = con.execute("SELECT 1 FROM scanned_days WHERE filed=?", (fresh_day.isoformat(),)).fetchone()
