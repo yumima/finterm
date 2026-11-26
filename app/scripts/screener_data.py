@@ -399,6 +399,9 @@ def _persist(cache, path, state):
             state["mtime"] = _mtime(path)
             state["saved"] = time.time()
         finally:
+            import file_lock
+
+            file_lock.unlock(lock)  # before close: Windows frees a closed handle's lock late
             lock.close()
     except Exception as e:
         print(f"price cache not written: {e}", file=sys.stderr)

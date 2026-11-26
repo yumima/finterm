@@ -13,7 +13,7 @@ Run it with finterm's own Python (any Python with yfinance works too):
 
 It runs twice when the computer has a system proxy (a VPN in "system proxy"
 mode): A as finterm 4.2.0 does (yfinance does not see the system proxy), and
-B with the system proxy handed to every library, as the fix does. Send the
+B with yfinance following the system proxy, as the fix does. Send the
 whole output.
 """
 import json
@@ -51,7 +51,38 @@ def system_proxies():
     return out
 
 
+def follow_system_proxy():
+    """What finterm's fix does (app/scripts/system_proxy.py, kept in step):
+    each curl_cffi request asks the OS, at that moment, for its URL's proxy
+    and bypass list. The environment is not touched."""
+    import urllib.parse
+    from curl_cffi.requests import Session
+
+    def proxy_for(url):
+        parts = urllib.parse.urlsplit(url)
+        scheme, host = (parts.scheme or "http").lower(), parts.hostname or ""
+        found = urllib.request.getproxies()
+        proxy = found.get(scheme) or (found.get("http") if scheme == "https" else None)
+        if not proxy or proxy.lower().startswith("socks") or not host or urllib.request.proxy_bypass(host):
+            return None
+        return proxy if "://" in proxy else "http://" + proxy
+
+    original = Session.request
+
+    def request(self, method, url, *args, **kwargs):
+        if not kwargs.get("proxy") and not kwargs.get("proxies") and not getattr(self, "proxies", None) \
+                and not getattr(self, "proxy", None):
+            p = proxy_for(str(url))
+            if p:
+                kwargs["proxy"] = p
+        return original(self, method, url, *args, **kwargs)
+
+    Session.request = request
+
+
 def checks():
+    if os.environ.get("CHECK_YAHOO_FIX"):
+        follow_system_proxy()
     try:
         import yfinance
         print("  yfinance", yfinance.__version__)
@@ -119,11 +150,7 @@ def main():
 
     runs = [("A — as finterm 4.2.0 does", dict(os.environ))]
     if found and not any(os.environ.get(k) for k in _ENV_KEYS):
-        env = dict(os.environ)
-        for scheme, url in found.items():
-            env[f"{scheme.upper()}_PROXY"] = env[f"{scheme}_proxy"] = url
-        env["NO_PROXY"] = env["no_proxy"] = "localhost,127.0.0.1,::1"
-        runs.append(("B — with the system proxy handed on (the fix)", env))
+        runs.append(("B — following the system proxy, as the fix does", {**os.environ, "CHECK_YAHOO_FIX": "1"}))
 
     for title, env in runs:
         print(f"\n{title}", flush=True)

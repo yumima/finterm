@@ -1,18 +1,22 @@
-"""system_proxy.apply(): the OS proxy reaches curl_cffi (yfinance's client).
+"""system_proxy: curl_cffi (yfinance's client) follows the OS proxy.
 
 A VPN in "system proxy" mode was seen by websockets but not by curl_cffi, so
-yfinance went direct and Yahoo answered 429 from mainland China (2026-11-26).
-Here a local proxy stands in for the VPN: after apply(), a curl_cffi request
-must arrive at it as a CONNECT; localhost stays direct; an explicit *_PROXY in
-the environment wins; ProxyOverride entries become NO_PROXY entries.
+yfinance went direct and Yahoo answered 429 from mainland China (2026-11-26;
+the customer's check: direct 429, through the proxy PASS). Each curl_cffi
+request now asks the OS for its URL's proxy, honouring the OS's bypass list,
+at the moment it is made; the environment is left alone.
 """
 import os
 import socket
+import subprocess
 import sys
+import tempfile
 import threading
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
+SCRIPTS = os.path.abspath(os.path.join(HERE, "..", "..", "scripts"))
+sys.path.insert(0, SCRIPTS)
 
 import system_proxy as sp  # noqa: E402
 
@@ -25,40 +29,62 @@ def check(name, ok, detail=""):
         fails.append(name)
 
 
-# ── the environment apply() writes ──────────────────────────────────────────
-sp.system_proxies = lambda: {"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
-env = {}
-sp.apply(env)
-check("HTTPS_PROXY / https_proxy set", env.get("HTTPS_PROXY") == env.get("https_proxy") == "http://127.0.0.1:7897")
-check("lowercase http_proxy set (libcurl reads only that one)", env.get("http_proxy") == "http://127.0.0.1:7897")
-check("localhost stays direct", all(x in env["NO_PROXY"].split(",") for x in ("localhost", "127.0.0.1", "::1")))
+real_getproxies, real_bypass = urllib.request.getproxies, urllib.request.proxy_bypass
+os_proxies = {}
+bypassed = set()
+urllib.request.getproxies = lambda: dict(os_proxies)
+urllib.request.proxy_bypass = lambda host: host in bypassed
 
-env = {"HTTPS_PROXY": "http://corp:3128"}
-check("an explicit proxy in the environment wins", sp.apply(env) == {} and env == {"HTTPS_PROXY": "http://corp:3128"})
+# ── the decision, per URL, at request time ──────────────────────────────────
+os_proxies.update({"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"})
+check("https goes through the OS proxy", sp.proxy_for("https://query1.finance.yahoo.com/x") == "http://127.0.0.1:7897")
+os_proxies.pop("https")
+check("an http-only setting serves https too", sp.proxy_for("https://a.example/") == "http://127.0.0.1:7897")
+bypassed.add("ollama-box")
+check("a host the OS bypasses goes direct", sp.proxy_for("http://ollama-box:11434/api") is None)
+os_proxies.clear()
+check("the VPN switched off: direct at the next request", sp.proxy_for("https://query1.finance.yahoo.com/") is None)
+os_proxies.update({"https": "socks5://127.0.0.1:7898"})
+check("a SOCKS-only setting is left alone", sp.proxy_for("https://query1.finance.yahoo.com/") is None)
+os_proxies.clear()
+os_proxies.update({"https": "127.0.0.1:7897"})
+check("a bare host:port gets its scheme", sp.proxy_for("https://x.example/") == "http://127.0.0.1:7897")
+os_proxies.clear()
+check("no environment is written", not any(k.lower().endswith("_proxy") for k in os.environ))
+check("Linux: nothing installed (curl reads the desktop's env proxy itself)",
+      sp.install() is (sys.platform in ("win32", "darwin")))
 
-env = {"NO_PROXY": "internal.example"}
-sp.apply(env)
-check("an existing NO_PROXY is kept", env["NO_PROXY"].split(",")[0] == "internal.example")
+# ── a hook the interpreter already had still runs ───────────────────────────
+with tempfile.TemporaryDirectory() as other:
+    with open(os.path.join(other, "sitecustomize.py"), "w") as f:
+        f.write("import os\nos.environ['FINTERM_OTHER_HOOK'] = 'ran'\n")
+    out = subprocess.run([sys.executable, "-c", "import os; print(os.environ.get('FINTERM_OTHER_HOOK'))"],
+                         env={**os.environ, "PYTHONPATH": os.pathsep.join([SCRIPTS, other])},
+                         capture_output=True, text=True, timeout=60).stdout.strip()
+    check("the interpreter's own sitecustomize still runs", out == "ran", out)
 
-sp.system_proxies = lambda: {}
-env = {}
-check("no system proxy: nothing set", sp.apply(env) == {} and env == {})
-
-got = sp._override_to_no_proxy("localhost;127.*;192.168.*;10.*;*.corp.example;intranet;<local>;a*b")
-check("ProxyOverride → NO_PROXY", got == ["localhost", "127.0.0.0/8", "192.168.0.0/16", "10.0.0.0/8",
-                                          ".corp.example", "intranet"], str(got))
-
-# ── curl_cffi really goes through it ────────────────────────────────────────
+# ── curl_cffi: patched on import, and really goes through the proxy ────────
 try:
-    from curl_cffi import requests as creq
+    import curl_cffi  # noqa: F401
 except ImportError as e:
-    print(f"SKIP : curl_cffi end-to-end ({e})")
+    print(f"SKIP : curl_cffi parts ({e})")
+    urllib.request.getproxies, urllib.request.proxy_bypass = real_getproxies, real_bypass
     sys.exit(1 if fails else 77)  # 77 = skip: no app venv here
+
+code = ("import sys; sys.path.insert(0, %r); import system_proxy as sp; sys.meta_path.insert(0, sp._Finder()); "
+        "from curl_cffi.requests import Session; print(getattr(Session.request, '_finterm_proxy', False))" % SCRIPTS)
+out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60).stdout.strip()
+check("curl_cffi's Session is patched when it is first imported", out == "True", out)
+
+import curl_cffi.requests.session as cs  # noqa: E402
+from curl_cffi import requests as creq  # noqa: E402
+
+sp._patch(cs)
 
 seen = []
 srv = socket.socket()
 srv.bind(("127.0.0.1", 0))
-srv.listen(4)
+srv.listen(8)
 port = srv.getsockname()[1]
 
 
@@ -68,28 +94,29 @@ def serve():
             c, _ = srv.accept()
         except OSError:
             return
-        data = c.recv(4096).decode("latin-1", "replace")
-        seen.append(data.split("\r\n", 1)[0])
+        seen.append(c.recv(4096).decode("latin-1", "replace").split("\r\n", 1)[0])
         c.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")  # refuse: no real traffic
         c.close()
 
 
 threading.Thread(target=serve, daemon=True).start()
-saved = {k: os.environ.pop(k) for k in list(os.environ) if k.lower() in
-         ("http_proxy", "https_proxy", "all_proxy", "no_proxy")}
 try:
-    sp.system_proxies = lambda: {"http": f"http://127.0.0.1:{port}", "https": f"http://127.0.0.1:{port}"}
-    sp.apply()
+    os_proxies.update({"http": f"http://127.0.0.1:{port}", "https": f"http://127.0.0.1:{port}"})
     try:
         creq.get("https://query1.finance.yahoo.com/v8/finance/chart/%5EN225", timeout=5)
     except Exception:
         pass  # the stand-in proxy refuses; what matters is that it was asked
-    check("curl_cffi sends Yahoo through the system proxy",
-          any(line.startswith("CONNECT query1.finance.yahoo.com:443") for line in seen), str(seen))
+    check("a curl_cffi request goes through the OS proxy",
+          any(x.startswith("CONNECT query1.finance.yahoo.com:443") for x in seen), str(seen))
+    seen.clear()
+    bypassed.add("bypassed.invalid")
+    try:
+        creq.get("https://bypassed.invalid/", timeout=3)
+    except Exception:
+        pass
+    check("...and a bypassed host does not", not seen, str(seen))
 finally:
     srv.close()
-    for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"):
-        os.environ.pop(k, None)
-    os.environ.update(saved)
+    urllib.request.getproxies, urllib.request.proxy_bypass = real_getproxies, real_bypass
 
 sys.exit(1 if fails else 0)

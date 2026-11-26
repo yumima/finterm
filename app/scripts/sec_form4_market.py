@@ -228,7 +228,10 @@ class _ScanLock:
 
     def __exit__(self, *exc):
         if self.f:
-            self.f.close()  # lets go of the lock
+            import file_lock
+
+            file_lock.unlock(self.f)  # before close: Windows frees a closed handle's lock late
+            self.f.close()
 
 
 LOCKED = "the Form 4 store is locked by another scan — will retry"

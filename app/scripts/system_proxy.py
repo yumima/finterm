@@ -1,99 +1,94 @@
-"""The OS proxy (a VPN client in "system proxy" mode) for every HTTP library.
+"""The OS proxy (a VPN in "system proxy" mode) for curl_cffi too.
 
-urllib/requests and websockets read the Windows registry / macOS settings, but
-curl_cffi (yfinance's HTTP client) reads only the *_PROXY environment
-variables. With a VPN set as the system proxy, yfinance then went DIRECT — from
-mainland China Yahoo answers that with 429 "Too Many Requests" — while the
-push stream went through the VPN: prices loaded once, indices never moved
-(customer report 2026-11-26).
+urllib/requests and websockets ask the Windows registry / macOS settings for
+the proxy (and for the hosts that bypass it), but curl_cffi — yfinance's HTTP
+client — reads only the *_PROXY environment variables. With a VPN set as the
+system proxy, the push stream went through it while yfinance went DIRECT: from
+mainland China Yahoo answered 429, so prices loaded once and indices never
+moved (customer report 2026-11-26).
 
-apply() copies the system proxy into the environment, once, at interpreter
-start (sitecustomize.py), unless the user's environment already names one.
+install() (run from sitecustomize at start-up, Windows and macOS only) patches
+curl_cffi's Session.request when curl_cffi is first imported: a request with
+no proxy of its own asks the OS, at that moment, which proxy serves its URL —
+urllib.request.getproxies() (the environment first, else the OS settings) and
+proxy_bypass() (NO_PROXY, else the OS's own exceptions such as <local>). The
+environment is not touched, so every other library keeps its own behaviour,
+and a VPN switched on or off is seen by the next request.
 """
-import os
 import sys
 
-_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
-_LOCAL = ("localhost", "127.0.0.1", "::1")
+_TARGET = "curl_cffi.requests.session"
 
 
-def _override_to_no_proxy(override):
-    """Windows' ProxyOverride ("localhost;127.*;192.168.*;*.corp;<local>") as
-    NO_PROXY entries curl and requests both understand: suffixes as .domain,
-    trailing-* IPv4 prefixes as CIDR; anything else is dropped."""
-    out = []
-    for raw in (override or "").replace(",", ";").split(";"):
-        e = raw.strip()
-        if not e or e == "<local>":
-            continue
-        if e.startswith("*."):
-            out.append(e[1:])
-            continue
-        parts = e.split(".")
-        if parts[-1] == "*" and 1 <= len(parts) - 1 <= 3 and all(p.isdigit() for p in parts[:-1]):
-            octets = [int(p) for p in parts[:-1]]
-            if all(0 <= o <= 255 for o in octets):
-                bits = 8 * len(octets)
-                out.append(".".join(str(o) for o in octets + [0] * (4 - len(octets))) + f"/{bits}")
-            continue
-        if "*" not in e:
-            out.append(e)
-    return out
-
-
-def _windows_override():
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") as k:
-            return str(winreg.QueryValueEx(k, "ProxyOverride")[0])
-    except Exception:
-        return ""
-
-
-def system_proxies():
-    """{'http': url, 'https': url} from the OS settings (no environment), or {}.
-    SOCKS-only setups are left alone: requests without PySocks would fail on a
-    socks:// proxy, which is worse than going direct."""
+def proxy_for(url):
+    """The proxy URL the OS would use for `url`, or None (direct). SOCKS
+    proxies are left alone: curl_cffi needs them spelt socks5h://, and a
+    wrong guess is worse than going direct."""
+    import urllib.parse
     import urllib.request
     try:
-        if sys.platform == "win32":
-            found = urllib.request.getproxies_registry()
-        elif sys.platform == "darwin":
-            found = urllib.request.getproxies_macosx_sysconf()
-        else:
-            return {}  # Linux: the desktop proxy reaches programs through the environment already
+        parts = urllib.parse.urlsplit(url)
+        scheme, host = (parts.scheme or "http").lower(), parts.hostname or ""
+        found = urllib.request.getproxies()
+        proxy = found.get(scheme) or (found.get("http") if scheme == "https" else None)
+        if not proxy or proxy.lower().startswith("socks") or not host:
+            return None
+        if urllib.request.proxy_bypass(host):
+            return None
+        return proxy if "://" in proxy else "http://" + proxy
     except Exception:
-        return {}
-    out = {}
-    for scheme in ("http", "https"):
-        url = found.get(scheme)
-        if url and not url.lower().startswith("socks"):
-            out[scheme] = url if "://" in url else "http://" + url
-    if "https" not in out and "http" in out:
-        out["https"] = out["http"]  # one proxy for both, as the OS means it
-    return out
+        return None
 
 
-def apply(environ=None):
-    """Put the system proxy into `environ` (default os.environ). Returns what
-    was set ({} when the environment already has a proxy or the OS has none)."""
-    env = os.environ if environ is None else environ
-    if any(env.get(k) for k in _ENV_KEYS):
-        return {}
-    found = system_proxies()
-    if not found:
-        return {}
-    set_ = {}
-    for scheme, url in found.items():
-        for key in (f"{scheme.upper()}_PROXY", f"{scheme}_proxy"):  # libcurl reads only lowercase http_proxy
-            env[key] = url
-            set_[key] = url
-    no_proxy = [x.strip() for x in (env.get("NO_PROXY") or env.get("no_proxy") or "").split(",") if x.strip()]
-    extra = list(_LOCAL) + (_override_to_no_proxy(_windows_override()) if sys.platform == "win32" else [])
-    for e in extra:
-        if e not in no_proxy:
-            no_proxy.append(e)
-    env["NO_PROXY"] = env["no_proxy"] = ",".join(no_proxy)
-    set_["NO_PROXY"] = env["NO_PROXY"]
-    return set_
+def _patch(module):
+    Session = getattr(module, "Session", None)
+    if Session is None or getattr(Session.request, "_finterm_proxy", False):
+        return
+    original = Session.request
+
+    def request(self, method, url, *args, **kwargs):
+        if not kwargs.get("proxy") and not kwargs.get("proxies") and not getattr(self, "proxies", None) \
+                and not getattr(self, "proxy", None):
+            p = proxy_for(str(url))
+            if p:
+                kwargs["proxy"] = p
+        return original(self, method, url, *args, **kwargs)
+
+    request._finterm_proxy = True
+    Session.request = request
+
+
+class _Finder:
+    """Patches curl_cffi's session module right after it is imported — no
+    import of curl_cffi here (it is slow, and most scripts never use it)."""
+
+    def find_spec(self, name, path=None, target=None):
+        if name != _TARGET:
+            return None
+        import importlib.machinery
+        spec = importlib.machinery.PathFinder.find_spec(name, path)
+        if spec is None or spec.loader is None or not hasattr(spec.loader, "exec_module"):
+            return spec
+        exec_module = spec.loader.exec_module
+
+        def exec_and_patch(module):
+            exec_module(module)
+            try:
+                _patch(module)
+            except Exception:
+                pass
+
+        spec.loader.exec_module = exec_and_patch
+        return spec
+
+
+def install():
+    """Windows and macOS only: elsewhere the desktop proxy already reaches
+    programs through the environment, which curl reads itself."""
+    if sys.platform not in ("win32", "darwin"):
+        return False
+    if _TARGET in sys.modules:
+        _patch(sys.modules[_TARGET])
+    elif not any(isinstance(f, _Finder) for f in sys.meta_path):
+        sys.meta_path.insert(0, _Finder())
+    return True

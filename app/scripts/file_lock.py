@@ -5,8 +5,9 @@ Screener's cache imported it inside their lock and failed there outright, and
 the Form 4 scan ran unlocked (found when the test suite first ran on Windows,
 2026-11-26). POSIX: flock. Windows: a one-byte msvcrt lock at offset 0 (allowed
 past the end of an empty file). Both belong to the open file — another open()
-of the same path, in this process or another, is kept out — and both go away
-when the file is closed.
+of the same path, in this process or another, is kept out. Call unlock()
+before closing: Windows frees a closed handle's lock only at some later time,
+so a lock merely closed can still refuse the next taker.
 """
 import os
 import time
