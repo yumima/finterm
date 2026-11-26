@@ -488,7 +488,8 @@ def test_health_says_what_is_missing():
 def test_the_symbols_are_kept_for_the_owner_only():
     bd.keep_symbols(["aapl", " msft ", "", 5, "AAPL"])
     assert json.loads(bd.symbols_path().read_text()) == ["AAPL", "MSFT"]
-    assert bd.symbols_path().stat().st_mode & 0o077 == 0
+    if os.name != "nt":  # Windows has no mode bits; the file is in the user's own profile
+        assert bd.symbols_path().stat().st_mode & 0o077 == 0
 
 
 def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
@@ -496,9 +497,11 @@ def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
     assert "Nothing" in bd.cancel_build("weekly-none")["error"]
     m = make_weekly(did)
     # a stand-in for the build: its own session, a child of its own
-    p = subprocess.Popen([sys.executable, "-c", "import subprocess,time\n"
-                          "c = subprocess.Popen(['sleep', '60']); print(c.pid, flush=True); time.sleep(60)", "build-weekly"],
-                         stdout=subprocess.PIPE, text=True, start_new_session=True)
+    group = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    p = subprocess.Popen([sys.executable, "-c", "import subprocess,sys,time\n"
+                          "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                          "print(c.pid, flush=True); time.sleep(60)", "build-weekly"],
+                         stdout=subprocess.PIPE, text=True, start_new_session=True, creationflags=group)
     child = int(p.stdout.readline())
     m.update({"state": "building", "pid": p.pid, "prev_ready": True})
     bd.store(m)
@@ -513,11 +516,12 @@ def test_a_build_can_be_cancelled_and_the_brief_is_what_it_was():
         if not bd._alive(child):
             break
         bd.time.sleep(0.1)
-    gone = not bd._alive(child) or "Z" in subprocess.run(["ps", "-o", "stat=", "-p", str(child)], capture_output=True,
-                                                         text=True).stdout
+    gone = not bd._alive(child) or (os.name != "nt" and "Z" in subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(child)], capture_output=True, text=True).stdout)
     assert gone, "the build's children end with it"
     # a build that finishes while Cancel waits for its turn is left alone
-    q = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "build-weekly"], start_new_session=True)
+    q = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "build-weekly"], start_new_session=True,
+                         creationflags=group)
     m = bd.load(did)
     m.update({"state": "building", "pid": q.pid, "prev_ready": True})
     bd.store(m)

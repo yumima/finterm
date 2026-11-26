@@ -49,6 +49,7 @@ Actions:
              read per pending deal); warm: seconds.
 """
 
+from datefmt import fmt as _fmt
 import copy
 import json
 import os
@@ -506,18 +507,18 @@ def project(d, comps, today):
     st, st_date = d.get("stage"), parse_mdy(d.get("stage_date"))
     if d.get("priced_from") == "edgar":
         return {"kind": "priced", "date": st_date.isoformat(),
-                "basis": f"Final prospectus (424B) filed {st_date:%b %-d}; Nasdaq not updated yet"}
+                "basis": f"Final prospectus (424B) filed {_fmt(st_date, '%b %-d')}; Nasdaq not updated yet"}
     if d.get("withdrawn_from") == "edgar":
-        return {"kind": "withdrawn", "basis": f"RW (withdrawal) filed {st_date:%b %-d}; Nasdaq not updated yet"}
+        return {"kind": "withdrawn", "basis": f"RW (withdrawal) filed {_fmt(st_date, '%b %-d')}; Nasdaq not updated yet"}
     if d["status"] == "priced":
         return {"kind": "priced", "date": d["priced_date"].isoformat(), "basis": "Nasdaq priced row"}
     if d["status"] == "withdrawn":
         return {"kind": "withdrawn", "basis": "Nasdaq withdrawn row"}
     if st == "withdrawn":
-        return {"kind": "withdrawn", "basis": f"RW (withdrawal) filed {st_date:%b %-d}"}
+        return {"kind": "withdrawn", "basis": f"RW (withdrawal) filed {_fmt(st_date, '%b %-d')}"}
     if st == "priced":
         return {"kind": "priced", "date": st_date.isoformat(),
-                "basis": f"Final prospectus (424B) filed {st_date:%b %-d}; Nasdaq not updated yet"}
+                "basis": f"Final prospectus (424B) filed {_fmt(st_date, '%b %-d')}; Nasdaq not updated yet"}
 
     # The underwriters' date, while still ahead, outranks an EDGAR window that
     # has lapsed: a deal filed its 8-A early and is pricing on schedule.
@@ -539,17 +540,17 @@ def project(d, comps, today):
             when = _weekday(max(st_date + timedelta(days=pt), today))
             return {"kind": "imminent", "date": when.isoformat(),
                     "lo": _weekday(st_date + timedelta(days=lo)).isoformat(), "hi": due_hi.isoformat(),
-                    "basis": f"{what} {st_date:%b %-d}; IPOs at this step priced within "
+                    "basis": f"{what} {_fmt(st_date, '%b %-d')}; IPOs at this step priced within "
                              f"{lo}–{hi} days (p10–p90)"}
-        return _late(f"{what} {st_date:%b %-d}, but no pricing reported since — postponed, or a "
+        return _late(f"{what} {_fmt(st_date, '%b %-d')}, but no pricing reported since — postponed, or a "
                      "best-efforts offering selling over time", due_hi, today)
 
     if exp:
-        return _late(f"was expected {exp:%b %-d}; no pricing reported since", exp, today)
+        return _late(f"was expected {_fmt(exp, '%b %-d')}; no pricing reported since", exp, today)
 
     last = parse_mdy(d.get("last_filing_date"))
     if last and (today - last).days > DORMANT_DAYS:
-        return {"kind": "dormant", "basis": f"no registration filing since {last:%b %-d, %Y}"}
+        return {"kind": "dormant", "basis": f"no registration filing since {_fmt(last, '%b %-d, %Y')}"}
 
     if not comps or comps["priced"] < MIN_COMPARABLES:
         n = comps["priced"] if comps else 0

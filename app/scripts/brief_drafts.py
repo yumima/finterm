@@ -245,11 +245,67 @@ def _parse(ts):
 
 
 def _alive(pid):
+    """Is the process running? (Windows: never os.kill(pid, 0) — signal 0 is
+    CTRL_C_EVENT there, so the check would interrupt the process it asks about.)"""
     try:
-        os.kill(int(pid), 0)
-        return True
-    except (OSError, ValueError, TypeError):
+        pid = int(pid)
+    except (ValueError, TypeError):
         return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = wintypes.DWORD()
+            return bool(k32.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _is_app_build(pid):
+    """Is `pid` a weekly build this app started (its own process group, its
+    command line says build-weekly) — not the Sunday run, not a reused pid?"""
+    if pid <= 1 or not _alive(pid):
+        return False
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                 f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"],
+                capture_output=True, text=True, timeout=20,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            return "build-weekly" in out
+        return os.getpgid(pid) == pid and "build-weekly" in subprocess.run(
+            ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _end_build(pid, force=False):
+    """Stop a build and everything it started. POSIX: its process group
+    (TERM, or KILL). Windows: the process tree (taskkill /T; no gentle form)."""
+    import signal
+
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return
+    try:
+        os.killpg(pid, signal.SIGKILL if force else signal.SIGTERM)
+    except OSError:
+        pass
 
 
 def _git(*args, check=True, cwd=None):
@@ -557,6 +613,8 @@ def start_weekly_build(force=False, symbols=None):
         log.flush()
         subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly", *(["--again"] if again else [])], stdout=log,
                          stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
+                         creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+                         if os.name == "nt" else 0,
                          cwd=os.path.dirname(os.path.abspath(__file__)))
     time.sleep(0.5)  # the child records its own pid at once; this one exits
     return get(did)
@@ -564,20 +622,13 @@ def start_weekly_build(force=False, symbols=None):
 
 def cancel_build(did):
     """Stop a build started from the app: the brief is what it was before."""
-    import signal
-
     m = load(did)
     if not m or _effective_state(m) != "building":
         return {"error": "Nothing is being built."}
     pid = int(m.get("pid") or 0)
-    # Its own session (start_weekly_build), so its children end with it. The
-    # Sunday run is not stopped from here: systemd owns it.
-    try:
-        mine = pid > 1 and os.getpgid(pid) == pid and "build-weekly" in subprocess.run(
-            ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
-    except OSError:
-        mine = False
-    if not mine:
+    # Its own session / process group (start_weekly_build), so its children
+    # end with it. The Sunday run is not stopped from here: systemd owns it.
+    if not _is_app_build(pid):
         return {"error": "The Sunday run is building it; it finishes by itself."}
     # Under the lock the finished draft is put in place with, and only while the
     # draft is still this build's: never in the middle of that, never another's.
@@ -585,13 +636,13 @@ def cancel_build(did):
         m = load(did)
         if not m or m.get("state") != "building" or m.get("pid") != pid:
             return {"error": "It had finished.", **(get(did) if m else {})}
-        os.killpg(pid, signal.SIGTERM)
+        _end_build(pid)
         for _ in range(50):
             if not _alive(pid):
                 break
             time.sleep(0.1)
         else:
-            os.killpg(pid, signal.SIGKILL)
+            _end_build(pid, force=True)
             time.sleep(0.2)
         # Not load(): a died new edition reads as published there already.
         back = "published" if m.get("prev_published") else "ready" if m.get("prev_ready") else "failed"

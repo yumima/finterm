@@ -125,6 +125,9 @@ jobs:
           if [ -n "${OPENSSL_ROOT_DIR:-}" ]; then
             EXTRA="$EXTRA -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}"
           fi
+          # The setup-python 3.12, by path: on Windows CMake's FindPython reads
+          # the registry first and took the runner's newer Python (no tzdata).
+          EXTRA="$EXTRA -DPython3_EXECUTABLE=$(python -c 'import sys; print(sys.executable)' | tr '\\' '/')"
           cmake -B build $EXTRA \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \

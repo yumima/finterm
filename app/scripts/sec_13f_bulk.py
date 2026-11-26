@@ -41,6 +41,7 @@ ACTIONS
     resolve  {"ticker"}                ticker -> CUSIP via OpenFIGI
 """
 
+from datefmt import fmt as _fmt
 import io
 import json
 import os
@@ -2428,7 +2429,7 @@ def stock_flows(limit=10, today=None, symbols=()):
         n, before = _filers(con, q), _filers(con, prior)
         if not quarter_is_complete(q, n, before, today):
             return {"error": f"13F season: {n:,} of about {before:,} managers have filed for "
-                             f"{_date.fromisoformat(q):%b %-d, %Y}"}
+                             f"{_fmt(_date.fromisoformat(q), '%b %-d, %Y')}"}
         # The index can be ahead of the scan (a sync cut short): its sums are
         # then the early filers' again. The scan's stamp says how many filings
         # of the quarter it saw; a few stragglers since change nothing.

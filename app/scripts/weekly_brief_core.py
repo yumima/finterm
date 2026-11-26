@@ -8,6 +8,7 @@ Public output: SEC EDGAR data, U.S. agencies' and the Fed's figures (FRED), the
 week's release schedule, and screen tickers with finterm's own backtest records
 and market counts (no vendor figures) — see tools/weekly_brief.py.
 """
+from datefmt import fmt as _fmt
 import os
 import re
 from datetime import date, timedelta
@@ -204,7 +205,7 @@ def post_lines(topics, series, rows, flows, max_cashtags, today, screens=True):
     lines = []
     r = market_regime(series, today) if "summary" in topics and series else None
     if r:
-        lines.append(f"{LABELS[r['state']]}: {regime_words(r)} ({r['date']:%b %-d})")
+        lines.append(f"{LABELS[r['state']]}: {regime_words(r)} ({_fmt(r['date'], '%b %-d')})")
     if "macro" in topics and series:
         by = {r["name"]: r for r in market_rows(series) if r["value"] != "—"}
         parts = [f"{short} {by[name]['value']} ({by[name]['change']} 1w)" for name, short in
@@ -250,7 +251,7 @@ def social_posts(rows, today, url, topics=("summary", "macro", "insider", "funds
                  screens=True):
     """This issue's announcement per network, built from its own figures and
     only from the sections it holds."""
-    head = f"What's moving, week to {today:%b %-d}"
+    head = f"What's moving, week to {_fmt(today, '%b %-d')}"
     out = {"url": url}
     for net, extra, weigh in (("x", "", x_weight), ("bluesky", "", len),
                               ("mastodon", "\n\nFixed rules, not personal advice. #investing #stocks #opensource", len)):
@@ -611,7 +612,7 @@ def market_rows(series):
         was = _before(obs, d - timedelta(days=7))
         year = [x for day, x in obs if day > d - timedelta(days=365)]
         rows.append({"name": name, "value": show(v), "change": _change(v, was and was[1], kind),
-                     "trend": spark(year), "asof": f"{d:%b %-d}"})
+                     "trend": spark(year), "asof": f"{_fmt(d, '%b %-d')}"})
 
     pct = lambda v: _minus(f"{v:.2f}%")
     for sid, (name, kind) in MARKET_SERIES.items():
@@ -656,7 +657,7 @@ def economy_rows(series):
             continue
         d, v = pts[-1]
         asof = (f"Q{(d.month - 1) // 3 + 1} {d.year}" if sid == "A191RL1Q225SBEA"
-                else f"{d:%b %-d}" if sid == "ICSA" else f"{d:%b}")
+                else f"{_fmt(d, '%b %-d')}" if sid == "ICSA" else f"{d:%b}")
         # A newer month is out but makes no figure: the index a year earlier was
         # never published (October 2025, the shutdown). Said, or the row reads
         # as stale.
@@ -759,7 +760,7 @@ def call_lines(r, ev):
     no stance: the state is said and that is all."""
     st, al = ((ev or {}).get("states") or {}).get(r["state"]), (ev or {}).get("all")
     rule, always = (ev or {}).get("rule"), (ev or {}).get("always")
-    where = f"{regime_words(r)}, at the {r['date']:%b %-d} close"
+    where = f"{regime_words(r)}, at the {_fmt(r['date'], '%b %-d')} close"
     if not (has_record(ev, r["state"]) and al):
         return [f"**{LABELS[r['state']]}.** {where}.", ""]
     pc = lambda x: f"{x * 100:.0f}%"
@@ -787,11 +788,11 @@ def past_week_line(series, market, r, today, asof=None):
     if r and r["week"] is not None:
         w = r["week"]
         parts.append("S&P 500 " + ("little changed" if abs(w) < 0.0025 else "up" if w > 0 else "down")
-                     + f" to {r['date']:%b %-d}")
+                     + f" to {_fmt(r['date'], '%b %-d')}")
     m = market or {}
     if m.get("up5_share") is not None:
         parts.append(f"{m['up5_share'] * 100:.0f}% of US stocks above $2B rose"
-                     + (f" to {date.fromisoformat(asof):%b %-d}" if asof and r and asof != r["date"].isoformat() else "")
+                     + (f" to {_fmt(date.fromisoformat(asof), '%b %-d')}" if asof and r and asof != r["date"].isoformat() else "")
                      + (f", {m['above200_share'] * 100:.0f}% are above their 200-day average"
                         if m.get("above200_share") is not None else ""))
     sec = m.get("sectors") or []
@@ -885,8 +886,8 @@ def funds_part(flows, max_rows=5):
         out.append("| " + " | ".join(cell(adds, i) + cell(trims, i)) + " |")
     q = date.fromisoformat(flows["quarter"])
     filed = flows.get("filed_to")
-    out += ["", f"13F positions at {q:%b %-d, %Y}"
-                + (f", filed to {date.fromisoformat(filed):%b %-d}" if filed else "")
+    out += ["", f"13F positions at {_fmt(q, '%b %-d, %Y')}"
+                + (f", filed to {_fmt(date.fromisoformat(filed), '%b %-d')}" if filed else "")
                 + (f", {flows['managers']:,} managers" if flows.get("managers") else "")
                 + ", against each manager's previous filing. Counted: US-listed companies (no funds), changes of "
                   "$25M or more by managers with at most 1,000 positions; dollars are share changes at the filings' "
@@ -945,8 +946,8 @@ def record_short(ev):
 
 
 def week_ahead_section(events, mon, fri, error=None):
-    out = [f"## Week ahead, {fri:%b %-d}" if mon == fri else f"## Week ahead, {mon:%b %-d}–{fri:%-d}"
-           if mon.month == fri.month else f"## Week ahead, {mon:%b %-d}–{fri:%b %-d}", ""]
+    out = [f"## Week ahead, {_fmt(fri, '%b %-d')}" if mon == fri else f"## Week ahead, {_fmt(mon, '%b %-d')}–{_fmt(fri, '%-d')}"
+           if mon.month == fri.month else f"## Week ahead, {_fmt(mon, '%b %-d')}–{_fmt(fri, '%b %-d')}", ""]
     if error:
         return out + [f"_No release list this week: {md_escape(error)}._", ""]
     if not events:
@@ -959,10 +960,10 @@ def week_ahead_section(events, mon, fri, error=None):
             short = re.sub(r"\s+[mqy]/[mqy]$", "", t)  # "CPI m/m" and "CPI y/y" are one release
             if short not in names:
                 names.append(short)
-        at = "" if (w.hour, w.minute) == (0, 0) else f"{w:%-H:%M} "
+        at = "" if (w.hour, w.minute) == (0, 0) else f"{_fmt(w, '%-H:%M')} "
         days.setdefault(w.date(), []).append(at + ", ".join(md_escape(x) for x in names))
     out += ["| Day | US releases (Eastern time) |", "|---|---|"]
-    out += [f"| {d:%a %-d} | {' · '.join(days[d])} |" for d in sorted(days)[:BRIEF_DAYS]]
+    out += [f"| {_fmt(d, '%a %-d')} | {' · '.join(days[d])} |" for d in sorted(days)[:BRIEF_DAYS]]
     return out + [""]
 
 
@@ -997,7 +998,7 @@ def earnings_part(earn, max_rows=8):
             return ["_Earnings: no large report confirmed for the next 7 days._", ""]
         return ["_The calendar lists no large company for the next 7 days._", ""]
     out = ["| Earnings, 7 days | Company | A year ago |", "|---|---|---:|"]
-    out += [f"| {md_escape(r['symbol'])} | {md_escape(r['company'])} | {r['year_ago']:%a %b %-d} |" for r in rows[:max_rows]]
+    out += [f"| {md_escape(r['symbol'])} | {md_escape(r['company'])} | {_fmt(r['year_ago'], '%a %b %-d')} |" for r in rows[:max_rows]]
     n = earn.get("unsure") or 0
     return out + ["", "Expected by the calendar and by the same report a year ago (SEC 8-K); dates can move."
                   + (f" {n} more not confirmed." if n else "")
@@ -1058,11 +1059,11 @@ def ipo_part(ipo, max_rows=5):
         price = lambda r: "—" if not r else f"${r[0]:,.2f}" if r[0] == r[1] else f"${r[0]:,.2f}–{r[1]:,.2f}"
         out += ["| IPO | Company | Price | Latest step (SEC) |", "|---|---|---:|---|"]
         out += [f"| {md_escape(d['ticker']) or '—'} | {md_escape(d['company'])}{' (SPAC)' if d['spac'] else ''} | "
-                f"{price(d['range'])} | {d['step']}, {date.fromisoformat(d['filed']):%b %-d} |" for d in deals[:max_rows]]
+                f"{price(d['range'])} | {d['step']}, {_fmt(date.fromisoformat(d['filed']), '%b %-d')} |" for d in deals[:max_rows]]
         out.append("")
     if ends:
         out += ["| Lock-up ends | Company | Date | Term |", "|---|---|---:|---:|"]
-        out += [f"| {md_escape(e['ticker']) or '—'} | {md_escape(e['company'])} | {e['ends']:%a %b %-d} | {e['days']} days |"
+        out += [f"| {md_escape(e['ticker']) or '—'} | {md_escape(e['company'])} | {_fmt(e['ends'], '%a %b %-d')} | {e['days']} days |"
                 for e in ends[:max_rows]]
         out.append("")
     say = []
