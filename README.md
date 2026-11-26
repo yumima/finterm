@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`1c39b0222`](https://github.com/yumima/finterm/commit/1c39b0222) Ownership: the loading bars while a panel waits, not a blank table
 - [`b91bf1bc0`](https://github.com/yumima/finterm/commit/b91bf1bc0) Screener: price holes judged on the sessions most names traded
 - [`069adc0a0`](https://github.com/yumima/finterm/commit/069adc0a0) Screener: every screen checked against its source and recomputed
 - [`556c5b9e8`](https://github.com/yumima/finterm/commit/556c5b9e8) Screener: Lynch value as TradingView draws it; cuts never print as passed
