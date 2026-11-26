@@ -126,9 +126,17 @@ void TestHearthInstaller::it_can_be_stopped() {
 }
 
 void TestHearthInstaller::no_connection() {
-    HearthInstaller::instance().use({"http://127.0.0.1:1/install.sh", QString(64, 'a')});
+    // A port that was just free and is closed again: refused at once on every
+    // OS (port 1 was not — macOS runners let the connect hang to the timeout).
+    quint16 port = 0;
+    {
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost));
+        port = probe.serverPort();
+    }
+    HearthInstaller::instance().use({QString("http://127.0.0.1:%1/install.sh").arg(port), QString(64, 'a')});
     const auto r = run();
-    QVERIFY(!r.first && r.second.contains("could not be fetched"));
+    QVERIFY2(!r.first && r.second.contains("could not be fetched"), qPrintable(r.second));
 }
 
 QTEST_GUILESS_MAIN(TestHearthInstaller)

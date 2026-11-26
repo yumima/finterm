@@ -123,8 +123,11 @@ jobs:
         shell: bash
         working-directory: app
         run: |
+          # Ninja: keep going past a failed file, so one run reports them all.
+          KEEP=""
+          [ "${{ runner.os }}" != "Windows" ] && KEEP="-- -k 0"
           cmake --build build --config ${{ env.BUILD_TYPE }} --target all_tests \
-            --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
+            --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4) $KEEP
 
       # No display on the runners: Qt's offscreen platform for widget tests.
       - name: Run ctest

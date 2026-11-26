@@ -86,8 +86,14 @@ class TestPortfolioReturns : public QObject {
 void TestPortfolioReturns::initTestCase() {
     // A fixed zone west of UTC, so a US-evening trade has a later UTC date —
     // the case that used to land the flow one segment late.
+#ifdef _WIN32
+    // The MSVC runtime reads only the POSIX form (no zoneinfo names).
+    qputenv("TZ", "PST8PDT");
+    _tzset();
+#else
     qputenv("TZ", "America/Los_Angeles");
     tzset();
+#endif
 }
 
 void TestPortfolioReturns::plain_growth_no_flows() {

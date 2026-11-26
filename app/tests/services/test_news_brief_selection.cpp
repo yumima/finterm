@@ -85,9 +85,9 @@ class TestNewsBriefSelection : public QObject {
         // "newest N articles" sampling the six copies crowded out five other
         // stories and the model wrote the Fed decision six times.
         QVector<NewsArticle> pool;
-        for (const QString& src : {"Reuters", "AP", "Bloomberg", "WSJ", "BBC", "CNBC"}) {
+        for (const char* src : {"Reuters", "AP", "Bloomberg", "WSJ", "BBC", "CNBC"}) {
             pool << article(QStringLiteral("Federal Reserve holds interest rate steady at 4.25%"),
-                            QStringLiteral("ECONOMIC"), src, 1);
+                            QStringLiteral("ECONOMIC"), QString::fromLatin1(src), 1);
         }
         pool << article(QStringLiteral("Bitcoin slips below $60,000 as ETF outflows continue"),
                         QStringLiteral("CRYPTO"), QStringLiteral("CoinDesk"), 2);

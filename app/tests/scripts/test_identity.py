@@ -210,11 +210,16 @@ def _check_sec_http():
     requests.get = lambda url, **k: (starts.append(time.monotonic()), _R(url, 200))[1]
     ts = [threading.Thread(target=sec_http.get, args=("https://www.sec.gov/x",), kwargs={"gap": 0.1})
           for _ in range(4)]
+    t0 = time.monotonic()
     [t.start() for t in ts]
     [t.join() for t in ts]
     starts.sort()
-    if min(b - a for a, b in zip(starts, starts[1:])) < 0.095:
-        fails.append(f"sec_http let concurrent requests start closer than the gap: {starts}")
+    # The k-th start may not come before t0 + k*gap: that is what the gate
+    # reserves. Gaps between neighbouring starts are no test — one late
+    # thread wake-up (a busy CI runner) shortens the next gap, gate or not.
+    if any(st < t0 + k * 0.1 - 0.005 for k, st in enumerate(starts)):
+        fails.append(f"sec_http let concurrent requests start closer than the gap: "
+                     f"{[round(st - t0, 3) for st in starts]}")
 
     # deadline: a slot further off is not taken (nothing sent, nothing reserved),
     # and the lock is not held while another caller sleeps for its slot

@@ -6,7 +6,13 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
 
-import yfinance_data as y  # noqa: E402
+try:
+    import yfinance_data as y  # noqa: E402
+except ImportError as e:
+    # 77 = the app venv (yfinance, pandas) isn't here — skipped, as the other
+    # daemon tests are (CI runners have no app venv).
+    print(f"SKIP : {e}")
+    sys.exit(77)
 
 
 class _Resp:

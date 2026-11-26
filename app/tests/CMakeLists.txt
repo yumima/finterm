@@ -1342,6 +1342,7 @@ if(Python3_Interpreter_FOUND)
         NAME orderbook
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_orderbook.py
     )
+    set_tests_properties(orderbook PROPERTIES SKIP_RETURN_CODE 77)
     # FRED keyless (fred_data.py): error page ≠ empty series, "." ≠ 0, keyed shape
     add_test(
         NAME fred_data
