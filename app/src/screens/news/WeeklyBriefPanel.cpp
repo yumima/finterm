@@ -41,7 +41,9 @@ const Opt kTopics[] = {
     {"funds", "Fund moves", "What institutions added and trimmed, net by stock (SEC 13F)"},
     {"screens", "Screen leaders", "The first names of each of finterm's screens, with each screen's own record"},
     {"earnings", "Earnings ahead", "Large companies expected to report in the next 7 days, confirmed by SEC filings"},
-    {"ipo", "IPOs and lock-ups", "IPOs expected to price and lock-ups ending in the next 7 days, from SEC filings"},
+    {"ipo_priced", "IPOs priced this week", "Each IPO of the past 7 days: date, price, size, first-day return, return since"},
+    {"ipo_ahead", "IPOs next week", "IPOs expected to price in the next 7 days: date, price range, shares, size"},
+    {"lockups", "Lock-ups ending", "Lock-ups ending in the next 7 days, confirmed by the final prospectus"},
     {"mine", "Your holdings (private)",
      "This week on your portfolios and watchlists — in your draft only; never published or posted"},
 };
@@ -366,7 +368,7 @@ void WeeklyBriefPanel::save_settings() {
     for (auto it = platforms_.begin(); it != platforms_.end(); ++it)
         if (it.value()->isChecked())
             plats.append(it.key());
-    const QJsonObject s{{"v", 4}, // this list has a box for every section (brief_drafts.settings_set)
+    const QJsonObject s{{"v", 5}, // this list has a box for every section (brief_drafts.settings_set)
                         {"topics", topics},
                         {"detail", detail_->currentData().toString()},
                         {"platforms", plats},

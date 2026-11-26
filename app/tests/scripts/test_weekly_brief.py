@@ -656,25 +656,75 @@ def test_what_the_monday_check_mails_about():
 
 # ── IPOs and lock-ups ────────────────────────────────────────────────────────
 
-IPO = {"ahead": [{"company": "Alpha_Co", "ticker": "AAA", "range": (14.0, 16.0), "step": "8-A12B", "filed": "2026-11-20",
-                  "spac": False},
-                 {"company": "Blank Check", "ticker": "", "range": (10.0, 10.0), "step": "S-1/A", "filed": "2026-11-19",
-                  "spac": True}],
+IPO = {"priced": [{"ticker": "NEW", "company": "New_Co", "priced": date(2026, 11, 19), "price": 20.0, "shares": 5e6,
+                   "size": 1e8, "spac": False, "first_ret": 0.25, "ret": 0.10, "last_date": date(2026, 11, 25)}],
+       "ahead": [{"company": "Alpha_Co", "ticker": "AAA", "date": date(2026, 12, 2), "estimated": False,
+                  "range": (14.0, 16.0), "shares": 4e6, "size": 6e7, "spac": False},
+                 {"company": "Blank Check", "ticker": "", "date": date(2026, 12, 3), "estimated": True,
+                  "range": (10.0, 10.0), "shares": 2e7, "size": 2e8, "spac": True}],
        "lockups": [{"ticker": "QNT", "company": "Quantinuum Inc.", "dated": date(2026, 6, 3), "days": 180,
                     "ends": date(2026, 11, 30)}], "unread": 1}
 
 
 def test_ipo_part():
     text = "\n".join(wb.ipo_part(IPO))
-    assert "| AAA | Alpha\\_Co | $14.00–16.00 | 8-A12B, Nov 20 |" in text, text
-    assert "| — | Blank Check (SPAC) | $10.00 | S-1/A, Nov 19 |" in text
+    assert "| NEW | New\\_Co | Thu Nov 19 | $20.00 | $100.0M | +25.0% | +10.0% |" in text, text
+    assert "return: to the Nov 25 close." in text
+    assert "| AAA | Alpha\\_Co | Wed Dec 2 | $14.00–16.00 | 4.0M | $60.0M |" in text, text
+    assert "| — | Blank Check (SPAC) | ~Thu Dec 3 | $10.00 | 20.0M | $200.0M |" in text, text
     assert "| QNT | Quantinuum Inc. | Mon Nov 30 | 180 days |" in text and "1 lock-up not confirmed by the prospectus is" in text
-    empty = "\n".join(wb.ipo_part({"ahead": [], "lockups": [], "unread": 0}))
-    assert "No IPO is expected" in empty and "No lock-up is known" in empty and "|" not in empty
+    empty = "\n".join(wb.ipo_part({"priced": [], "ahead": [], "lockups": [], "unread": 0}))
+    assert "No IPO priced" in empty and "No IPO is expected" in empty and "No lock-up is known" in empty and "|" not in empty
     # nothing read is not "none"
-    blind = "\n".join(wb.ipo_part({"ahead": [], "ahead_unread": 2, "lockups": [], "unread": 0, "partial": True}))
-    assert "No IPO" not in blind and "No lock-up" not in blind and "2 IPOs whose filings" in blind and "partly read" in blind
+    blind = "\n".join(wb.ipo_part({"priced": [], "ahead": [], "lockups": [], "unread": 0, "partial": True}))
+    assert "No IPO" not in blind and "No lock-up" not in blind and "partly read" in blind
     assert "could not be read" in "\n".join(wb.ipo_part({"error": "could not be read (OSError)"}))
+    # no closes: returns absent, said so
+    noc = dict(IPO, priced=[dict(IPO["priced"][0], first_ret=None, ret=None, last_date=None)], closes_read=False)
+    t2 = "\n".join(wb.ipo_part(noc))
+    assert "| — | — |" in t2 and "Prices could not be read" in t2, t2
+
+
+def test_ipo_selection_and_returns():
+    deals = [
+        {"status": "priced", "priced_date": "2026-11-19", "ticker": "NEW", "company": "New", "final_price": 20.0,
+         "shares": 5e6, "offer_amount": 1e8},
+        {"status": "priced", "priced_date": "2026-11-12", "ticker": "OLD", "company": "Old", "final_price": 10.0, "shares": 1e6},
+        {"status": "upcoming", "ticker": "AAA", "company": "A", "price_range": "14.00-16.00", "shares": 4e6,
+         "projection": {"kind": "scheduled", "date": "2026-12-02"}},
+        {"status": "filed", "ticker": "BBB", "company": "B", "price_range": "10.00", "shares": 1e6,
+         "projection": {"kind": "imminent", "date": "2026-12-01"}},
+        {"status": "filed", "ticker": "CCC", "company": "C", "price_range": "5.00-6.00", "shares": 1e6,
+         "projection": {"kind": "estimate", "date": "2026-12-01"}},   # a statistical estimate: not "expected"
+        {"status": "upcoming", "ticker": "LATE", "company": "L", "price_range": "",
+         "projection": {"kind": "scheduled", "date": "2026-12-20"}},  # outside the week
+    ]
+    pr = wb.ipo_priced(deals, date(2026, 11, 15), date(2026, 11, 22))
+    assert [r["ticker"] for r in pr] == ["NEW"] and pr[0]["size"] == 1e8, pr
+    ah = wb.ipo_ahead(deals, date(2026, 11, 29), date(2026, 12, 6))
+    assert [(r["ticker"], r["estimated"]) for r in ah] == [("BBB", True), ("AAA", False)], ah
+    assert ah[1]["size"] == 4e6 * 15.0 and ah[0]["range"] == (10.0, 10.0)
+    p = wb.ipo_returns(dict(pr[0]), [(date(2026, 11, 18), 99.0), (date(2026, 11, 20), 25.0), (date(2026, 11, 25), 22.0)])
+    assert abs(p["first_ret"] - 0.25) < 1e-12 and abs(p["ret"] - 0.10) < 1e-12 and p["last_date"] == date(2026, 11, 25), p
+    # priced on EDGAR before Nasdaq moved the row
+    ed = [{"status": "upcoming", "ticker": "EDG", "company": "E", "final_price": None, "shares": 1e6,
+           "projection": {"kind": "priced", "date": "2026-11-19"}}]
+    assert [r["ticker"] for r in wb.ipo_priced(ed, date(2026, 11, 15), date(2026, 11, 22))] == ["EDG"]
+    # a box each: what is left out is not mentioned either
+    only = "\n".join(wb.ipo_part(IPO, parts={"ipo_ahead"}))
+    assert "Next week" in only and "Priced this week" not in only and "Lock-up" not in only \
+        and "No IPO priced" not in only, only
+    q = wb.ipo_returns(dict(pr[0]), [])
+    assert q["ret"] is None and q["first_ret"] is None
+    # a reverse split after pricing: closes are on today's basis, so is the IPO price
+    rs = wb.ipo_priced([dict(deals[0], split_factor=0.05)], date(2026, 11, 15), date(2026, 11, 22))[0]
+    assert rs["price"] == 20.0 and rs["basis"] == 400.0, rs
+    r2 = wb.ipo_returns(rs, [(date(2026, 11, 20), 200.0)])
+    assert abs(r2["ret"] + 0.5) < 1e-12, r2   # not +900%
+    # through the day the brief is made
+    assert [r["ticker"] for r in wb.ipo_priced(deals, date(2026, 11, 12), date(2026, 11, 20))] == ["NEW", "OLD"]
+    assert wb.ipo_ahead([dict(deals[2], price_range="$14.00 to $16.00")], date(2026, 11, 29),
+                        date(2026, 12, 6))[0]["range"] == (14.0, 16.0)
 
 
 def test_what_a_filing_says():
@@ -762,7 +812,8 @@ def test_the_issue_holds_the_chosen_sections_in_order_and_is_short():
     full = _body(("summary", "macro", "screens", "insider", "funds"))
     heads = [ln for ln in full.split("\n") if ln.startswith("## ")]
     assert heads == ["## At a glance", "## Markets and economy", "## Week ahead, Nov 16–20", "## Stocks"], heads
-    assert "## Week ahead" in _body(("ipo",)) and "IPOs and lock-ups" in _body(("ipo",))
+    ipo3 = ("ipo_priced", "ipo_ahead", "lockups")
+    assert "## Week ahead" in _body(ipo3) and "IPOs and lock-ups" in _body(ipo3)
     parts = [full.index(x) for x in ("| Insider buying |", "| Funds added |", "| Screen leaders |")]
     assert parts == sorted(parts) and parts[0] > full.index("## Stocks"), parts
     assert full.rstrip().endswith("Made with [finterm](https://yumima.github.io/finterm/), an open-source research terminal.")
@@ -772,7 +823,7 @@ def test_the_issue_holds_the_chosen_sections_in_order_and_is_short():
 
 
 def test_issue_disclaimer_names_every_source_insider_page_keeps_its_own():
-    for src in ("ForexFactory", "TradingView", "FRED", "13F", "Form"):
+    for src in ("ForexFactory", "TradingView", "FRED", "13F", "Form", "Nasdaq IPO calendar"):
         assert src in wb.ISSUE_DISCLAIMER, src
     assert "ForexFactory" not in wb.DISCLAIMER and wb.DISCLAIMER.endswith("Source: U.S. SEC, EDGAR.")
 

@@ -13,6 +13,8 @@ import os
 import re
 from datetime import date, timedelta
 
+from ipo_calendar import parse_range
+
 CONTACT_KEY = "FINTERM_CONTACT_EMAIL"
 
 # finterm's own forward-return study (plans/research/form4_forward_returns_2026-09.md):
@@ -51,8 +53,9 @@ ISSUE_DISCLAIMER = (
     "broker-dealers, receive no compensation from any company listed, and may hold securities named here. Backtests are hypothetical; past results do "
     "not predict future returns. Data may contain errors: verify against the filings. Sources: SEC EDGAR (Forms 4, 13F, "
     "S-1, F-1, 424B and 8-K); Federal Reserve, BEA, BLS, DOL and EIA via FRED, Federal Reserve Bank of St. Louis; release dates via the "
-    "ForexFactory calendar; the market stance, screens and breadth computed by finterm from S&P 500, VIX, TradingView "
-    "and Yahoo Finance data, none of which is reproduced."
+    "ForexFactory calendar; IPO dates, prices, ranges and sizes from the Nasdaq IPO calendar, and IPO returns computed "
+    "from Yahoo Finance closes; the market stance, screens and breadth computed by finterm from S&P 500, VIX, "
+    "TradingView and Yahoo Finance data, none of which is reproduced."
 )
 
 
@@ -482,8 +485,8 @@ PICK_SKIP = ("trend_template",)
 
 # ── private sections ─────────────────────────────────────────────────────────
 #
-# A draft is read by its owner first: it may carry sections built from data
-# that must not be redistributed (Nasdaq's IPO calendar). They sit between
+# A draft is read by its owner first: it may carry sections that are not for
+# the public page. They sit between
 # these markers and strip_private() removes them from anything published —
 # brief_drafts.publish() calls it on every file it copies.
 
@@ -1048,19 +1051,102 @@ def mine_rows(symbols, buys, sells, flows, doc, ahead):
     return [r for _, _, r in sorted(out, key=lambda t: t[:2])]
 
 
-def ipo_part(ipo, max_rows=5):
-    """IPOs expected to price and lock-ups ending in the next seven days, every
-    figure from the companies' SEC filings (sec_ipo)."""
+def ipo_priced(deals, lo, hi):
+    """IPOs that priced on [lo, hi), from finterm's calendar: [{ticker, company,
+    priced, price, shares, size, spac}], latest first. Size = price x shares
+    offered (the base deal, without an over-allotment)."""
+    out = []
+    for d in deals:
+        # priced on EDGAR (a 424B4) before Nasdaq moved the row: priced too
+        p = d.get("projection") or {}
+        when = d.get("priced_date") if d.get("status") == "priced" else \
+            p.get("date") if p.get("kind") == "priced" else None
+        if not when:
+            continue
+        day = date.fromisoformat(when)
+        if not lo <= day < hi:
+            continue
+        price, shares = d.get("final_price"), d.get("shares")
+        # the IPO price on today's share basis: closes are split-adjusted
+        sf = d.get("split_factor")
+        out.append({"ticker": d.get("ticker") or "", "company": d.get("company") or "", "priced": day,
+                    "price": price, "shares": shares, "basis": price / sf if price and sf else price,
+                    "size": price * shares if price and shares else d.get("offer_amount"),
+                    "spac": bool(d.get("spac"))})
+    return sorted(out, key=lambda r: (r["spac"], -r["priced"].toordinal(), r["company"]))
+
+
+def ipo_ahead(deals, lo, hi):
+    """IPOs expected to price on [lo, hi]: [{ticker, company, date, estimated,
+    range, shares, size, spac}], soonest first. Scheduled = the exchange's date;
+    imminent = finterm's estimate from the SEC steps (marked). Size = shares x
+    the range's midpoint."""
+    out = []
+    for d in deals:
+        p = d.get("projection") or {}
+        if d.get("status") not in ("upcoming", "filed") or p.get("kind") not in ("scheduled", "imminent") \
+                or not p.get("date"):
+            continue
+        day = date.fromisoformat(p["date"])
+        if not lo <= day <= hi:
+            continue
+        rng, shares = parse_range(d.get("price_range")), d.get("shares")
+        out.append({"ticker": d.get("ticker") or "", "company": d.get("company") or "", "date": day,
+                    "estimated": p["kind"] != "scheduled", "range": rng, "shares": shares,
+                    "size": shares * (rng[0] + rng[1]) / 2 if rng and shares else None, "spac": bool(d.get("spac"))})
+    return sorted(out, key=lambda r: (r["spac"], r["date"], r["company"]))
+
+
+def ipo_returns(p, closes):
+    """Sets first_close / first_ret (the first close on or after pricing) and
+    last_close / last_date / ret (the latest) on @p, from [(date, close)]."""
+    rows = sorted((d, c) for d, c in closes if d >= p["priced"] and c and c > 0)
+    p.update({"first_close": None, "first_ret": None, "last_close": None, "last_date": None, "ret": None})
+    if not rows or not p.get("price"):
+        return p
+    p["first_close"], p["last_date"], p["last_close"] = rows[0][1], rows[-1][0], rows[-1][1]
+    base = p.get("basis") or p["price"]  # split-adjusted, as the closes are
+    p["first_ret"] = rows[0][1] / base - 1
+    p["ret"] = rows[-1][1] / base - 1
+    return p
+
+
+IPO_PARTS = ("ipo_priced", "ipo_ahead", "lockups")  # a box each in the brief's settings
+
+
+def ipo_part(ipo, max_rows=5, parts=IPO_PARTS):
+    """The past week's IPOs with their returns, the next week's with their
+    terms (finterm's IPO calendar, as PRIVATE MARKET shows it), and lock-ups
+    ending in the next seven days (confirmed by the final prospectus)."""
     if not ipo or ipo.get("error"):
         return [f"_IPOs and lock-ups: {md_escape((ipo or {}).get('error') or 'not read')}._", ""]
     out = []
-    deals, ends = ipo.get("ahead") or [], ipo.get("lockups") or []
+    want = set(parts)
+    priced = (ipo.get("priced") or []) if "ipo_priced" in want else []
+    deals = (ipo.get("ahead") or []) if "ipo_ahead" in want else []
+    ends = (ipo.get("lockups") or []) if "lockups" in want else []
+    usd = lambda v: "—" if not v else f"${v:,.2f}"
+    pct = lambda v: "—" if v is None else f"{v * 100:+.1f}%"
+    shares = lambda v: "—" if not v else f"{v / 1e6:,.1f}M"
+    name = lambda r: md_escape(r["company"]) + (" (SPAC)" if r["spac"] else "")
+    if priced:
+        out += ["| Priced this week | Company | Date | Price | Size | First day | Return |",
+                "|---|---|---:|---:|---:|---:|---:|"]
+        out += [f"| {md_escape(r['ticker']) or '—'} | {name(r)} | {_fmt(r['priced'], '%a %b %-d')} | {usd(r['price'])} | "
+                f"{money(r['size']) if r['size'] else '—'} | {pct(r.get('first_ret'))} | {pct(r.get('ret'))} |"
+                for r in priced[:max_rows]]
+        last = max((r["last_date"] for r in priced if r.get("last_date")), default=None)
+        out += ["", "Size = price × shares offered. First day: the first session's close against the IPO price; "
+                    "return: to " + (f"the {_fmt(last, '%b %-d')} close." if last else "the latest close.")
+                + ("" if ipo.get("closes_read", True) else " Prices could not be read this week."), ""]
     if deals:
-        price = lambda r: "—" if not r else f"${r[0]:,.2f}" if r[0] == r[1] else f"${r[0]:,.2f}–{r[1]:,.2f}"
-        out += ["| IPO | Company | Price | Latest step (SEC) |", "|---|---|---:|---|"]
-        out += [f"| {md_escape(d['ticker']) or '—'} | {md_escape(d['company'])}{' (SPAC)' if d['spac'] else ''} | "
-                f"{price(d['range'])} | {d['step']}, {_fmt(date.fromisoformat(d['filed']), '%b %-d')} |" for d in deals[:max_rows]]
-        out.append("")
+        rng = lambda r: "—" if not r else f"${r[0]:,.2f}" if r[0] == r[1] else f"${r[0]:,.2f}–{r[1]:,.2f}"
+        out += ["| Next week | Company | Expected | Price range | Shares | Size |", "|---|---|---:|---:|---:|---:|"]
+        out += [f"| {md_escape(d['ticker']) or '—'} | {name(d)} | "
+                f"{('~' if d['estimated'] else '') + _fmt(d['date'], '%a %b %-d')} | {rng(d['range'])} | "
+                f"{shares(d['shares'])} | {money(d['size']) if d['size'] else '—'} |" for d in deals[:max_rows]]
+        out += ["", "Expected: the exchange calendar's date; ~ = finterm's estimate from the company's SEC steps. "
+                    "Size = shares × the range's midpoint. Pricing can slip.", ""]
     if ends:
         out += ["| Lock-up ends | Company | Date | Term |", "|---|---|---:|---:|"]
         out += [f"| {md_escape(e['ticker']) or '—'} | {md_escape(e['company'])} | {_fmt(e['ends'], '%a %b %-d')} | {e['days']} days |"
@@ -1069,25 +1155,26 @@ def ipo_part(ipo, max_rows=5):
     say = []
     # "None" only when everything was read.
     part = bool(ipo.get("partial"))
-    if not deals and not ipo.get("ahead_unread") and not part:
+    if "ipo_priced" in want and not priced and not part:
+        say.append("No IPO priced in the past 7 days.")
+    elif len(priced) > max_rows:
+        say.append(f"{len(priced) - max_rows} more priced.")
+    if "ipo_ahead" in want and not deals and not part:
         say.append("No IPO is expected to price in the next 7 days.")
     elif len(deals) > max_rows:
         say.append(f"{len(deals) - max_rows} more IPOs.")
-    if not ends and not part:
+    if "lockups" in want and not ends and not part:
         say.append("No lock-up is known to end in the next 7 days.")
     elif len(ends) > max_rows:
         say.append(f"{len(ends) - max_rows} more lock-ups.")
-    if ipo.get("ahead_unread"):
-        n = ipo["ahead_unread"]
-        say.append(f"{n} IPO{'' if n == 1 else 's'} whose filings could not be read {'is' if n == 1 else 'are'} left out.")
     if part:
         say.append("The calendar was only partly read: there may be more.")
-    if ipo.get("unread"):
+    if ipo.get("unread") and "lockups" in want:
         n = ipo["unread"]
         say.append(f"{n} lock-up{'' if n == 1 else 's'} not confirmed by the prospectus {'is' if n == 1 else 'are'} left out.")
-    if deals or ends:
-        say.append("From the registration and the final prospectus; pricing can slip, and early releases are not modelled.")
-    return out + [" ".join(say), ""]
+    if ends:
+        say.append("Lock-ups from the final prospectus; early releases are not modelled.")
+    return out + [" ".join(say), ""] if say else out
 
 
 def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events, mon, fri, macro_err, today,
@@ -1106,11 +1193,12 @@ def brief_body(topics, detail, series, doc, scr_err, rows, notes, flows, events,
         out += ["## Markets and economy", ""] + PENDING if "series" in pending else economy_section(series)
     if "macro" in topics:
         out += ["## Week ahead", ""] + PENDING if "events" in pending else week_ahead_section(events, mon, fri, macro_err)
-    elif {"ipo", "earnings"} & set(topics):
+    elif {*IPO_PARTS, "earnings"} & set(topics):
         out += ["## Week ahead", ""]
     if "earnings" in topics:
         out += PENDING if "earnings" in pending else earnings_part(earnings)
-    if "ipo" in topics:
-        out += PENDING if "ipo" in pending else ipo_part(ipo, BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"]))
+    if set(IPO_PARTS) & set(topics):
+        out += PENDING if "ipo" in pending else ipo_part(ipo, BRIEF_ROWS.get(detail, BRIEF_ROWS["standard"]),
+                                                         parts=set(IPO_PARTS) & set(topics))
     out += stocks_section(topics, detail, doc, scr_err, rows, notes, flows, pending)
     return out + [f"Made with [finterm]({SITE_URL}/), an open-source research terminal.", ""]

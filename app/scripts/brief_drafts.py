@@ -76,14 +76,25 @@ THEME_DISCLAIMER = (
 # --topics/--detail), by tick() (where to post) and by tools/weekly_publish.sh
 # (auto-mode). Set from finterm › NEWS › What's On › WEEKLY BRIEF.
 
-TOPICS = ("summary", "macro", "earnings", "ipo", "insider", "funds", "screens", "mine")
+IPO_TOPICS = ("ipo_priced", "ipo_ahead", "lockups")  # one box each since v5; "ipo" before
+TOPICS = ("summary", "macro", "earnings", *IPO_TOPICS, "insider", "funds", "screens", "mine")
 NEW_TOPICS = (("funds", 2), ("earnings", 4), ("mine", 4))  # the settings version each came with
-RENAMED_TOPICS = {"ipo_private": "ipo"}  # the IPO part, when it was the owner's only
+# old names: the IPO part when it was the owner's only, then one box for all three
+RENAMED_TOPICS = {"ipo_private": IPO_TOPICS, "ipo": IPO_TOPICS}
+
+
+def _renamed(topics):
+    out = []
+    for t in topics:
+        new = RENAMED_TOPICS.get(t, t)
+        out += list(new) if isinstance(new, tuple) else [new]
+    return out
 DETAILS = ("full", "standard", "short")
 AUTO_MODES = ("draft", "publish")
-PUBLIC_SECTIONS = ("macro", "earnings", "ipo", "insider", "funds", "screens")  # what a published issue can hold
+PUBLIC_SECTIONS = ("macro", "earnings", *IPO_TOPICS, "insider", "funds", "screens")  # what a published issue can hold
 DEFAULT_SETTINGS = {"topics": list(TOPICS), "detail": "standard", "platforms": ["x"], "auto": "draft",
-                    "v": 4}  # 2: the one-page brief (fund moves); 3: IPOs are public; 4: earnings, your holdings
+                    "v": 5}  # 2: the one-page brief (fund moves); 3: IPOs are public; 4: earnings, your holdings;
+#                              5: IPOs priced / IPOs next week / lock-ups, a box each
 
 
 def settings_path():
@@ -102,7 +113,7 @@ def settings_get():
     except (OSError, ValueError, AttributeError, TypeError):
         pass
     import social_post as sp
-    chosen = [RENAMED_TOPICS.get(t, t) for t in s.get("topics", [])]
+    chosen = _renamed(s.get("topics", []))
     s["topics"] = [t for t in TOPICS if t in chosen]
     if not [t for t in s["topics"] if t in PUBLIC_SECTIONS]:  # a hand-edited file: never an empty issue
         s["topics"] = list(DEFAULT_SETTINGS["topics"])
@@ -117,7 +128,7 @@ def settings_set(new):
     import social_post as sp
     cur = settings_get()
     if "topics" in new:
-        new = dict(new, topics=[RENAMED_TOPICS.get(t, t) for t in new["topics"]])
+        new = dict(new, topics=_renamed(new["topics"]))
         bad = [t for t in new["topics"] if t not in TOPICS]
         if bad:
             return {"error": f"unknown topic(s): {', '.join(bad)}"}
@@ -126,7 +137,9 @@ def settings_set(new):
         # A screen from before fund moves (an app still running, or not yet
         # updated) has no box for them and sends none: its list is not a choice.
         # The same for IPOs, whose box it looks up under their old name.
-        for t, since in (*NEW_TOPICS, ("ipo", 3)):
+        # (a screen before v5 has one IPO box, found under the old name, so it
+        # sends none of the three: its list is not a choice about them)
+        for t, since in (*NEW_TOPICS, *((t, 5) for t in IPO_TOPICS)):
             if int(new.get("v") or 1) < since and t in cur["topics"] and t not in new["topics"]:
                 new["topics"].append(t)
         cur["topics"] = [t for t in TOPICS if t in new["topics"]]

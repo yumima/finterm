@@ -197,11 +197,11 @@ def test_settings_validate_and_drive_the_build():
     assert st["detail"] == "standard" and st["auto"] == "draft" and "insider" in st["topics"], st
     assert "error" in bd.settings_set({"topics": ["nope"]})
     assert "error" in bd.settings_set({"topics": ["summary"]})  # nothing of its own: refused
-    assert bd.settings_set({"v": 4, "topics": ["ipo_private"]})["topics"] == ["ipo"]  # its name before it was public
+    assert bd.settings_set({"v": 4, "topics": ["ipo_private"]})["topics"] == ["ipo_priced", "ipo_ahead", "lockups"]  # its name before it was public
     bd.settings_set(bd.DEFAULT_SETTINGS)
     assert "error" in bd.settings_set({"platforms": ["myspace"]})
     assert "error" in bd.settings_set({"detail": "huge"})
-    out = bd.settings_set({"v": 4, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
+    out = bd.settings_set({"v": 5, "topics": ["funds", "macro", "summary"], "detail": "short", "platforms": ["mastodon", "x"],
                            "auto": "publish"})
     assert out["topics"] == ["summary", "macro", "funds"] and out["platforms"] == ["x", "mastodon"], out  # canonical order
     assert bd.settings_get() == out
@@ -226,14 +226,19 @@ def test_settings_from_before_the_one_page_brief():
     bd.settings_path().parent.mkdir(parents=True, exist_ok=True)
     bd.settings_path().write_text(json.dumps({"topics": ["summary", "insider", "screens"], "detail": "short"}))
     st = bd.settings_get()
-    assert st["topics"] == ["summary", "earnings", "insider", "funds", "screens", "mine"] and st["detail"] == "short" and st["v"] == 4, st
+    assert st["topics"] == ["summary", "earnings", "insider", "funds", "screens", "mine"] and st["detail"] == "short" and st["v"] == 5, st
     # A screen without a box for fund moves does not switch them off...
     assert "funds" in bd.settings_set({"topics": ["insider", "screens"], "detail": "full"})["topics"]
     # ...nor, of before, the IPOs, which it knows by another name
     bd.settings_set({"v": 4, "topics": ["ipo", "insider", "funds"]})
-    assert bd.settings_set({"v": 2, "topics": ["insider"], "detail": "full"})["topics"] == ["ipo", "insider"]
+    assert bd.settings_set({"v": 2, "topics": ["insider"], "detail": "full"})["topics"] == ["ipo_priced", "ipo_ahead", "lockups", "insider"]
+    # a v4 screen still running finds no box for them and sends none: kept
+    assert bd.settings_set({"v": 4, "topics": ["insider", "funds"]})["topics"][:3] == ["ipo_priced", "ipo_ahead", "lockups"]
+    # a v5 screen has a box for each IPO table: one off stays off
+    assert bd.settings_set({"v": 5, "topics": ["ipo_priced", "lockups", "insider"]})["topics"] == \
+        ["ipo_priced", "lockups", "insider"]
     # ...one with a box does, for good.
-    bd.settings_set({"v": 4, "topics": ["summary", "insider", "screens"]})
+    bd.settings_set({"v": 5, "topics": ["summary", "insider", "screens"]})
     assert bd.settings_get()["topics"] == ["summary", "insider", "screens"], bd.settings_get()
     assert "error" in bd.settings_set({"topics": ["summary"]})
     bd.settings_path().write_text("[1]")  # not a settings file: the defaults

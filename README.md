@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`e2382cced`](https://github.com/yumima/finterm/commit/e2382cced) Private Market: split-adjusted returns, SPACs found, lock-ups on time
 - [`7ce9633f1`](https://github.com/yumima/finterm/commit/7ce9633f1) Ownership: refreshes judged per round, 13F views kept on new filings
 - [`b07f6d53e`](https://github.com/yumima/finterm/commit/b07f6d53e) IPO tile: says when nothing is scheduled
 - [`012da8a66`](https://github.com/yumima/finterm/commit/012da8a66) Ownership: kept current automatically, never blanking under a reader

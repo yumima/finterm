@@ -1,10 +1,11 @@
 """What an IPO's own SEC filings say: the price range of a registration, the
 date, price and lock-up term of a final prospectus.
 
-The weekly brief is public, and Nasdaq's calendar may not be redistributed. It
-is read to know WHICH companies to look at; everything the brief prints about
-them comes from here. A filing that does not say it in the usual words gives None,
-never a guess.
+The weekly brief's lock-ups come from here: the calendar's date can be off by
+the term it assumed, and the final prospectus decides. (Its IPO tables are the
+IPO calendar's own figures, as PRIVATE MARKET shows them — the owner's choice,
+2026-11-26.) A filing that does not say it in the usual words gives None, never
+a guess.
 """
 
 import html

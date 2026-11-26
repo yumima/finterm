@@ -13,9 +13,11 @@ figures of U.S. agencies and the Federal Reserve through FRED (public domain
 series only); the week's release SCHEDULE (never the feed's consensus); and
 each screen's TICKERS with finterm's own backtest record and its own counts of
 market breadth — no TradingView or Yahoo number is reproduced (their terms
-forbid redistribution). IPOs and lock-ups: Nasdaq's calendar, whose terms forbid
-redistribution too, says which companies to look at; every figure printed is
-read from their SEC filings (sec_ipo.py).
+forbid redistribution). IPOs: the IPO calendar's own figures (Nasdaq's
+calendar as PRIVATE MARKET shows it — dates, price, range, shares, size; the
+owner's choice, 2026-11-26) and each new listing's return against its IPO price
+computed from closes (a return, never a close, as the track record does).
+Lock-ups: confirmed by the final prospectus on SEC (sec_ipo.py).
 
 Modes:
     python3 tools/weekly_brief.py [--out DIR]          one Markdown file (local)
@@ -57,7 +59,7 @@ from weekly_brief_core import (  # noqa: E402,F401 — the shared brief; re-expo
     brief_body, call_head, clusters_data, clusters_section, contact_from_keyring, economy_rows, fetch_macro_rows,
     fetch_macro_series, issue_day, issue_key, issue_url, macro_coverage, macro_events, market_regime, market_rows,
     has_record, load_evidence, mine_part, mine_rows, page, regime_words, social_posts, week_ahead,
-)
+    ipo_ahead, ipo_priced, ipo_returns)
 
 
 class Progress:
@@ -110,6 +112,16 @@ class Progress:
             pass
 
 
+def analytics_python():
+    """finterm's analytics Python (pandas, yfinance), or None: this script
+    runs under the system Python."""
+    import finterm_paths
+
+    root = finterm_paths.data_root() / "venv-numpy2"
+    py = root / ("Scripts/python.exe" if sys.platform.startswith("win") else "bin/python3")
+    return py if py.exists() else None
+
+
 def screener_doc(timeout=900, say=None):
     """One scan of the strategy screens, run in finterm's analytics Python
     (pandas, yfinance) — this script runs under the system Python. Returns
@@ -117,11 +129,8 @@ def screener_doc(timeout=900, say=None):
     import subprocess
     import tempfile
 
-    import finterm_paths
-
-    root = finterm_paths.data_root() / "venv-numpy2"
-    py = root / ("Scripts/python.exe" if sys.platform.startswith("win") else "bin/python3")
-    if not py.exists():
+    py = analytics_python()
+    if not py:
         return None, "finterm's analytics Python is not installed"
     with tempfile.TemporaryFile("w+", encoding="utf-8") as out:
         p = subprocess.Popen([str(py), str(SCRIPTS / "screener_data.py"), "scan", "{}"], stdin=subprocess.DEVNULL,
@@ -156,7 +165,8 @@ def screener_doc(timeout=900, say=None):
     return doc, None
 
 
-ALL_TOPICS = ("summary", "macro", "earnings", "ipo", "insider", "funds", "screens", "mine")
+IPO_TOPICS = ("ipo_priced", "ipo_ahead", "lockups")
+ALL_TOPICS = ("summary", "macro", "earnings", *IPO_TOPICS, "insider", "funds", "screens", "mine")
 
 
 def earnings_week(today):
@@ -266,7 +276,7 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
         got["ipo"] = ipo_week(today)
         if got["ipo"].get("error"):
             return got["ipo"]["error"]
-        return "partly read" if got["ipo"].get("partial") or got["ipo"].get("ahead_unread") else None
+        return "partly read" if got["ipo"].get("partial") else None
 
     def earnings(say):
         got["earnings"] = earnings_week(today)
@@ -283,7 +293,7 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
         (("filings", "SEC Form 4 filings", "rows", filings), True),  # also the evergreen insider page's
         (("funds", "13F fund moves", "flows", funds), "funds" in topics),
         (("earnings", "Earnings ahead", "earnings", earnings), "earnings" in topics),
-        (("ipos", "IPOs and lock-ups", "ipo", ipos), "ipo" in topics)) if wanted]
+        (("ipos", "IPOs and lock-ups", "ipo", ipos), bool(set(IPO_TOPICS) & set(topics)))) if wanted]
     symbols = sorted(set(symbols)) if "mine" in topics else []
     # Reads what the others found, so it comes after them.
     last = [("holdings", "Your holdings", "mine", holdings)] if symbols else []
@@ -343,9 +353,36 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
     return {"body": page(set()), **got, "regime": regime, "screens": bool(got["doc"]), "progress": progress}
 
 
+def ipo_closes(symbols, start, end):
+    """{ticker: [(date, close)]} from finterm's analytics Python (yfinance's
+    batch_closes); {} when nothing was asked, None when the prices could not
+    be read (not installed, or it did not answer)."""
+    import subprocess
+
+    if not symbols:
+        return {}
+    py = analytics_python()
+    if not py:
+        return None
+    code = ("import json, sys; sys.path.insert(0, sys.argv[1]); import yfinance_data as y; "
+            "print(json.dumps(y.batch_closes(json.loads(sys.argv[2]), sys.argv[3], sys.argv[4])))")
+    try:
+        r = subprocess.run([str(py), "-c", code, str(SCRIPTS), json.dumps(sorted(symbols)), start.isoformat(),
+                            end.isoformat()], capture_output=True, text=True, timeout=180, stdin=subprocess.DEVNULL)
+        doc = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    if not isinstance(doc, dict) or doc.get("error"):
+        return None
+    return {t: [(date.fromisoformat(d), float(c)) for d, c in rows]
+            for t, rows in ((doc or {}).get("closes") or {}).items()}
+
+
 def ipo_week(today):
-    """{ahead, lockups, unread}: the next seven days' IPOs and lock-up ends. The
-    calendar says which companies to look at; sec_ipo reads their filings."""
+    """{priced, ahead, lockups, unread}: the past seven days' IPOs with their
+    returns, the next seven days' IPOs, and lock-up ends. The IPOs are finterm's
+    calendar (PRIVATE MARKET's: Nasdaq's merged per deal, staged on EDGAR); the
+    lock-ups are confirmed by the final prospectus (sec_ipo)."""
     import ipo_calendar
     import sec_ipo
 
@@ -354,14 +391,21 @@ def ipo_week(today):
         return {"error": "the calendar could not be read"}
     hi = today + timedelta(days=IPO_DAYS)
     lockups, lockups_unread = sec_ipo.lockups(data.get("lockups") or [], today, hi, cache)
-    deals, deals_unread = sec_ipo.ahead(data["deals"], today, hi, cache)
-    return {"ahead": deals, "ahead_unread": deals_unread, "lockups": lockups, "unread": lockups_unread,
-            # part of the calendar, or of EDGAR, did not answer: "none" is not known
-            "partial": bool(data.get("errors"))}
+    # through today: a deal that priced on the day the brief is made is in it
+    priced = ipo_priced(data["deals"], today - timedelta(days=IPO_DAYS), today + timedelta(days=1))
+    closes = ipo_closes({p["ticker"] for p in priced if p["ticker"]}, today - timedelta(days=IPO_DAYS + 3),
+                        today + timedelta(days=1))
+    for p in priced:
+        ipo_returns(p, (closes or {}).get(p["ticker"]) or [])
+    return {"priced": priced, "ahead": ipo_ahead(data["deals"], today, hi), "lockups": lockups,
+            "unread": lockups_unread, "closes_read": closes is not None,
+            # a month of the calendar not read at all: "none" is not known (an
+            # EDGAR gap or a month served from its cached copy is not that)
+            "partial": bool(data.get("months_failed"))}
 
 
 SECTION_WORDS = {"summary": "the market at a glance", "macro": "markets, economy and the week ahead",
-                 "earnings": "earnings ahead", "ipo": "IPOs and lock-ups", "insider": "insider buying", "funds": "fund moves",
+                 "earnings": "earnings ahead", "ipo_priced": "IPOs priced", "ipo_ahead": "IPOs ahead", "lockups": "lock-ups", "insider": "insider buying", "funds": "fund moves",
                  "screens": "screen leaders"}
 
 
@@ -476,13 +520,16 @@ def main():
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="site mode: publish even when some days of filings could not be read")
     ap.add_argument("--topics", default=",".join(ALL_TOPICS),
-                    help="comma-separated sections: summary, macro, earnings, ipo, insider, funds, screens, mine (drafts)")
+                    help="comma-separated sections: summary, macro, earnings, ipo_priced, ipo_ahead, lockups, insider, "
+                         "funds, screens, mine (drafts); ipo = the three IPO tables")
     ap.add_argument("--detail", default="standard", choices=("full", "standard", "short"),
                     help="rows a table holds: 10, 5 or 3")
     ap.add_argument("--draft", action="store_true", help="site mode, for review in the app: writes private.md beside the site, the owner's holdings "
                          "this week, never part of it")
     args = ap.parse_args()
     topics = [t.strip() for t in args.topics.split(",") if t.strip()]
+    # the name before the IPO tables had a box each (a schedule may still pass it)
+    topics = [x for t in topics for x in (IPO_TOPICS if t == "ipo" else (t,))]
     bad = [t for t in topics if t not in ALL_TOPICS]
     if bad:
         ap.error(f"unknown topic(s): {', '.join(bad)}")
