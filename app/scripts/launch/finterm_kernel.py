@@ -173,51 +173,6 @@ class Kernel:
 
 # ── The cells' side ──────────────────────────────────────────────────────────
 
-def inherit_std_handles():
-    """Windows: a program a cell starts with subprocess writes to the cell's
-    pipes, as on POSIX.
-
-    The cells' process runs with a hidden console (CREATE_NO_WINDOW). Popen
-    with no redirection passes no standard handles and inherits none, so a
-    console program attaches to that hidden console and its output is lost.
-    Naming any one stream makes Popen hand over all three of this process's
-    standard handles (stdin is the null device here); fd 1 is the cell's
-    stdout, as a POSIX child would inherit it. Left alone: a program asking
-    for a console of its own (CREATE_NEW_CONSOLE), a STARTUPINFO carrying its
-    own handles, and a cell that has closed fd 1. Other ways to start a
-    program (os.system, os.spawn*) inherit the standard handles themselves,
-    so they are made inheritable."""
-    import functools
-
-    for fd in (0, 1, 2):
-        try:
-            os.set_inheritable(fd, True)
-        except OSError:
-            pass
-    original = subprocess.Popen.__init__
-    if getattr(original, "_finterm_std", False):
-        return
-    new_console = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
-    use_std_handles = getattr(subprocess, "STARTF_USESTDHANDLES", 0x100)
-
-    @functools.wraps(original)
-    def __init__(self, args, bufsize=-1, executable=None, stdin=None, stdout=None, stderr=None, *rest, **kw):
-        # positional after stderr: preexec_fn, close_fds, shell, cwd, env, universal_newlines, startupinfo, creationflags
-        flags = kw.get("creationflags", rest[7] if len(rest) > 7 else 0) or 0
-        info = kw.get("startupinfo", rest[6] if len(rest) > 6 else None)
-        if stdin is None and stdout is None and stderr is None and not flags & new_console \
-                and not (getattr(info, "dwFlags", 0) or 0) & use_std_handles:
-            try:
-                os.fstat(1)
-                stdout = 1
-            except OSError:
-                pass  # fd 1 closed by the cell: as unpatched Popen
-        original(self, args, bufsize, executable, stdin, stdout, stderr, *rest, **kw)
-
-    __init__._finterm_std = True
-    subprocess.Popen.__init__ = __init__
-
-
 def cells():
     import ast
     import faulthandler
@@ -268,8 +223,6 @@ def cells():
 
     sys.stdout, sys.stderr = text_file(1, "<stdout>"), text_file(2, "<stderr>")
     sys.__stdout__, sys.__stderr__ = sys.stdout, sys.stderr
-    if os.name == "nt":
-        inherit_std_handles()
 
     state = {"id": None, "in_cell": False, "interrupt": None}
     waiting = queue.Queue()

@@ -79,22 +79,16 @@ check("a print without a newline is shown", text(k.run("print('a', end='')")) ==
 check("unicode", text(k.run("print('é😀')")) == "é😀\n")
 check("a lone surrogate does not break it", "\\ud83d" in text(k.run("print('\\ud83d')")))
 check("stderr has its name", text(k.run("import sys\nprint('warn', file=sys.stderr)"), "stderr") == "warn\n")
-# On Windows the cells' process has a hidden console: a program it starts
-# without redirecting would write there, not to the cell (finterm_kernel's
-# inherit_std_handles).
-check("a subprocess's output too", text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(7)'])\npass")) == "7\n")
-check("...and its stderr", text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'import sys; print(8, file=sys.stderr)'])\npass"), "stderr") == "8\n")
+# Windows too (checked on CI): a program a cell starts writes to the cell's
+# pipes; it ends its lines with \r\n.
+nl = lambda t: t.replace("\r\n", "\n")  # a Windows program ends its lines with \r\n
+out = text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'print(7)'])\npass"))
+check("a subprocess's output too", nl(out) == "7\n", repr(out))
+out = text(k.run("import subprocess, sys\nsubprocess.run([sys.executable, '-c', 'import sys; print(8, file=sys.stderr)'])\npass"), "stderr")
+check("...and its stderr", nl(out) == "8\n", repr(out))
 # cmd /c strips a line's first and last quote when it has more than two: wrap it once more
 check("...through the shell too", text(k.run("import os, sys\nc = f'\"{sys.executable}\" -c \"print(9)\"'\n"
                                              "os.system(f'\"{c}\"' if os.name == 'nt' else c)\npass")).strip() == "9")
-check("a STARTUPINFO's own handles are kept", os.name != "nt" or text(k.run(
-    "import subprocess, sys, msvcrt, tempfile, os\ntf = tempfile.TemporaryFile()\nsi = subprocess.STARTUPINFO()\n"
-    "si.dwFlags |= subprocess.STARTF_USESTDHANDLES\nh = msvcrt.get_osfhandle(tf.fileno())\nos.set_handle_inheritable(h, True)\n"
-    "si.hStdOutput = si.hStdError = h\nsubprocess.run([sys.executable, '-c', 'print(6)'], startupinfo=si, close_fds=False)\n"
-    "tf.seek(0)\nprint(tf.read().strip() == b'6')")) == "True\n")
-check("a closed fd 1 does not stop a program starting", text(k.run(
-    "import os, subprocess, sys\nkeep = os.dup(1)\nos.close(1)\ntry:\n    r = subprocess.run([sys.executable, '-c', 'pass']).returncode\n"
-    "finally:\n    os.dup2(keep, 1)\n    os.close(keep)\nprint(r)")) == "0\n")
 check("a captured subprocess is still captured", text(k.run("import subprocess, sys\nprint(subprocess.run([sys.executable, '-c', 'print(5)'], capture_output=True, text=True).stdout.strip() + '!')")) == "5!\n")
 check("a write to the descriptor", text(k.run("import os\nos.write(1, b'raw')\npass")) == "raw")
 

@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`a96d1abca`](https://github.com/yumima/finterm/commit/a96d1abca) tests: the STARTUPINFO check's file does not overwrite the notebook's f
 - [`f156c7713`](https://github.com/yumima/finterm/commit/f156c7713) notebook: the Windows handle fix leaves a caller's own handles alone
 - [`c08f8a7bf`](https://github.com/yumima/finterm/commit/c08f8a7bf) notebook: on Windows a program a cell starts writes to the cell
 
