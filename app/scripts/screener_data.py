@@ -78,8 +78,16 @@ TV_COLUMNS = {
     "net_income_ttm": ("net_income", None),
     "cash_f_operating_activities_ttm": ("ocf", None),
     "total_debt_fq": ("total_debt", None),
-    "total_equity_fq": ("total_equity", None),
-    "piotroski_f_score_ttm": ("piotroski", None),
+    # common shareholders' equity (no minority interest), as the backtest's
+    # StockholdersEquity and the P/B's book
+    "shrhldrs_equity_fq": ("total_equity", None),
+    # the fiscal-year score: Piotroski's tests are on annual statements, as is
+    # the SEC backtest; the TTM score differs by several points (KO 9 vs 7)
+    "piotroski_f_score_fy": ("piotroski", None),
+    # Greenblatt's capital: net working capital + net fixed assets. The scanner
+    # has no net PP&E; it is TTM revenue / its fixed-asset turnover.
+    "working_capital_fq": ("working_capital", None),
+    "fixed_assets_turnover_fq": ("fa_turnover", None),
     "return_on_invested_capital_fq": ("roic", 0.01),
     "return_on_equity_fq": ("roe", 0.01),
     "gross_margin_ttm": ("gross_margin", 0.01),
@@ -143,10 +151,9 @@ def fetch_universe(min_mcap):
             {"left": "market_cap_basic", "operation": "greater", "right": float(min_mcap)},
             {"left": "type", "operation": "equal", "right": "stock"},
             {"left": "subtype", "operation": "equal", "right": "common"},
-            {"left": "is_primary", "operation": "equal", "right": True},
             {"left": "exchange", "operation": "in_range", "right": ["NASDAQ", "NYSE", "AMEX"]},
         ],
-        "columns": list(TV_COLUMNS) + list(TV_HISTORY),
+        "columns": list(TV_COLUMNS) + list(TV_HISTORY) + ["is_primary"],
         "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
         "range": [0, 6000],
     }
@@ -161,7 +168,9 @@ FUND_KEEP_DAYS = 35
 
 
 def _universe_path(min_mcap):
-    return os.path.join(str(cache_dir("screener")), f"universe_{int(min_mcap)}.json")
+    # v2: Greenblatt's capital and the fiscal-year F-score — a kept answer
+    # without them would empty the Magic Formula when the scanner is down
+    return os.path.join(str(cache_dir("screener")), f"universe_v2_{int(min_mcap)}.json")
 
 
 def _kept_universe(path):
@@ -274,10 +283,15 @@ def parse_universe(rows):
     """TradingView scanner rows -> {yahoo symbol: fundamentals dict}.
 
     One row per company: share classes (GOOG/GOOGL, BRK.A/BRK.B) are the same
-    business and would be ranked twice, so the more traded class is kept.
+    business and would be ranked twice, so the class with the most DOLLAR
+    volume is kept (shares traded would favour the cheap class: BRK-A trades
+    few shares of $700k). Only companies with a primary US listing count: a
+    non-primary row is another class of one of them, or a company listed
+    first abroad (Enbridge, Cameco), which is left out. A row without the
+    is_primary column counts as primary.
     """
     cols = list(TV_COLUMNS)
-    by_company = {}
+    by_company, primary = {}, set()
     for r in rows:
         vals = r.get("d") or []
         rec = {}
@@ -288,16 +302,22 @@ def parse_universe(rows):
                 continue
             f = _num(v)
             rec[key] = f * scale if (f is not None and scale is not None) else f
-        for col, v in zip(TV_HISTORY, vals[len(cols):]):
+        for col, v in zip(TV_HISTORY, vals[len(cols):len(cols) + len(TV_HISTORY)]):
             rec[TV_HISTORY[col]] = [_num(x) for x in v] if isinstance(v, list) else None
+        is_primary = vals[len(cols) + len(TV_HISTORY)] if len(vals) > len(cols) + len(TV_HISTORY) else True
         if not rec.get("tv_name"):
             continue
         rec["symbol"] = yahoo_symbol(rec["tv_name"])
         company = company_key(rec.get("name") or rec["symbol"])
+        if is_primary is not False:
+            primary.add(company)
         prev = by_company.get(company)
-        if prev is None or (rec.get("avg_volume_30d") or 0) > (prev.get("avg_volume_30d") or 0):
+        both_quoted = prev is not None and rec.get("q_close") and prev.get("q_close")
+        traded = (lambda x: (x.get("avg_volume_30d") or 0) * x["q_close"]) if both_quoted \
+            else (lambda x: x.get("avg_volume_30d") or 0)
+        if prev is None or traded(rec) > traded(prev):
             by_company[company] = rec
-    return {rec["symbol"]: rec for rec in by_company.values()}
+    return {rec["symbol"]: rec for company, rec in by_company.items() if company in primary}
 
 
 # ── Prices ───────────────────────────────────────────────────────────────────
@@ -465,7 +485,7 @@ def load_prices(symbols, force=False, now=None):
     got = {s: cache["frames"][s] for s in want if s in cache["frames"]}
     oldest = min((cache["fetched"].get(s, 0) for s in got), default=0)
     # served from cache although not current: their chunk's download failed
-    stale = sum(1 for s in got if not is_fresh(cache["fetched"].get(s, 0), now))
+    stale = sorted(s for s in got if not is_fresh(cache["fetched"].get(s, 0), now))
     return got, oldest, stale
 
 
@@ -543,8 +563,14 @@ def price_signals(close, high, low, volume=None):
     for k, n in (("r1m", 21), ("r3m", 63), ("r6m", 126), ("r9m", 189), ("r12m", 252)):
         s[k] = close / close.shift(n) - 1
     s["mom12_1"] = close.shift(21) / close.shift(252) - 1
-    # IBD-style relative-strength composite: the last quarter double-weighted
-    s["rs_raw"] = 0.4 * s["r3m"] + 0.2 * s["r6m"] + 0.2 * s["r9m"] + 0.2 * s["r12m"]
+    # Relative strength as William O'Neil + Co. publishes it: the last 12
+    # months' price change with "a 40% weight ... [on] the latest three-month
+    # period; the remaining three quarters each receive 20%" — each QUARTER's
+    # own return. (Weighting the cumulative 3/6/9/12-month returns, a common
+    # reconstruction and this code's first form, puts about 1.0/0.6/0.4/0.2 on
+    # the quarters.) Ranked within this universe, not against all stocks.
+    q = [close.shift(63 * i) / close.shift(63 * (i + 1)) - 1 for i in range(4)]
+    s["rs_raw"] = 0.4 * q[0] + 0.2 * (q[1] + q[2] + q[3])
     s["vol252"] = ret.rolling(252, min_periods=200).std() * np.sqrt(252)
     s["adr20"] = adr
     s["off_high"] = close / s["hi52"] - 1
@@ -576,11 +602,11 @@ def price_signals(close, high, low, volume=None):
 
 # Martin Luk's pullback (US Investing Champion 2025, +969.8%), mechanically, on
 # daily bars. His trigger is intraday (dip, turn, break the prior candle's
-# high on a 1-15 min chart); the daily proxy is a buy stop at today's high,
+# high on a short intraday chart); the daily proxy is a buy stop at today's high,
 # filled when the next session trades through it. Leadership (top 25% by
 # 1/3/6-month return and up 30%+) is cross-sectional, so the CALLER ranks it
 # over its own universe; these are the per-stock parts.
-PULLBACK_MAX_RISK = 0.03   # his stops: "usually within 2.5 to 3%"
+PULLBACK_MAX_RISK = 0.03   # our cap; Luk: stops "1-5% (mostly)", "over 80% ... <3.5%" (his 2024 review)
 PULLBACK_MIN_RISK = 0.01   # a stop closer than 1% is inside a normal day's noise
 
 
@@ -637,21 +663,21 @@ def pullback_signals(close, high, low):
 
 # ── Quality at a fair price (Buffett) ────────────────────────────────────────
 #
-# Buffett publishes no screen. These are the tests he has stated in print,
-# made exact; each threshold's origin is in the strategy's `rules` and in
+# Buffett publishes no screen. These are tests he has written about, with
+# thresholds of our own (marked "ours"); each one's origin is in the rules and in
 # plans/research/buffett_screen_2026-11.md. The definitions below are the only
 # ones: fund_backtest.py imports them.
 BUFFETT = {
     "years": 10,           # consecutive fiscal years of earnings and free cash flow
     "fcf_misses": 1,       # years of negative free cash flow allowed
-    "growth": 0.03,        # a year, earnings, first three years' average to the last three's
-    "roe": 0.15, "roic": 0.12,
-    "debt_years": 4.0,     # total debt in years of earnings
-    "gm_low": 0.80,        # the worst year's gross margin against the median year's
-    "trend": 0.80,         # the last year's earnings against the 3-year average
-    "growth_cap": 0.08,    # the most growth the value assumes, for ten years
-    "terminal": 0.03,      # and after them
-    "discount": 0.10,      # the return he asks for at least
+    "growth": 0.03,        # ours: a year, earnings, first three years' average to the last three's
+    "roe": 0.15, "roic": 0.12,  # ours (15% after the Fortune study the 1987 letter cites)
+    "debt_years": 4.0,     # ours: total debt in years of 3-year average earnings
+    "gm_low": 0.80,        # ours: the worst year's gross margin against the median year's
+    "trend": 0.80,         # ours: the last year's earnings against the 3-year average
+    "growth_cap": 0.08,    # ours: the most growth the value assumes, for ten years
+    "terminal": 0.03,      # ours: and after them
+    "discount": 0.10,      # the rate in the 1991 letter's media example (a hypothetical)
     "n": 30,
 }
 
@@ -744,8 +770,8 @@ LYNCH = {
     "debt_share": 0.25,     # debt / (debt + equity): his "normal" 25 to 75, no weaker
     "ratio": 2.0,           # (growth + yield) / P/E: "a 2 or better"
     "ratio_ok": 1.5,        # "1.5 is okay": the setting-up list's floor
-    "value_pe_max": 25,     # Lynch value: growth as the P/E, at most this (TradingView's Peter Lynch Value)
-    "line_pe": 15,          # the earnings line on his charts: 15 x earnings
+    "value_pe_max": 25,     # Lynch value: growth as the P/E, at most this (a community TradingView indicator's cap)
+    "line_pe": 15,          # the earnings line: 15 x earnings (GuruFocus's Peter Lynch Chart convention)
     "n": 30,
 }
 
@@ -819,10 +845,9 @@ TT_RULES = [
 
 def tt_setting_up(sig, df, k=-1):
     """Names one rule from the Trend Template: RS >= 70 and exactly one of the
-    7 price criteria failed — the list that reached the template a month
-    later 38% of the time against 9% for other non-passers, and as a holding
-    did no better than the index (setups_backtest.py). Names failing ONLY the
-    RS rule are left out: holding them was reliably worse (t -3.0).
+    7 price criteria failed — the tested definition (setups_backtest.py; its
+    record is in the evidence file). Names failing ONLY the RS rule are not
+    listed; their own record is exported as "rs_trap" and the card states it.
     Ranked by RS. Returns [{"symbol", "rule", "gap", "gap_text"}]."""
     parts = [sig[f"tt_p{i}"].iloc[k] for i in range(len(TT_RULES))]
     syms = df.index
@@ -841,7 +866,7 @@ def tt_setting_up(sig, df, k=-1):
         out.append({"symbol": sym, "rule": label, "short": short, "gap": _clean(gap),
                     "gap_short": f"{gap * 100:.1f}%" if np.isfinite(gap) else "",
                     "gap_text": f"{what} {gap * 100:.1f}%" if np.isfinite(gap) else ""})
-    out.sort(key=lambda d: (-df.at[d["symbol"], "rs"], d["symbol"]))
+    out.sort(key=lambda d: (-df.at[d["symbol"], "rs_raw"], d["symbol"]))
     return out
 
 
@@ -965,7 +990,10 @@ def setting_up(df, sig, lists, ctx):
     resting = gk("pb_higher_lows") & gk("pb_contracting") & gk("pb_above") & gk("pb_trend")
     ema21 = sig["ema21"].iloc[k].reindex(df.index)
     pbl = sig["pb_low"].iloc[k].reindex(df.index)
-    appr = lead.reindex(df.index).fillna(False).astype(bool) & resting & ~gk("pb_touched") & (pbl <= ema21 * 1.05)
+    # above the 21 EMA and within 5% of it: a low that went through it (under
+    # the 21, and the 50) has not "not yet touched" the zone (WAY, OKTA)
+    appr = (lead.reindex(df.index).fillna(False).astype(bool) & resting & ~gk("pb_touched")
+            & (pbl >= ema21) & (pbl <= ema21 * 1.05))
     def pb_item(s_):
         # the distance to the zone (a low within 2% of the 21 EMA), against
         # TODAY's EMA; the screen tests each day's own EMA, so a risen EMA can
@@ -1052,24 +1080,27 @@ STRATEGIES = [
     {
         "id": "buffett", "name": "Buffett Value", "family": "Practitioner",
         "setups": "buffett",
-        "source": "Warren Buffett's letters to Berkshire shareholders (1986, 1987, 1989, 1991, 1992), made exact",
+        "source": "Warren Buffett's letters to Berkshire shareholders (1977, 1986, 1987, 1989, 1991, 1992); the thresholds are this terminal's",
         "summary": "Good businesses at or below an estimated value: ten years of profit, high returns, little debt, then the widest margin of safety. At most 30.",
-        "rules": ["Ten consecutive fiscal years of data, a profit in every one ('demonstrated consistent earning power', 1986)",
-                  "Free cash flow positive in at least nine of the ten",
-                  "Earnings up ≥ 3% a year, first three years' average to the last three's",
-                  "ROE ≥ 15% (the 1987 letter's floor for any year of ten; here the latest) and ROIC ≥ 12%, so debt cannot make the return",
-                  "Total debt ≤ 4 years of earnings ('good returns on equity while employing little or no debt', 1986)",
-                  "Worst year's gross margin ≥ 80% of the median year's, where five or more are reported: a stable margin is the trace of a moat",
-                  "Last twelve months' earnings ≥ 80% of the 3-year average (no 'turn-around situations', 1986)",
-                  "Owner earnings = the lower of 3-year average free cash flow and net income (the 1986 formula; the lower of the two stops share-based pay from counting as cash)",
-                  "Estimated value = owner earnings growing at their own rate, 0% to at most 8%, for ten years, then 3%, discounted at 10% (the rate in his 1991 example)",
-                  "Price at or below that value; ranked by margin of safety, the 30 widest",
+        "rules": ["Ten consecutive fiscal years of data (ours), a profit in every one (1986 acquisition criteria: 'demonstrated consistent earning power')",
+                  "Free cash flow positive in at least nine of the ten (ours)",
+                  "Earnings up ≥ 3% a year, first three years' average to the last three's (ours)",
+                  "ROE ≥ 15% in the latest year (ours, after the Fortune study the 1987 letter cites: ROE averaging over 20% for ten years and 'no year worse than 15%') and ROIC ≥ 12% (ours), so debt cannot make the return",
+                  "Total debt ≤ 4 × the 3-year average net income (the 4 is ours; 1986: 'good returns on equity while employing little or no debt')",
+                  "Worst year's gross margin ≥ 80% of the median year's, where five or more are reported (ours: a stable margin as a trace of a moat)",
+                  "Last twelve months' earnings ≥ 80% of the 3-year average (the 80% is ours; 1986: no 'turn-around' situations)",
+                  "Owner earnings ≈ the lower of 3-year average free cash flow and 3-year average net income (ours, an approximation of the 1986 formula: free cash flow subtracts all capex where Buffett subtracts only what maintains the business, strict for growers; the lower of the two keeps share-based pay from counting as cash)",
+                  "Estimated value = owner earnings growing at the rate net income grew (floored at 0%, capped at 8%) for ten years, then 3% a year forever, discounted at 10% (the method is the 1992 letter's discounted cash; 10% is the rate in a 1991 example; the ten years, the 8% cap and the 3% are ours)",
+                  "Price at or below that value; ranked by margin of safety, the 30 widest (the zero cut is ours: Buffett insists on a margin but gives no number, and names near zero would not meet his 1992 test)",
                   "Excludes Finance and Utilities: free cash flow and gross margin mean nothing there"],
         "idea": "'It's far better to buy a wonderful company at a fair price than a fair company at a wonderful price' (1989). The first rules ask only whether the business is good: steady profit, high returns on little debt, cash behind the earnings. The last asks what the cash it earns is worth and whether the market asks less. 'If we calculate the value of a common stock to be only slightly higher than its price, we're not interested in buying' (1992): a name at the top of the list has the widest margin, one at the bottom almost none.",
         "use": "Buffett reads the business before the price: whether he understands it, whether its advantage will last, whether its managers are able and honest. No screen measures those. He holds for many years, and in few names. The estimated value here moves a lot with growth and the discount rate: it orders candidates, it does not price them.",
         "tested": "The same tests on SEC annual filings, visible 120 days after period end, point-in-time S&P 500 members, Finance and Utilities excluded (SIC codes), held one month; only the months that held names count (from 2015). XBRL filings start in 2009, so 7 to 10 years of history are used instead of ten, and the lists are short. Return on equity and the 'last twelve months' test use the last fiscal year; return on capital is net income / (equity + debt); debt is what the filing tags (none tagged fails); market cap comes from the filed public float.",
-        "reading": [["Warren Buffett, 1986 letter: acquisition criteria and owner earnings", 'https://www.berkshirehathaway.com/letters/1986.html'],
-                    ["Warren Buffett, 1987 letter: 'two tests of economic excellence'", 'https://www.berkshirehathaway.com/letters/1987.html'],
+        "reading": [["Warren Buffett, 1977 letter: a business we understand, favorable long-term prospects, honest and competent people, an attractive price", 'https://www.berkshirehathaway.com/letters/1977.html'],
+                    ["Warren Buffett, 1986 letter: acquisition criteria and owner earnings", 'https://www.berkshirehathaway.com/letters/1986.html'],
+                    ["Warren Buffett, 1987 letter: the Fortune study's 'two tests of economic excellence'", 'https://www.berkshirehathaway.com/letters/1987.html'],
+                    ["Warren Buffett, 1989 letter: 'a wonderful company at a fair price'", 'https://www.berkshirehathaway.com/letters/1989.html'],
+                    ["Warren Buffett, 1991 letter: the 10% discount-rate example", 'https://www.berkshirehathaway.com/letters/1991.html'],
                     ["Warren Buffett, 1992 letter: value, growth and the margin of safety", 'https://www.berkshirehathaway.com/letters/1992.html'],
                     ["Frazzini, Kabiller & Pedersen (2018), 'Buffett's Alpha', Financial Analysts Journal", 'https://doi.org/10.2469/faj.v74.n4.3']],
         "practice": "Take the five widest margins. For each, read the last annual report and write one page: what it sells, why a rival cannot take the customers, what would break that, and what you think it earns in ten years. Strike the ones you cannot explain. Paper-buy what is left and review once a year on the business, not the price; compare with SPY over at least five years.",
@@ -1083,46 +1114,46 @@ STRATEGIES = [
     {
         "id": "lynch", "name": "Peter Lynch Value", "family": "Practitioner",
         "setups": "lynch",
-        "source": "Peter Lynch, 'One Up on Wall Street' (1989), \"Some Famous Numbers\", made exact",
+        "source": "Peter Lynch, 'One Up on Wall Street' (1989), \"Some Famous Numbers\"; growth and debt limits are AAII's and this terminal's",
         "summary": "Growth at a reasonable price: (earnings growth + dividend yield) / P/E of 2 or better, steady profits, little debt. At most 30.",
         "rules": ["Six consecutive fiscal years reported, a profit in every one: five years of growth, never across a loss",
-                  "Earnings growth = net income, last fiscal year against five years before, a year; above 0% and at most 50% (AAII's Lynch screen: a faster rate is not believed)",
+                  "Earnings growth = net income, last fiscal year against five years before, a year (Lynch asks for the 'long-term growth rate'; the trailing five years are AAII's and ours), above 0% and at most 50% (AAII's Lynch screen: a faster rate 'is not sustainable'; Lynch himself was 'wary of companies that seem to be growing faster than 25 percent')",
                   "Last twelve months' earnings positive; P/E = market cap / those earnings",
-                  "Total debt ≤ 25% of debt + equity ('a normal corporate balance sheet has 75 percent equity and 25 percent debt'), equity positive",
+                  "Total debt ≤ 25% of debt + equity, equity positive (ours: his 'normal corporate balance sheet has 75 percent equity and 25 percent debt' made a ceiling, on total debt where he looked at long-term debt)",
                   "Lynch ratio = (growth rate + dividend yield) / P/E, rates in percent: 'less than a 1 is poor, and 1.5 is okay, but what you're really looking for is a 2 or better'",
                   "Ratio ≥ 2; ranked by the ratio, the 30 highest",
-                  "Lynch value = the price at which the P/E equals the growth rate ('the p/e ratio of any company that's fairly priced will equal its growth rate'), the P/E at most 25 as in TradingView's Peter Lynch Value indicator",
-                  "Earnings line = 15 × the last twelve months' earnings a share: the line his charts draw the price against",
+                  "Lynch value = the price at which the P/E equals the growth rate ('the p/e ratio of any company that's fairly priced will equal its growth rate'), the P/E at most 25 (the default cap of a community TradingView indicator, which uses one-year EPS growth instead)",
+                  "Earnings line = 15 × the last twelve months' earnings a share (the book compares the price with an earnings line drawn on its charts; the 15× scale is the convention of GuruFocus's Peter Lynch Chart and TradingView's community indicators)",
                   "Excludes Finance and Utilities, as the other fundamental screens do"],
         "idea": "Lynch ran Fidelity Magellan from 1977 to 1990 and wrote down the numbers he used. The first: a fairly priced company's P/E equals its growth rate, so 'a p/e ratio that's half the growth rate is very positive, and one that's twice the growth rate is very negative'. The second adds the dividend, so a slow grower that pays is not called dear: 12% growth plus a 3% yield over a P/E of 10 is 1.5. Both ask how much growth a dollar of price buys, and a balance sheet without much debt is what lets a company survive long enough to deliver it.",
-        "use": "The ratio was one number in his two-minute story, not the story. He sorted companies first — slow growers, stalwarts, fast growers, cyclicals, turnarounds, asset plays — and the ratio misleads on cyclicals: their P/E is lowest at the top of the cycle, when growth is about to turn. He also wanted inventories growing no faster than sales, few institutions holding the stock, and insiders buying; this feed carries none of those. Read the latest 10-K before trusting a ratio built on five years of history.",
+        "use": "The ratio was one number in his two-minute story, not the story. He sorted companies first — slow growers, stalwarts, fast growers, cyclicals, turnarounds, asset plays — and a low P/E misleads on cyclicals: Lynch warns it shrinks toward the peak of the cycle, when earnings are about to turn. He also wanted inventories growing no faster than sales, few institutions holding the stock, and insiders buying; this feed carries none of those. Read the latest 10-K before trusting a ratio built on five years of history.",
         "tested": "The same tests on SEC annual filings, visible 120 days after period end, point-in-time S&P 500 members, Finance and Utilities excluded (SIC codes), held one month; only the months that held names count (six years of filings, so from 2014). The 'last twelve months' are the last fiscal year; dividends are those the cash-flow statement tags (none tagged = none paid, which can only lower the ratio); debt is what the filing tags (none tagged fails); market cap comes from the filed public float.",
         "reading": [["Peter Lynch with John Rothchild, 'One Up on Wall Street' (1989): chapters 7 (the six categories) and 13 ('Some Famous Numbers')", 'https://openlibrary.org/search?q=One+Up+on+Wall+Street+Lynch'],
                     ["Peter Lynch with John Rothchild, 'Beating the Street' (1993)", 'https://openlibrary.org/search?q=Beating+the+Street+Lynch'],
                     ["AAII, 'Peter Lynch and Investing in What You Know' (2019): a published Lynch screen", 'https://www.aaii.com/journal/article/10631-peter-lynch-and-investing-in-what-you-know']],
-        "practice": "Take the five highest ratios. For each, write Lynch's two-minute story: which of his six categories it is, why it will keep growing, and what would stop it. Strike the cyclicals near a peak and anything you cannot explain. Paper-buy what is left, check each quarter that earnings are still growing at the rate you bought, and compare with SPY over at least three years.",
+        "practice": "Take the five highest ratios. For each, do Lynch's two-minute drill: which of his six categories it is, why it will keep growing, and what would stop it. Strike the cyclicals near a peak and anything you cannot explain. Paper-buy what is left, check each quarter that earnings are still growing at the rate you bought, and compare with SPY over at least three years.",
         "rank_key": 'lynch_ratio',
         "setup_desc": 'companies that pass every test before the price but are not on the list, the 30 highest ratios of at least 1.5 (Lynch\'s "okay")',
         "rank_by": "Lynch ratio, highest first",
         "columns": ["lynch_ratio", "lynch_value", "lynch_line", "lynch_growth", "lynch_pe", "div_yield", "debt_cap"],
         "backtest": 'Lynch: (growth + yield) / P/E >= 2 (max 30)',
-        "note": "Strong but thin: rarely more than two S&P 500 stocks pass at once, and the same few companies stay on for years, a homebuilder (a cyclical, where Lynch warned the ratio misleads) most of all. The record survives leaving out its biggest names and beats random picks from the same passers, but the 'okay' names between 1.5 and 2 did not beat the index. Lynch gave the ratio as a rule of thumb, never as a screen; his Magellan record came from company visits and judgement no rule here contains.",
+        "note": "Strong but thin: rarely more than two S&P 500 stocks pass at once, and the same few companies stay on for years, a homebuilder (a cyclical, whose low P/E Lynch warned can mark the peak) most of all. The record survives leaving out its biggest names and beats random picks from the same passers, but the 'okay' names between 1.5 and 2 did not beat the index. Lynch gave the ratio as one of several numbers to check, not as a screen; his Magellan record came from company visits and judgement no rule here contains.",
     },
     {
         "id": "trend_template", "name": "Minervini Trend Template", "family": "Practitioner",
         "setups": "trend_template",
-        "source": "Mark Minervini — US Investing Champion 2021 (+334.8%), 1997",
+        "source": "Mark Minervini — US Investing Champion 2021 (+334.8%, $1M+ stock division) and 1997 (+155%)",
         "summary": "Stage-2 uptrend filter: price above rising long averages, near its high, strong RS.",
         "rules": ["Close > 150-day and 200-day SMA", "150-day SMA > 200-day SMA",
-                  "200-day SMA rising (vs 21 sessions ago)", "50-day SMA > 150-day and 200-day",
+                  "200-day SMA rising over the last month (21 sessions; his minimum — he prefers 4-5 months)", "50-day SMA > 150-day and 200-day",
                   "Close > 50-day SMA", "Close ≥ 30% above 52-week low",
                   "Close within 25% of 52-week high (52-week high/low on closes)",
-                  "RS rating ≥ 70 (1-99: percentile in this universe of 0.4×3-month + 0.2×6-, 9- and 12-month return)"],
+                  "RS rating ≥ 70 (Minervini's minimum; ours, not IBD's: a 1-99 percentile within this universe of the last four quarters' returns weighted 40/20/20/20, the weights O'Neil publishes)"],
         "idea": "Big winners almost always start their run from a confirmed uptrend (Weinstein's 'Stage 2'). The template keeps only stocks already in one, so time is never spent on stocks in a downtrend or a base that has not resolved.",
         "use": "Minervini's first filter, not a buy list: he then waits for a tight, low-volume base (his volatility-contraction pattern) and buys the breakout from it with a small stop. A stock that drops out of the template is no longer a candidate.",
         "tested": 'Every month-end 2010-01 to 2026-08, all point-in-time S&P 500 members passing the 7 price rules plus RS ≥ 70, equal weight, held one month, 10 bp per side.',
         "reading": [["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", 'https://openlibrary.org/search?q=Trade+Like+a+Stock+Market+Wizard+Minervini'], ["Stan Weinstein, 'Secrets for Profiting in Bull and Bear Markets' (1988) — the four stages", 'https://openlibrary.org/search?q=Secrets+for+Profiting+in+Bull+and+Bear+Markets+Weinstein']],
-        "practice": "Each weekend, open the charts of the passers with the highest RS. Note the ones forming a tight base: each pullback shallower than the last, volume drying up. Paper-buy only a breakout above the base's high, with the stop set before entry (Minervini keeps his losses in single digits), and log entry, stop and outcome. After 20 trades compare your average win with your average loss: the method lives on small losses.",
+        "practice": "Each weekend, open the charts of the passers with the highest RS. Note the ones forming a tight base: each pullback shallower than the last, volume drying up. Paper-buy only a breakout above the base's high, with the stop set before entry and kept small, and log entry, stop and outcome. After 20 trades compare your average win with your average loss: the method lives on small losses.",
         "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
         "setup_desc": 'names with RS of at least 70 that fail exactly one of the seven price rules',
         "rank_by": "RS rating, highest first",
@@ -1133,7 +1164,7 @@ STRATEGIES = [
     {
         "id": "rs_leaders", "name": "RS Leaders (Trend Template top 25)", "family": "Practitioner",
         "setups": "trend_template",
-        "source": "Minervini / IBD leadership — the strongest names that pass the template",
+        "source": "This terminal's: the Trend Template (Minervini) ranked by RS (O'Neil's 'L'), top 25",
         "summary": "The 25 highest-RS stocks among Trend Template passers.",
         "rules": None,  # the Trend Template's, then the top 25 (filled in below)
         "idea": "The template's strongest names: relative strength persists, so the leaders of the market tend to stay leaders for a while (IBD's 'L' and Minervini's focus).",
@@ -1154,8 +1185,8 @@ STRATEGIES = [
         "source": "Jegadeesh & Titman (1993); AQR 'Fact, Fiction and Momentum'",
         "summary": "Past 12-month return skipping the latest month — the classic cross-sectional momentum.",
         "rules": ["Return from 12 months ago to 1 month ago", "Top decile of the universe"],
-        "idea": 'Stocks that rose most over the past year keep outperforming for the next 3-12 months; the most cited explanation is that investors under-react to news. The latest month is skipped because one-month returns tend to reverse.',
-        "use": 'The academic form holds the top decile and rebalances monthly; it is a systematic portfolio, not a stock pick. Prone to sharp crashes when beaten-down stocks rebound.',
+        "idea": 'Stocks that rose most over the past year keep outperforming for the next 3-12 months; one leading explanation, Jegadeesh and Titman\'s own, is that investors under-react to firm-specific news. The latest month is skipped because one-month returns tend to reverse.',
+        "use": 'The academic form is long the top decile and short the bottom (Jegadeesh and Titman used 3-12-month windows; 12-1 is the later standard form, as in Asness et al.); this list is the long side only, a systematic portfolio, not a stock pick. Prone to sharp crashes when beaten-down stocks rebound.',
         "tested": 'Top decile of point-in-time S&P 500 members by 12-1 return, equal weight, rebalanced monthly, 10 bp per side.',
         "reading": [["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", 'https://doi.org/10.1111/j.1540-6261.1993.tb04702.x'], ["Asness, Frazzini, Israel & Moskowitz (2014), 'Fact, Fiction and Momentum Investing', Journal of Portfolio Management", 'https://doi.org/10.3905/jpm.2014.40.5.075'], ["Daniel & Moskowitz (2016), 'Momentum Crashes', Journal of Financial Economics", 'https://doi.org/10.1016/j.jfineco.2015.12.002']],
         "practice": 'Paper-hold the whole list in equal weights for one month, rebalance on the first trading day of each month, and track it against an equal-weighted S&P 500 fund (RSP). The test is the portfolio over years, not any one stock; expect long stretches behind the index and sharp drops in rebounds.',
@@ -1164,15 +1195,17 @@ STRATEGIES = [
         "rank_by": "12-1 return",
         "columns": ["mom12_1", "r1m", "rs", "off_high", "vol252"],
         "backtest": 'Momentum 12-1 (top decile)',
-        "note": 'Lost in every period before 2023. Momentum crashes in sharp rebounds (2009: -73%, Daniel & Moskowitz).',
+        "note": 'Trailed the equal-weight index in every period before 2023. Momentum crashes in sharp rebounds: March-May 2009 the long-short winner-minus-loser portfolio lost about 73% as past losers rose 163% (Daniel & Moskowitz); the winners alone — this list — gained 8% while the market rose 26%.',
     },
     {
         "id": "canslim", "name": "CAN SLIM (partial)", "family": "Practitioner",
         "setups": "canslim",
-        "source": "William O'Neil; David Ryan — US Investing Champion 1985-87",
+        "source": "William O'Neil; David Ryan — three-time US Investing Champion (mid-1980s)",
         "summary": "Growth leaders: accelerating earnings, near highs, strong RS, in a healthy market.",
-        "rules": ["C: latest-quarter EPS ≥ +25% y/y", "A: fiscal-year EPS ≥ +25% and ROE ≥ 17%",
-                  "N: within 15% of the 52-week high", "L: RS rating ≥ 80",
+        "rules": ["C: latest-quarter EPS ≥ +25% y/y (IBD's figure; the book says 18-20% minimum; its sales-growth and acceleration tests are not screened)",
+                  "A: latest fiscal-year EPS ≥ +25% (O'Neil asks for 25%+ a year over three years) and ROE ≥ 17% (TradingView's latest-quarter ROE)",
+                  "N: within 15% of the 52-week high on closes (our proxy for O'Neil's 'close to or making new highs'; the new-product test is not screened)",
+                  "L: RS rating ≥ 80 (the Trend Template's RS: ours, not IBD's)",
                   "M: market (SPY) above its 50- and 200-day — shown in the header, not a filter",
                   "S and I not screened (float-turnover and fund-sponsorship data unavailable)"],
         "idea": "O'Neil studied the biggest stock winners over many decades and listed the traits they shared before their run: strong current and annual earnings growth (C, A), something new (N), supply (S), leadership (L), institutional buying (I), and a rising market (M).",
@@ -1186,18 +1219,20 @@ STRATEGIES = [
         "columns": ["eps_growth_q", "eps_growth_fy", "roe", "rs", "off_high"],
         "backtest": None,
         "note": "Not backtested here (needs point-in-time quarterly EPS). AAII's hypothetical "
-                "record: 23.8%/yr 1998-2007, before costs; the original screen often passes 2 stocks or fewer.",
+                "'CAN SLIM Revised' screen: 23.8%/yr Jan 1998-Dec 2007, before costs, about 10 passers a month.",
     },
     {
-        "id": "breakout", "name": "Breakout Leaders (Kullamaggie-style)", "family": "Practitioner",
+        "id": "breakout", "name": "Breakout Leaders (Qullamaggie-style)", "family": "Practitioner",
         "setups": "breakout",
         "source": "Kristjan Kullamägi — self-reported; no audited record",
         "summary": "The biggest recent movers that are volatile enough to trade and resting near their highs.",
-        "rules": ["Top 5% by combined 1/3/6-month return rank", "ADR% (20-day) ≥ 4%",
-                  "Within 15% of the 52-week high", "Close above 10- and 20-day SMA",
-                  "50-day average dollar volume ≥ $20M"],
-        "idea": 'Kullamägi trades momentum bursts: the stocks that just made the biggest moves often pause in a tight range near their highs and then break out for another leg.',
-        "use": "He buys the break of the opening range out of the consolidation, with the stop at the day's low, sells part after a few days and trails the rest with the 10- or 20-day average. The list is the watchlist; the trade is the breakout.",
+        "rules": ["Top 5% by combined 1/3/6-month return rank (he scans the top 1-2% on each window)",
+                  "ADR% (20-day) ≥ 4% (ours)", "Within 15% of the 52-week high, on closes (ours)",
+                  "Close above the 10- and 20-day SMA (ours; he describes the stock 'surfing' the rising 10- and 20-day)",
+                  "50-day average dollar volume ≥ $20M (ours; he checks dollar volume, no figure)",
+                  "The thresholds are this terminal's: his post gives none"],
+        "idea": "Kullamägi's breakout setup: a stock that has just moved 30-100%+ in days to weeks consolidates in an orderly way (higher lows, tightening range, 2 weeks to 2 months) near its highs, then breaks out for another leg.",
+        "use": "He buys the break of the opening range out of the consolidation, with the stop at the day's low, sells a third to a half after 3-5 days, moves the stop to break even and trails the rest with the 10- or 20-day average. The list is the watchlist; the trade is the breakout.",
         "tested": 'Simplified: the top 2% of point-in-time S&P 500 members by combined 1/3/6-month rank, monthly, equal weight, WITHOUT the volatility, near-high, average and volume filters.',
         "reading": [["Kristjan Kullamägi's own write-ups of his setups at qullamaggie.com (self-published)", 'https://qullamaggie.com/']],
         "practice": "Before each open, mark names that have paused for days to weeks after a big move. Paper-buy the break of the opening range, stop at the day's low, and skip trades whose stop is wider than about one ADR. Sell a third to a half after 3-5 days and trail the rest with the 10- or 20-day average. Log results in R (multiples of the risk).",
@@ -1213,20 +1248,21 @@ STRATEGIES = [
         "setups": "magic_formula",
         "source": "Joel Greenblatt, 'The Little Book That Beats the Market' (2005)",
         "summary": "Good businesses at cheap prices: high earnings yield plus high return on capital.",
-        "rules": ["Earnings yield = EBIT / enterprise value", "Return on capital ≈ ROIC",
+        "rules": ["Earnings yield = EBIT / enterprise value",
+                  "Return on capital = EBIT / (net working capital + net fixed assets), Greenblatt's; net fixed assets = revenue / TradingView's fixed-asset turnover (the scanner has no net PP&E); a company without that figure is not ranked",
                   "Rank each, add the ranks, take the 30 best",
                   "Excludes Finance and Utilities"],
         "idea": 'Buy good businesses at bargain prices: a high return on capital says the business is good, a high earnings yield says the price is low. Ranking on both together avoids cheap-but-bad and good-but-expensive.',
         "use": "Greenblatt's version: buy 20-30 names a few at a time through the year, hold each about a year, replace and repeat, and stick with it for 3-5 years through long losing stretches.",
-        "tested": "Top 30 point-in-time S&P 500 members by the combined rank, Finance and Utilities excluded (SEC SIC codes), fundamentals from SEC filings visible 120 days after period end, held one month. The test's return on capital is EBIT / (net working capital + net PP&E) and its EV uses market cap from the filed public float; the live screen uses TradingView's EBIT/EV and ROIC.",
+        "tested": "Top 30 point-in-time S&P 500 members by the combined rank, Finance and Utilities excluded (SEC SIC codes), fundamentals from SEC filings visible 120 days after period end, held one month. Return on capital is EBIT / (net working capital + net PP&E) in both; the test's EV uses market cap from the filed public float.",
         "reading": [["Joel Greenblatt, 'The Little Book That Beats the Market' (2005); updated as 'The Little Book That Still Beats the Market' (2010)", 'https://openlibrary.org/search?q=The+Little+Book+That+Beats+the+Market+Greenblatt']],
         "practice": "Paper-buy 5-7 names from the list every 2-3 months until you hold 20-30, sell each after about a year, and repeat. Track the paper portfolio against SPY and RSP for at least three years: Greenblatt's point is that it works only for those who stay with it through years when it lags.",
         "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
         "setup_desc": 'ranks 31-60 by the combined rank: the next 30',
         "rank_by": "Combined rank",
-        "columns": ["earnings_yield", "roic", "pe", "ev_ebitda", "r6m"],
+        "columns": ["earnings_yield", "roc", "pe", "ev_ebitda", "r6m"],
         "backtest": 'Magic Formula (top 30)',
-        "note": "Independent tests: 11.4% vs 8.7% for the S&P 2003-15, with long losing stretches — far below the book's ~30%.",
+        "note": "One independent replication (R. A. Martin, 2020: US stocks above $100M, Jul 2003-Dec 2015): 11.4%/yr vs 8.7% for the S&P 500, lagging in 2007-11 — far below the book's 30.8%/yr (1988-2004). Greenblatt also excludes foreign companies and uses a $50M floor; here ADRs are out (non-US common shares stay) and the floor is the universe's.",
     },
     {
         "id": "piotroski", "name": "Piotroski F-Score ≥ 8", "family": "Academic",
@@ -1236,10 +1272,11 @@ STRATEGIES = [
         "rules": ["Profitability: ROA > 0, CFO > 0, ROA up, CFO > net income",
                   "Leverage/liquidity: leverage down, current ratio up, no new shares",
                   "Efficiency: gross margin up, asset turnover up",
-                  "Score ≥ 8 (TradingView's computed TTM score)", "Sorted by price/book, cheapest first"],
+                  "Score ≥ 8 (TradingView's score on the last fiscal year's statements, as in the paper)",
+                  "Sorted by price/book, cheapest first; passers with no or negative book value follow"],
         "idea": 'Among cheap stocks, the ones whose accounts are improving do much better than the ones whose accounts are deteriorating; nine simple yes/no tests from the financial statements separate the two.',
         "use": 'Piotroski bought high scorers within the cheapest fifth by book/market and held a year. Here it is shown on the whole universe, cheapest first, as a check that a business is getting healthier.',
-        "tested": 'All point-in-time S&P 500 members with a score ≥ 8 computed from SEC filings, equal weight, held one month.',
+        "tested": 'All point-in-time S&P 500 members with a score ≥ 8 computed from annual SEC filings, equal weight, held one month.',
         "reading": [["Joseph Piotroski (2000), 'Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers', Journal of Accounting Research", 'https://doi.org/10.2307/2672906']],
         "practice": 'Once a year, after annual reports are out, paper-buy the cheapest high scorers (lowest P/B on the list), hold 12 months, and compare with RSP. Note which ones were cheap for a reason: the score is a health check, not a guarantee.',
         "rank_asc": True,  # lowest first
@@ -1248,13 +1285,13 @@ STRATEGIES = [
         "rank_by": "Price/book, cheapest first",
         "columns": ["piotroski", "pb", "pe", "roe", "r6m"],
         "backtest": 'Piotroski F >= 8 (all)',
-        "note": "A junk-avoidance filter, not alpha. Piotroski's own version (8-9 in the cheapest book/market quintile) left about 3 large caps a month here and lost money.",
+        "note": "A junk-avoidance filter, not alpha. Closest to Piotroski's own version (8-9 among the cheapest 30% by book/market; he used the cheapest fifth): about 3 large caps a month here, behind the index with a deep drawdown.",
     },
     {
         "id": "quality_momentum", "name": "Quality + Momentum", "family": "Academic",
         "setups": "quality_momentum",
         "source": "Novy-Marx (2013) gross profitability, combined with 12-1 momentum",
-        "summary": "Most profitable third of the market by gross profit / assets, then the strongest 25 by momentum.",
+        "summary": "The most profitable 30% by gross profit / assets, then the strongest 25 by momentum.",
         "rules": ["Gross profit / total assets in the top 30%", "Then top 25 by 12-1 momentum",
                   "Excludes Finance and Utilities"],
         "idea": "Gross profit / assets is the cleanest measure of how productive a business is (Novy-Marx): profitable firms earn more even when they look expensive. Taking the strongest-momentum names among them adds the momentum effect. The combination is this terminal's, not a published strategy.",
@@ -1274,8 +1311,10 @@ STRATEGIES = [
         "setups": "trending_value",
         "source": "James O'Shaughnessy, 'What Works on Wall Street' (4th ed.)",
         "summary": "Cheapest decile on six value ratios, then the 25 with the best 6-month return.",
-        "rules": ["Value composite: average percentile of E/P, B/P, S/P, CFO/P, EBIT/EV and "
-                  "shareholder yield (needs ≥ 4 of 6; a loss ranks as expensive)", "Cheapest 10%", "Then top 25 by 6-month return"],
+        "rules": ["Value composite (ours, close to O'Shaughnessy's Value Composite Two): average percentile of E/P, B/P, S/P, "
+                  "operating cash flow/P, EBIT/EV and shareholder yield — he uses EBITDA/EV and price/cash flow; EBIT/EV "
+                  "matches the SEC backtest, which has no D&A (needs ≥ 4 of 6; a loss ranks as expensive)",
+                  "Cheapest 10%", "Then top 25 by 6-month return"],
         "idea": 'Cheap stocks beat expensive ones over time, but many cheap stocks are cheap for a reason. Requiring the cheapest to also be rising (6-month return) avoids most value traps.',
         "use": "O'Shaughnessy holds the 25 for a year and rebalances annually.",
         "tested": 'The same six-ratio composite from SEC filings, cheapest decile of point-in-time S&P 500 members, then the top 25 by 6-month return, rebalanced monthly (not annually as in the book).',
@@ -1293,18 +1332,19 @@ STRATEGIES = [
         "setups": "luk_pullback",
         "source": "Martin Luk — US Investing Champion 2025 (+969.8%), 2024 6th (+283.1%)",
         "summary": "A strong stock resting at support, ready to turn: buy the break of the prior "
-                   "day's high with a 1-3% stop, risking 0.5% of the account.",
-        "rules": ["Leader: top 25% by 1/3/6-month return, up 30%+, $20M+ daily volume",
+                   "day's high with a stop under the pullback low (here 1-3%; his are mostly 1-5%), risking 0.5% of the account.",
+        "rules": ["Leader: top 25% by combined 1/3/6-month return rank, up 30%+ over one of them, 50-day average dollar volume ≥ $20M (the cut and the liquidity floor are ours)",
                   "Resting: higher lows, daily ranges contracting, above the 9 and 21 EMA, 21 > 50 EMA",
-                  "Zone: a low in the last 3 sessions at the 21 EMA (within 2%), above the 50",
-                  "Entry: a buy stop at today's high (his trigger is intraday: dip, turn, break the prior candle)",
+                  "Zone: on one of the last 3 sessions the low came to within 2% above that day's 21 EMA or below it, but not more than 2% under its 50 EMA",
+                  "Entry: a buy stop at today's high (ours, a daily proxy; his trigger is intraday: dip, turn, break the prior candle, per the hb_stocks summary)",
                   "Stop: just under the 3-session pullback low (at least 1% away); a setup needing more than 3% is skipped",
-                  "Size: shares so the stop costs 0.5% of the account",
-                  "Exits: a third at 3R, a third at 5R, the rest trails the 9 EMA"],
+                  "Size: shares so the stop costs 0.5% of the account (Luk: 0.5-1% per trade)",
+                  "Exits (ours, after the hb_stocks summary): a third at 3R, a third at 5R, the rest trails the 9 EMA; Luk's own stated rule is the 9 EMA trailing stop"],
         "idea": 'A market leader that pulls back in an orderly way to its rising 21-day EMA, and holds, usually resumes its trend. Entering at that support allows a very tight stop, so a small loss buys a large potential win.',
-        "use": "Luk enters intraday as the stock dips, turns and breaks the prior candle's high, risks about 0.5% of the account per trade, and sells into strength (3R, 5R), trailing the rest. The columns here are a plan from the last close.",
+        "use": "Luk enters intraday as the stock dips, turns and breaks the prior candle's high, risks 0.5-1% of the account per trade, and takes partial profits into strength, trailing with the 9 EMA. The columns here are a plan from the last close.",
         "tested": "As individual trades on daily bars: a buy stop at the setup day's high, filled the next session, the stop and exits above, 0.5% risk, compared with random entries with the same exits; on the S&P 500 2010-26 and on today's stocks ≥ $300M 2022-26.",
-        "reading": [["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)", 'https://x.com/hb_stocks/status/2112038539676574098']],
+        "reading": [["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)", 'https://x.com/hb_stocks/status/2112038539676574098'],
+                    ["Martin Luk, his own review of USIC 2024 (+283%): stops, risk per trade, the 9 EMA trail", 'https://tradingresourcehub.substack.com/p/martin-luk-283-usic-2024-key-lessons']],
         "practice": 'Use the plan columns: set your account size and risk, paper-place a buy stop at Entry with the Stop beneath it, and if filled sell a third at 3R, a third at 5R and trail the rest under the 9 EMA. Log every trade in R. Mechanically the record is a losing average, so practise to see whether your own reading of the intraday turn improves on it before any money is at risk.',
         "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
         "setup_desc": 'leaders resting in the pattern (higher lows, contracting ranges, above the 9 and 21 EMA, 21 above 50) that have not yet touched the 21 EMA, with their 3-session low within 5% above it',
@@ -1323,8 +1363,8 @@ STRATEGIES = [
         "setups": "low_vol",
         "source": "Blitz & van Vliet (2007), 'The Volatility Effect'",
         "summary": "The calmest decile by one-year realised volatility — a defensive tilt.",
-        "rules": ["Annualised volatility of daily returns, past year", "Lowest 10% of the universe"],
-        "idea": 'Low-risk stocks have historically earned about as much as high-risk ones with far smaller swings — the low-volatility anomaly, which contradicts the textbook trade-off between risk and return.',
+        "rules": ["Annualised volatility of daily returns, past year, at least 200 sessions (ours; Blitz & van Vliet use 3-year weekly volatility)", "Lowest 10% of the universe"],
+        "idea": 'Low-volatility stocks have historically earned about the market\'s return with much smaller swings, while the most volatile earned far less (Blitz & van Vliet: 5.9%/yr between the lowest- and highest-volatility deciles, 1986-2006) — the low-volatility anomaly, which contradicts the textbook trade-off between risk and return.',
         "use": 'A defensive sleeve held as a diversified portfolio and rebalanced periodically; it gives up return in strong bull markets led by high-beta stocks.',
         "tested": 'Lowest decile of point-in-time S&P 500 members by one-year volatility, equal weight, rebalanced monthly.',
         "reading": [["Blitz & van Vliet (2007), 'The Volatility Effect: Lower Risk Without Lower Return', Journal of Portfolio Management", 'https://doi.org/10.3905/jpm.2007.698039'], ["Baker, Bradley & Wurgler (2011), 'Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly', Financial Analysts Journal", 'https://doi.org/10.2469/faj.v67.n1.4']],
@@ -1335,7 +1375,7 @@ STRATEGIES = [
         "rank_by": "Volatility, lowest first",
         "columns": ["vol252", "r12m", "div_yield", "pe", "off_high"],
         "backtest": 'Low volatility (lowest decile)',
-        "note": 'Lagged in a period led by high-beta tech, with the smallest drawdown of any screen: a risk choice, not a return one.',
+        "note": 'Behind the index in three of the four periods (ahead only in 2015-19), with about the smallest drawdown of any screen: a risk choice, not a return one.',
     },
 ]
 
@@ -1470,7 +1510,31 @@ def apply_live_bars(frames, quotes, now=None):
     return out, info
 
 
-def compute(fund, frames, extras=None, now=None):
+PRICE_GAP_WINDOW = 21  # sessions
+
+
+def price_gaps(close, exempt=()):
+    """Names whose Yahoo history has a hole in its last PRICE_GAP_WINDOW
+    sessions: a session missing between two it has, or both of the last two
+    missing. A history that starts inside the window (a new listing) has no
+    hole for it; one missing only the last row is a name today's live bar did
+    not reach, ranked on its last close as before."""
+    recent = close.iloc[-PRICE_GAP_WINDOW:]
+    out = []
+    for c in recent.columns:
+        s_ = recent[c]
+        first, last = s_.first_valid_index(), s_.last_valid_index()
+        if first is None:
+            out.append(c)
+            continue
+        inside = s_.loc[first:last].isna().any()
+        tail_gone = c not in exempt and len(s_) >= 2 and s_.iloc[-2:].isna().all()
+        if inside or tail_gone:
+            out.append(c)
+    return sorted(out)
+
+
+def compute(fund, frames, extras=None, now=None, stale=()):
     """Metrics for every name with prices, and each strategy's ranked list.
 
     `fund` = parse_universe() output, `frames` = load_prices() output.
@@ -1490,6 +1554,16 @@ def compute(fund, frames, extras=None, now=None):
     for p in (high, low, volume):
         if BENCHMARK in p.columns:
             p.drop(columns=BENCHMARK, inplace=True)
+    # a name served from an older cache (its download failed) ends early by
+    # design and is reported as such ("on older prices"): only holes count
+    gaps = price_gaps(close, exempt=set(stale))
+    raw_close = close.copy()  # the chart keeps what was traded, holes and all
+    if gaps:
+        # not ranked on price: a forward fill would carry the last close across
+        # the hole (SNDK 2026-11-25: Yahoo skipped three sessions, $94.39
+        # carried against $73.61 traded, RS 79 against about 28)
+        for p in (close, high, low, volume):
+            p.loc[:, [g for g in gaps if g in p.columns]] = np.nan
     sig = price_signals(close, high, low, volume)
     last = {k: v.iloc[-1] for k, v in sig.items()}
 
@@ -1497,6 +1571,16 @@ def compute(fund, frames, extras=None, now=None):
     df = pd.DataFrame(index=syms)
     px = close.ffill().iloc[-1]
     df["price"] = px.reindex(syms)
+    # a name left out on price shows the scanner's close of the same last
+    # session, if it has one; never the close from before its hole
+    last_day = close.index[-1].date() if len(close.index) else None
+    for g in gaps:
+        r_ = fund.get(g) or {}
+        t_ = r_.get("q_time")
+        same = t_ is not None and last_day is not None and \
+            datetime.fromtimestamp(t_, timezone.utc).astimezone(_et()).date() == last_day
+        if g in df.index:
+            df.at[g, "price"] = r_.get("q_close") if same and r_.get("q_close") else np.nan
     # Unfilled: a name with no bar on the last session has NO 1-day change —
     # yesterday's close twice would print a confident +0.0%.
     if len(close) > 1:
@@ -1521,6 +1605,11 @@ def compute(fund, frames, extras=None, now=None):
     ev, ebit, assets, mcap = num("ev"), num("ebit"), num("total_assets"), num("mcap")
     df["earnings_yield"] = (ebit / ev).where((ev > 0) & operating)
     df["gpa"] = (num("gross_profit") / assets).where((assets > 0) & operating)
+    # Greenblatt's return on capital: EBIT / (net working capital + net fixed
+    # assets), only where that capital is positive — the backtest's measure
+    fa_t = num("fa_turnover")
+    capital = num("working_capital") + (num("revenue") / fa_t).where(fa_t > 0)
+    df["roc"] = (ebit / capital).where((capital > 0) & operating)
     # TradingView reports an explicit 0 for a non-payer / non-repurchaser, so a
     # null is UNKNOWN: either part absent makes the sum absent, never "0 + x".
     df["shareholder_yield"] = num("div_yield") + num("buyback_yield")
@@ -1534,7 +1623,7 @@ def compute(fund, frames, extras=None, now=None):
     ocf, rev, ni = num("ocf"), num("revenue"), num("net_income")
     pos = mcap > 0
     value = pd.DataFrame({
-        "ep": (ni / mcap).where(pos), "bp": (1 / pb).where(pb != 0), "sp": (rev / mcap).where(pos),
+        "ep": (ni / mcap).where(pos), "bp": (num("total_equity") / mcap).where(pos).fillna((1 / pb).where(pb > 0)), "sp": (rev / mcap).where(pos),
         "cfp": (ocf / mcap).where(pos), "ey": (ebit / ev).where(ev > 0),
         "shy": df["shareholder_yield"],
     })
@@ -1607,23 +1696,30 @@ def compute(fund, frames, extras=None, now=None):
     lists["buffett"] = _top(df["mos"][good & (df["mos"] >= 0)], n=BUFFETT["n"])
     lists["lynch"] = _top(df["lynch_ratio"][lgood & (df["lynch_ratio"] >= LYNCH["ratio"])], n=LYNCH["n"])
     tt = df["tt_core"] & (rs >= 70)
-    lists["trend_template"] = _top(rs[tt])
-    lists["rs_leaders"] = _top(rs[tt], n=25)
+    # ordered on the unrounded composite: the 1-99 rating ties often (13
+    # names at 97 on 2026-11-25), and a tie then fell to the ticker's letters
+    rs_x = df["rs_raw"]
+    lists["trend_template"] = _top(rs_x[tt])
+    lists["rs_leaders"] = _top(rs_x[tt], n=25)
     lists["momentum"] = _top(df["mom12_1"], frac=0.10)
     can = ((df["eps_growth_q"] >= 0.25) & (df["eps_growth_fy"] >= 0.25) & (df["roe"] >= 0.17)
            & (df["off_high"] >= -0.15) & (rs >= 80))
-    lists["canslim"] = _top(rs[can])
+    lists["canslim"] = _top(rs_x[can])
     combo = pct_rank(df["r1m"]) + pct_rank(df["r3m"]) + pct_rank(df["r6m"])
     leaders = combo >= combo.quantile(0.95)
     brk = (leaders & (df["adr20"] >= 0.04) & (df["off_high"] >= -0.15)
            & (df["price"] > df["sma10"]) & (df["price"] > df["sma20"])
            & (df["dollar_vol50"] >= 20e6))
     lists["breakout"] = _top(combo[brk])
-    both = df["earnings_yield"].notna() & df["roic"].notna()
-    magic = -(df["earnings_yield"][both].rank(ascending=False) + df["roic"][both].rank(ascending=False))
+    both = df["earnings_yield"].notna() & df["roc"].notna()
+    magic = -(df["earnings_yield"][both].rank(ascending=False) + df["roc"][both].rank(ascending=False))
     lists["magic_formula"] = _top(magic, n=30)
     pio = df["piotroski"] >= 8
-    lists["piotroski"] = _top((-df["pb"].where(df["pb"] > 0))[pio])
+    # cheapest positive book first; a passer with no or negative book value is
+    # still a passer, listed after them (TradingView gives no P/B for negative
+    # equity: DPZ, MCD, SBUX)
+    pio_key = (-df["pb"].where(df["pb"] > 0)).fillna(-np.inf)
+    lists["piotroski"] = list(pio_key[pio].sort_values(ascending=False, kind="stable").index)
     gpa_pool = _top(df["gpa"], frac=0.30)
     lists["quality_momentum"] = _top(df["mom12_1"].reindex(gpa_pool), n=25)
     cheap = _top(df["value_score"], frac=0.10)
@@ -1698,8 +1794,9 @@ def compute(fund, frames, extras=None, now=None):
     asof = close.index[-1].strftime("%Y-%m-%d") if len(close.index) else None
     if extras is not None:
         # NOT df.attrs: pandas deep-copies attrs into every derived frame
-        extras["closes"] = close.iloc[-CHART_BARS:]
+        extras["closes"] = raw_close.iloc[-CHART_BARS:]
         extras["plan_asof"] = plan_asof
+        extras["price_gaps"] = [g for g in gaps if g in fund]
         extras["setups"] = setting_up(df, sig, lists, {
             "k": k, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap, "combo": combo,
             "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1], "good": good, "lgood": lgood})
@@ -1875,11 +1972,11 @@ def worked_examples(df, sig, lists, ctx):
     specs = {
         "buffett": (df["mos"], buffett),
         "lynch": (df["lynch_ratio"], lynch),
-        "trend_template": (rs, template),
-        "rs_leaders": (rs, lambda s_: template(s_) + [ranked("Top 25 by RS among the passers", rs[tt], s_, 25)]),
+        "trend_template": (df["rs_raw"], template),
+        "rs_leaders": (df["rs_raw"], lambda s_: template(s_) + [ranked("Top 25 by RS among the passers", df["rs_raw"][tt], s_, 25)]),
         "momentum": (mom, lambda s_: [C("12-1 return", _pc(mom.get(s_), True), np.isfinite(mom.get(s_, np.nan))),
                                      decile("In the top 10% of the universe", mom, s_, 0.10, lambda x: _pc(x, True))]),
-        "canslim": (rs, lambda s_: [
+        "canslim": (df["rs_raw"], lambda s_: [
             C("C: latest-quarter EPS at least +25% y/y", _pc(v("eps_growth_q", s_), True), v("eps_growth_q", s_) >= 0.25),
             C("A: fiscal-year EPS at least +25%", _pc(v("eps_growth_fy", s_), True), v("eps_growth_fy", s_) >= 0.25),
             C("A: ROE at least 17%", _pc(v("roe", s_)), v("roe", s_) >= 0.17),
@@ -1899,13 +1996,14 @@ def worked_examples(df, sig, lists, ctx):
             C("Not Finance or Utilities", v("sector", s_) if isinstance(v("sector", s_), str) else "sector unknown",
               ctx["sector_ok"].get(s_, False)),
             C("Earnings yield (EBIT / EV)", _pc(v("earnings_yield", s_)), np.isfinite(v("earnings_yield", s_))),
-            C("Return on capital (ROIC)", _pc(v("roic", s_)), np.isfinite(v("roic", s_))),
+            C("Return on capital: EBIT / (net working capital + net fixed assets)", _pc(v("roc", s_)),
+              np.isfinite(v("roc", s_))),
             ranked("Combined rank in the best 30", magic, s_, 30)]),
-        "piotroski": ((-df["pb"].where(df["pb"] > 0)), lambda s_: [
-            C("F-score at least 8", "—" if not np.isfinite(v("piotroski", s_)) else f"{v('piotroski', s_):.0f} of 9",
-              v("piotroski", s_) >= 8),
-            C("A positive book value (then cheapest P/B first)",
-              f"P/B {v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else "no P/B", v("pb", s_) > 0)]),
+        "piotroski": ((-df["pb"].where(df["pb"] > 0)).where(df["piotroski"].notna()), lambda s_: [
+            C("F-score at least 8 (then cheapest P/B first; no or negative book value last)",
+              "—" if not np.isfinite(v("piotroski", s_)) else f"{v('piotroski', s_):.0f} of 9"
+              + (f", P/B {v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else ", no P/B"),
+              v("piotroski", s_) >= 8)]),
         "quality_momentum": (mom, lambda s_: [
             C("Gross profit / assets in the top 30%", f"{_pc(v('gpa', s_))}, the cut is {_pc(gpa_cut)}",
               s_ in ctx["gpa_pool"]),
@@ -1951,7 +2049,7 @@ def _clean(v):
 
 OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1m", "r3m", "r6m",
               "r12m", "mom12_1", "off_high", "above_low", "vol252", "adr20", "dollar_vol50",
-              "tt_count", "earnings_yield", "roic", "roe", "gpa", "gross_margin", "piotroski",
+              "tt_count", "earnings_yield", "roc", "roic", "roe", "gpa", "gross_margin", "piotroski",
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
               "div_yield", "shareholder_yield", "value_score", "next_earnings",
               "mos", "fair_value", "owner_yield", "ni_growth", "debt_years",
@@ -1967,7 +2065,8 @@ def scan(min_mcap=2e9, force=False):
     # straddles 16:15 must not judge freshness by one clock and live bars by
     # another (a morning partial bar then went out as the close)
     now = datetime.now(timezone.utc)
-    frames, fetched_ts, stale = load_prices(sorted(fund), force=force, now=now)
+    frames, fetched_ts, stale_syms = load_prices(sorted(fund), force=force, now=now)
+    stale = len(stale_syms)
     if fund_day:
         fund = age_universe(fund, frames, fund_day)
     quotes = {} if fund_day else dict(fund)
@@ -1979,7 +2078,7 @@ def scan(min_mcap=2e9, force=False):
     frames, live = apply_live_bars(frames, quotes, now)
     log_progress(1, 1, "Computing screens")
     extras = {}
-    df, lists, market, asof = compute(fund, frames, extras, now)
+    df, lists, market, asof = compute(fund, frames, extras, now, stale=stale_syms)
     setups = extras.get("setups") or {}
     in_any = sorted({s for v in lists.values() for s in v} | {d["symbol"] for v in setups.values() for d in v})
     rows = {s: {k: _clean(df.at[s, k]) for k in OUT_FIELDS if k in df.columns} for s in in_any}
@@ -2002,6 +2101,8 @@ def scan(min_mcap=2e9, force=False):
         "prices_fetched": datetime.fromtimestamp(fetched_ts, timezone.utc).astimezone(_et())
         .strftime("%Y-%m-%d %H:%M ET") if fetched_ts else None,
         "stale_prices": int(stale),
+        # missing sessions in their Yahoo history: left out of every price screen
+        "price_gaps": extras.get("price_gaps") or [],
         # today's bar during the session: TradingView's quote, as delayed as it says
         "live_bar": live,
         "universe": {"n": len(fund), "priced": int(df["price"].notna().sum()),

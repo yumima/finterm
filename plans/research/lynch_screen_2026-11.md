@@ -88,10 +88,11 @@ worth watching, not a proven edge. The card says so in words; its numbers come f
 12 names of 1,686 above $2B: DAC, STRL, MLI, DLO, ZM, CTVA, EXEL, BSM, GRBK, GMED, NXT, DECK. The first miss, URBN,
 grew earnings 227% a year off its 2021 base and fails the 50% cap, which is what the cap is for.
 
-CTVA is a data fault, not a pick: its price fell from $12.14 to $8.23 between 2026-11-11 and 2026-11-25, with Yahoo's
-history re-based to it (2025 closes near $9), while TradingView's earnings, equity and dividend still describe the
-company before that, so its P/E of 7.2 and yield of 8.7% are false. This affects every fundamental screen, not only
-this one, and is open: a corporate action the price vendor applied and the fundamentals vendor has not.
+CTVA looked like a data fault (an $8 price beside a large company's balance sheet) and is not one: SEC's filings
+(10-Q filed 2026-11-12, after a notice of late filing) give diluted EPS of $1.96 for nine months and a $0.18
+quarterly dividend, the same as TradingView, and Yahoo's prices agree with TradingView's 52-week range ($7.82–14.62).
+What the screen cannot see is the news: a third-quarter loss and a late filing. The ratio rests on fiscal-year
+history; read the latest 10-Q before trusting it.
 
 ## Effect on the other records
 

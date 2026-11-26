@@ -46,14 +46,29 @@ rows = [
     tv_row(name="AAA", description="Alpha Corp", sector="Technology Services",
            market_cap_basic=5e9, return_on_equity_fq=25.0, dividends_yield_current=None,
            average_volume_30d_calc=1e6),
-    # same company, two classes: the more traded one wins
+    # same company, two classes: the one with more DOLLAR volume wins
     tv_row(name="BRK.A", description="Berkshire Hathaway Inc. Class A", sector="Finance",
-           market_cap_basic=1e12, average_volume_30d_calc=200),
+           market_cap_basic=1e12, average_volume_30d_calc=200, close=700000.0),
     tv_row(name="BRK.B", description="Berkshire Hathaway Inc. Class B", sector="Finance",
-           market_cap_basic=1e12, average_volume_30d_calc=4e6),
+           market_cap_basic=1e12, average_volume_30d_calc=4e6, close=466.0),
 ]
 u = sd.parse_universe(rows)
 check(set(u) == {"AAA", "BRK-B"}, f"share classes collapse to the traded one, TV dot -> Yahoo dash: {sorted(u)}")
+hist_none = [None] * len(sd.TV_HISTORY)
+pr = lambda primary, **kv: {"d": tv_row(**kv)["d"] + hist_none + [primary]}
+u2 = sd.parse_universe([
+    # TradingView's primary class trades few shares at a high price, the other more dollars
+    pr(True, name="BATRA", description="Atlanta Braves Holdings Inc Class A", average_volume_30d_calc=60000, close=54.0),
+    pr(False, name="BATRK", description="Atlanta Braves Holdings Inc Class C", average_volume_30d_calc=485000, close=54.4),
+    # primary abroad: no primary US listing, left out
+    pr(False, name="ENB", description="Enbridge Inc.", average_volume_30d_calc=5e6, close=47.0),
+    # more shares, fewer dollars: the dear class keeps it
+    pr(True, name="XX.A", description="Dear Co Class A", average_volume_30d_calc=1000, close=5000.0),
+    pr(False, name="XX.B", description="Dear Co Class B", average_volume_30d_calc=50000, close=20.0)])
+check(set(u2) == {"BATRK", "XX-A"}, f"the class with the most dollar volume; no company listed first abroad: {sorted(u2)}")
+u3 = sd.parse_universe([pr(True, name="YY.A", description="Why Co Class A", average_volume_30d_calc=100, close=None),
+                        pr(False, name="YY.B", description="Why Co Class B", average_volume_30d_calc=900, close=None)])
+check(set(u3) == {"YY-B"}, f"no quote on a class: the more shares traded, not the first row: {sorted(u3)}")
 check(abs(u["AAA"]["roe"] - 0.25) < 1e-12, "TradingView percent converted to a fraction")
 check(u["AAA"]["div_yield"] is None, "absent dividend yield stays None, not 0")
 check(u["AAA"]["piotroski"] is None, "absent Piotroski stays None")
@@ -107,13 +122,17 @@ def fund_rec(sym, **kv):
 
 fund = {
     "UP": fund_rec("UP", ebit=5e8, ev=5e9, roic=0.30, gross_profit=4e9, total_assets=1e10,
+                   working_capital=1e9, revenue=8e9, fa_turnover=2.0,
                    piotroski=9, pb=2.0, eps_growth_q=0.4, eps_growth_fy=0.5, roe=0.3),
     # cheapest on EBIT/EV but a bank: excluded from the Magic Formula
-    "DOWN": fund_rec("DOWN", sector="Finance", ebit=9e8, ev=1e9, roic=0.5, piotroski=8, pb=0.5),
+    "DOWN": fund_rec("DOWN", sector="Finance", ebit=9e8, ev=1e9, roic=0.5, piotroski=8, pb=0.5,
+                     working_capital=1e9, revenue=8e9, fa_turnover=2.0),
     # EBIT absent: must not rank as an earnings yield of zero
-    "CALM": fund_rec("CALM", ebit=None, ev=3e9, roic=0.2, piotroski=None),
+    "CALM": fund_rec("CALM", ebit=None, ev=3e9, roic=0.2, piotroski=None, working_capital=1e9, revenue=8e9,
+                     fa_turnover=2.0),
     # CAN SLIM growth but ROE unreported: no data, not a pass
-    "WILD": fund_rec("WILD", ebit=1e8, ev=2e9, roic=0.1, eps_growth_q=0.6, eps_growth_fy=0.6, roe=None),
+    "WILD": fund_rec("WILD", ebit=1e8, ev=2e9, roic=0.1, eps_growth_q=0.6, eps_growth_fy=0.6, roe=None,
+                     working_capital=-5e8, revenue=1e9, fa_turnover=4.0),
 }
 df, lists, market, asof = sd.compute(fund, frames)
 
@@ -165,6 +184,7 @@ for i in range(60):
     fund60[sym] = fund_rec(sym, sector=["Technology Services", "Finance", "Health Technology"][i % 3],
                            industry=f"I{i % 6}", mcap=mc, ev=mc * rng60.uniform(0.8, 1.3),
                            ebit=mc * rng60.uniform(-0.02, 0.15), roic=rng60.uniform(-0.1, 0.4),
+                           working_capital=mc * rng60.uniform(-0.05, 0.2), fa_turnover=rng60.uniform(0.5, 8),
                            gross_profit=mc * rng60.uniform(0.05, 0.5), total_assets=mc * rng60.uniform(0.5, 2),
                            piotroski=int(rng60.integers(3, 10)), pb=rng60.uniform(-1, 8),
                            eps_growth_q=rng60.uniform(-0.5, 1.0), eps_growth_fy=rng60.uniform(-0.5, 1.0),
@@ -314,6 +334,42 @@ hr = {"d": [{"name": "HHH", "description": "Hist Co", "market_cap_basic": 5e9}.g
       + [[3.0, None, 1.0], [2.0], None, [5.0], [2025, 2024]]}
 hu = sd.parse_universe([hr])["HHH"]
 check(hu["ni_h"] == [3.0, None, 1.0] and hu["gp_h"] is None and hu["fy_h"] == [2025.0, 2024.0], f"histories parsed: {hu}")
+
+# ── price holes: not ranked on price ─────────────────────────────────────────
+ix = pd.bdate_range("2026-10-01", periods=40)
+base = np.linspace(10, 20, 40)
+pg = pd.DataFrame({"OK": base, "HOLE": base, "TAIL": base, "NEW": base, "LAST1": base}, index=ix)
+pg.iloc[30:33, 1] = np.nan          # three sessions skipped, then prices again (SNDK)
+pg.iloc[-2:, 2] = np.nan            # the last two sessions missing
+pg.iloc[:30, 3] = np.nan            # listed 10 sessions ago: no hole
+pg.iloc[-1, 4] = np.nan             # only today's bar missing (intraday, no live bar)
+check(sd.price_gaps(pg) == ["HOLE", "TAIL"], f"holes inside the last 21 sessions or the last two gone: {sd.price_gaps(pg)}")
+check(sd.price_gaps(pg, exempt={"TAIL"}) == ["HOLE"],
+      "a name served from an older cache (download failed) ends early by design: reported stale, not a hole")
+gf = {s_: f.copy() for s_, f in frames.items()}
+victim = sorted(s_ for s_ in gf if s_ != "SPY")[0]
+gf[victim] = gf[victim].drop(gf[victim].index[-4:-1])  # Yahoo skipped three sessions before the last
+gdf, glists, _, _ = sd.compute(fund, gf, gx := {})
+check(victim in gx["price_gaps"] and np.isnan(gdf.at[victim, "rs"]) and not any(victim in glists[k] for k in
+      ("trend_template", "rs_leaders", "momentum", "breakout", "low_vol", "luk_pullback")),
+      f"a name with a hole is left out of the price screens and its RS: {gx['price_gaps']}")
+# Piotroski: a passer without a book value is listed after the priced ones
+pf = dict(fund, NEG=fund_rec("NEG", piotroski=9, pb=None))
+pfr = dict(frames, NEG=frames[victim])
+check(sd.compute(pf, pfr)[1]["piotroski"][-1] == "NEG", "F >= 8 with no P/B: listed last, not dropped")
+
+# ── RS: O'Neil's published weights on each quarter's own return ──────────────
+rq = pd.Series(100.0 * np.array([1.0] * 40 + [1.0 + 0.10 * min(i, 63) / 63 for i in range(63)]
+                                + [1.10 * (1 - 0.05 * min(i, 63) / 63) for i in range(63)]
+                                + [1.045 * (1 + 0.20 * min(i, 63) / 63) for i in range(63)]
+                                + [1.254 * (1 + 0.02 * min(i, 63) / 63) for i in range(64)]),
+               index=pd.bdate_range("2024-01-01", periods=293))
+rc = pd.DataFrame({"Q": rq})
+rsig = sd.price_signals(rc, rc, rc)
+c_ = rq.to_numpy()
+qs = [c_[-1 - 63 * i] / c_[-1 - 63 * (i + 1)] - 1 for i in range(4)]
+check(abs(rsig["rs_raw"]["Q"].iloc[-1] - (0.4 * qs[0] + 0.2 * (qs[1] + qs[2] + qs[3]))) < 1e-12,
+      f"RS = 40% on the latest quarter's own return, 20% on each of the three before: {qs}")
 
 # ── Peter Lynch Value ────────────────────────────────────────────────────────
 lh = {"ni_h": [100.0 * 1.15 ** -i for i in range(8)], "fy_h": [2025 - i for i in range(8)]}
@@ -495,6 +551,11 @@ check("SPY" not in df.index, "the benchmark is not a screen candidate")
 check(lists["magic_formula"][:1] == ["UP"] and "DOWN" not in lists["magic_formula"],
       f"Magic Formula ranks operating companies only: {lists['magic_formula']}")
 check("CALM" not in lists["magic_formula"], "absent EBIT does not rank")
+check(abs(df.at["UP", "roc"] - 5e8 / (1e9 + 8e9 / 2.0)) < 1e-12,
+      f"Greenblatt's ROC = EBIT / (working capital + revenue / fixed-asset turnover): {df.at['UP', 'roc']}")
+check(np.isnan(df.at["WILD", "roc"]) and "WILD" not in lists["magic_formula"],
+      "capital not positive (-0.5B + 0.25B): no return on capital, not ranked")
+check(np.isnan(df.at["DOWN", "roc"]), "a bank has no Greenblatt return on capital")
 check(np.isnan(df.at["CALM", "earnings_yield"]), "absent EBIT -> earnings yield NaN, not 0")
 check(set(lists["piotroski"]) == {"UP", "DOWN"} and lists["piotroski"][0] == "DOWN",
       f"F >= 8, cheapest book first; absent score excluded: {lists['piotroski']}")
@@ -752,12 +813,17 @@ check(np.isnan(df2.at["UP", "shareholder_yield"]), "dividend known, buyback unkn
 check(abs(df2.at["WILD", "shareholder_yield"] - 0.01) < 1e-12, "explicit zeros add up")
 
 # a loss ranks as EXPENSIVE in the value composite, it does not drop out
-v = {s: fund_rec(s, mcap=1e9, ev=1e9, ebit=e, net_income=ni, revenue=1e9, ocf=1e8, pb=1.0,
+v = {s: fund_rec(s, mcap=1e9, ev=1e9, ebit=e, net_income=ni, revenue=1e9, ocf=1e8, pb=1.0, total_equity=1e9,
                  div_yield=0.0, buyback_yield=0.0)
      # DOWN matches UP on every ratio but E/P, so only the loss can rank it last
      for s, e, ni in (("UP", 1e8, 1e8), ("DOWN", 1e8, -5e8), ("CALM", 1e8, 1e8), ("WILD", 1e8, 1e8))}
 df3, _, _, _ = sd.compute(v, frames)
 check(df3.at["DOWN", "value_n"] == 6, "a loss keeps its E/P term (negative), it is not dropped")
+# a negative book ranks as EXPENSIVE too (TradingView gives no P/B for it: B/P = equity / market cap)
+v2 = dict(v, DOWN=dict(v["DOWN"], net_income=1e8, total_equity=-4e8, pb=None))
+df4, _, _, _ = sd.compute(v2, frames)
+check(df4.at["DOWN", "value_n"] == 6 and df4.at["DOWN", "value_score"] < df4.at["UP", "value_score"],
+      f"negative equity keeps a (negative) B/P term and scores dearer: {df4.at['DOWN', 'value_score']}")
 check(df3["value_score"]["DOWN"] < df3["value_score"].drop("DOWN").min(), f"the loss-maker is the most expensive: {df3['value_score'].to_dict()}")
 
 # cache clock: DST-correct close, and intraday fetches expire
@@ -816,7 +882,7 @@ with tempfile.TemporaryDirectory() as tmp:
     yf.download = _fake_download
     try:
         got, oldest, stale = sd.load_prices(["AAA", "BBB"], now=datetime.now(timezone.utc))
-        check(set(got) == {"AAA", "BBB", "SPY"} and stale == 0 and oldest > 0,
+        check(set(got) == {"AAA", "BBB", "SPY"} and stale == [] and oldest > 0,
               f"a downloading load_prices returns fresh frames: {sorted(got)} stale={stale}")
     except Exception as e:
         check(False, f"load_prices with a download and a clock raised {type(e).__name__}: {e}")

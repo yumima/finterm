@@ -80,7 +80,8 @@ def pullback_approaching(t, u):
     lead = pb_leaders_on([t], u).iloc[0]
     g = lambda n: S[n].loc[t, u].fillna(False).astype(bool)
     resting = g("pb_higher_lows") & g("pb_contracting") & g("pb_above") & g("pb_trend")
-    near = S["pb_low"].loc[t, u] <= S["ema21"].loc[t, u] * 1.05
+    # above the 21 EMA and within 5% of it (a low under it went through the zone)
+    near = (S["pb_low"].loc[t, u] >= S["ema21"].loc[t, u]) & (S["pb_low"].loc[t, u] <= S["ema21"].loc[t, u] * 1.05)
     sel = lead & resting & ~g("pb_touched") & near
     return sel
 

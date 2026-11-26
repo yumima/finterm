@@ -846,6 +846,11 @@ void ScreenerScreen::apply_result(const screener::ScanResult& r, bool provisiona
         bits << QStringLiteral("TradingView did not answer: fundamentals of %1 at today's prices").arg(r.fund_day);
     if (r.stale_prices > 0)
         bits << QStringLiteral("%1 names on older prices (oldest %2)").arg(r.stale_prices).arg(r.prices_fetched);
+    if (!r.price_gaps.isEmpty())
+        bits << QStringLiteral("%1 left out of the price screens: sessions missing from their prices (%2)")
+                    .arg(r.price_gaps.size())
+                    .arg(r.price_gaps.mid(0, 5).join(QStringLiteral(", ")) +
+                         (r.price_gaps.size() > 5 ? QStringLiteral(", …") : QString()));
     bits << QStringLiteral("%1 stocks (%2 priced)").arg(r.universe_n).arg(r.priced);
     if (provisional && running_)
         bits << QStringLiteral("refreshing…");
@@ -1929,13 +1934,19 @@ void ScreenerScreen::fill_band() {
                                                                           : QStringLiteral("every other name"),
                         QStringLiteral("%1 to %2").arg(rec.value(QStringLiteral("from")).toString(),
                                                        rec.value(QStringLiteral("to")).toString())));
-        if (s->setups_from == QLatin1String("trend_template") && !trap.isEmpty())
-            d += para(
-                QStringLiteral("Left out on purpose: names whose price trend passes all seven rules but whose RS is "
-                               "below 70. Held as a list they were reliably worse than the index, %1 / yr, t %2, in "
-                               "every sub-period — one of the two significant results in this research, both "
-                               "negative (the other: buying the names nearest their 52-week high).")
-                    .arg(pc(trap, "excess", true), tv(trap)));
+        if (s->setups_from == QLatin1String("trend_template") && !trap.isEmpty()) {
+            // the verdict comes from the record: under the first RS formula it
+            // was t -2.4, under O'Neil's published weights it is noise
+            const auto tt = screener::num(trap, QStringLiteral("t"));
+            const QString verdict = !tt                   ? QStringLiteral("untested")
+                                    : std::abs(*tt) < 2.0 ? QStringLiteral("noise")
+                                    : *tt > 0             ? QStringLiteral("better than the index")
+                                                          : QStringLiteral("reliably worse");
+            d += para(QStringLiteral("Not listed: names whose price trend passes all seven rules but whose RS is "
+                                     "below 70, the template's own rule. Held as a list they returned %1 / yr "
+                                     "against the index, t %2 (%3).")
+                          .arg(pc(trap, "excess", true), tv(trap), verdict));
+        }
     }
     d += section(QStringLiteral("PRACTISE IT · PAPER FIRST"), s->practice);
     if (!s->reading.isEmpty())

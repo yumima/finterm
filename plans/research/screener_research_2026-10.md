@@ -31,7 +31,7 @@ large field):
 |---|---|---|---|
 | Mark Minervini | +334.8% (2021, $1M+ div.), ~155% (1997) | SEPA / Trend Template | none rigorous |
 | Oliver Kell | +941.1% (2020) | cycle of price action (Minervini-family) | none |
-| David Ryan | 161% / 160% / ~100% (1985-87) | CAN SLIM | AAII 23.8%/yr 1998-2007, hypothetical, pre-cost |
+| David Ryan | three US Investing Championship titles, mid-1980s (sources differ on the years and figures) | CAN SLIM | AAII 23.8%/yr 1998-2007, hypothetical, pre-cost |
 | Leif Soreide | +60.9% (2019) | trend-template growth | none |
 | Kristjan Kullamägi | self-reported | breakouts / episodic pivots | none |
 
@@ -264,3 +264,17 @@ all but Piotroski (1.0% vs 0.5%: the F-score moves once a year); none, held as a
 list, differs from the index (|t| < 1). CAN SLIM: no test (no
 point-in-time quarterly EPS); its list ships labelled untested. The raw run
 counted empty months as cash: the pullback list read −9.0% (t −1.95) that way.
+
+## Fact-check 2026-11-26 (all screens)
+
+Each screen's text was checked against its primary source (Minervini, O'Neil + Co., Kullamägi's own post, Luk's own
+2024 review, Greenblatt, Piotroski 2000, Jegadeesh & Titman 1993, Daniel & Moskowitz, Novy-Marx, O'Shaughnessy via
+secondary sources, Blitz & van Vliet). Code changes that followed, re-measured on the shipped code:
+- RS rating: O'Neil + Co. publishes 40% on the latest quarter and 20% on each of the three before it, each quarter's
+  own return. The first form weighted cumulative 3/6/9/12-month returns (about 1.0/0.6/0.4/0.2 on the quarters).
+- Magic Formula live: Greenblatt's return on capital, EBIT / (net working capital + net fixed assets), as the
+  backtest already measured; the live screen had ranked on TradingView's ROIC (net income / debt + equity).
+- Piotroski live: TradingView's fiscal-year score, annual like the paper and the backtest (the TTM score differed by
+  up to four points: XOM 9 vs 5).
+Text: thresholds of this terminal's are marked "ours"; misattributions corrected (Fortune's ROE tests, Stockbee's
+"momentum burst", AAII's "CAN SLIM Revised" record, the long-short 2009 momentum crash, Luk's stops).

@@ -85,6 +85,7 @@ struct ScanResult {
     bool intraday = false;             // today's bar is still moving — not a close
     QString prices_fetched;            // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
     int stale_prices = 0;              // names served from an older cache (their download failed)
+    QStringList price_gaps;            // names with missing sessions: left out of the price screens
     QString plan_asof;                 // the completed session the pullback plans are drawn from
     int live_applied = 0;              // names whose today's bar is TradingView's quote
     int live_on_last_close = 0;        // names without a usable quote: shown at their last real close
@@ -142,6 +143,8 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     r.intraday = root.value(QStringLiteral("intraday")).toBool();
     r.prices_fetched = root.value(QStringLiteral("prices_fetched")).toString();
     r.stale_prices = root.value(QStringLiteral("stale_prices")).toInt();
+    for (const auto& g : root.value(QStringLiteral("price_gaps")).toArray())
+        r.price_gaps << g.toString();
     r.plan_asof = root.value(QStringLiteral("plan_asof")).toString();
     const QJsonObject lb = root.value(QStringLiteral("live_bar")).toObject();
     r.live_applied = lb.value(QStringLiteral("applied")).toInt();
@@ -272,8 +275,8 @@ inline const QVector<ColumnDef>& column_defs() {
         {"chg_1d", "1D", Kind::PctSigned, "Change on the current (or last) session — live"},
         {"mcap", "Mkt cap", Kind::Compact, "Market capitalisation"},
         {"rs", "RS", Kind::Int,
-         "Relative-strength rating 1-99: percentile of 0.4·3M + 0.2·6M + 0.2·9M + 0.2·12M return "
-         "against this universe (IBD-style)"},
+         "Relative-strength rating 1-99: percentile within this universe of the last four quarters' returns, "
+         "weighted 40/20/20/20 as William O'Neil + Co. publishes (not IBD's own rating)"},
         {"off_high", "Off high", Kind::PctSigned, "Distance below the 52-week closing high"},
         {"above_low", "Above low", Kind::Pct, "Distance above the 52-week closing low"},
         {"r1m", "1M", Kind::PctSigned, "Return, 21 sessions"},
@@ -288,7 +291,9 @@ inline const QVector<ColumnDef>& column_defs() {
         {"eps_growth_fy", "EPS FY y/y", Kind::PctSigned, "Fiscal-year diluted EPS growth"},
         {"rev_growth", "Rev y/y", Kind::PctSigned, "Revenue growth, trailing twelve months"},
         {"roe", "ROE", Kind::Pct, "Return on equity"},
-        {"roic", "ROIC", Kind::Pct, "Return on invested capital (Magic Formula's return on capital)"},
+        {"roic", "ROIC", Kind::Pct, "Return on invested capital: net income ÷ (debt + equity), TradingView's"},
+        {"roc", "ROC", Kind::Pct,
+         "Greenblatt's return on capital: EBIT ÷ (net working capital + net fixed assets) — the Magic Formula's"},
         {"gross_margin", "Gross mgn", Kind::Pct, "Gross margin, trailing twelve months"},
         {"gpa", "GP/Assets", Kind::Pct, "Gross profit ÷ total assets (Novy-Marx)"},
         {"mos", "Margin", Kind::PctSigned,
@@ -319,7 +324,7 @@ inline const QVector<ColumnDef>& column_defs() {
         {"pb", "P/B", Kind::Ratio, "Price ÷ book value"},
         {"ps", "P/S", Kind::Ratio, "Price ÷ sales"},
         {"ev_ebitda", "EV/EBITDA", Kind::Ratio, "Enterprise value ÷ EBITDA"},
-        {"piotroski", "F-score", Kind::Int, "Piotroski F-score 0-9, trailing twelve months"},
+        {"piotroski", "F-score", Kind::Int, "Piotroski F-score 0-9, on the last fiscal year's statements"},
         {"div_yield", "Div yld", Kind::Pct, "Dividend yield"},
         {"shareholder_yield", "Sh. yield", Kind::Pct, "Dividend yield + buyback yield"},
         {"entry", "Entry", Kind::Money,

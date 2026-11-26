@@ -212,35 +212,35 @@
    "to": "2026-08"
   },
   "Minervini Trend Template (all passers)": {
-   "excess": -0.009,
+   "excess": -0.0149,
    "from": "2010-01",
-   "hit": 0.535,
-   "max_dd": -0.2115,
-   "median_names": 82.0,
+   "hit": 0.52,
+   "max_dd": -0.2054,
+   "median_names": 78.0,
    "months_held": 200,
    "subperiods": [
-    -0.0186,
-    -0.0177,
-    -0.0334,
-    0.0359
+    -0.0221,
+    -0.027,
+    -0.041,
+    0.033
    ],
-   "t": -0.42,
+   "t": -0.7,
    "to": "2026-08"
   },
   "Minervini Trend Template (all passers) +M": {
-   "excess": -0.0419,
+   "excess": -0.0466,
    "from": "2010-01",
-   "hit": 0.51,
-   "max_dd": -0.189,
+   "hit": 0.495,
+   "max_dd": -0.191,
    "median_names": null,
    "months_held": 200,
    "subperiods": [
-    -0.0174,
-    -0.0639,
-    -0.0798,
-    -0.0144
+    -0.0204,
+    -0.0721,
+    -0.0827,
+    -0.0179
    ],
-   "t": -1.38,
+   "t": -1.53,
    "to": "2026-08"
   },
   "Momentum 12-1 (top decile)": {
@@ -276,19 +276,19 @@
    "to": "2026-08"
   },
   "Momentum 12-1 within Trend Template, top 25": {
-   "excess": 0.0144,
+   "excess": 0.0114,
    "from": "2010-01",
    "hit": 0.565,
    "max_dd": -0.2244,
    "median_names": 25.0,
    "months_held": 200,
    "subperiods": [
-    0.0022,
-    -0.04,
-    -0.0403,
-    0.1501
+    -0.0006,
+    -0.0463,
+    -0.0427,
+    0.1509
    ],
-   "t": 0.43,
+   "t": 0.34,
    "to": "2026-08"
   },
   "Piotroski F >= 8 (all)": {
@@ -340,67 +340,67 @@
    "to": "2026-08"
   },
   "RS composite (top decile)": {
-   "excess": 0.0199,
+   "excess": 0.0142,
    "from": "2010-01",
-   "hit": 0.51,
-   "max_dd": -0.1962,
+   "hit": 0.54,
+   "max_dd": -0.232,
    "median_names": 41.0,
    "months_held": 200,
    "subperiods": [
-    0.003,
-    -0.0197,
-    0.0144,
-    0.1013
+    0.0022,
+    -0.038,
+    0.0153,
+    0.1007
    ],
-   "t": 0.77,
+   "t": 0.55,
    "to": "2026-08"
   },
   "RS composite (top decile) +M": {
-   "excess": -0.0281,
+   "excess": -0.0328,
    "from": "2010-01",
-   "hit": 0.49,
-   "max_dd": -0.2524,
+   "hit": 0.525,
+   "max_dd": -0.2512,
    "median_names": null,
    "months_held": 200,
    "subperiods": [
-    -0.0007,
-    -0.0652,
-    -0.0588,
-    0.0104
+    0.0015,
+    -0.0821,
+    -0.0553,
+    0.0059
    ],
-   "t": -0.81,
+   "t": -0.94,
    "to": "2026-08"
   },
   "Trend Template, top 25 by RS": {
-   "excess": 0.0174,
+   "excess": 0.0127,
    "from": "2010-01",
-   "hit": 0.545,
-   "max_dd": -0.2262,
+   "hit": 0.54,
+   "max_dd": -0.2281,
    "median_names": 25.0,
    "months_held": 200,
    "subperiods": [
-    0.014,
-    -0.0406,
-    -0.0001,
-    0.1156
+    0.0054,
+    -0.0434,
+    -0.0351,
+    0.138
    ],
-   "t": 0.51,
+   "t": 0.38,
    "to": "2026-08"
   },
   "Trend Template, top 25 by RS +M": {
-   "excess": -0.0224,
+   "excess": -0.0242,
    "from": "2010-01",
-   "hit": 0.525,
-   "max_dd": -0.2479,
+   "hit": 0.52,
+   "max_dd": -0.2284,
    "median_names": null,
    "months_held": 200,
    "subperiods": [
-    0.015,
-    -0.0886,
-    -0.0612,
-    0.0483
+    0.0096,
+    -0.089,
+    -0.0828,
+    0.0659
    ],
-   "t": -0.56,
+   "t": -0.61,
    "to": "2026-08"
   },
   "Trending Value: value top decile -> top 25 by 6m": {
@@ -536,21 +536,21 @@
    "to": "2026-08"
   },
   "luk_pullback": {
-   "excess": -0.0271,
+   "excess": -0.0238,
    "from": "2010-02",
-   "max_dd": -0.6223,
+   "max_dd": -0.6085,
    "median_names": 5.0,
    "months": 200,
    "months_held": 159,
    "qualify_base": 0.0262,
-   "qualify_next": 0.2802,
+   "qualify_next": 0.2803,
    "subperiods": [
     0.0543,
-    -0.102,
-    -0.0951,
-    0.0041
+    -0.0915,
+    -0.0966,
+    0.0056
    ],
-   "t": -0.56,
+   "t": -0.49,
    "to": "2026-08"
   },
   "lynch": {
@@ -644,37 +644,37 @@
    "to": "2026-08"
   },
   "rs_trap": {
-   "excess": -0.0561,
+   "excess": -0.0046,
    "from": "2010-01",
-   "max_dd": -0.3569,
-   "median_names": 22.0,
+   "max_dd": -0.3724,
+   "median_names": 24.0,
    "months": 200,
-   "months_held": 162,
+   "months_held": 179,
    "subperiods": [
-    -0.0441,
-    -0.046,
-    -0.0603,
-    -0.0815
+    -0.0378,
+    0.0213,
+    -0.0196,
+    0.0159
    ],
-   "t": -2.43,
+   "t": -0.14,
    "to": "2026-08"
   },
   "trend_template": {
-   "excess": -0.0021,
+   "excess": -0.0074,
    "from": "2010-01",
-   "max_dd": -0.2413,
-   "median_names": 31.0,
+   "max_dd": -0.2394,
+   "median_names": 30.0,
    "months": 200,
    "months_held": 200,
-   "qualify_base": 0.0872,
-   "qualify_next": 0.3794,
+   "qualify_base": 0.0847,
+   "qualify_next": 0.3563,
    "subperiods": [
-    -0.0369,
-    0.0085,
-    0.012,
-    0.0194
+    -0.0525,
+    0.0128,
+    0.0249,
+    0.0003
    ],
-   "t": -0.1,
+   "t": -0.36,
    "to": "2026-08"
   },
   "trending_value": {
