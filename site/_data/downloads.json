@@ -2,5 +2,11 @@
   "clones": 1214,
   "clones_from": "2026-11-11",
   "clones_to": "2026-11-24",
-  "earlier_releases": {}
+  "earlier_releases": {
+    "v4.2.0@45774858410.1": {
+      "linux": 5,
+      "windows": 5,
+      "macos": 4
+    }
+  }
 }
