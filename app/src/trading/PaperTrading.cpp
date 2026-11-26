@@ -233,7 +233,10 @@ PtTrade pt_fill_order(const QString& order_id, double fill_price, std::optional<
 
     // ── Begin DB transaction for atomicity ──────────────────────────────
     auto& db = Database::instance();
-    db.begin_transaction();
+    // Without the transaction a failure half way could not be rolled back
+    // (BEGIN IMMEDIATE waits busy_timeout for another thread's write).
+    if (auto b = db.begin_transaction(); b.is_err())
+        throw std::runtime_error("Could not start the fill: " + b.error());
 
     try {
         // 4. Check opposite-side position (closing)

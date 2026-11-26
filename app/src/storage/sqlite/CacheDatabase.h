@@ -1,7 +1,7 @@
 #pragma once
 #include "core/result/Result.h"
+#include "storage/sqlite/ThreadConnections.h"
 
-#include <QMutex>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -12,9 +12,10 @@ namespace finterm {
 
 /// Separate SQLite database for ephemeral cache data.
 /// Uses synchronous=NORMAL under WAL for safe, fast writes.
-/// A QMutex serializes access: Qt's QSqlDatabase connection is not thread-safe,
-/// and this cache is read/written from services whose callbacks may run on
-/// worker threads (HttpClient, PythonRunner finished signals).
+/// It is read/written from services whose callbacks may run on worker threads
+/// (HttpClient, PythonRunner finished signals), so each thread works on its
+/// own connection (ThreadConnections): a QSqlQuery from execute() belongs to
+/// the calling thread.
 class CacheDatabase {
   public:
     static CacheDatabase& instance();
@@ -26,15 +27,15 @@ class CacheDatabase {
     Result<QSqlQuery> execute(const QString& sql, const QVariantList& params = {});
     Result<void> exec(const QString& sql);
 
-    QSqlDatabase& raw_db() { return db_; }
+    /// The calling thread's connection (invalid when closed). This thread only.
+    QSqlDatabase raw_db() { return conns_.connection(); }
 
   private:
-    CacheDatabase() = default;
-    Result<void> apply_pragmas();
+    CacheDatabase();
+    static QString apply_pragmas(QSqlDatabase& db);
     Result<void> create_tables();
 
-    QSqlDatabase db_;
-    mutable QMutex mutex_;
+    ThreadConnections conns_;
 };
 
 } // namespace finterm

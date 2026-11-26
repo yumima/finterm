@@ -2,7 +2,10 @@
 
 #include "core/logging/Logger.h"
 
-#include <QMutexLocker>
+#include <QThread>
+
+#include <cstring>
+
 
 namespace finterm {
 
@@ -11,17 +14,15 @@ CacheDatabase& CacheDatabase::instance() {
     return s;
 }
 
+CacheDatabase::CacheDatabase() : conns_(QStringLiteral("finterm_cache"), &CacheDatabase::apply_pragmas) {}
+
 Result<void> CacheDatabase::open(const QString& path) {
-    db_ = QSqlDatabase::addDatabase("QSQLITE", "finterm_cache");
-    db_.setDatabaseName(path);
-    if (!db_.open()) {
-        return Result<void>::err(db_.lastError().text().toStdString());
+    const QString error = conns_.set_path(path);
+    if (!error.isEmpty()) {
+        conns_.set_path({});
+        return Result<void>::err(error.toStdString());
     }
     LOG_INFO("CacheDB", "Opened cache database: " + path);
-
-    auto pr = apply_pragmas();
-    if (pr.is_err())
-        return pr;
 
     auto tr = create_tables();
     if (tr.is_err())
@@ -40,17 +41,19 @@ Result<void> CacheDatabase::open(const QString& path) {
 }
 
 void CacheDatabase::close() {
-    if (db_.isOpen())
-        db_.close();
+    conns_.set_path({});
 }
 
 bool CacheDatabase::is_open() const {
-    return db_.isOpen();
+    return !conns_.path().isEmpty();
 }
 
 Result<QSqlQuery> CacheDatabase::execute(const QString& sql, const QVariantList& params) {
-    QMutexLocker lock(&mutex_);
-    QSqlQuery query(db_);
+    QString error;
+    QSqlDatabase db = conns_.connection(&error);
+    if (!db.isOpen())
+        return Result<QSqlQuery>::err(error.toStdString());
+    QSqlQuery query(db);
     query.prepare(sql);
     for (int i = 0; i < params.size(); ++i) {
         query.bindValue(i, params[i]);
@@ -62,15 +65,18 @@ Result<QSqlQuery> CacheDatabase::execute(const QString& sql, const QVariantList&
 }
 
 Result<void> CacheDatabase::exec(const QString& sql) {
-    QMutexLocker lock(&mutex_);
-    QSqlQuery query(db_);
+    QString error;
+    QSqlDatabase db = conns_.connection(&error);
+    if (!db.isOpen())
+        return Result<void>::err(error.toStdString());
+    QSqlQuery query(db);
     if (!query.exec(sql)) {
         return Result<void>::err(query.lastError().text().toStdString());
     }
     return Result<void>::ok();
 }
 
-Result<void> CacheDatabase::apply_pragmas() {
+QString CacheDatabase::apply_pragmas(QSqlDatabase& db) {
     // synchronous=NORMAL under WAL is the standard safe/fast combo. OFF risked full DB
     // corruption on power loss — now that cache.db also holds
     // screen_state, durability matters more than the marginal write gain of OFF.
@@ -83,13 +89,18 @@ Result<void> CacheDatabase::apply_pragmas() {
         "PRAGMA wal_autocheckpoint = 400",
         "PRAGMA journal_size_limit = 33554432", // 32 MB
     };
+    // Per connection, so every thread's connection gets them.
     for (auto* p : pragmas) {
-        auto r = exec(p);
-        if (r.is_err()) {
-            LOG_WARN("CacheDB", QString("PRAGMA failed: %1 — %2").arg(p, QString::fromStdString(r.error())));
+        QSqlQuery q(db);
+        // The large page cache is for the GUI thread's connection; every worker
+        // thread has one too, and 2 MB each is plenty for what they run.
+        if (std::strstr(p, "cache_size") && !QThread::isMainThread())
+            p = "PRAGMA cache_size = -2000";
+        if (!q.exec(QString::fromLatin1(p))) {
+            LOG_WARN("CacheDB", QString("PRAGMA failed: %1 — %2").arg(p, q.lastError().text()));
         }
     }
-    return Result<void>::ok();
+    return {};
 }
 
 Result<void> CacheDatabase::create_tables() {

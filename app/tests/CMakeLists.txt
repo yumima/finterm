@@ -349,6 +349,7 @@ find_package(Qt6 ${_finterm_qt_match} REQUIRED COMPONENTS Sql)
 add_executable(test_portfolio_snapshots
     storage/test_portfolio_snapshots.cpp
     ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/ThreadConnections.cpp
     ../src/services/portfolio/PortfolioLedger.cpp
     ../src/storage/sqlite/migrations/MigrationRunner.cpp
     ../src/storage/sqlite/migrations/v006_portfolio_multi.cpp
@@ -381,6 +382,7 @@ add_test(NAME portfolio_snapshots COMMAND test_portfolio_snapshots)
 add_executable(test_chat_sessions
     storage/test_chat_sessions.cpp
     ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/ThreadConnections.cpp
     ../src/storage/sqlite/migrations/MigrationRunner.cpp
     ../src/storage/sqlite/migrations/v002_llm_chat.cpp
     ../src/storage/sqlite/migrations/v043_chat_session_persona.cpp
@@ -414,6 +416,7 @@ add_executable(test_cache_aged
     storage/test_cache_aged.cpp
     ../src/storage/cache/CacheManager.cpp
     ../src/storage/sqlite/CacheDatabase.cpp
+    ../src/storage/sqlite/ThreadConnections.cpp
     ../src/core/logging/Logger.cpp
 )
 
@@ -1004,6 +1007,7 @@ add_test(NAME hearth_installer COMMAND test_hearth_installer)
 add_executable(test_engine_link
     storage/test_engine_link.cpp
     ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/ThreadConnections.cpp
     ../src/storage/sqlite/migrations/MigrationRunner.cpp
     ../src/storage/sqlite/migrations/v001_initial.cpp
     ../src/storage/sqlite/migrations/v002_llm_chat.cpp
@@ -1610,3 +1614,20 @@ if(Python3_Interpreter_FOUND)
     )
     set_tests_properties(social_backend PROPERTIES TIMEOUT 60)
 endif()
+
+# ── One SQLite connection per thread ─────────────────────────────────────────
+# Qt opens SQLite NOMUTEX; a connection shared across threads crashed the
+# Windows build in qsqlite.dll. Pins per-thread connections, concurrent
+# read/write, thread-owned transactions and reopen.
+add_executable(test_db_threads
+    storage/test_db_threads.cpp
+    ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/CacheDatabase.cpp
+    ../src/storage/sqlite/ThreadConnections.cpp
+    ../src/storage/sqlite/migrations/MigrationRunner.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_db_threads PRIVATE ../src)
+target_link_libraries(test_db_threads PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+set_target_properties(test_db_threads PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME db_threads COMMAND test_db_threads)

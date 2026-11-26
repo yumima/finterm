@@ -645,6 +645,7 @@ set(STORAGE_SOURCES
     # Core databases
     src/storage/sqlite/Database.cpp
     src/storage/sqlite/CacheDatabase.cpp
+    src/storage/sqlite/ThreadConnections.cpp
     src/storage/sweep/RetiredStorage.cpp
 
     # Migration system

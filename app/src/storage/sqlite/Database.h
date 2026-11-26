@@ -1,7 +1,7 @@
 #pragma once
 #include "core/result/Result.h"
+#include "storage/sqlite/ThreadConnections.h"
 
-#include <QMutex>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -11,6 +11,9 @@
 namespace finterm {
 
 /// SQLite database wrapper with WAL mode, prepared statements, and transaction support.
+/// Each thread works on its own connection to the file (ThreadConnections): a
+/// QSqlQuery from execute() belongs to the calling thread, and so does a
+/// transaction begun with begin_transaction().
 class Database {
   public:
     static Database& instance();
@@ -30,24 +33,18 @@ class Database {
     Result<void> commit();
     Result<void> rollback();
 
-    QSqlDatabase& raw_db() { return db_; }
+    /// The calling thread's connection (invalid when the database is closed).
+    /// Use it on this thread only.
+    QSqlDatabase raw_db() { return conns_.connection(); }
 
     /// Returns the file path of the open database (empty if not open).
-    QString path() const { return db_.databaseName(); }
+    QString path() const { return conns_.path(); }
 
   private:
-    Database() = default;
-    Result<void> apply_pragmas();
-    void close_locked(); ///< close db_; caller holds mutex_
+    Database();
+    static QString apply_pragmas(QSqlDatabase& db);
 
-    QSqlDatabase db_;
-    // Serialises access to db_ across threads.
-    // Qt's rule: a QSqlDatabase connection may only be used from the thread
-    // that created it. In practice the SQLite driver is compiled with
-    // SQLITE_THREADSAFE=1 (serialised mode), so the C-level access is safe,
-    // but the Qt C++ wrappers (QSqlQuery, QSqlDatabase) are not. This mutex
-    // ensures we never touch db_ concurrently from two threads.
-    mutable QMutex mutex_;
+    ThreadConnections conns_;
 };
 
 } // namespace finterm
