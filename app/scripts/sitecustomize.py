@@ -21,11 +21,13 @@ try:
     import importlib.machinery
     import importlib.util
 
-    _here = os.path.dirname(os.path.abspath(__file__))
-    _rest = [p for p in sys.path if os.path.abspath(p or os.curdir) != _here]
-    _spec = importlib.machinery.PathFinder.find_spec("sitecustomize", _rest)
-    if _spec and _spec.origin and os.path.abspath(_spec.origin) != os.path.abspath(__file__):
-        _mod = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_mod)
+    if not getattr(sys, "_finterm_site_chained", False):
+        sys._finterm_site_chained = True  # this folder under two spellings must not chain to itself
+        _here = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+        _rest = [p for p in sys.path if os.path.realpath(p or os.curdir) != _here]
+        _spec = importlib.machinery.PathFinder.find_spec("sitecustomize", _rest)
+        if _spec and _spec.origin and os.path.realpath(os.path.dirname(_spec.origin)) != _here:
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
 except Exception:
     pass

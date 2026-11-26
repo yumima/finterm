@@ -29,11 +29,11 @@ def check(name, ok, detail=""):
         fails.append(name)
 
 
-real_getproxies, real_bypass = urllib.request.getproxies, urllib.request.proxy_bypass
+env_before = dict(os.environ)
+real_settings = sp._os_settings
 os_proxies = {}
 bypassed = set()
-urllib.request.getproxies = lambda: dict(os_proxies)
-urllib.request.proxy_bypass = lambda host: host in bypassed
+sp._os_settings = lambda: (dict(os_proxies), lambda host: host in bypassed)
 
 # ── the decision, per URL, at request time ──────────────────────────────────
 os_proxies.update({"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"})
@@ -49,8 +49,36 @@ check("a SOCKS-only setting is left alone", sp.proxy_for("https://query1.finance
 os_proxies.clear()
 os_proxies.update({"https": "127.0.0.1:7897"})
 check("a bare host:port gets its scheme", sp.proxy_for("https://x.example/") == "http://127.0.0.1:7897")
+os_proxies.update({"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"})
+check("loopback is always direct", sp.proxy_for("http://127.0.0.1:11434/api") is None
+      and sp.proxy_for("http://localhost:8080/") is None and sp.proxy_for("http://[::1]:80/") is None)
 os_proxies.clear()
-check("no environment is written", not any(k.lower().endswith("_proxy") for k in os.environ))
+check("no environment is written", dict(os.environ) == env_before)
+
+# A NO_PROXY alone in the environment must not hide the OS proxy (urllib's
+# getproxies() answers {'no': ...} then). Windows' registry readers, faked.
+sp._os_settings = real_settings
+saved_env = {k: os.environ.pop(k) for k in list(os.environ) if k.lower().endswith("_proxy")}
+os.environ["NO_PROXY"] = "localhost"
+real_platform = sp.sys.platform
+had = {n: getattr(urllib.request, n, None) for n in ("getproxies_registry", "proxy_bypass_registry")}
+try:
+    sp.sys.platform = "win32"
+    urllib.request.getproxies_registry = lambda: {"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
+    urllib.request.proxy_bypass_registry = lambda host: host == "intranet"
+    check("NO_PROXY alone: the OS proxy is still used", sp.proxy_for("https://query1.finance.yahoo.com/") ==
+          "http://127.0.0.1:7897")
+    check("...and the OS's own bypass list too", sp.proxy_for("http://intranet/") is None)
+finally:
+    sp.sys.platform = real_platform
+    for n, f in had.items():
+        if f is None:
+            delattr(urllib.request, n)
+        else:
+            setattr(urllib.request, n, f)
+    os.environ.pop("NO_PROXY", None)
+    os.environ.update(saved_env)
+sp._os_settings = lambda: (dict(os_proxies), lambda host: host in bypassed)
 check("Linux: nothing installed (curl reads the desktop's env proxy itself)",
       sp.install() is (sys.platform in ("win32", "darwin")))
 
@@ -68,7 +96,7 @@ try:
     import curl_cffi  # noqa: F401
 except ImportError as e:
     print(f"SKIP : curl_cffi parts ({e})")
-    urllib.request.getproxies, urllib.request.proxy_bypass = real_getproxies, real_bypass
+    sp._os_settings = real_settings
     sys.exit(1 if fails else 77)  # 77 = skip: no app venv here
 
 code = ("import sys; sys.path.insert(0, %r); import system_proxy as sp; sys.meta_path.insert(0, sp._Finder()); "
@@ -115,8 +143,15 @@ try:
     except Exception:
         pass
     check("...and a bypassed host does not", not seen, str(seen))
+    seen.clear()
+    try:
+        creq.Session(base_url="https://query2.finance.yahoo.com").get("/v8/finance/chart/%5EGSPC", timeout=5)
+    except Exception:
+        pass
+    check("a Session(base_url=...) with a relative URL goes through it too",
+          any(x.startswith("CONNECT query2.finance.yahoo.com:443") for x in seen), str(seen))
 finally:
     srv.close()
-    urllib.request.getproxies, urllib.request.proxy_bypass = real_getproxies, real_bypass
+    sp._os_settings = real_settings
 
 sys.exit(1 if fails else 0)

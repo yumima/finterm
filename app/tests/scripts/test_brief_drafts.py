@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import types
 import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -394,7 +395,7 @@ def test_a_published_brief_can_be_generated_again():
     assert bd.load(did)["state"] == "published"
     # the build fails: the published brief stands
     started, popen, real = [], subprocess.Popen, bd.repo_root
-    bd.subprocess.Popen = lambda *a, **k: started.append(a)
+    bd.subprocess.Popen = lambda *a, **k: started.append(a) or types.SimpleNamespace(pid=os.getpid())
     bd.repo_root = lambda: Path(TMP) / "no-such-repo"
     try:
         bd.start_weekly_build(force=True)

@@ -261,7 +261,7 @@ def _alive(pid):
         k32.OpenProcess.restype = wintypes.HANDLE
         h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
-            return False
+            return ctypes.get_last_error() == 5  # ACCESS_DENIED: it exists, it is not ours to open
         try:
             code = wintypes.DWORD()
             return bool(k32.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
@@ -286,7 +286,7 @@ def _is_app_build(pid):
                  f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"],
                 capture_output=True, text=True, timeout=20,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
-            return "build-weekly" in out
+            return "brief_drafts.py" in out and "build-weekly" in out
         return os.getpgid(pid) == pid and "build-weekly" in subprocess.run(
             ["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
     except (OSError, subprocess.SubprocessError):
@@ -611,12 +611,20 @@ def start_weekly_build(force=False, symbols=None):
     with open(log_path(), "a", encoding="utf-8") as log:
         log.write(f"\n=== {_iso(_now())} weekly build (Social screen)\n")
         log.flush()
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly", *(["--again"] if again else [])], stdout=log,
+        child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "build-weekly", *(["--again"] if again else [])], stdout=log,
                          stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
                          creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
                          if os.name == "nt" else 0,
                          cwd=os.path.dirname(os.path.abspath(__file__)))
-    time.sleep(0.5)  # the child records its own pid at once; this one exits
+    # The child records its own pid when it is up; until then the record names
+    # the child as started (this process exits) — a slow start (Windows:
+    # Defender, the venv launcher) must not read as a dead build.
+    with Lock(wait=True):
+        m = load(did)
+        if m and m.get("state") == "building" and m.get("pid") == os.getpid():
+            m["pid"] = child.pid
+            store(m)
+    time.sleep(0.5)
     return get(did)
 
 

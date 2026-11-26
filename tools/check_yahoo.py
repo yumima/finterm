@@ -52,32 +52,67 @@ def system_proxies():
 
 
 def follow_system_proxy():
-    """What finterm's fix does (app/scripts/system_proxy.py, kept in step):
-    each curl_cffi request asks the OS, at that moment, for its URL's proxy
-    and bypass list. The environment is not touched."""
+    """What finterm's fix does: each curl_cffi request asks the OS, at that
+    moment, for its URL's proxy and bypass list. Uses the app's own
+    app/scripts/system_proxy.py when this file sits in a finterm checkout;
+    the copy below (for a customer running this file alone) is the same rule."""
+    import curl_cffi.requests.session as cs
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    scripts = os.path.join(here, "..", "app", "scripts")
+    if os.path.exists(os.path.join(scripts, "system_proxy.py")):
+        sys.path.insert(0, scripts)
+        import system_proxy
+        system_proxy._patch(cs)
+        return
+
+    import ipaddress
     import urllib.parse
-    from curl_cffi.requests import Session
+
+    def os_settings():
+        env = urllib.request.getproxies_environment()
+        if any(k in env for k in ("http", "https", "all")):
+            return env, urllib.request.proxy_bypass_environment
+        if sys.platform == "win32":
+            return urllib.request.getproxies_registry(), urllib.request.proxy_bypass_registry
+        if sys.platform == "darwin":
+            return urllib.request.getproxies_macosx_sysconf(), urllib.request.proxy_bypass_macosx_sysconf
+        return env, urllib.request.proxy_bypass_environment
+
+    def loopback(host):
+        if host.lower() == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host.strip("[]")).is_loopback
+        except ValueError:
+            return False
 
     def proxy_for(url):
         parts = urllib.parse.urlsplit(url)
         scheme, host = (parts.scheme or "http").lower(), parts.hostname or ""
-        found = urllib.request.getproxies()
-        proxy = found.get(scheme) or (found.get("http") if scheme == "https" else None)
-        if not proxy or proxy.lower().startswith("socks") or not host or urllib.request.proxy_bypass(host):
+        if not host or loopback(host):
+            return None
+        found, bypass = os_settings()
+        proxy = found.get(scheme) or found.get("all") or (found.get("http") if scheme == "https" else None)
+        if not proxy or proxy.lower().startswith("socks") or bypass(host):
             return None
         return proxy if "://" in proxy else "http://" + proxy
 
-    original = Session.request
+    original = cs.Session.request
 
     def request(self, method, url, *args, **kwargs):
         if not kwargs.get("proxy") and not kwargs.get("proxies") and not getattr(self, "proxies", None) \
                 and not getattr(self, "proxy", None):
-            p = proxy_for(str(url))
+            full = str(url)
+            base = getattr(self, "base_url", None)
+            if base and not urllib.parse.urlsplit(full).netloc:
+                full = urllib.parse.urljoin(str(base), full)
+            p = proxy_for(full)
             if p:
                 kwargs["proxy"] = p
         return original(self, method, url, *args, **kwargs)
 
-    Session.request = request
+    cs.Session.request = request
 
 
 def checks():

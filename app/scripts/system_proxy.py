@@ -20,20 +20,47 @@ import sys
 _TARGET = "curl_cffi.requests.session"
 
 
-def proxy_for(url):
-    """The proxy URL the OS would use for `url`, or None (direct). SOCKS
-    proxies are left alone: curl_cffi needs them spelt socks5h://, and a
-    wrong guess is worse than going direct."""
-    import urllib.parse
+def _is_loopback(host):
+    import ipaddress
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
+def _os_settings():
+    """(proxies, bypass) as the OS has them — the environment's *_PROXY when it
+    names a proxy (curl would use it anyway), else the Windows registry /
+    macOS settings. A NO_PROXY alone is not "the environment has a proxy":
+    urllib's getproxies() would then answer {'no': ...} and hide the OS proxy."""
     import urllib.request
+    env = urllib.request.getproxies_environment()
+    if any(k in env for k in ("http", "https", "all")):
+        return env, urllib.request.proxy_bypass_environment
+    if sys.platform == "win32":
+        return urllib.request.getproxies_registry(), urllib.request.proxy_bypass_registry
+    if sys.platform == "darwin":
+        return urllib.request.getproxies_macosx_sysconf(), urllib.request.proxy_bypass_macosx_sysconf
+    return env, urllib.request.proxy_bypass_environment
+
+
+def proxy_for(url):
+    """The proxy URL the OS would use for `url`, or None (direct). Loopback is
+    always direct. SOCKS proxies are left alone: curl_cffi needs them spelt
+    socks5h://, and a wrong guess is worse than going direct."""
+    import urllib.parse
     try:
         parts = urllib.parse.urlsplit(url)
         scheme, host = (parts.scheme or "http").lower(), parts.hostname or ""
-        found = urllib.request.getproxies()
-        proxy = found.get(scheme) or (found.get("http") if scheme == "https" else None)
-        if not proxy or proxy.lower().startswith("socks") or not host:
+        if not host or _is_loopback(host):
             return None
-        if urllib.request.proxy_bypass(host):
+        found, bypass = _os_settings()
+        proxy = found.get(scheme) or found.get("all") or (found.get("http") if scheme == "https" else None)
+        if not proxy or proxy.lower().startswith("socks"):
+            return None
+        if bypass(host):
             return None
         return proxy if "://" in proxy else "http://" + proxy
     except Exception:
@@ -49,7 +76,12 @@ def _patch(module):
     def request(self, method, url, *args, **kwargs):
         if not kwargs.get("proxy") and not kwargs.get("proxies") and not getattr(self, "proxies", None) \
                 and not getattr(self, "proxy", None):
-            p = proxy_for(str(url))
+            import urllib.parse
+            full = str(url)
+            base = getattr(self, "base_url", None)
+            if base and not urllib.parse.urlsplit(full).netloc:
+                full = urllib.parse.urljoin(str(base), full)  # a Session(base_url=...) sends relative URLs
+            p = proxy_for(full)
             if p:
                 kwargs["proxy"] = p
         return original(self, method, url, *args, **kwargs)

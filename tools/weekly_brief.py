@@ -50,6 +50,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import brief_track  # noqa: E402
+from datefmt import fmt as _fmt  # noqa: E402
 from weekly_brief_core import (  # noqa: E402,F401 — the shared brief; re-exported for callers
     CLUSTER_HISTORY, CONTACT_KEY, DISCLAIMER, ECONOMY_SERIES, IPO_DAYS, ISSUE_DISCLAIMER, LABELS, MARKET_SERIES,
     METHOD_URL, REGIME_SERIES, SITE_URL, STANCE, WINDOW_DAYS,
@@ -197,10 +198,10 @@ def holdings_week(symbols, today, flows, doc, earnings, ipo):
     ahead = {}
     for r in (earnings or {}).get("calendar") or []:
         if one_symbol(r["symbol"]) in mine:
-            ahead.setdefault(one_symbol(r["symbol"]), []).append(f"earnings {date.fromisoformat(r['date']):%a %b %-d}")
+            ahead.setdefault(one_symbol(r["symbol"]), []).append(f"earnings {_fmt(date.fromisoformat(r['date']), '%a %b %-d')}")
     for r in (ipo or {}).get("lockups") or []:
         if one_symbol(r["ticker"]) in mine:
-            ahead.setdefault(one_symbol(r["ticker"]), []).append(f"lock-up ends {r['ends']:%a %b %-d}")
+            ahead.setdefault(one_symbol(r["ticker"]), []).append(f"lock-up ends {_fmt(r['ends'], '%a %b %-d')}")
     by = {one_symbol(k): v for k, v in ((flows or {}).get("by") or {}).items()}
     doc = {"strategies": [{**st, "symbols": [one_symbol(s) for s in st.get("symbols") or []]}
                           for st in (doc or {}).get("strategies") or []]}
@@ -250,7 +251,7 @@ def build_brief(today, topics=ALL_TOPICS, detail="standard", scan=True, extras=T
             got["rows"], _, _ = clusters_data(False)
             progress.page(page(pending))
         got["rows"], got["notes"], got["complete"] = clusters_data(
-            scan, lambda day, n, of, left: say(f"{day:%a %b %-d}: {n:,} of {of:,}", n / max(1, of)),
+            scan, lambda day, n, of, left: say(f"{_fmt(day, '%a %b %-d')}: {n:,} of {of:,}", n / max(1, of)),
             waiting=lambda: say("another scan is reading; waiting for it"))
         say(f"{len(got['rows'])} companies")
         return got["notes"][0] if got["notes"] and not got["complete"] else None
@@ -383,8 +384,8 @@ def write_card(site_dir, today, data):
     rel = f"assets/brief/{issue_day(today).isoformat()}.png"
     stance = "full risk" if STANCE[r["state"]] == 1 else "half risk"
     words = regime_words(r)
-    ok = brief_card.make(site_dir / rel, f"Weekly brief · {today:%B %-d, %Y}", r["state"],
-                         f"{LABELS[r['state']]}: {stance}".upper(), f"{words} ({r['date']:%b %-d} close)", cells)
+    ok = brief_card.make(site_dir / rel, f"Weekly brief · {_fmt(today, '%B %-d, %Y')}", r["state"],
+                         f"{LABELS[r['state']]}: {stance}".upper(), f"{words} ({_fmt(r['date'], '%b %-d')} close)", cells)
     return rel if ok else None
 
 
@@ -416,8 +417,8 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
     # week's issue, and the announced URL does not depend on it.
     post = posts / f"{issue_day(today).isoformat()}-insider-buying.md"
     post.write_text(page({
-        "title": f"Weekly brief, {today:%B %-d, %Y}",
-        "description": f"{what[0].upper()}{what[1:]} — the week to {today:%B %-d, %Y}, on one page.",
+        "title": f"Weekly brief, {_fmt(today, '%B %-d, %Y')}",
+        "description": f"{what[0].upper()}{what[1:]} — the week to {_fmt(today, '%B %-d, %Y')}, on one page.",
         # The week's Monday, date only: Jekyll reads it as midnight UTC, so it
         # is never in the future; the post layout shows `updated`.
         "date": issue_day(today),
@@ -432,7 +433,7 @@ def write_site(site_dir, rows, notes, today, body, complete=True, topics=ALL_TOP
         "description": "Companies where two or more insiders reported open-market purchases in the last 7 days "
                        "of SEC Form 4 filings. Updated weekly.",
         "permalink": "/insider-cluster-buys/",
-    }, [f"_Updated {today:%B %-d, %Y} · [this week's issue]({url}) · [all issues]({SITE_URL}/brief/)_", ""]
+    }, [f"_Updated {_fmt(today, '%B %-d, %Y')} · [this week's issue]({url}) · [all issues]({SITE_URL}/brief/)_", ""]
         + mark + raw(clusters_section(rows, notes, max_rows=len(rows)))), encoding="utf-8")
 
     # complete/notes: the Social screen's draft review shows them and asks
@@ -524,7 +525,7 @@ def main():
 
     out_dir = Path(args.out) if args.out else finterm_paths.user_root() / "files" / "weekly"
     out_dir.mkdir(parents=True, exist_ok=True)
-    lines = [f"# Weekly brief, {today:%B %-d, %Y}", ""]
+    lines = [f"# Weekly brief, {_fmt(today, '%B %-d, %Y')}", ""]
     lines += build_brief(today, topics, args.detail, scan=not args.no_scan, extras=not args.no_extras)["body"]
     lines += ["---", "", f"_{ISSUE_DISCLAIMER}_", ""]
     path = out_dir / f"weekly-{week_of.isoformat()}.md"
