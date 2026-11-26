@@ -4,30 +4,30 @@
   "updates": {
     "windows-x64": {
       "latest-version": "4.2.0",
-      "commit": "2d68e42b6b23959b8b23b4f7044decee4ab4b950",
-      "committed": "2026-11-25T01:48:16Z",
+      "commit": "2f3abfe09ab7afde9e461f9e35ec253fca23183d",
+      "committed": "2026-11-26T07:04:46Z",
       "download-url": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-windows-x64-setup.exe",
-      "sha256": "7a24768a9ff9519fc45d36f5f07c03bf4a55a90c27cff12c1340b9616aea886b",
+      "sha256": "eed1ff29350a4f765dd3f1e7213b09421957e5c85c2e26dfa528965ae6618130",
       "open-url": "https://github.com/yumima/finterm/releases/tag/v4.2.0",
       "changelog": "finterm v4.2.0 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.2.0",
       "inplace-url": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-windows-x64-update.zip",
-      "inplace-sha256": "83b94f0d1e58cf83f221ae7b39c01177356a013574676f83a7c1b0fb67812a0e"
+      "inplace-sha256": "6e7a79e92987be2de8ec3b78478d584c5a94405f2419ca48d0c5736dda55c2ab"
     },
     "linux-x64": {
       "latest-version": "4.2.0",
-      "commit": "2d68e42b6b23959b8b23b4f7044decee4ab4b950",
-      "committed": "2026-11-25T01:48:16Z",
+      "commit": "2f3abfe09ab7afde9e461f9e35ec253fca23183d",
+      "committed": "2026-11-26T07:04:46Z",
       "download-url": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-linux-x64-setup.run",
-      "sha256": "11555d71ac51665f7490ddc85861993fefae47cf4bf24e8de4350548cbde1457",
+      "sha256": "6e1bc189bc086b92acd4b734f6279465390dcd6a0795bd91a0bf4a6fbfdc84ef",
       "open-url": "https://github.com/yumima/finterm/releases/tag/v4.2.0",
       "changelog": "finterm v4.2.0 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.2.0"
     },
     "macos-arm64": {
       "latest-version": "4.2.0",
-      "commit": "2d68e42b6b23959b8b23b4f7044decee4ab4b950",
-      "committed": "2026-11-25T01:48:16Z",
+      "commit": "2f3abfe09ab7afde9e461f9e35ec253fca23183d",
+      "committed": "2026-11-26T07:04:46Z",
       "download-url": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-macos-arm64-setup.dmg",
-      "sha256": "e40c7a5502a0cf65f1c709d29f686984a159af98077631baf6d4ba67b0ff067f",
+      "sha256": "72d79ab80b3be8745925dce8e6de88c82a90e337de534b7ef57f327cad393ce5",
       "open-url": "https://github.com/yumima/finterm/releases/tag/v4.2.0",
       "changelog": "finterm v4.2.0 \u2014 see release notes at https://github.com/yumima/finterm/releases/tag/v4.2.0"
     }

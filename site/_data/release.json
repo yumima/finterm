@@ -1,7 +1,7 @@
 {
   "version": "4.2.0",
-  "released": "2026-11-25T02:57:09Z",
-  "build": "2d68e42",
+  "released": "2026-11-26T07:52:30Z",
+  "build": "2f3abfe",
   "page": "https://github.com/yumima/finterm/releases/tag/v4.2.0",
   "linux": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-linux-x64-setup.run",
   "windows": "https://github.com/yumima/finterm/releases/download/v4.2.0/finterm-4.2.0-windows-x64-setup.exe",
