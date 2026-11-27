@@ -51,7 +51,8 @@ NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::
         set_loading(false);
         finalize_refresh(QStringLiteral("timeout"));
         if (news_layout_->count() <= 1) // nothing on screen: say it on the page, not a hidden line
-            set_error(QStringLiteral("No answer from the data service (timeout) — retry with refresh."));
+            set_load_error(QStringLiteral("market news"), QStringLiteral("data service: timeout — no answer"),
+                           QStringLiteral("finterm's data service"));
         LOG_WARN("NewsWidget", "fetch_news watchdog fired — daemon did not respond");
     });
 
@@ -107,7 +108,7 @@ void NewsWidget::refresh_data() {
                     populate(last_articles_); // re-judge "HH:mm" vs date — the day may have turned
                 finalize_refresh(why + (have_prior ? QStringLiteral(" · showing the previous headlines") : QString()));
                 if (!have_prior)
-                    set_error(why + QStringLiteral(" — the feed will retry on the next refresh."));
+                    set_load_error(QStringLiteral("market news"), why, QStringLiteral("the news feeds"));
                 LOG_WARN("NewsWidget", "fetch_news failed: " + why);
                 return;
             }

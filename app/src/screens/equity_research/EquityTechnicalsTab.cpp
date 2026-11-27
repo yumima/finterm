@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityTechnicalsTab.cpp
 #include "screens/equity_research/EquityTechnicalsTab.h"
 
+#include "core/errors/DataFailure.h"
+
 #include "services/equity/EquityResearchService.h"
 #include "services/equity/TechnicalRating.h"
 #include "ui/formatting/NumberFormat.h"
@@ -1183,7 +1185,10 @@ void EquityTechnicalsTab::apply_technicals_state(const services::query::QuerySto
             // which presented the previous symbol's STRONG BUY under the new
             // symbol's header — or the daily verdict under an active 1W button.
             reset_panels();
-            warning_label_->setText(QString("Could not load technicals for %1: %2").arg(current_symbol_, s.error));
+            const auto f = data_failure::classify(s.error, QStringLiteral("Yahoo Finance"));
+            warning_label_->setText(data_failure::one_line(QStringLiteral("technicals for %1").arg(current_symbol_), f) +
+                                    QStringLiteral(" What to do: ") + f.action);
+            warning_label_->setToolTip(f.raw);
             warning_label_->setVisible(true);
         }
         return;

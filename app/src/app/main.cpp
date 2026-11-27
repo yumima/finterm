@@ -10,6 +10,9 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/config/LayoutMigrations.h"
+#include "core/config/StartFresh.h"
+#include "core/network/ProxySettings.h"
+#include "services/data_health/DataHealth.h"
 #include "core/config/ProfileManager.h"
 #include "core/crash/CrashHandler.h"
 #include "core/keys/KeyConfigManager.h"
@@ -110,6 +113,10 @@ int main(int argc, char* argv[]) {
         std::fflush(stdout);
         return 0;
     }
+
+    // ── Started again by "Start fresh": let the old process go first ───────
+    // so this one becomes the primary instance (and its data is free).
+    finterm::start_fresh::wait_for_parent(argc, argv);
 
     // ── Move an older build's data folder to the current name ───────────────
     // Before anything below creates the new root: once it exists, the old
@@ -291,12 +298,43 @@ int main(int argc, char* argv[]) {
     // before anything below reads one (Polymarket credentials, a few lines on).
     finterm::SecureStorage::instance().migrate_identity();
 
+    // ── How to reach the internet (Settings › Data Sources › Network) ───────
+    // Before any request, and before the data service starts: it inherits the
+    // proxy through the environment.
+    finterm::proxy::apply(finterm::proxy::load());
+
+    // ── "Start fresh", asked for in the previous run ────────────────────────
+    // Before anything opens a database (ensure_all, the auth service, the
+    // per-user DB below).
+    if (const auto fresh = finterm::start_fresh::run_if_scheduled(); fresh.ran) {
+        QString text = fresh.ok ? QStringLiteral("finterm has been reset. Set it up as on the first start.")
+                                : QStringLiteral("finterm could not be reset completely.");
+        if (!fresh.ok && !fresh.backup_dir.isEmpty())
+            text += QStringLiteral("\n\nA copy of your data was left in:\n%1\nDelete it once finterm shows your data "
+                                   "as before.")
+                        .arg(QDir::toNativeSeparators(fresh.backup_dir));
+        else if (!fresh.backup_dir.isEmpty())
+            text += QStringLiteral("\n\nYour previous data was moved, not deleted, to:\n%1\n\nTo get it back, quit "
+                                   "finterm and copy the user folder from there into %2. Delete the backup when you "
+                                   "no longer need it.")
+                        .arg(QDir::toNativeSeparators(fresh.backup_dir),
+                             QDir::toNativeSeparators(finterm::ProfileManager::instance().profile_root()));
+        if (!fresh.problems.isEmpty())
+            text += QStringLiteral("\n\n") + fresh.problems.join(QStringLiteral("\n"));
+        if (fresh.ok)
+            QMessageBox::information(nullptr, QStringLiteral("finterm"), text);
+        else
+            QMessageBox::warning(nullptr, QStringLiteral("finterm"), text);
+    }
+
     // Register DataHub payload meta-types (QuoteData, HistoryPoint, InfoData,
     // NewsArticle, EconomicsResult) so they can flow through QVariant-keyed
     // topics and cross-thread queued signals. Phase 0 — see
     // app/DATAHUB_ARCHITECTURE.md.
     // Phase 2: register MarketDataService as the `market:quote:*` producer.
     finterm::datahub::register_metatypes();
+    // What data is failing and why — the status bar's READY / DATA slot.
+    finterm::services::DataHealth::instance().start();
     // SymbolContext payload types — signals cross threads when a producer
     // service (not just UI) publishes a group change.
     qRegisterMetaType<finterm::SymbolRef>("finterm::SymbolRef");

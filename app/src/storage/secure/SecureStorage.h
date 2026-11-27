@@ -52,6 +52,11 @@ class SecureStorage {
     /// failed or the backend cannot enumerate (see can_enumerate()).
     Result<QStringList> list_keys(const QString& prefix = {});
 
+    /// Remove every secret of the active profile, on every backend (a fresh
+    /// start). The number removed, or an error when the keyring could not be
+    /// searched or an entry would not go.
+    Result<int> remove_all_in_profile();
+
     /// Run every known legacy-id migration once. Called at startup so
     /// Settings › Credentials shows the value services actually use.
     void migrate_legacy_ids();

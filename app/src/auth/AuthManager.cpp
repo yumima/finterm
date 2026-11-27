@@ -120,12 +120,9 @@ void AuthManager::clear_session(bool wipe_device_pin) {
     // The device PIN survives an ordinary sign-out: wiping it here is what
     // used to turn every logout (including a stray toolbar click) into a
     // forced PIN re-creation.
+    PinManager::instance().set_account({}, {}, {});
     if (wipe_device_pin)
         PinManager::instance().clear_pin();
-}
-
-bool AuthManager::needs_pin_setup() const {
-    return session_.authenticated && !PinManager::instance().has_pin();
 }
 
 // ── Initialize ───────────────────────────────────────────────────────────────
@@ -223,6 +220,13 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
             }
             store.store("pin_owner", identity);
         }
+        // The account PIN is what the lock screen asks for.
+        const QString user = session_.user_info.username;
+        if (!user.isEmpty()) {
+            PinManager::instance().set_account(
+                user, [user](const QString& pin) { return AuthService::instance().verify_local_pin(user, pin); },
+                [user](const QString& pin) { return AuthService::instance().set_local_pin(user, pin); });
+        }
     }
     save_session();
     set_loading(false);
@@ -237,21 +241,36 @@ void AuthManager::signup_local(const QString& username, const QString& pin) {
     set_loading(true);
     AuthService::instance().register_local_user(username, pin, [this](ApiResponse r) {
         set_loading(false);
-        if (r.success)
-            emit signup_succeeded();
+        if (r.success) {
+            emit local_users_changed();
+            emit signup_succeeded(r.data["username"].toString(), r.data["recovery_key"].toString());
+        }
         else
             emit signup_failed(r.error.isEmpty() ? "Could not create user" : r.error);
     });
 }
 
 void AuthManager::login_local(const QString& username, const QString& pin) {
+    // Each user's wrong PINs count against that user only.
+    const QString user = username.toLower().trimmed();
+    auto& gate = PinManager::instance();
+    if (gate.is_locked_out(user)) {
+        const int secs = gate.lockout_remaining_seconds(user);
+        emit login_failed(QStringLiteral("Too many wrong PINs — try again in %1, or choose \"Forgot PIN?\".")
+                              .arg(secs >= 120 ? QStringLiteral("%1 min").arg((secs + 59) / 60)
+                                               : QStringLiteral("%1 s").arg(secs)));
+        return;
+    }
     set_loading(true);
-    AuthService::instance().login_local(username, pin, [this](ApiResponse r) {
+    AuthService::instance().login_local(username, pin, [this, user](ApiResponse r) {
+        if (r.status_code == 401)
+            PinManager::instance().record_attempt(user, false);
         if (!r.success) {
             set_loading(false);
             emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
             return;
         }
+        PinManager::instance().record_attempt(user, true);
         const auto data = unwrap_data(r.data);
         const QString api_key = data["api_key"].toString();
         if (api_key.isEmpty()) {
@@ -271,12 +290,30 @@ void AuthManager::login_local(const QString& username, const QString& pin) {
     });
 }
 
+QString AuthManager::reset_pin_with_recovery_key(const QString& username, const QString& key,
+                                                 const QString& new_pin) {
+    const QString why = AuthService::instance().reset_pin_with_recovery_key(username, key, new_pin);
+    if (why.isEmpty())
+        PinManager::instance().pin_was_reset(username.toLower().trimmed());
+    return why;
+}
+
+bool AuthManager::has_recovery_key(const QString& username) const {
+    return AuthService::instance().has_recovery_key(username);
+}
+
+QString AuthManager::create_recovery_key() {
+    if (!session_.authenticated || session_.user_info.username.isEmpty())
+        return {};
+    return AuthService::instance().create_recovery_key(session_.user_info.username);
+}
+
 QVector<QJsonObject> AuthManager::list_local_users() const {
     return AuthService::instance().list_local_users();
 }
 
 void AuthManager::delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done) {
-    AuthService::instance().delete_local_user(username, [username, on_done = std::move(on_done)](ApiResponse r) {
+    AuthService::instance().delete_local_user(username, [this, username, on_done = std::move(on_done)](ApiResponse r) {
         // Only once the user row is really gone: a failed delete leaves a
         // live user whose channels and device PIN must keep working.
         if (!r.success) {
@@ -285,6 +322,7 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
             return;
         }
         notifications::remove_user_secrets(username);
+        PinManager::instance().forget_user(username.toLower().trimmed());
         // "Reset this user" is the forgotten-credentials recovery path: the
         // deleted user's device PIN must not gate a future account re-created
         // under the same name.
@@ -293,6 +331,7 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
             PinManager::instance().clear_pin();
             finterm::SecureStorage::instance().remove("pin_owner");
         }
+        emit local_users_changed();
         if (on_done)
             on_done(true, {});
     });

@@ -2,6 +2,8 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
 
+#include "core/errors/DataFailure.h"
+
 #include <algorithm>
 
 #include "services/pre_ipo/IpoDealsFeed.h"
@@ -46,6 +48,7 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR
     // that occurred when apply_styles() was called after the first populate().
     // Show it (loading/empty state) or hide it (data populated) via setVisible.
     status_label_ = new QLabel("Loading…");
+    status_label_->setWordWrap(true); // a failure says why — a sentence, not a word
     status_label_->setAlignment(Qt::AlignCenter);
     vl->addWidget(status_label_);
 
@@ -71,14 +74,17 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR
     auto& feed = services::IpoDealsFeed::instance();
     connect(&feed, &services::IpoDealsFeed::updated, this, &IpoCalendarWidget::rebuild_entries);
     connect(&feed, &services::IpoDealsFeed::answered, this,
-            [this](bool enrich, bool ok, const QJsonObject&, const QString&) {
-                // Nothing held and the calendar couldn't be read: say so,
-                // rather than "No IPO data", which reads as a quiet calendar.
+            [this](bool enrich, bool ok, const QJsonObject&, const QString& why) {
+                // Nothing held and the calendar couldn't be read: say so —
+                // and why — rather than "No IPO data", which reads as a
+                // quiet calendar.
                 if (ok || enrich || services::IpoDealsFeed::instance().loaded())
                     return;
                 set_loading(false);
                 scroll_area_->setVisible(false);
-                status_label_->setText("Couldn't load IPO calendar");
+                const auto f = data_failure::classify(why, QStringLiteral("Nasdaq"));
+                status_label_->setText(data_failure::one_line(QStringLiteral("the IPO calendar"), f));
+                status_label_->setToolTip(QStringLiteral("What to do: %1\n\n%2").arg(f.action, f.raw));
                 status_label_->setVisible(true);
             });
 

@@ -25,7 +25,8 @@ function run(o) {
             isPackageManager: () => false, isCommandLineInstance: () => !!o.cli,
             value: k => k === "TargetDir" ? o.target : "", environmentVariable: n => env[n] || "",
             fileExists: p => o.installs.some(d => p === d + "/FintermMaintenanceTool.exe") || /AppData\/Local\/finterm$/.test(p.replace(/\\/g, "/")),
-            interrupt: () => { ++seen.interrupted; }, execute: (p, a) => { seen.commands.push(p + " " + (a || []).join(" ")); return ["", 0]; },
+            interrupt: () => { ++seen.interrupted; }, execute: (p, a) => { seen.commands.push(p + " " + (a || []).join(" "));
+                return [/tasklist/i.test(p) && o.uninstallerOpen ? "FintermMaintenanceTool.exe   4242 Console  1  50,000 K" : "", 0]; },
             installationFinished: hook("installed"), uninstallationStarted: hook("uninstall"), uninstallationFinished: hook("uninstalled"),
         },
         gui: { rejectWithoutPrompt: () => { ++seen.rejected; } }, // defined on the command line too (IFW 4.7)
@@ -63,5 +64,30 @@ s = run({ target: PU, installs: [PU, PF], uninstall: true, answerYes: true });
 check("uninstall beside Program Files: not asked, data stays", s.asked === 0 && s.commands.length === 0);
 s = run({ target: PF.replace(/\//g, "\\"), installs: [PU, PF], uninstall: true, answerYes: true });
 check("uninstall of Program Files beside per-user: not asked, data stays", s.asked === 0 && s.commands.length === 0);
+// An uninstaller still open: its self-delete would take the new install's.
+s = run({ target: PU, installs: [], uninstallerOpen: true, operations: true });
+check("uninstaller window open: told, closed, nothing installed",
+      s.critical === 1 && s.rejected === 1 && !!s.threw && s.operations === 0);
+s = run({ target: PU, installs: [], uninstallerOpen: true, cli: true, operations: true });
+check("uninstaller open, command line: interrupted", s.interrupted === 1 && !!s.threw);
+
+// The updater's copies beside the install go with the program, whatever the
+// data answer — they are a whole finterm, not the user's data.
+s = run({ target: PU, installs: [PU], uninstall: true, answerYes: false });
+let leftovers = (() => { const seen2 = s; seen2.hooks.uninstalled(); return seen2.commands.filter(c => /previous/.test(c)); })();
+check("uninstall removes the updater's copies (data kept)",
+      leftovers.length === 1 && /AppData\\Local\\Programs'/.test(leftovers[0]));
+{
+    const ctx = { console: { log() {} } };
+    vm.createContext(ctx);
+    vm.runInContext(source, ctx);
+    const re = new RegExp(vm.runInContext('updaterLeftoverPattern("finterm")', ctx));
+    const yes = ["finterm.previous", "finterm.previous.old", "finterm.new", "finterm.ready-20261127120000",
+                 "finterm.failed", "FINTERM.previous".toLowerCase()];
+    const no = ["finterm", "finterm-backups", "finterm.previousX", "finterm.previous.bak", "otherfinterm.previous",
+                "finterm.new-123"];
+    check("leftover names matched", yes.every(n => re.test(n)));
+    check("nothing else matched", no.every(n => !re.test(n)));
+}
 console.log(failures + " failure(s)");
 process.exit(failures ? 1 : 0);

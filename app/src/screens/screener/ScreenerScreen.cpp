@@ -1518,7 +1518,7 @@ void ScreenerScreen::add_to_portfolio(const QString& sym) {
             return;
         // kNoQuoteError: answered without this symbol; anything else: the
         // download failed.
-        const bool failed = error != services::MarketDataService::kNoQuoteError;
+        const bool failed = !services::MarketDataService::is_no_quote(error);
         note->setText(listed && *listed > 0
                           ? QStringLiteral("No quote%1 — the screener's price.").arg(failed ? " (fetch failed)" : "")
                           : QStringLiteral("No price available — enter one."));

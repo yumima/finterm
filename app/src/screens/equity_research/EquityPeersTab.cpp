@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityPeersTab.cpp
 #include "screens/equity_research/EquityPeersTab.h"
 
+#include "core/errors/DataFailure.h"
+
 #include "services/equity/EquityResearchService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -227,7 +229,10 @@ void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State&
             displayed_symbol_.clear();
             if (peer_table_)
                 peer_table_->setRowCount(0);
-            status_label_->setText(QString("Couldn't load peers \xe2\x80\x94 %1").arg(s.error));
+            const auto f = data_failure::classify(s.error, QStringLiteral("Yahoo Finance"));
+            status_label_->setText(data_failure::one_line(QStringLiteral("peers"), f) +
+                                   QStringLiteral(" What to do: ") + f.action);
+            status_label_->setToolTip(f.raw);
             status_label_->show();
         } else {
             status_label_->hide();

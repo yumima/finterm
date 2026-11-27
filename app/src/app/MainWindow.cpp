@@ -28,6 +28,7 @@
 #include "screens/alt_investments/AltInvestmentsScreen.h"
 #include "screens/asia_markets/AsiaMarketsScreen.h"
 #include "screens/auth/LockScreen.h"
+#include "screens/auth/RecoveryKeyDialog.h"
 #include "screens/auth/LoginScreen.h"
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
@@ -271,12 +272,16 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // Lock screen signals
     connect(lock_screen_, &screens::LockScreen::unlocked, this, &MainWindow::on_terminal_unlocked);
-    connect(lock_screen_, &screens::LockScreen::reauth_requested, this, []() {
-        // Max PIN attempts exceeded — force full re-login. This is the
-        // forgotten-PIN recovery path, so the device PIN is wiped here:
-        // after signing back in the user sets a fresh one.
-        auth::AuthManager::instance().logout(/*wipe_device_pin=*/true);
-    });
+    // "Forgot PIN? › Sign in as someone else": back to the user picker,
+    // where another user signs in or a new one is created.
+    connect(lock_screen_, &screens::LockScreen::switch_user_requested, this,
+            []() { auth::AuthManager::instance().logout(); });
+    // Signing in on the sign-in screen proves the PIN; the lock screen must
+    // not ask for it a second time.
+    connect(&auth::AuthManager::instance(), &auth::AuthManager::login_succeeded, this,
+            [this]() { signed_in_with_pin_ = true; });
+    connect(&auth::AuthManager::instance(), &auth::AuthManager::logged_out, this,
+            [this]() { signed_in_with_pin_ = false; });
 
     // Inactivity guard → lock screen
     connect(&auth::InactivityGuard::instance(), &auth::InactivityGuard::lock_requested, this,
@@ -1217,7 +1222,7 @@ void MainWindow::setup_dock_screens() {
 void MainWindow::on_auth_state_changed() {
     auto& auth = auth::AuthManager::instance();
 
-    // If logged out while the lock screen is active (e.g. max PIN attempts → reauth),
+    // If logged out while the lock screen is active (Forgot PIN › another user),
     // clear locked_ so the login screen can show. Otherwise stay on the lock screen.
     if (locked_) {
         if (!auth.is_authenticated()) {
@@ -1243,14 +1248,6 @@ void MainWindow::on_auth_state_changed() {
         // while the user is working on the dashboard will re-show the PIN prompt.
         if (stack_->currentIndex() == 1 || stack_->currentIndex() == 2) {
             if (!pin_gate_cleared_) {
-                if (auth.needs_pin_setup()) {
-                    LOG_INFO("MainWindow", "Authenticated (on app stack) but no PIN — showing PIN setup");
-                    lock_screen_->show_setup();
-                    locked_ = true;
-                    set_shell_visible(false);
-                    show_lock_overlay();
-                    return;
-                }
                 if (auth::PinManager::instance().has_pin()) {
                     LOG_INFO("MainWindow", "Authenticated (on app stack) with PIN — showing PIN unlock");
                     lock_screen_->show_unlock();
@@ -1272,12 +1269,13 @@ void MainWindow::on_auth_state_changed() {
         // On subsequent launches (PIN exists): show PIN unlock.
         // Skip if user is already on the lock screen (index 3).
         if (!lock_screen_->isVisible()) {
-            if (auth.needs_pin_setup()) {
-                LOG_INFO("MainWindow", "Authenticated but no PIN — showing PIN setup");
-                lock_screen_->show_setup();
-                locked_ = true;
-                set_shell_visible(false);
-                show_lock_overlay();
+            // The PIN was just typed on the sign-in screen: that is the
+            // unlock — the lock screen would ask for the same PIN again.
+            if (signed_in_with_pin_) {
+                signed_in_with_pin_ = false;
+                LOG_INFO("MainWindow", "Signed in with the PIN — unlocking");
+                stack_->setCurrentIndex(1);
+                on_terminal_unlocked();
                 return;
             }
             if (auth::PinManager::instance().has_pin()) {
@@ -1300,10 +1298,7 @@ void MainWindow::on_auth_state_changed() {
                                            "locked=%1 gate_cleared=%2 — forcing lock screen")
                                        .arg(locked_)
                                        .arg(pin_gate_cleared_));
-            if (auth::PinManager::instance().has_pin())
-                lock_screen_->show_unlock();
-            else
-                lock_screen_->show_setup();
+            lock_screen_->show_unlock();
             locked_ = true;
             set_shell_visible(false);
             show_lock_overlay();
@@ -1325,6 +1320,18 @@ void MainWindow::on_auth_state_changed() {
         auth::InactivityGuard::instance().set_enabled(false);
         auth::InactivityGuard::instance().set_terminal_locked(false);
         pin_gate_cleared_ = false;
+        // Signed out from the lock screen ("Switch user", "Reset this user"):
+        // the overlay comes down — it sits above the sign-in page — and what
+        // show_lock_screen() disabled is usable again for the next sign-in.
+        hide_lock_overlay();
+        if (dock_manager_ && dock_manager_->parentWidget())
+            dock_manager_->parentWidget()->setEnabled(true);
+        if (dock_toolbar_)
+            dock_toolbar_->setEnabled(true);
+        if (pushpin_toolbar_)
+            pushpin_toolbar_->setEnabled(true);
+        if (dock_status_bar_)
+            dock_status_bar_->setEnabled(true);
         set_shell_visible(false);
         stack_->setCurrentIndex(0);
         auth_stack_->setCurrentWidget(login_page_);
@@ -1454,8 +1461,7 @@ void MainWindow::hide_lock_overlay() {
 
 void MainWindow::confirm_and_logout() {
     const auto ans = QMessageBox::question(this, tr("Log out"),
-                                           tr("Sign out of finterm?\n\nYour device PIN is kept — the next sign-in "
-                                              "unlocks with it instead of asking you to create a new one."),
+                                           tr("Sign out of finterm?\n\nYou sign in again with your username and PIN."),
                                            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     if (ans == QMessageBox::Yes)
         auth::AuthManager::instance().logout();
@@ -1490,9 +1496,6 @@ void MainWindow::on_terminal_unlocked() {
     }
     guard.reset_timer();
 
-    // Reset PIN lockout on successful unlock
-    auth::PinManager::instance().reset_lockout();
-
     set_shell_visible(true);
     hide_lock_overlay();
     if (chat_bubble_) {
@@ -1518,6 +1521,12 @@ void MainWindow::on_terminal_unlocked() {
     // Now that the user is in, kick the deferred cache warm (no-op if it already
     // ran on the no-PIN path). Async — returns immediately, won't block the UI.
     try_boot_prefetch();
+
+    // A user without a recovery key is offered one, once.
+    QTimer::singleShot(1500, this, [this]() {
+        if (!locked_)
+            screens::RecoveryKeyDialog::offer_if_missing(this);
+    });
 
     // The home screen is built in the background once the restored screen has
     // painted, so the first DASHBOARD click shows its (hub-seeded) quotes at

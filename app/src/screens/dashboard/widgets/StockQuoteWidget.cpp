@@ -166,10 +166,10 @@ void StockQuoteWidget::hub_resubscribe() {
     // and the "--" placeholders looking like a (wrong) empty state. Surface the
     // failure — but only when no quote has loaded yet: a transient error after
     // good data keeps the good data on screen.
-    hub.subscribe_errors(this, topic, [this](const QString&) {
+    hub.subscribe_errors(this, topic, [this](const QString& why) {
         set_loading(false);
         if (!has_data_)
-            set_error(QStringLiteral("Quote unavailable"));
+            set_load_error(QStringLiteral("the quote for %1").arg(symbol_), why);
     });
     hub_active_ = true;
 }

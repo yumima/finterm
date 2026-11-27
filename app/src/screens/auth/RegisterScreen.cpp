@@ -1,6 +1,8 @@
 #include "screens/auth/RegisterScreen.h"
 
 #include "auth/AuthManager.h"
+#include "auth/PinPolicy.h"
+#include "screens/auth/RecoveryKeyDialog.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -50,11 +52,35 @@ RegisterScreen::RegisterScreen(QWidget* parent) : QWidget(parent) {
     build_form();
 
     auto& auth = auth::AuthManager::instance();
-    connect(&auth, &auth::AuthManager::signup_succeeded, this, [this]() { emit navigate_login(); });
+    // Show the recovery key once, then the new user is signed in with the
+    // PIN just chosen — no second PIN to set, no sign-in screen in between.
+    // Only the screen that asked (another window's register screen hears the
+    // same signal, and must not show someone else's key).
+    connect(&auth, &auth::AuthManager::signup_succeeded, this, [this](const QString& user, const QString& key) {
+        if (pending_pin_.isEmpty())
+            return;
+        const QString pin = pending_pin_;
+        pending_pin_.clear();
+        create_btn_->setEnabled(true);
+        if (!key.isEmpty())
+            RecoveryKeyDialog::show_key(window(), user, key);
+        signing_in_ = true;
+        auth::AuthManager::instance().login_local(user, pin);
+    });
+    // The new user is made; should the sign-in after it fail, the sign-in
+    // screen lists them — never leave the form looking as if nothing happened.
+    connect(&auth, &auth::AuthManager::login_failed, this, [this](const QString&) {
+        if (!signing_in_)
+            return;
+        signing_in_ = false;
+        emit navigate_login();
+    });
+    connect(&auth, &auth::AuthManager::login_succeeded, this, [this]() { signing_in_ = false; });
     connect(&auth, &auth::AuthManager::signup_failed, this, [this](const QString& err) {
         error_label_->setText(err);
         error_label_->show();
         create_btn_->setEnabled(true);
+        pending_pin_.clear();
     });
 }
 
@@ -174,8 +200,8 @@ void RegisterScreen::on_create() {
         show_error(QStringLiteral("Username must be at least 2 characters."));
         return;
     }
-    if (pin.size() < 4 || pin.size() > 6) {
-        show_error(QStringLiteral("PIN must be 4 to 6 digits."));
+    if (const QString why = auth::pin_policy::problem(pin); !why.isEmpty()) {
+        show_error(why);
         return;
     }
     if (pin != pin2) {
@@ -184,6 +210,7 @@ void RegisterScreen::on_create() {
     }
     error_label_->hide();
     create_btn_->setEnabled(false);
+    pending_pin_ = pin;
     auth::AuthManager::instance().signup_local(user, pin);
 }
 

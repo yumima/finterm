@@ -271,8 +271,17 @@ void MarketDataService::refresh(const QStringList& topics) {
             const QJsonArray quotes_arr = root.value("quotes").toArray();
             int quotes_parsed = 0;
             QSet<QString> answered_quotes;
+            QHash<QString, QString> quote_errors; // symbol → why the daemon gave no quote
             for (const auto& v : quotes_arr) {
                 const QJsonObject q = v.toObject();
+                // A refused row ("transient") is a failed fetch, its text the
+                // refusal; any other {error} row is an answer without a quote
+                // (unknown symbol, nothing priced) — kNoQuoteError, with why.
+                if (q.contains("error") && want_quotes.contains(q["symbol"].toString()))
+                    quote_errors.insert(q["symbol"].toString(),
+                                        q["transient"].toBool()
+                                            ? q["error"].toString()
+                                            : kNoQuoteError + QStringLiteral(": ") + q["error"].toString());
                 if (q.isEmpty() || q.contains("error") || !want_quotes.contains(q["symbol"].toString()))
                     continue;
                 const QuoteData qd = quote_from_daemon(q);
@@ -293,12 +302,24 @@ void MarketDataService::refresh(const QStringList& topics) {
             }
 
             // A symbol asked for and not answered (refused, or an {error}
-            // row) is an error on its topic — never an empty success.
+            // row) is an error on its topic — never an empty success — and
+            // carries the daemon's reason where it gave one, so the screen
+            // can say why (rate limit, no such symbol, …).
+            // The whole quote download refused: the daemon says why beside
+            // an empty list ("quotes_error") — a refusal, not an answer.
+            const QString all_refused = root.value("quotes_error").toString();
             for (const auto& sym : quote_syms)
                 if (!answered_quotes.contains(sym))
-                    hub.publish_error(QStringLiteral("market:quote:") + sym, kNoQuoteError);
+                    hub.publish_error(QStringLiteral("market:quote:") + sym,
+                                      quote_errors.value(sym, all_refused.isEmpty() ? kNoQuoteError : all_refused)
+                                          .left(300));
 
-            // Sparklines — {sym: [closes]}
+            // Sparklines — {sym: [closes]}. Refused as a whole: the daemon's
+            // reason ("sparklines_error") goes to each topic asked for —
+            // otherwise they sit until the hub times them out ("timed out").
+            if (const QString why = root.value("sparklines_error").toString(); !why.isEmpty())
+                for (const auto& sym : spark_syms)
+                    hub.publish_error(QStringLiteral("market:sparkline:") + sym, why.left(300));
             const QJsonObject sparks = root.value("sparklines").toObject();
             int sparks_parsed = 0;
             for (auto it = sparks.begin(); it != sparks.end(); ++it) {

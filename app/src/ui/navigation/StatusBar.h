@@ -28,7 +28,6 @@ class StatusBar : public QWidget {
     static QList<QPointer<StatusBar>>& all_bars();
     void refresh_theme();
     void toggle_notif_panel();
-    QLabel* ready_label_ = nullptr;
     NotifBell* notif_bell_ = nullptr;
     NotifPanel* notif_panel_ = nullptr;
     /// The slide-in toast for every notification, over this window — made on

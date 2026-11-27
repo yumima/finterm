@@ -2,28 +2,10 @@
 
 A financial terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 
-## Today's commits (2026-11-26)
+## Today's commits (2026-11-27)
 
 Latest first.
 
-- [`bee80c7ae`](https://github.com/yumima/finterm/commit/bee80c7ae) Weekly brief: IPOs priced and ahead, a box for each table
-- [`6a3905d2f`](https://github.com/yumima/finterm/commit/6a3905d2f) Private Market: split-adjusted returns, SPACs found, lock-ups on time
-- [`bd656a9c1`](https://github.com/yumima/finterm/commit/bd656a9c1) Ownership: refreshes judged per round, 13F views kept on new filings
-- [`ef96fb77a`](https://github.com/yumima/finterm/commit/ef96fb77a) IPO tile: says when nothing is scheduled
-- [`d45855cc7`](https://github.com/yumima/finterm/commit/d45855cc7) Ownership: kept current automatically, never blanking under a reader
-- [`dec583fbb`](https://github.com/yumima/finterm/commit/dec583fbb) **chore(release):** download counts of the releases before v4.2.1
-- [`b70eae2e5`](https://github.com/yumima/finterm/commit/b70eae2e5) **chore(release):** update README download links and updates.json for v4.2.1
-- [`82282b2e4`](https://github.com/yumima/finterm/commit/82282b2e4) finterm 4.2.1
-- [`1c39b0222`](https://github.com/yumima/finterm/commit/1c39b0222) Ownership: the loading bars while a panel waits, not a blank table
-- [`b91bf1bc0`](https://github.com/yumima/finterm/commit/b91bf1bc0) Screener: price holes judged on the sessions most names traded
-- [`069adc0a0`](https://github.com/yumima/finterm/commit/069adc0a0) Screener: every screen checked against its source and recomputed
-- [`556c5b9e8`](https://github.com/yumima/finterm/commit/556c5b9e8) Screener: Lynch value as TradingView draws it; cuts never print as passed
-- [`40bce469f`](https://github.com/yumima/finterm/commit/40bce469f) Screener: Peter Lynch Value
-- [`19c568ff3`](https://github.com/yumima/finterm/commit/19c568ff3) tests: every program-output check says what came and compares exactly
-- [`60bb7c299`](https://github.com/yumima/finterm/commit/60bb7c299) notebook: no Windows handle patch — the subprocess output was never lost
-- [`a96d1abca`](https://github.com/yumima/finterm/commit/a96d1abca) tests: the STARTUPINFO check's file does not overwrite the notebook's f
-- [`f156c7713`](https://github.com/yumima/finterm/commit/f156c7713) notebook: the Windows handle fix leaves a caller's own handles alone
-- [`c08f8a7bf`](https://github.com/yumima/finterm/commit/c08f8a7bf) notebook: on Windows a program a cell starts writes to the cell
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
@@ -59,7 +41,7 @@ Current release: [v4.2.1](https://github.com/yumima/finterm/releases/tag/v4.2.1)
 **Then, on every system**
 
 1. **First start only: setup.** finterm downloads its own Python and builds its data environment. A progress screen shows it; it takes about 5–15 minutes and needs internet. Nothing else has to be installed, before or after.
-2. **Create a local account:** a username and a 4–6 digit PIN, then a 6-digit security PIN that unlocks the terminal on each start. Both stay on your machine and cannot be recovered if forgotten.
+2. **Create a local account:** a username and a 4–6 digit PIN, which signs you in and unlocks the terminal. finterm then shows a **recovery key** once — keep it: it sets a new PIN if you forget yours. Both stay on your machine.
 3. **The dashboard opens with live data.** finterm starts its own data process in the background and restarts it if it stops; there is nothing else to launch.
 
 Later starts skip setup and go straight to the PIN.
@@ -67,7 +49,7 @@ Later starts skip setup and go straight to the PIN.
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Your data | `%LOCALAPPDATA%\finterm` | `~/Library/Application Support/finterm` | `~/.local/share/finterm` |
-| Uninstall | Settings → Apps → `io.github.yumima.finterm` | Drag the app to the Bin | Delete the `.run` file |
+| Uninstall | Settings → Apps → **finterm** (installs before 4.2.2: `io.github.yumima.finterm`) | Drag the app to the Bin | Delete the `.run` file |
 
 Uninstalling leaves your data folder in place; delete it too for a clean removal.
 
@@ -144,7 +126,7 @@ More: [development guide](docs/DEVELOPMENT.md) · [architecture](docs/ARCHITECTU
 | Odd windows, stale layout, general flakiness | `finterm repair` |
 | Data scripts or Python environment broken | `finterm repair` |
 | Quotes stuck or timing out | `pkill -f "yfinance_data.py --daemon"` — the app restarts it |
-| Forgot a PIN | Login picker → select the user → **Forgot PIN? Reset this user** (removes that user's data) |
+| Forgot your PIN | **Forgot PIN?** on the lock or sign-in screen: your recovery key sets a new PIN (keeps everything); or sign in as / create another user; or reset that user; or **Start fresh** — finterm sets itself up again and moves your old data to `finterm-backups/` |
 
 ## License
 

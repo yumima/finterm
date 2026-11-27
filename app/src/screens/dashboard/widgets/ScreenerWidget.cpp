@@ -229,10 +229,10 @@ void ScreenerWidget::hub_subscribe_all() {
     // Errors for THIS widget's own topics only (a per-topic subscription —
     // a market:quote:* pattern also delivered every other widget's bad ticker).
     for (const auto& sym : kScreenerSymbols) {
-        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString&) {
+        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString& why) {
             set_loading(false);
             if (row_cache_.isEmpty())
-                set_error(QStringLiteral("Screener data unavailable"));
+                set_load_error(QStringLiteral("screener data"), why);
         });
     }
     hub_active_ = true;

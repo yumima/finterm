@@ -21,6 +21,8 @@ class RegisterScreen : public QWidget {
     void hideEvent(QHideEvent* event) override;
 
   private:
+    QString pending_pin_; ///< the PIN just submitted, to sign in with once created
+    bool signing_in_ = false; ///< the sign-in right after creating the user is under way
     QLineEdit* username_ = nullptr;
     QLineEdit* pin_ = nullptr;
     QLineEdit* pin_confirm_ = nullptr;

@@ -5,7 +5,8 @@
 //   - Full user-data cleanup on uninstall (with user confirmation)
 //
 // Data locations cleaned on uninstall:
-//   Windows : %LOCALAPPDATA%\com.fincept.terminal\
+//   Windows : %LOCALAPPDATA%\finterm\ and \finterm-backups\ (Start fresh)
+//             %LOCALAPPDATA%\com.fincept.terminal\
 //             %LOCALAPPDATA%\Fincept\*                  (legacy)
 //             %LOCALAPPDATA%\FinceptTerminal\*          (legacy)
 //             %APPDATA%\Fincept\*                       (QSettings roaming)
@@ -41,7 +42,7 @@ function Component()
     // scripts — connections silently no-op on some versions.
     if (installer.isInstaller()) {
         installer.installationFinished.connect(onInstallationFinished);
-        refuseBesideProgramFilesInstall();
+        refuseWhileUninstallerOpen() || refuseBesideProgramFilesInstall();
     }
 
     if (installer.isUninstaller()) {
@@ -56,6 +57,8 @@ function Component()
 
 Component.prototype.createOperations = function()
 {
+    if (installer.isInstaller() && uninstallerRunning())
+        throw new Error("a finterm uninstaller window is still open - close it first");
     var other = installer.isInstaller() ? installToRefuseBeside() : "";
     if (other)
         throw new Error("finterm is already installed in " + other + " - uninstall it first");
@@ -156,6 +159,38 @@ function refuseBesideProgramFilesInstall()
         gui.rejectWithoutPrompt();
 }
 
+// ---------------------------------------------------------------------------
+// Windows: an uninstaller window still open (on its last page). IFW removes
+// the uninstaller with a helper that waits for that window to close and then
+// deletes FintermMaintenanceTool.* in the folder — by then the NEW install's,
+// leaving it without an uninstaller. Ask for the window to be closed first.
+// ---------------------------------------------------------------------------
+
+function uninstallerRunning()
+{
+    if (systemInfo.kernelType !== "winnt")
+        return false;
+    var r = installer.execute("tasklist.exe", ["/FI", "IMAGENAME eq FintermMaintenanceTool.exe", "/NH"]);
+    return !!(r && r.length > 0 && /FintermMaintenanceTool\.exe/i.test(String(r[0])));
+}
+
+function refuseWhileUninstallerOpen()
+{
+    if (!uninstallerRunning())
+        return false;
+    console.log("[finterm] an uninstaller window is still open");
+    QMessageBox.critical(
+        "finterm.install.uninstaller_open",
+        "Close the finterm uninstaller first",
+        "A finterm uninstaller window is still open. Close it (click Finish), then run this installer again.",
+        QMessageBox.Ok);
+    if (installer.isCommandLineInstance())
+        installer.interrupt();
+    else
+        gui.rejectWithoutPrompt();
+    return true;
+}
+
 function onInstallationFinished()
 {
     console.log("[finterm] Installation finished.");
@@ -210,6 +245,42 @@ function onUninstallationStarted()
 function onUninstallationFinished()
 {
     console.log("[finterm] Uninstallation finished.");
+    removeUpdaterLeftovers();
+}
+
+// ---------------------------------------------------------------------------
+// The in-place updater (apply-update.ps1) keeps the previous version beside
+// the install — <TargetDir>.previous — for a rollback, and an interrupted
+// update can leave <TargetDir>.new / .ready / .failed / .previous.old (each
+// possibly with a -yyyyMMddHHmmss suffix). They are program files, not the
+// user's data: they go with the program, whatever the data answer was.
+// Before this, an uninstall left a whole copy of finterm behind.
+// ---------------------------------------------------------------------------
+
+function updaterLeftoverPattern(name)
+{
+    return "^" + name.replace(/[.^$*+?()[\]{}|\\]/g, "\\$&") +
+           "\\.(previous(\\.old)?|new|ready|failed)(-\\d{14})?$";
+}
+
+function removeUpdaterLeftovers()
+{
+    if (systemInfo.kernelType !== "winnt")
+        return;
+    var target = (installer.value("TargetDir") || "").replace(/\\/g, "/").replace(/\/+$/, "");
+    var cut = target.lastIndexOf("/");
+    if (cut <= 0)
+        return;
+    var parent = target.substring(0, cut);
+    var name = target.substring(cut + 1);
+    if (!name)
+        return;
+    runAndLog("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        "Get-ChildItem -LiteralPath '" + toWin(parent).replace(/'/g, "''") + "' -Directory -ErrorAction SilentlyContinue | " +
+        "Where-Object { $_.Name -match '" + updaterLeftoverPattern(name).replace(/'/g, "''") + "' } | " +
+        "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+    ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +309,8 @@ function cleanUserDataWindows()
     // 1. Main data root (current, and an older build's not yet moved)
     removeDirWindows(localAppData + "/finterm");
     removeDirWindows(localAppData + "/com.fincept.terminal");
+    // Start fresh's backups of the user's earlier data (finterm-backups).
+    removeDirWindows(localAppData + "/finterm-backups");
 
     // 2. Legacy data roots
     removeDirWindows(localAppData + "/Fincept/FinceptTerminal");
@@ -326,6 +399,7 @@ function cleanUserDataMac()
 
     // 1. Main data root (current, and an older build's not yet moved)
     removeDirPosix(home + "/Library/Application Support/finterm");
+    removeDirPosix(home + "/Library/Application Support/finterm-backups");
     removeDirPosix(home + "/Library/Application Support/com.fincept.terminal");
     runAndLog("/bin/bash", ["-c", "rm -f \"$HOME\"/Library/Preferences/com.finterm.*.plist; exit 0"]);
 
@@ -382,6 +456,7 @@ function cleanUserDataLinux()
     // 1. Main data root (respect XDG; current, and an older build's not yet moved)
     removeDirPosix(xdgDat + "/finterm");
     removeDirPosix(home   + "/.local/share/finterm");
+    removeDirPosix(xdgDat + "/finterm-backups");
     removeDirPosix(xdgDat + "/com.fincept.terminal");
     removeDirPosix(home   + "/.local/share/com.fincept.terminal");
 

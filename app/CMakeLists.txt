@@ -598,6 +598,9 @@ set(CORE_SOURCES
     src/core/config/AppPaths.cpp
     src/core/config/BuildInfo.cpp
     src/core/config/LayoutMigrations.cpp
+    src/core/config/StartFresh.cpp
+    src/core/errors/DataFailure.cpp
+    src/core/network/ProxySettings.cpp
     src/core/config/ProfileManager.cpp
     src/core/logging/Logger.cpp
     src/core/events/EventBus.cpp
@@ -636,6 +639,7 @@ set(AUTH_SOURCES
     src/auth/AuthManager.cpp
     src/auth/AuthService.cpp
     src/auth/PinManager.cpp
+    src/auth/PinPolicy.cpp
     src/auth/InactivityGuard.cpp
     src/auth/SecurityAuditLog.cpp
 )
@@ -879,6 +883,7 @@ set(SERVICE_SOURCES
     src/services/markets/LiveQuoteFollower.cpp
     src/services/markets/ExtendedHoursService.cpp
     src/services/markets/MarketDataService.cpp
+    src/services/data_health/DataHealth.cpp
     src/services/markets/IndexFutures.cpp
     src/services/markets/ConditionService.cpp
     src/services/futures/FuturesService.cpp
@@ -1027,6 +1032,7 @@ set(UI_SOURCES
     src/ui/widgets/NotifToast.cpp
     src/ui/widgets/NotifBell.cpp
     src/ui/widgets/UpdateIndicator.cpp
+    src/ui/widgets/DataStatusIndicator.cpp
     src/ui/widgets/EngineIndicator.cpp
     src/ui/widgets/NotifPanel.cpp
     src/ui/alerts/AlertsDialog.cpp
@@ -1037,6 +1043,9 @@ set(SCREEN_SOURCES
     src/screens/auth/LoginScreen.cpp
     src/screens/auth/RegisterScreen.cpp
     src/screens/auth/LockScreen.cpp
+    src/screens/auth/PinRecoveryPanel.cpp
+    src/screens/auth/RecoveryKeyDialog.cpp
+    src/screens/auth/StartFreshDialog.cpp
     src/screens/devtools/DataHubInspector.cpp
     src/screens/profile/ProfileScreen.cpp
     src/screens/settings/SettingsScreen.cpp
@@ -1049,6 +1058,7 @@ set(SCREEN_SOURCES
     src/screens/settings/PythonEnvSection.cpp
     src/screens/settings/VoiceConfigSection.cpp
     src/screens/settings/PriceSourceSection.cpp
+    src/screens/settings/NetworkSection.cpp
     src/screens/settings/CredentialsSection.cpp
     src/screens/settings/StoredCredentialsSection.cpp
     src/screens/settings/AiSystemSection.cpp
@@ -1476,6 +1486,9 @@ set_source_files_properties(
     src/services/pre_ipo/IpoDealsFeed.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/LockScreen.cpp
+    src/screens/auth/PinRecoveryPanel.cpp
+    src/screens/auth/RecoveryKeyDialog.cpp
+    src/screens/auth/StartFreshDialog.cpp
     src/screens/auth/LoginScreen.cpp
     src/screens/auth/RegisterScreen.cpp
     src/screens/backtesting/BacktestingScreen.cpp
@@ -2703,7 +2716,12 @@ if(FINTERM_BUILD_INSTALLER)
 
     # ── CPackIFW installer configuration ─────────────────────────────────────
     set(CPACK_IFW_PACKAGE_TITLE "finterm")
-    set(CPACK_IFW_PACKAGE_NAME "io.github.yumima.finterm")
+    # The product name people see: the wizard's "Welcome to … Setup" and the
+    # Settings › Apps entry (DisplayName). It was a reverse-DNS id, so Apps
+    # listed "io.github.yumima.finterm" — hard to recognise, and a customer
+    # deleted folders by hand instead. Installs are found by folder and
+    # maintenance-tool name (below), never by this.
+    set(CPACK_IFW_PACKAGE_NAME "finterm")
     set(CPACK_IFW_PACKAGE_PUBLISHER "finterm contributors")
     set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "finterm")
     set(CPACK_IFW_PACKAGE_ICON

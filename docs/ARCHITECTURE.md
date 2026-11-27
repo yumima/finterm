@@ -114,7 +114,8 @@ app/src/
 ├── auth/
 │   ├── AuthManager.cpp/h           # Session state: local login, sign-out, API key
 │   ├── AuthService.cpp/h           # Local users in auth.db (username + PIN), per-user DB
-│   ├── PinManager.cpp/h            # Device PIN, lockout
+│   ├── PinManager.cpp/h            # Lock-screen gate (account PIN), lockout
+│   ├── PinPolicy.cpp/h             # PIN rules, PBKDF2 hashes, recovery keys
 │   ├── InactivityGuard.cpp/h       # Auto-lock after idle
 │   └── AuthTypes.h                 # Shared auth types
 │

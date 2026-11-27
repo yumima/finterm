@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 
+#include "core/errors/DataFailure.h"
+
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
@@ -142,15 +144,23 @@ void WatchlistWidget::hub_resubscribe() {
         // and the symbol input must stay usable (re-entering symbols is how the
         // reader fixes a bad list). Only while nothing has loaded yet; once any
         // symbol delivers, render_from_cache() overwrites the row with data.
-        hub.subscribe_errors(this, topic, [this](const QString&) {
+        hub.subscribe_errors(this, topic, [this](const QString& why) {
             set_loading(false);
             if (row_cache_.isEmpty() && table_) {
                 // Replace the persistent rows with a single error row. The
                 // mappings are dropped so a later success rebuilds cleanly.
+                // Short in the cells (what failed), the reason and what to do
+                // in the row's tooltip.
+                const auto f = data_failure::classify(why, QStringLiteral("Yahoo Finance"));
                 table_->clear_data();
                 row_index_.clear();
                 spark_widgets_.clear();
-                table_->add_row({QStringLiteral("Quotes unavailable"), QString{}, QString{}, QString{}, QString{}});
+                table_->add_row({QStringLiteral("No quotes"), data_failure::kind_label(f.kind), QString{}, QString{},
+                                 QString{}});
+                const QString tip = f.reason + QStringLiteral("\nWhat to do: ") + f.action;
+                for (int c = 0; c < table_->columnCount(); ++c)
+                    if (auto* item = table_->item(0, c))
+                        item->setToolTip(tip);
             }
         });
         hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {

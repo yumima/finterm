@@ -32,6 +32,9 @@ class ResearchCandleCanvas : public QWidget {
     /// NoData: "No data available for this period" — valid symbol, no series.
     /// Error: "Failed to load chart — try again" — fetch errored out.
     void set_placeholder_state(PlaceholderState state);
+    /// Why the fetch failed (the raw error), for the Error placeholder: it
+    /// then says what happened and what to do, not only "failed".
+    void set_error_detail(const QString& raw);
 
     // ── Pass 1 chart-overlay controls ────────────────────────────────────────
     /// Toggle log scaling on the price axis. Linear is the default; log is
@@ -85,6 +88,7 @@ class ResearchCandleCanvas : public QWidget {
     bool dirty_ = true;
     QString currency_sym_ = "$";
     PlaceholderState placeholder_state_ = PlaceholderState::Loading;
+    QString error_detail_; ///< raw error behind the Error placeholder
 
     // Pass 1 overlay state — every toggle invalidates the pixmap cache so
     // the next paintEvent rebuilds with the new options.

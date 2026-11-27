@@ -2,6 +2,7 @@
 
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/widgets/DataStatusIndicator.h"
 #include "ui/widgets/EngineIndicator.h"
 #include "ui/widgets/NotifBell.h"
 #include "ui/widgets/NotifPanel.h"
@@ -46,8 +47,8 @@ StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
     // otherwise (UpdateIndicator).
     hl->addWidget(new UpdateIndicator(this));
     hl->addWidget(new EngineIndicator(this)); // the one-time question about hearth
-    ready_label_ = mk("READY", "sbReady");
-    hl->addWidget(ready_label_);
+    // READY, or what data is failing and why (click for the details).
+    hl->addWidget(new DataStatusIndicator(this));
     hl->addWidget(mk("  |  ", "sbSep"));
 
     notif_bell_ = new NotifBell(this);
@@ -89,12 +90,10 @@ void StatusBar::refresh_theme() {
                           "#sbVersion { color:%3; background:transparent; }"
                           "#sbSep { color:%2; background:transparent; }"
                           "#sbFeed { color:%3; background:transparent; }"
-                          "#sbSpacer { background:transparent; }"
-                          "#sbReady { color:%4; font-weight:700; background:transparent; }")
+                          "#sbSpacer { background:transparent; }")
                       .arg(colors::BG_BASE())
                       .arg(colors::BORDER_DIM())
-                      .arg(colors::TEXT_SECONDARY())
-                      .arg(colors::POSITIVE()));
+                      .arg(colors::TEXT_SECONDARY()));
 }
 
 StatusBar* StatusBar::primary_bar() {

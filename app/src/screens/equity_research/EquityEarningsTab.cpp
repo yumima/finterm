@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityEarningsTab.cpp
 #include "screens/equity_research/EquityEarningsTab.h"
 
+#include "core/errors/DataFailure.h"
+
 #include "screens/equity_research/EarningsCallAudio.h"
 #include "screens/equity_research/EarningsCallWebPanel.h"
 
@@ -446,7 +448,10 @@ void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s)
 
     if (!s.error.isEmpty() && !have_data) {
         loading_overlay_->hide_loading();
-        show_message(QString("Couldn't load earnings data — %1").arg(s.error));
+        const auto f = data_failure::classify(s.error, QStringLiteral("Yahoo Finance"));
+        show_message(data_failure::one_line(QStringLiteral("earnings data"), f) + QStringLiteral("\nWhat to do: ") +
+                     f.action);
+        message_label_->setToolTip(f.raw);
         // Forget the symbol so re-activating the tab retries. QueryStore
         // leaves no cached value behind a failed fetch, so the re-subscribe
         // takes its cold path and kicks a fresh one; without this reset

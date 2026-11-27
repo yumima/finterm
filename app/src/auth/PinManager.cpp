@@ -5,7 +5,6 @@
 #include "storage/secure/SecureStorage.h"
 
 #include <QCryptographicHash>
-#include <QRandomGenerator>
 
 #include <climits>
 
@@ -26,39 +25,6 @@ bool constant_time_equals(const QByteArray& a, const QByteArray& b) {
     return diff == 0;
 }
 
-// Reject trivially weak 6-digit PINs. Returns an error message or empty string
-// if the PIN is acceptable. Centralized here (not in UI) so every caller —
-// future QR/companion setup, tests, scripted flows — gets the same guardrails.
-QString weak_pin_reason(const QString& pin) {
-    if (pin.length() != 6)
-        return QStringLiteral("PIN must be exactly 6 digits");
-    for (const QChar& c : pin) {
-        if (!c.isDigit())
-            return QStringLiteral("PIN must contain only digits");
-    }
-    bool all_same = true;
-    for (int i = 1; i < pin.length(); ++i) {
-        if (pin[i] != pin[0]) {
-            all_same = false;
-            break;
-        }
-    }
-    if (all_same)
-        return QStringLiteral("PIN is too simple — use unique digits");
-
-    bool seq_up = true, seq_down = true;
-    for (int i = 1; i < pin.length(); ++i) {
-        if (pin[i].unicode() != pin[i - 1].unicode() + 1)
-            seq_up = false;
-        if (pin[i].unicode() != pin[i - 1].unicode() - 1)
-            seq_down = false;
-    }
-    if (seq_up || seq_down)
-        return QStringLiteral("PIN is too simple — avoid sequential digits");
-
-    return QString();
-}
-
 } // namespace
 
 PinManager& PinManager::instance() {
@@ -68,7 +34,6 @@ PinManager& PinManager::instance() {
 
 PinManager::PinManager() {
     load_state();
-    load_lockout_state();
 }
 
 // ── HMAC-SHA256 (manual, no QMessageAuthenticationCode dependency) ──────────
@@ -144,261 +109,204 @@ void PinManager::load_state() {
     if (hash_r.is_ok() && salt_r.is_ok() && !hash_r.value().isEmpty() && !salt_r.value().isEmpty()) {
         stored_hash_ = QByteArray::fromHex(hash_r.value().toUtf8());
         stored_salt_ = QByteArray::fromHex(salt_r.value().toUtf8());
-        has_pin_ = true;
+        has_device_pin_ = true;
     } else {
-        has_pin_ = false;
+        has_device_pin_ = false;
         stored_hash_.clear();
         stored_salt_.clear();
     }
 }
 
-void PinManager::save_lockout_state() {
-    auto& ss = SecureStorage::instance();
-
-    // Check every write. A silent failure here previously meant an attacker
-    // could hit the attempt counter with failures that never persisted,
-    // bypassing lockout across restarts. If any write fails we log ERROR and
-    // keep the in-memory counter authoritative for the rest of the session.
-    const auto r_att = ss.store("pin_failed_attempts", QString::number(failed_attempts_));
-    if (r_att.is_err())
-        LOG_ERROR("Auth",
-                  QString("Failed to persist pin_failed_attempts: %1").arg(QString::fromStdString(r_att.error())));
-
-    if (lockout_until_.isValid()) {
-        const auto r_until = ss.store("pin_lockout_until", lockout_until_.toString(Qt::ISODate));
-        if (r_until.is_err())
-            LOG_ERROR("Auth",
-                      QString("Failed to persist pin_lockout_until: %1").arg(QString::fromStdString(r_until.error())));
-
-        // Record the wall clock observed at the moment we wrote the deadline.
-        // On load, if current wall clock is earlier than this, the clock has
-        // been rolled back and we refuse to clear the lockout.
-        const auto r_stamp = ss.store("pin_lockout_stamp", QDateTime::currentDateTime().toString(Qt::ISODate));
-        if (r_stamp.is_err())
-            LOG_ERROR("Auth",
-                      QString("Failed to persist pin_lockout_stamp: %1").arg(QString::fromStdString(r_stamp.error())));
-    } else {
-        const auto r1 = ss.remove("pin_lockout_until");
-        const auto r2 = ss.remove("pin_lockout_stamp");
-        if (r1.is_err())
-            LOG_ERROR("Auth",
-                      QString("Failed to remove pin_lockout_until: %1").arg(QString::fromStdString(r1.error())));
-        if (r2.is_err())
-            LOG_ERROR("Auth",
-                      QString("Failed to remove pin_lockout_stamp: %1").arg(QString::fromStdString(r2.error())));
-    }
+// Keyring names of a user's lockout state. The account-less names (the
+// builds before 4.2.2 kept one device-wide counter) are the "" user's.
+static QString lock_key(const char* base, const QString& user) {
+    return user.isEmpty() ? QString::fromLatin1(base) : QStringLiteral("%1:%2").arg(QLatin1String(base), user);
 }
 
-void PinManager::load_lockout_state() {
+PinManager::Lock& PinManager::lock_for(const QString& user) {
+    auto it = locks_.find(user);
+    if (it != locks_.end())
+        return it.value();
+    Lock lock;
     auto& ss = SecureStorage::instance();
-
-    auto attempts_r = ss.retrieve("pin_failed_attempts");
+    const auto attempts_r = ss.retrieve(lock_key("pin_failed_attempts", user));
     if (attempts_r.is_ok() && !attempts_r.value().isEmpty())
-        failed_attempts_ = attempts_r.value().toInt();
-
-    auto lockout_r = ss.retrieve("pin_lockout_until");
-    if (lockout_r.is_ok() && !lockout_r.value().isEmpty()) {
-        lockout_until_ = QDateTime::fromString(lockout_r.value(), Qt::ISODate);
-
-        // Clock-rollback defence: compare current wall clock to the timestamp
-        // we stored the last time we updated the lockout. If the clock has
-        // been moved backward by more than 60s (small NTP corrections are
-        // acceptable), refuse to trust "now" for lockout-expiry purposes —
-        // extend the deadline by the rollback delta so the attacker gains no
-        // free time.
-        auto stamp_r = ss.retrieve("pin_lockout_stamp");
+        lock.failed = attempts_r.value().toInt();
+    const auto until_r = ss.retrieve(lock_key("pin_lockout_until", user));
+    if (until_r.is_ok() && !until_r.value().isEmpty()) {
+        lock.until = QDateTime::fromString(until_r.value(), Qt::ISODate);
+        // Clock-rollback defence: a wall clock moved back by more than a
+        // minute since the deadline was written extends the deadline by as
+        // much, so turning the clock back buys no free guesses.
+        const auto stamp_r = ss.retrieve(lock_key("pin_lockout_stamp", user));
         const QDateTime now = QDateTime::currentDateTime();
         if (stamp_r.is_ok() && !stamp_r.value().isEmpty()) {
             const QDateTime stamp = QDateTime::fromString(stamp_r.value(), Qt::ISODate);
-            if (stamp.isValid() && now.secsTo(stamp) > 60) {
-                const qint64 rollback = now.secsTo(stamp); // positive seconds
-                LOG_WARN("Auth", QString("System clock rolled back %1s since last lockout write — "
-                                         "extending lockout by that delta")
-                                     .arg(rollback));
-                if (lockout_until_.isValid())
-                    lockout_until_ = lockout_until_.addSecs(rollback);
+            if (stamp.isValid() && now.secsTo(stamp) > 60 && lock.until.isValid()) {
+                LOG_WARN("Auth", QString("System clock rolled back %1s since the last lockout — extending it")
+                                     .arg(now.secsTo(stamp)));
+                lock.until = lock.until.addSecs(now.secsTo(stamp));
             }
         }
+        if (lock.until.isValid() && lock.until <= now)
+            lock.until = QDateTime();
+    }
+    return locks_.insert(user, lock).value();
+}
 
-        // Clear expired lockout only after the rollback check above.
-        if (lockout_until_.isValid() && lockout_until_ <= now)
-            lockout_until_ = QDateTime();
+void PinManager::save_lock(const QString& user) {
+    const Lock& lock = lock_for(user);
+    auto& ss = SecureStorage::instance();
+    // Every write checked: a counter that silently fails to persist would let
+    // a restart wipe the lockout. The in-memory one stays authoritative.
+    auto check = [](const Result<void>& r, const QString& what) {
+        if (r.is_err())
+            LOG_ERROR("Auth", QString("Failed to persist %1: %2").arg(what, QString::fromStdString(r.error())));
+    };
+    if (lock.failed == 0 && !lock.until.isValid()) {
+        for (const char* base : {"pin_failed_attempts", "pin_lockout_until", "pin_lockout_stamp"})
+            check(ss.remove(lock_key(base, user)), lock_key(base, user));
+        return;
+    }
+    check(ss.store(lock_key("pin_failed_attempts", user), QString::number(lock.failed)), "pin_failed_attempts");
+    if (lock.until.isValid()) {
+        check(ss.store(lock_key("pin_lockout_until", user), lock.until.toString(Qt::ISODate)), "pin_lockout_until");
+        check(ss.store(lock_key("pin_lockout_stamp", user), QDateTime::currentDateTime().toString(Qt::ISODate)),
+              "pin_lockout_stamp");
+    } else {
+        check(ss.remove(lock_key("pin_lockout_until", user)), "pin_lockout_until");
+        check(ss.remove(lock_key("pin_lockout_stamp", user)), "pin_lockout_stamp");
     }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+void PinManager::set_account(const QString& username, std::function<bool(const QString&)> check,
+                             std::function<QString(const QString&)> set) {
+    account_ = username;
+    account_check_ = std::move(check);
+    account_set_ = std::move(set);
+}
+
 bool PinManager::has_pin() const {
-    return has_pin_;
+    return static_cast<bool>(account_check_) || has_device_pin_;
 }
 
-Result<void> PinManager::set_pin(const QString& pin) {
-    // Centralized weak-PIN rejection — every caller goes through this, so the
-    // UI cannot be bypassed by a scripted flow or a future companion-setup path.
-    const QString weak = weak_pin_reason(pin);
-    if (!weak.isEmpty())
-        return Result<void>::err(weak.toStdString());
-
-    // Generate cryptographically random salt
-    QByteArray salt(kSaltLength, '\0');
-    QRandomGenerator* rng = QRandomGenerator::system();
-    for (int i = 0; i < kSaltLength; ++i)
-        salt[i] = static_cast<char>(rng->bounded(256));
-
-    // Derive key
-    QByteArray hash = derive_key(pin, salt);
-
-    // Store in SecureStorage
-    auto& ss = SecureStorage::instance();
-    auto r1 = ss.store("pin_hash", QString::fromUtf8(hash.toHex()));
-    if (r1.is_err())
-        return Result<void>::err("Failed to store PIN hash: " + r1.error());
-
-    auto r2 = ss.store("pin_salt", QString::fromUtf8(salt.toHex()));
-    if (r2.is_err())
-        return Result<void>::err("Failed to store PIN salt: " + r2.error());
-
-    // Update cached state
-    stored_hash_ = hash;
-    stored_salt_ = salt;
-    has_pin_ = true;
-
-    // Reset lockout on new PIN
-    failed_attempts_ = 0;
-    lockout_until_ = QDateTime();
-    save_lockout_state();
-
-    LOG_INFO("Auth", "PIN configured successfully");
-    SecurityAuditLog::instance().record("pin_set");
-    return Result<void>::ok();
-}
-
-Result<void> PinManager::change_pin(const QString& old_pin, const QString& new_pin) {
-    // Must already have a PIN — otherwise the caller should go through set_pin.
-    if (!has_pin_)
-        return Result<void>::err("No PIN is configured — use set_pin()");
-
-    // Verify old PIN via the same path as an unlock attempt. This means a wrong
-    // old_pin increments failed_attempts_ and can trigger the normal lockout
-    // ladder, so an attacker who momentarily has an unlocked terminal cannot
-    // silently swap the PIN by guessing the old one.
-    if (!verify_pin(old_pin))
-        return Result<void>::err("Current PIN is incorrect");
-
-    // Disallow reusing the same PIN so users don't think the flow did nothing.
+QString PinManager::change_pin(const QString& old_pin, const QString& new_pin) {
+    if (!account_set_)
+        return QStringLiteral("Sign in first.");
     if (old_pin == new_pin)
-        return Result<void>::err("New PIN must differ from the current PIN");
+        return QStringLiteral("The new PIN is the same as the current one.");
+    // Through the unlock path: a wrong current PIN counts and can start a
+    // wait, so an unattended unlocked terminal can't have its PIN guessed
+    // and swapped.
+    if (is_locked_out(account_))
+        return QStringLiteral("Too many wrong PINs — try again in %1 s.").arg(lockout_remaining_seconds(account_));
+    if (!verify_pin(old_pin))
+        return QStringLiteral("The current PIN is wrong.");
+    const QString why = account_set_(new_pin);
+    if (!why.isEmpty())
+        return why;
+    retire_device_pin();
+    SecurityAuditLog::instance().record("pin_changed");
+    return {};
+}
 
-    auto r = set_pin(new_pin);
-    if (r.is_ok())
-        SecurityAuditLog::instance().record("pin_changed");
-    return r;
+void PinManager::pin_was_reset(const QString& user) {
+    // The device PIN is its owner's: another user's reset leaves it alone.
+    const auto owner = SecureStorage::instance().retrieve("pin_owner");
+    if (owner.is_ok() && owner.value() == user)
+        retire_device_pin();
+    Lock& lock = lock_for(user);
+    lock = Lock{};
+    save_lock(user);
+    emit lockout_changed(false, 0);
+    SecurityAuditLog::instance().record("pin_reset_with_recovery_key");
+}
+
+void PinManager::retire_device_pin() {
+    if (!has_device_pin_)
+        return;
+    auto& ss = SecureStorage::instance();
+    ss.remove("pin_hash");
+    ss.remove("pin_salt");
+    stored_hash_.clear();
+    stored_salt_.clear();
+    has_device_pin_ = false;
+    LOG_INFO("Auth", "Device PIN retired — the account PIN unlocks");
 }
 
 bool PinManager::verify_pin(const QString& pin) {
-    if (!has_pin_)
+    if (!has_pin() || is_locked_out(account_))
         return false;
+    // The device PIN compare is constant time; so is PinPolicy's.
+    bool ok = account_check_ && account_check_(pin);
+    if (!ok && has_device_pin_)
+        ok = constant_time_equals(derive_key(pin, stored_salt_), stored_hash_);
+    record_attempt(account_, ok);
+    return ok;
+}
 
-    // Check lockout
-    if (is_locked_out())
-        return false;
-
-    // Check max attempts — require full re-auth
-    if (failed_attempts_ >= kMaxAttempts) {
-        emit max_attempts_exceeded();
-        return false;
-    }
-
-    // Derive and compare. Use a constant-time comparison so execution time
-    // does not leak the position of the first differing byte — PBKDF2 already
-    // makes brute-force expensive, but the compare itself must not be a side
-    // channel.
-    QByteArray derived = derive_key(pin, stored_salt_);
-
-    if (constant_time_equals(derived, stored_hash_)) {
-        // Success — reset lockout
-        failed_attempts_ = 0;
-        lockout_until_ = QDateTime();
-        save_lockout_state();
-        LOG_INFO("Auth", "PIN verified successfully");
+void PinManager::record_attempt(const QString& user, bool ok) {
+    Lock& lock = lock_for(user);
+    if (ok) {
+        if (lock.failed != 0 || lock.until.isValid()) {
+            lock = Lock{};
+            save_lock(user);
+        }
         SecurityAuditLog::instance().record("pin_verify_ok");
-        return true;
+        return;
     }
-
-    // Failed attempt
-    failed_attempts_++;
-    LOG_WARN("Auth", QString("PIN verification failed (attempt %1/%2)").arg(failed_attempts_).arg(kMaxAttempts));
-    SecurityAuditLog::instance().record("pin_verify_fail",
-                                        QString("attempt=%1/%2").arg(failed_attempts_).arg(kMaxAttempts));
-
-    if (failed_attempts_ >= kMaxAttempts) {
-        // Permanent lockout — require server re-auth
-        save_lockout_state();
-        SecurityAuditLog::instance().record("max_attempts_exceeded");
-        emit max_attempts_exceeded();
-        emit lockout_changed(true, 0);
-        return false;
+    ++lock.failed;
+    LOG_WARN("Auth", QString("Wrong PIN (%1 in a row)").arg(lock.failed));
+    SecurityAuditLog::instance().record("pin_verify_fail", QString("attempt=%1").arg(lock.failed));
+    if (lock.failed > kFreeAttempts) {
+        const int tier = qMin(lock.failed - kFreeAttempts - 1, static_cast<int>(kLockoutTiers.size()) - 1);
+        const int secs = kLockoutTiers[static_cast<size_t>(tier)];
+        lock.until = QDateTime::currentDateTime().addSecs(secs);
+        SecurityAuditLog::instance().record("lockout_started", QString("seconds=%1").arg(secs));
+        save_lock(user);
+        emit lockout_changed(true, secs);
+        return;
     }
+    save_lock(user);
+}
 
-    // Grace period: the first kFreeAttempts mistakes just show "incorrect"
-    // with no timed lockout — users legitimately fat-finger a 6-digit PIN.
-    // The timed-lockout ladder starts at attempt (kFreeAttempts + 1), i.e.
-    // the 3rd failure triggers the first 30s lockout.
-    if (failed_attempts_ <= kFreeAttempts) {
-        save_lockout_state();
-        return false;
-    }
-
-    // Apply timed lockout. The ladder is indexed from the first *post-grace*
-    // failure so the first lockout is kLockoutTiers[0] (30s).
-    int tier = qMin(failed_attempts_ - kFreeAttempts - 1, static_cast<int>(kLockoutTiers.size()) - 1);
-    int lockout_secs = kLockoutTiers[static_cast<size_t>(tier)];
-    lockout_until_ = QDateTime::currentDateTime().addSecs(lockout_secs);
-    save_lockout_state();
-    SecurityAuditLog::instance().record("lockout_started", QString("seconds=%1").arg(lockout_secs));
-
-    emit lockout_changed(true, lockout_secs);
-    return false;
+void PinManager::forget_user(const QString& user) {
+    lock_for(user) = Lock{};
+    save_lock(user); // removes the keyring entries
 }
 
 void PinManager::clear_pin() {
     auto& ss = SecureStorage::instance();
     ss.remove("pin_hash");
     ss.remove("pin_salt");
-    ss.remove("pin_failed_attempts");
-    ss.remove("pin_lockout_until");
-    ss.remove("pin_lockout_stamp");
-
     stored_hash_.clear();
     stored_salt_.clear();
-    has_pin_ = false;
-    failed_attempts_ = 0;
-    lockout_until_ = QDateTime();
+    has_device_pin_ = false;
+    // The account-less lockout went with the device PIN.
+    lock_for(QString()) = Lock{};
+    save_lock(QString());
 
     LOG_INFO("Auth", "PIN cleared");
     SecurityAuditLog::instance().record("pin_cleared");
 }
 
-bool PinManager::is_locked_out() const {
-    if (!lockout_until_.isValid())
-        return false;
-    return QDateTime::currentDateTime() < lockout_until_;
+bool PinManager::is_locked_out(const QString& user) {
+    const Lock& lock = lock_for(user);
+    return lock.until.isValid() && QDateTime::currentDateTime() < lock.until;
 }
 
-int PinManager::lockout_remaining_seconds() const {
-    if (!lockout_until_.isValid())
+int PinManager::lockout_remaining_seconds(const QString& user) {
+    const Lock& lock = lock_for(user);
+    if (!lock.until.isValid())
         return 0;
-    const qint64 secs = QDateTime::currentDateTime().secsTo(lockout_until_);
+    const qint64 secs = QDateTime::currentDateTime().secsTo(lock.until);
     return static_cast<int>(qBound(qint64{0}, secs, qint64{INT_MAX}));
 }
 
-void PinManager::reset_lockout() {
-    failed_attempts_ = 0;
-    lockout_until_ = QDateTime();
-    save_lockout_state();
-    emit lockout_changed(false, 0);
-    LOG_INFO("Auth", "PIN lockout reset after re-authentication");
-    SecurityAuditLog::instance().record("lockout_cleared");
+int PinManager::failed_attempts(const QString& user) {
+    return lock_for(user).failed;
 }
 
 } // namespace finterm::auth

@@ -2,72 +2,80 @@
 #include "core/result/Result.h"
 
 #include <QDateTime>
+#include <QHash>
 #include <QObject>
 #include <QString>
 
 #include <array>
+#include <functional>
 
 namespace finterm::auth {
 
-/// Manages local PIN authentication — hashing, verification, and lockout.
+/// The lock-screen gate: which PIN unlocks, and the lockout after wrong ones.
 ///
-/// PIN is hashed with PBKDF2-SHA256 (100k iterations, 32-byte salt) and stored
-/// in OS-native SecureStorage (DPAPI / Keychain). A lockout mechanism enforces
-/// exponential backoff after failed attempts (30s, 60s, 5min, 15min, then
-/// requires full server re-authentication).
+/// The PIN is the signed-in user's account PIN (AuthService, installed here
+/// by AuthManager with set_account()). Builds before 4.2.2 also asked for a
+/// separate 6-digit "device PIN"; one that was set keeps working (either
+/// PIN unlocks) until the user changes their PIN, which retires it — a user
+/// who remembers only one of the two is never locked out.
+///
+/// Wrong PINs, counted per user across the lock screen and the sign-in screen
+/// (one user's mistakes never hold up another, or a new user): two free, then
+/// waits of 30 s, 1, 5, 15 and 60 minutes (and 60 from then on).
+/// There is no permanent lock: forgetting the PIN is handled by the recovery
+/// options (recovery key, another user, reset), not by trying harder.
 class PinManager : public QObject {
     Q_OBJECT
   public:
     static PinManager& instance();
 
-    /// True if user has configured a PIN (hash exists in SecureStorage).
+    /// The signed-in account's PIN check and setter. Both empty at sign-out.
+    void set_account(const QString& username, std::function<bool(const QString&)> check,
+                     std::function<QString(const QString&)> set);
+    /// The account the gate is for ("" when signed out).
+    QString account() const { return account_; }
+
+    /// True when there is a PIN to unlock with (an account, or an older
+    /// build's device PIN).
     bool has_pin() const;
+    /// An older build's separate device PIN is still set.
+    bool has_device_pin() const { return has_device_pin_; }
 
-    /// Set or update the PIN. Returns error if hash/storage fails or the PIN
-    /// is trivially weak (all-same digits, ascending/descending sequence).
-    /// Note: this does NOT require the old PIN — use change_pin() for that.
-    Result<void> set_pin(const QString& pin);
+    /// Change the PIN, requiring the current one (a wrong one counts like a
+    /// failed unlock). Retires the device PIN. Returns "" or why not.
+    QString change_pin(const QString& old_pin, const QString& new_pin);
 
-    /// Change the PIN, requiring the current PIN for authorization. A wrong
-    /// old_pin increments the failed-attempt counter exactly like a failed
-    /// unlock, so an attacker who unlocks an unattended terminal cannot
-    /// silently swap the PIN without facing the same lockout.
-    Result<void> change_pin(const QString& old_pin, const QString& new_pin);
+    /// `user`'s PIN was set after they proved who they are another way (a
+    /// recovery key): their lockout ends, and the device PIN, if it is
+    /// theirs, retires.
+    void pin_was_reset(const QString& user);
 
-    /// Verify a PIN attempt. On failure increments attempt counter and
-    /// may trigger lockout. Returns true on match.
+    /// Verify an unlock attempt against the account PIN or the device PIN.
+    /// Counts failures and applies the waits; false while a wait runs.
     bool verify_pin(const QString& pin);
 
-    /// Remove stored PIN (e.g. on logout or account reset).
+    /// For a PIN checked elsewhere (the sign-in screen): count the outcome
+    /// against `user`'s lockout.
+    void record_attempt(const QString& user, bool ok);
+
+    /// A deleted user's lockout goes with them: a user created again under
+    /// the same name starts clean.
+    void forget_user(const QString& user);
+
+    /// Forget the device PIN and the lockout (sign-out of a deleted user,
+    /// a fresh start).
     void clear_pin();
 
-    /// Current lockout state.
-    bool is_locked_out() const;
+    /// `user`'s lockout ("" = no account: an older build's device PIN).
+    bool is_locked_out(const QString& user);
+    int lockout_remaining_seconds(const QString& user);
+    int failed_attempts(const QString& user);
 
-    /// Seconds remaining until lockout expires. 0 if not locked.
-    int lockout_remaining_seconds() const;
-
-    /// Number of consecutive failed attempts.
-    int failed_attempts() const { return failed_attempts_; }
-
-    /// Max attempts before permanent lockout (requires server re-auth).
-    static constexpr int kMaxAttempts = 5;
-
-    /// Number of "free" wrong attempts before the timed-lockout ladder kicks
-    /// in. Set to 2 so the user gets 3 tries (attempts 1, 2, 3) with only a
-    /// generic "incorrect" error; the 3rd mistake starts the 30s lockout.
-    /// kMaxAttempts still caps the total at 5 before forced re-login.
+    /// Wrong PINs that cost nothing but the message.
     static constexpr int kFreeAttempts = 2;
 
-    /// Reset lockout state (called after successful server re-auth).
-    void reset_lockout();
-
   signals:
-    /// Emitted when lockout state changes.
     void lockout_changed(bool locked, int remaining_seconds);
-
-    /// Emitted when max attempts exceeded — requires full re-login.
-    void max_attempts_exceeded();
 
   private:
     PinManager();
@@ -79,22 +87,31 @@ class PinManager : public QObject {
     static constexpr int kSaltLength = 32;
     static constexpr int kHashLength = 32;
 
-    // Lockout durations (seconds) per attempt tier
-    static constexpr std::array<int, 4> kLockoutTiers = {30, 60, 300, 900};
+    // Waits (seconds) after the free attempts; the last repeats.
+    static constexpr std::array<int, 5> kLockoutTiers = {30, 60, 300, 900, 3600};
 
     QByteArray derive_key(const QString& pin, const QByteArray& salt) const;
 
-    int failed_attempts_ = 0;
-    QDateTime lockout_until_;
+    struct Lock {
+        int failed = 0;
+        QDateTime until;
+    };
+    /// Per user, read from the keyring on first use.
+    QHash<QString, Lock> locks_;
+    Lock& lock_for(const QString& user);
+    void save_lock(const QString& user);
 
-    // Cached state loaded from SecureStorage
-    bool has_pin_ = false;
+    QString account_;
+    std::function<bool(const QString&)> account_check_;
+    std::function<QString(const QString&)> account_set_;
+
+    // An older build's device PIN, from SecureStorage
+    bool has_device_pin_ = false;
     QByteArray stored_hash_;
     QByteArray stored_salt_;
 
     void load_state();
-    void save_lockout_state();
-    void load_lockout_state();
+    void retire_device_pin();
 };
 
 } // namespace finterm::auth

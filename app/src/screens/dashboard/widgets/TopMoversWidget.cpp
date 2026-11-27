@@ -140,11 +140,11 @@ void TopMoversWidget::subscribe_movers() {
         if (v.canConvert<services::MarketDataService::TopMovers>())
             on_movers(v.value<services::MarketDataService::TopMovers>());
     });
-    hub.subscribe_errors(this, topic, [this](const QString&) {
+    hub.subscribe_errors(this, topic, [this](const QString& why) {
         // Movers already on screen stay; say so only when there is nothing.
         set_loading(false);
         if (cached_movers_.gainers.isEmpty() && cached_movers_.losers.isEmpty())
-            set_error(QStringLiteral("Couldn't load top movers"));
+            set_load_error(QStringLiteral("top movers"), why);
     });
 }
 

@@ -51,6 +51,11 @@ class PythonWorker : public QObject {
     /// first paint instead of stalling the dashboard's first refresh.
     /// Idempotent; no-op if already starting or running.
     void warm_up() { ensure_started(); }
+    /// Start the daemon again — it reads its environment (the proxy) once,
+    /// at launch. Asynchronous: the old one is asked to stop (killed after
+    /// 3 s) and the new one launched when it has; requests in flight are
+    /// answered as failed. A no-op after stop().
+    void restart();
 
     void submit(const QString& action, const QJsonObject& payload, Callback cb, int timeout_ms = 0);
 
@@ -111,6 +116,7 @@ class PythonWorker : public QObject {
     /// The connection to the daemon: a QLocalSocket (Unix domain socket) or,
     /// on Windows, a QTcpSocket to loopback — see use_tcp_.
     QIODevice* socket_ = nullptr;
+    bool restarting_ = false; ///< restart() asked the daemon to stop; relaunch on its exit
     QString socket_path_;
     /// Loopback TCP instead of a Unix domain socket. Always on Windows, where
     /// Python has no AF_UNIX; FINTERM_DAEMON_TCP=1 forces it elsewhere so the

@@ -773,6 +773,19 @@ if(Python3_Interpreter_FOUND)
                          PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── An unreachable Yahoo is a refusal, not "no data" ─────────────────────────
+# yfinance files a ticker whose timezone lookup failed on the network under
+# "no timezone found" — the words for an unknown ticker. Pins: refusal (with
+# the network's reason) when the download or a probe shows the network failed.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME download_refusals
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_download_refusals.py
+    )
+    set_tests_properties(download_refusals PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 # ── Bar vs event timestamp decoders ──────────────────────────────────────────
 # Two kinds of epoch second, both qint64, both called `timestamp`, decoded
 # differently — and fromSecsSinceEpoch() looks correct for both. Wrong in five
@@ -1112,6 +1125,7 @@ add_test(NAME ownership_flags COMMAND test_ownership_flags)
 add_executable(test_base_widget_error
     screens/test_base_widget_error.cpp
     ../src/screens/dashboard/widgets/BaseWidget.cpp
+    ../src/core/errors/DataFailure.cpp
     ../src/ui/theme/Theme.cpp
     ../src/ui/theme/ThemeManager.cpp
     ../src/core/logging/Logger.cpp
@@ -1638,6 +1652,26 @@ target_include_directories(test_db_threads PRIVATE ../src)
 target_link_libraries(test_db_threads PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
 set_target_properties(test_db_threads PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME db_threads COMMAND test_db_threads)
+
+# ── AUTH: PIN rules, the stored hash forms, the recovery key ────────────────
+add_executable(test_pin_policy
+    auth/test_pin_policy.cpp
+    ../src/auth/PinPolicy.cpp
+)
+target_include_directories(test_pin_policy PRIVATE ../src)
+target_link_libraries(test_pin_policy PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+set_target_properties(test_pin_policy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME pin_policy COMMAND test_pin_policy)
+
+# ── DATA FAILURE: what a failed load tells the user ─────────────────────────
+add_executable(test_data_failure
+    core/test_data_failure.cpp
+    ../src/core/errors/DataFailure.cpp
+)
+target_include_directories(test_data_failure PRIVATE ../src)
+target_link_libraries(test_data_failure PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_data_failure PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME data_failure COMMAND test_data_failure)
 
 # ── all_tests: build every test executable without the app ───────────────────
 # CI (.github/workflows/tests.yml) builds this target and runs ctest.

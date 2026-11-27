@@ -295,6 +295,28 @@ void PythonWorker::stop() {
     fail_all_pending(QStringLiteral("worker shutting down"));
 }
 
+void PythonWorker::restart() {
+    if (stopped_ || restarting_ || !proc_ || proc_->state() == QProcess::NotRunning)
+        return; // not running: the next submit() starts it with the new environment
+    LOG_INFO("PythonWorker", "Restarting the data service for a new environment");
+    // Asynchronous: ask it to stop, and launch the new one from
+    // on_process_finished — never block the window waiting for the old.
+    restarting_ = true;
+    if (socket_connected()) {
+        QJsonObject req;
+        req["id"] = 0;
+        req["action"] = QStringLiteral("shutdown");
+        req["payload"] = QJsonObject{};
+        socket_->write(encode_frame(req));
+    }
+    proc_->closeWriteChannel();
+    QPointer<QProcess> old = proc_;
+    QTimer::singleShot(3000, this, [old]() {
+        if (old && old->state() != QProcess::NotRunning)
+            old->kill(); // didn't stop in time: on_process_finished still follows
+    });
+}
+
 // ── ensure_started / launch_process ──────────────────────────────────────────
 
 void PythonWorker::ensure_started() {
@@ -445,6 +467,14 @@ void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus statu
     };
 
     if (shutting_down_ || QCoreApplication::closingDown()) {
+        answer_lost();
+        return;
+    }
+
+    // Our own restart (a new environment): not a crash — no count, no cap.
+    if (restarting_) {
+        restarting_ = false;
+        launch_process();
         answer_lost();
         return;
     }

@@ -1,6 +1,9 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 
+#include "core/errors/DataFailure.h"
+#include "services/data_health/DataHealth.h"
+
 #include "services/calendar/MacroCalendar.h"
 #include "services/calendar/MacroCalendarFeed.h"
 #include "ui/theme/Theme.h"
@@ -45,6 +48,7 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
 
     // Status label lives OUTSIDE the scrollable list — never deleted by populate().
     status_label_ = new QLabel("Loading…");
+    status_label_->setWordWrap(true); // a failure says why — a sentence, not a word
     status_label_->setAlignment(Qt::AlignCenter);
     vl->addWidget(status_label_);
 
@@ -111,10 +115,17 @@ void EconomicCalendarWidget::refresh_data(bool force) {
             if (!last_events_.isEmpty())
                 return;
             scroll_area_->setVisible(false);
-            status_label_->setText("Couldn't load economic calendar");
+            const auto f = data_failure::classify(r.error, QStringLiteral("ForexFactory"));
+            status_label_->setText(data_failure::one_line(QStringLiteral("the economic calendar"), f));
+            status_label_->setToolTip(QStringLiteral("What to do: %1\n\n%2").arg(f.action, f.raw));
             status_label_->setVisible(true);
+            services::DataHealth::instance().report_failure(QStringLiteral("dashboard:economic_calendar"),
+                                                            QStringLiteral("Economic calendar"), r.error,
+                                                            QStringLiteral("ForexFactory"));
             return;
         }
+        status_label_->setToolTip(QString());
+        services::DataHealth::instance().report_success(QStringLiteral("dashboard:economic_calendar"));
         on_fetch_done(r.rows, r.stale);
     }, force);
 }

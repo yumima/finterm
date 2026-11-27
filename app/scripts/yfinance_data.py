@@ -305,7 +305,50 @@ def _download_refusals(symbols, dl_errors):
         if _is_refusal_text(e):
             for spelling in asked[k]:
                 refused[spelling] = e
+    # yfinance looks each ticker's timezone up first; when that lookup cannot
+    # reach Yahoo it reports "possibly delisted; no timezone found" — the
+    # words it uses for an unknown ticker. When the network failed in this
+    # same download (another ticker says so), or Yahoo can't be reached at
+    # all right now, those are refusals with that reason, not missing data.
+    tz_missing = [k for k, e in mine.items() if "timezone" in e.lower() and asked[k][0] not in refused]
+    if tz_missing:
+        why = next(iter(refused.values()), None) or _yahoo_unreachable()
+        if why:
+            for k in tz_missing:
+                for spelling in asked[k]:
+                    refused[spelling] = why
     return refused
+
+
+_REACH_LOCK = threading.Lock()
+_reach_cache = {"at": 0.0, "why": None}
+
+
+def _yahoo_unreachable():
+    """Why Yahoo can't be reached from here right now, or None when it
+    answers (any HTTP status is an answer). One small request, remembered for
+    30 s so a burst of failed downloads asks once. Through the same proxy
+    settings the downloads use (libcurl reads them from the environment)."""
+    with _REACH_LOCK:
+        now = time.time()
+        if now - _reach_cache["at"] < 30:
+            return _reach_cache["why"]
+        why = None
+        try:
+            try:
+                from curl_cffi import requests as _creq
+                _creq.get("https://query1.finance.yahoo.com/", timeout=6, impersonate="chrome")
+            except ImportError:
+                import urllib.request
+                try:
+                    urllib.request.urlopen("https://query1.finance.yahoo.com/", timeout=6)
+                except urllib.error.HTTPError:
+                    pass  # an HTTP status is an answer
+        except Exception as e:  # no connection, DNS, proxy, TLS, timeout
+            why = f"{type(e).__name__}: {e}"[:300]
+        _reach_cache["at"] = now
+        _reach_cache["why"] = why
+        return why
 
 
 def _is_refusal_text(msg):
@@ -2305,7 +2348,10 @@ def _yahoo_batch_quotes(symbols):
         refused = _download_refusals(symbols, dl_errors)
         if data is None or data.empty:
             if refused:
-                return {"error": f"Yahoo refused the quote download ({len(refused)} symbols)",
+                # The reason, not only the count: what the screen tells the
+                # user ("could not connect", "HTTP 429") comes from it.
+                first = str(next(iter(refused.values())))[:200]
+                return {"error": f"Yahoo refused the quote download ({len(refused)} symbols): {first}",
                         "transient": True}
             return []
 

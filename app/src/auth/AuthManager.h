@@ -20,16 +20,19 @@ class AuthManager : public QObject {
 
     // Local users: multi-user picker + PIN. No email, OTP or MFA.
     void signup_local(const QString& username, const QString& pin);
+    /// Wrong PINs here count against the same lockout as the lock screen.
     void login_local(const QString& username, const QString& pin);
+    /// Set a forgotten PIN with the recovery key. "" or why not.
+    QString reset_pin_with_recovery_key(const QString& username, const QString& key, const QString& new_pin);
+    bool has_recovery_key(const QString& username) const;
+    /// A new recovery key for the signed-in user ("" on failure).
+    QString create_recovery_key();
     QVector<QJsonObject> list_local_users() const;
     /// Delete a local user (auth.db row + users/<name>.db). on_done, when set,
     /// receives (ok, error) after the attempt.
     void delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done = {});
-    /// Sign out. The device PIN is kept by default so the next login unlocks
-    /// with the existing PIN instead of forcing a new SECURITY SETUP.
-    /// Pass wipe_device_pin = true only when the PIN itself must go: the
-    /// lockout "SIGN IN AGAIN" recovery (user cannot produce the PIN) and
-    /// account deletion.
+    /// Sign out. An older build's device PIN is kept unless wipe_device_pin
+    /// (account deletion).
     void logout(bool wipe_device_pin = false);
 
     // Session management
@@ -43,15 +46,16 @@ class AuthManager : public QObject {
     /// on_done reports failure, so keyring, auth.db and session stay in step.
     void regenerate_api_key(std::function<void(bool, const QString&)> on_done = {});
 
-    /// True if user needs to set up a PIN (authenticated but no PIN configured).
-    bool needs_pin_setup() const;
 
   signals:
     void auth_state_changed();
     void login_succeeded();
     void login_failed(const QString& error);
-    void signup_succeeded();
+    /// `recovery_key` is shown to the user once, then forgotten.
+    void signup_succeeded(const QString& username, const QString& recovery_key);
     void signup_failed(const QString& error);
+    /// A user was created or deleted: the sign-in picker lists them again.
+    void local_users_changed();
     void logged_out();
     void loading_changed(bool loading);
 

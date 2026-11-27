@@ -8,6 +8,8 @@
 
 namespace finterm::screens {
 
+class PinRecoveryPanel;
+
 /// Local login: pick a user from the list (sourced from the local auth.db),
 /// then punch in their 4-6 digit PIN. No email, no MFA, no remote auth.
 /// Falls through to a "first-run" panel that nudges new users into signup
@@ -40,12 +42,17 @@ class LoginScreen : public QWidget {
     QLineEdit* pin_input_ = nullptr;
     QPushButton* pin_unlock_btn_ = nullptr;
     QPushButton* pin_back_btn_ = nullptr;
-    QPushButton* pin_delete_btn_ = nullptr;
+    QPushButton* pin_forgot_btn_ = nullptr;
     QLabel* pin_error_ = nullptr;
     QString active_username_;
 
+    // ── Forgot page ───────────────────────────────────────────────────────
+    QWidget* recovery_page_ = nullptr;
+    PinRecoveryPanel* recovery_ = nullptr;
+
     void build_picker_page();
     void build_pin_page();
+    void build_recovery_page();
     void refresh_user_list();
     void show_picker();
     void show_pin_pad(const QString& username);
@@ -53,7 +60,6 @@ class LoginScreen : public QWidget {
   private slots:
     void on_user_selected(QListWidgetItem* item);
     void on_unlock();
-    void on_delete_user();
     void on_login_succeeded();
     void on_login_failed(const QString& error);
 };

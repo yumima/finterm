@@ -4,9 +4,11 @@
 
 #include "screens/settings/SettingsScreen.h"
 
+#include "screens/settings/NetworkSection.h"
 #include "screens/settings/PriceSourceSection.h"
 
 #include "ai_chat/LlmService.h"
+#include "auth/AuthManager.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
 #include "auth/SecurityAuditLog.h"
@@ -17,6 +19,8 @@
 #include "services/updater/UpdateService.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
+#include "screens/auth/RecoveryKeyDialog.h"
+#include "screens/auth/StartFreshDialog.h"
 #include "screens/devtools/DataHubInspector.h"
 #include "screens/profile/ProfileScreen.h"
 #include "screens/settings/ActivityPanelSection.h"
@@ -1087,6 +1091,14 @@ QWidget* SettingsScreen::build_storage() {
         connect(open_btn, &QPushButton::clicked, this,
                 [user_dir]() { QDesktopServices::openUrl(QUrl::fromLocalFile(user_dir)); });
         wl->addWidget(open_btn);
+        // Set finterm up again from the beginning (the old data goes to a
+        // backup folder) — the in-app way to do what hunting down folders did.
+        auto* fresh_btn = new QPushButton(tr("Start fresh…"));
+        fresh_btn->setStyleSheet(settings_style::btn_secondary_ss());
+        fresh_btn->setToolTip(tr("Restart finterm as on its first start. Your data is moved to a backup folder, "
+                                 "not deleted."));
+        connect(fresh_btn, &QPushButton::clicked, this, [this]() { StartFreshDialog::ask(this); });
+        wl->addWidget(fresh_btn);
         vl->addWidget(where);
         vl->addSpacing(10);
     }
@@ -1836,6 +1848,10 @@ QWidget* SettingsScreen::build_data_sources() {
     vl->addWidget(new PriceSourceSection(page));
     vl->addSpacing(8);
 
+    // How the app reaches the internet: system proxy, none, or a VPN's proxy.
+    vl->addWidget(new NetworkSection(page));
+    vl->addSpacing(8);
+
     // ── Stats strip ──────────────────────────────────────────────────────────
     auto result = DataSourceRepository::instance().list_all();
     auto connections = result.is_ok() ? result.value() : QVector<DataSource>{};
@@ -2420,12 +2436,34 @@ QWidget* SettingsScreen::build_security() {
 
     sec_pin_status_ = new QLabel;
     sec_pin_status_->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_PRIMARY()));
-    vl->addWidget(make_row("PIN Status", sec_pin_status_, "A 6-digit PIN is required to unlock the terminal."));
+    vl->addWidget(make_row("PIN Status", sec_pin_status_,
+                           "Your PIN (4 to 6 digits) signs you in and unlocks the terminal."));
 
     sec_lockout_status_ = new QLabel;
     sec_lockout_status_->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-    vl->addWidget(
-        make_row("Failed Attempts", sec_lockout_status_, "PIN lockout engages after 5 consecutive failures."));
+    vl->addWidget(make_row("Wrong PINs", sec_lockout_status_,
+                           "After two wrong PINs in a row, each further one makes you wait — 30 s, then longer."));
+
+    // ── RECOVERY KEY ──────────────────────────────────────────────────────────
+    {
+        auto* holder = new QWidget(this);
+        auto* hl = new QHBoxLayout(holder);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->setSpacing(8);
+        sec_recovery_status_ = new QLabel;
+        hl->addWidget(sec_recovery_status_);
+        sec_recovery_btn_ = new QPushButton("Make a new recovery key");
+        sec_recovery_btn_->setStyleSheet(settings_style::btn_secondary_ss());
+        hl->addWidget(sec_recovery_btn_);
+        hl->addStretch();
+        vl->addWidget(make_row("Recovery Key", holder,
+                               "Sets a new PIN if you forget yours, keeping your data. A new key replaces the old "
+                               "one."));
+        connect(sec_recovery_btn_, &QPushButton::clicked, this, [this]() {
+            if (RecoveryKeyDialog::create_and_show(this))
+                load_security();
+        });
+    }
 
     vl->addSpacing(8);
     vl->addWidget(make_sep());
@@ -2509,11 +2547,9 @@ QWidget* SettingsScreen::build_security() {
 
     // Save PIN handler.
     //
-    // All validation (length, digits, weak pattern, old-PIN verification, same-
-    // as-old rejection) lives in PinManager::change_pin so there is exactly
-    // one enforcement path and a wrong current PIN correctly feeds the
-    // shared lockout counter. The UI only checks "new" == "confirm" since the
-    // manager has no notion of a confirm field.
+    // All validation (pin_policy, current-PIN check, same-as-old) lives in
+    // PinManager::change_pin, so a wrong current PIN feeds the shared lockout.
+    // The UI only checks "new" == "confirm".
     connect(save_pin_btn, &QPushButton::clicked, this, [this]() {
         sec_pin_error_->hide();
         sec_pin_success_->hide();
@@ -2531,13 +2567,11 @@ QWidget* SettingsScreen::build_security() {
             return;
         }
 
-        auto result = pm.change_pin(current, new_pin);
-        if (result.is_err()) {
-            sec_pin_error_->setText(QString::fromStdString(result.error()));
+        const QString why = pm.change_pin(current, new_pin);
+        if (!why.isEmpty()) {
+            sec_pin_error_->setText(why);
             sec_pin_error_->show();
-            // On a wrong current PIN the manager incremented the attempt
-            // counter; clear the field and let the user try again (up to
-            // kMaxAttempts, at which point the lock screen takes over).
+            // A wrong current PIN counted against the lockout like an unlock.
             sec_current_pin_->clear();
             sec_current_pin_->setFocus();
             return;
@@ -2679,12 +2713,9 @@ void SettingsScreen::load_security() {
 
     // Lockout status
     if (sec_lockout_status_) {
-        int attempts = pm.failed_attempts();
-        if (attempts == 0) {
-            sec_lockout_status_->setText("0 / 5");
-        } else {
-            sec_lockout_status_->setText(QString("%1 / 5").arg(attempts));
-        }
+        const int attempts = pm.failed_attempts(pm.account());
+        sec_lockout_status_->setText(attempts == 0 ? QStringLiteral("none")
+                                                   : QStringLiteral("%1 in a row").arg(attempts));
         sec_lockout_status_->setStyleSheet(
             QString("color:%1;font-weight:700;background:transparent;")
                 .arg(attempts > 0 ? ui::colors::WARNING() : ui::colors::TEXT_SECONDARY()));
@@ -2693,6 +2724,17 @@ void SettingsScreen::load_security() {
     // Change PIN button visibility (only if PIN exists)
     if (sec_change_pin_btn_)
         sec_change_pin_btn_->setEnabled(pm.has_pin());
+
+    if (sec_recovery_status_) {
+        const QString user = pm.account();
+        const bool has_key = !user.isEmpty() && auth::AuthManager::instance().has_recovery_key(user);
+        sec_recovery_status_->setText(has_key ? QStringLiteral("SET") : QStringLiteral("NONE"));
+        sec_recovery_status_->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;")
+                                                .arg(has_key ? ui::colors::POSITIVE() : ui::colors::WARNING()));
+        if (sec_recovery_btn_)
+            sec_recovery_btn_->setText(has_key ? QStringLiteral("Make a new recovery key")
+                                               : QStringLiteral("Make a recovery key"));
+    }
 
     // Auto-lock settings
     if (sec_autolock_toggle_ && sec_lock_timeout_) {

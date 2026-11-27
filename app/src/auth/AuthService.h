@@ -14,7 +14,10 @@ namespace finterm::auth {
 /// All users are stored in AppPaths::data()/auth.db — nothing leaves this machine.
 ///
 /// Users are local: username + PIN, no email, OTP or MFA.
-/// PIN storage:    SHA-256 with random salt ("salt_hex:hash_hex").
+/// PIN storage:    PBKDF2-SHA256 (auth/PinPolicy); accounts made before
+///                 4.2.2 hold a salted SHA-256 until the user sets a new PIN.
+/// Recovery key:   optional, its PBKDF2 hash beside the PIN; it resets a
+///                 forgotten PIN without losing the user's data.
 /// API keys:       UUIDs issued when the user is created; regenerable.
 /// Session tokens: UUIDs generated at each login, passed to HttpClient for
 ///                 compatibility with existing token-clearing logic.
@@ -58,6 +61,21 @@ class AuthService : public QObject {
     /// Account "delete local account" (which closes the DB first).
     void delete_local_user(const QString& username, Callback cb);
 
+    // ── The account PIN and its recovery key ─────────────────────────────────
+    /// Whether `pin` is `username`'s PIN. Counts nothing: lockout is the
+    /// caller's (PinManager).
+    bool verify_local_pin(const QString& username, const QString& pin);
+    /// Replace `username`'s PIN (checked against pin_policy::problem). The
+    /// caller has already proved who it is.
+    QString set_local_pin(const QString& username, const QString& new_pin);
+    /// Whether `username` has a recovery key.
+    bool has_recovery_key(const QString& username);
+    /// A new recovery key for `username` (replacing any earlier one), or ""
+    /// when it could not be stored. Shown once: only its hash is kept.
+    QString create_recovery_key(const QString& username);
+    /// Set a new PIN with the recovery key. "" on success, else why not.
+    QString reset_pin_with_recovery_key(const QString& username, const QString& typed_key, const QString& new_pin);
+
     // ── Authenticated (api_key identifies the caller) ─────────────────────────
     void logout(const QString& api_key, Callback cb);
     void get_user_profile(const QString& api_key, Callback cb);
@@ -70,8 +88,7 @@ class AuthService : public QObject {
     AuthService() = default;
 
     void init_schema();
-    QString hash_password(const QString& password) const;
-    bool verify_password(const QString& password, const QString& stored) const;
+    QString stored_pin_hash(const QString& username);
     QString make_token() const;
     QJsonObject profile_json(int id, const QString& username, const QString& email, const QString& created_at,
                              const QString& last_login) const;

@@ -1,14 +1,13 @@
 #include "screens/auth/LoginScreen.h"
 
 #include "auth/AuthManager.h"
+#include "screens/auth/PinRecoveryPanel.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QIntValidator>
 #include <QListWidgetItem>
-#include <QMessageBox>
-#include <QPointer>
 #include <QPainter>
 #include <QShowEvent>
 #include <QStackedWidget>
@@ -58,11 +57,11 @@ QString secondary_btn_style() {
         .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::BORDER_MED(), finterm::ui::colors::AMBER());
 }
 
-QString danger_btn_style() {
+QString link_btn_style() {
     return QString("QPushButton { background:transparent; color:%1; border:none;"
-                   "  padding:6px 10px; font-size:11px; }"
+                   "  padding:6px 10px; font-size:12px; }"
                    "QPushButton:hover { color:%2; text-decoration:underline; }")
-        .arg(finterm::ui::colors::TEXT_TERTIARY(), finterm::ui::colors::NEGATIVE());
+        .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::AMBER());
 }
 
 } // namespace
@@ -75,12 +74,15 @@ LoginScreen::LoginScreen(QWidget* parent) : QWidget(parent) {
 
     build_picker_page();
     build_pin_page();
+    build_recovery_page();
     pages_->addWidget(picker_page_);
     pages_->addWidget(pin_page_);
+    pages_->addWidget(recovery_page_);
 
     auto& auth = auth::AuthManager::instance();
     connect(&auth, &auth::AuthManager::login_succeeded, this, &LoginScreen::on_login_succeeded);
     connect(&auth, &auth::AuthManager::login_failed, this, &LoginScreen::on_login_failed);
+    connect(&auth, &auth::AuthManager::local_users_changed, this, &LoginScreen::refresh_user_list);
 }
 
 void LoginScreen::paintEvent(QPaintEvent*) {
@@ -211,10 +213,13 @@ void LoginScreen::build_pin_page() {
     pin_back_btn_->setCursor(Qt::PointingHandCursor);
     connect(pin_back_btn_, &QPushButton::clicked, this, [this]() { show_picker(); });
 
-    pin_delete_btn_ = new QPushButton(QStringLiteral("Forgot PIN? Reset this user"), panel);
-    pin_delete_btn_->setStyleSheet(danger_btn_style());
-    pin_delete_btn_->setCursor(Qt::PointingHandCursor);
-    connect(pin_delete_btn_, &QPushButton::clicked, this, &LoginScreen::on_delete_user);
+    pin_forgot_btn_ = new QPushButton(QStringLiteral("Forgot PIN?"), panel);
+    pin_forgot_btn_->setStyleSheet(link_btn_style());
+    pin_forgot_btn_->setCursor(Qt::PointingHandCursor);
+    connect(pin_forgot_btn_, &QPushButton::clicked, this, [this]() {
+        recovery_->start(active_username_, /*signed_in=*/false);
+        pages_->setCurrentWidget(recovery_page_);
+    });
 
     pl->addWidget(pin_username_lbl_);
     pl->addWidget(hint);
@@ -223,7 +228,7 @@ void LoginScreen::build_pin_page() {
     pl->addWidget(pin_unlock_btn_);
     pl->addWidget(pin_back_btn_);
     pl->addSpacing(4);
-    pl->addWidget(pin_delete_btn_);
+    pl->addWidget(pin_forgot_btn_);
 
     auto* centerer = new QHBoxLayout;
     centerer->addStretch();
@@ -231,6 +236,40 @@ void LoginScreen::build_pin_page() {
     centerer->addStretch();
     outer->addLayout(centerer);
     outer->addStretch();
+}
+
+void LoginScreen::build_recovery_page() {
+    recovery_page_ = new QWidget(this);
+    auto* outer = new QVBoxLayout(recovery_page_);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->addStretch();
+    auto* panel = new QWidget(recovery_page_);
+    panel->setObjectName("authPanel");
+    panel->setStyleSheet(panel_style());
+    panel->setFixedWidth(460);
+    auto* pl = new QVBoxLayout(panel);
+    pl->setContentsMargins(28, 28, 28, 28);
+    recovery_ = new PinRecoveryPanel(panel);
+    pl->addWidget(recovery_);
+    auto* centerer = new QHBoxLayout;
+    centerer->addStretch();
+    centerer->addWidget(panel);
+    centerer->addStretch();
+    outer->addLayout(centerer);
+    outer->addStretch();
+
+    connect(recovery_, &PinRecoveryPanel::back, this, [this]() { show_pin_pad(active_username_); });
+    connect(recovery_, &PinRecoveryPanel::switch_user, this, [this]() { show_picker(); });
+    connect(recovery_, &PinRecoveryPanel::user_reset, this, [this](const QString&) {
+        show_picker();
+        refresh_user_list();
+    });
+    // The new PIN signs the user straight in.
+    connect(recovery_, &PinRecoveryPanel::pin_reset, this, [this](const QString& user, const QString& pin) {
+        show_pin_pad(user);
+        pin_unlock_btn_->setEnabled(false);
+        auth::AuthManager::instance().login_local(user, pin);
+    });
 }
 
 void LoginScreen::refresh_user_list() {
@@ -306,35 +345,6 @@ void LoginScreen::on_unlock() {
     pin_error_->hide();
     pin_unlock_btn_->setEnabled(false);
     auth::AuthManager::instance().login_local(active_username_, pin);
-}
-
-void LoginScreen::on_delete_user() {
-    if (active_username_.isEmpty())
-        return;
-    auto ans = QMessageBox::warning(this, QStringLiteral("Reset user"),
-                                    QString(QStringLiteral("Delete local user \"%1\"? This removes their "
-                                                           "saved data on this machine. You will need to "
-                                                           "create the account again."))
-                                        .arg(active_username_),
-                                    QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
-    if (ans != QMessageBox::Yes)
-        return;
-    const QString who = active_username_;
-    QPointer<LoginScreen> self(this);
-    auth::AuthManager::instance().delete_local_user(who, [self, who](bool ok, const QString& error) {
-        if (!self)
-            return;
-        if (!ok) {
-            // Nothing was changed (the delete restores what it moved): say so
-            // instead of quietly showing the same user again.
-            QMessageBox::warning(self, QStringLiteral("Reset user"),
-                                 QStringLiteral("Could not reset \"%1\": %2").arg(who, error));
-            return;
-        }
-        self->active_username_.clear();
-        self->show_picker();
-        self->refresh_user_list();
-    });
 }
 
 void LoginScreen::on_login_succeeded() {

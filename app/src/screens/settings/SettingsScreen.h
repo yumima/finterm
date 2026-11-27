@@ -125,6 +125,8 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     QCheckBox* sec_lock_on_minimize_ = nullptr;
     QListWidget* sec_audit_list_ = nullptr;
     QLabel* sec_lockout_status_ = nullptr;
+    QLabel* sec_recovery_status_ = nullptr;
+    QPushButton* sec_recovery_btn_ = nullptr;
     QPushButton* sec_change_pin_btn_ = nullptr;
     // Change PIN sub-widgets (shown/hidden dynamically)
     QWidget* sec_change_pin_form_ = nullptr;

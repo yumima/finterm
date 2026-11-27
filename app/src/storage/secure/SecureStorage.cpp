@@ -674,7 +674,7 @@ void SecureStorage::migrate_legacy_ids() {
 
 namespace {
 
-// Every secret filed under the legacy identity, across all profiles (raw,
+// Every secret filed under identity `id`, across all profiles (raw,
 // scoped names) — with its value where the backend hands it over in the same
 // call (Secret Service, Credential Manager), so a large keyring is one round
 // trip, not one per key. An error when the backend could not be searched —
@@ -684,10 +684,10 @@ struct LegacyEntry {
     std::optional<QString> value; // nullopt: read it with backend_retrieve
 };
 
-Result<QList<LegacyEntry>> legacy_entries() {
+Result<QList<LegacyEntry>> entries_of(const KeyringIdentity& id) {
     QList<LegacyEntry> out;
 #if defined(Q_OS_WIN)
-    const std::wstring filter = std::wstring(kLegacyId.win_prefix) + L"*";
+    const std::wstring filter = std::wstring(id.win_prefix) + L"*";
     DWORD count = 0;
     PCREDENTIALW* creds = nullptr;
     if (!CredEnumerateW(filter.c_str(), 0, &count, &creds)) {
@@ -695,7 +695,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
             return Result<QList<LegacyEntry>>::ok(out);
         return Result<QList<LegacyEntry>>::err("Credential Manager enumerate failed");
     }
-    const size_t prefix_len = std::wcslen(kLegacyId.win_prefix);
+    const size_t prefix_len = std::wcslen(id.win_prefix);
     for (DWORD i = 0; i < count; ++i) {
         const std::wstring target = creds[i]->TargetName ? creds[i]->TargetName : L"";
         if (target.size() <= prefix_len)
@@ -706,7 +706,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
     }
     CredFree(creds);
 #elif defined(Q_OS_MAC)
-    const QByteArray svc_bytes(kLegacyId.service);
+    const QByteArray svc_bytes(id.service);
     CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
                                                   svc_bytes.size(), kCFStringEncodingUTF8, false);
     const void* keys[] = {kSecClass, kSecAttrService, kSecReturnAttributes, kSecMatchLimit};
@@ -736,7 +736,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
     GError* err = nullptr;
     const int flags = SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS;
     GList* items =
-        secret_password_search_sync(schema_for(kLegacyId), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
+        secret_password_search_sync(schema_for(id), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
     if (err) {
         const std::string msg = err->message;
         g_error_free(err);
@@ -744,7 +744,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
     }
     for (GList* l = items; l; l = l->next) {
         GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
-        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, kLegacyId.attr));
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, id.attr));
         const QString key = raw ? QString::fromUtf8(raw) : QString();
         g_hash_table_unref(attrs);
         if (key.isEmpty())
@@ -759,7 +759,7 @@ Result<QList<LegacyEntry>> legacy_entries() {
     }
     g_list_free_full(items, g_object_unref);
 #else
-    QSettings s(kLegacyId.settings_org, AppIdentity::kAppSecure);
+    QSettings s(id.settings_org, AppIdentity::kAppSecure);
     s.beginGroup(QStringLiteral("secure"));
     for (const QString& key : s.allKeys())
         out.append({key, std::nullopt}); // a local file: per-key decode is cheap
@@ -826,7 +826,7 @@ void SecureStorage::migrate_identity() {
         }
     }
 #endif
-    const auto listed = legacy_entries();
+    const auto listed = entries_of(kLegacyId);
     if (listed.is_err()) {
         LOG_WARN(TAG, "credential move deferred: " + QString::fromStdString(listed.error()));
         return; // keyring unavailable — try again next launch
@@ -892,6 +892,36 @@ void SecureStorage::migrate_identity() {
         LOG_INFO(TAG, QString("moved %1 credential(s) to the current keyring identity").arg(moved));
     if (all_ok)
         flags.setValue(flag, true);
+}
+
+Result<int> SecureStorage::remove_all_in_profile() {
+    const auto listed = entries_of(kCurrentId);
+    if (listed.is_err())
+        return Result<int>::err(listed.error());
+    const QString scope = ProfileManager::instance().secure_key_prefix();
+    auto& c = secret_cache();
+    QMutexLocker lock(&c.mutex);
+    int removed = 0;
+    std::string failed;
+    for (const LegacyEntry& e : listed.value()) {
+        // The default profile has no prefix: its keys are those outside profiles/.
+        const bool in_scope = scope.isEmpty() ? !e.key.startsWith(QLatin1String("profiles/")) : e.key.startsWith(scope);
+        if (!in_scope)
+            continue;
+        if (backend_remove(e.key).is_ok())
+            ++removed;
+        else
+            failed = "could not remove " + e.key.toStdString();
+    }
+    // Start the cache over: it answered for keys that are gone now.
+    c.values.clear();
+    c.absent.clear();
+    c.complete = false;
+    c.preload_tried = false;
+    LOG_INFO(TAG, QString("removed %1 credential(s) of this profile").arg(removed));
+    if (!failed.empty())
+        return Result<int>::err(failed);
+    return Result<int>::ok(removed);
 }
 
 bool SecureStorage::can_enumerate() {

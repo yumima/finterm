@@ -2,70 +2,53 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QStackedWidget>
 #include <QTimer>
 #include <QWidget>
 
 namespace finterm::screens {
 
-/// Lock screen — PIN setup (mandatory first time) and PIN unlock (subsequent).
-/// Obsidian design: sharp corners, monospace, no shadows, terminal aesthetic.
+class PinRecoveryPanel;
+
+/// Lock screen — the signed-in user's PIN unlocks the terminal (at start with
+/// a saved session, and after inactivity). Obsidian design: sharp corners,
+/// monospace, no shadows.
 ///
 /// Pages:
-///   0 — PIN setup (create new 6-digit PIN, confirm)
-///   1 — PIN unlock (enter PIN to unlock terminal)
-///   2 — Lockout (too many failed attempts, must re-authenticate)
+///   0 — unlock: whose terminal it is, the PIN, the wait after wrong PINs,
+///       and "Forgot PIN?" / "Switch user"
+///   1 — forgot: the ways back in (PinRecoveryPanel)
 class LockScreen : public QWidget {
     Q_OBJECT
   public:
     explicit LockScreen(QWidget* parent = nullptr);
 
-    /// Show the appropriate page based on PIN state.
+    /// Show the unlock page.
     void activate();
-
-    /// Show PIN setup page (mandatory enrollment).
-    void show_setup();
-
-    /// Show PIN unlock page (returning user / inactivity lock).
     void show_unlock();
 
-    /// Show lockout page (max attempts exceeded).
-    void show_lockout();
-
   signals:
-    /// PIN setup or unlock completed — terminal should proceed.
+    /// The PIN was accepted (or reset with the recovery key).
     void unlocked();
-
-    /// User chose to re-authenticate (from lockout page).
-    void reauth_requested();
+    /// Sign out to the user picker: another user, or a new one.
+    void switch_user_requested();
 
   private:
-    QStackedWidget* pages_ = nullptr;
+    QWidget* pages_ = nullptr; ///< the card: one page shown at a time
+    QWidget* unlock_page_ = nullptr;
 
-    // PIN Setup page (index 0)
-    QLineEdit* setup_pin_input_ = nullptr;
-    QLineEdit* setup_confirm_input_ = nullptr;
-    QPushButton* setup_btn_ = nullptr;
-    QLabel* setup_error_ = nullptr;
-
-    // PIN Unlock page (index 1)
+    QLabel* unlock_user_ = nullptr;
     QLineEdit* unlock_pin_input_ = nullptr;
     QPushButton* unlock_btn_ = nullptr;
     QLabel* unlock_error_ = nullptr;
-    QLabel* unlock_attempts_ = nullptr;
     QLabel* unlock_lockout_label_ = nullptr;
+    PinRecoveryPanel* recovery_ = nullptr;
+    QWidget* recovery_page_ = nullptr;
 
-    // Lockout page (index 2)
-    QLabel* lockout_msg_ = nullptr;
-
-    // Lockout countdown timer
     QTimer* lockout_timer_ = nullptr;
 
-    void build_setup_page();
     void build_unlock_page();
-    void build_lockout_page();
-
-    void on_setup_submit();
+    void build_recovery_page();
+    void show_page(QWidget* page);
     void on_unlock_submit();
     void update_lockout_display();
 

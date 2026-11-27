@@ -2041,7 +2041,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
                     return; // answered already: later prints are follow_priced's
                 if (price)
                     st->price.insert(sym, *price);
-                else if (error == services::MarketDataService::kNoQuoteError)
+                else if (services::MarketDataService::is_no_quote(error))
                     st->no_quote.insert(sym);
                 else
                     st->refused.insert(sym);

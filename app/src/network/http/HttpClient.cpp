@@ -3,6 +3,7 @@
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QUrl>
 
 namespace finterm {
@@ -93,8 +94,21 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback) {
                 return;
             }
 
-            // No parseable body — return sentinel so callers map status to fallback message
-            cb(Result<QJsonDocument>::err(QString("HTTP_%1").arg(status).toStdString()));
+            // No parseable body — the status sentinel, and Qt's reason after
+            // it ("HTTP_0: Proxy connection refused", "HTTP_503: … Service
+            // Unavailable"): without it a screen could only say "failed".
+            // Never the URL: Qt's text carries it, and a query or path can
+            // hold a key or token (FRED ?api_key=, Discord/Telegram paths) —
+            // this text reaches the screen and "Copy details". Each URL in
+            // it is cut to its host.
+            static const QRegularExpression url_re(QStringLiteral(R"(\b[a-z][a-z0-9+.-]*://[^\s]+)"),
+                                                   QRegularExpression::CaseInsensitiveOption);
+            QString why = reply->errorString();
+            for (auto m = url_re.globalMatch(why); m.hasNext();) {
+                const auto hit = m.next();
+                why.replace(hit.captured(0), QUrl(hit.captured(0)).host());
+            }
+            cb(Result<QJsonDocument>::err(QString("HTTP_%1: %2").arg(status).arg(why.left(200)).toStdString()));
             return;
         }
 

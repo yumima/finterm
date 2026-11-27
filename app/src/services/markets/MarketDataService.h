@@ -208,6 +208,10 @@ class MarketDataService : public QObject, public finterm::datahub::Producer {
     /// answered without that symbol (unknown, delisted, not yet trading) —
     /// unlike a refused download, whose error is the refusal's own text.
     static inline const QString kNoQuoteError = QStringLiteral("no quote returned");
+    /// An error that is an answer — the source had no quote for the symbol
+    /// (kNoQuoteError, alone or with the source's reason after ": ") — as
+    /// opposed to a refusal or a failed fetch, which are worth asking again.
+    static bool is_no_quote(const QString& error) { return error.startsWith(kNoQuoteError); }
 
     /// Drop cached quote entries for the given symbols, forcing the next
     /// fetch_quotes() call to hit the data source. The DataHub min_interval

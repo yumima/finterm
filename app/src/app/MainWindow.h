@@ -83,6 +83,7 @@ class MainWindow : public QMainWindow {
     bool always_on_top_ = false;
     bool locked_ = false;           ///< True while lock/PIN screen is active — blocks navigation.
     bool pin_gate_cleared_ = false; ///< Set once the user has passed the PIN gate this session.
+    bool signed_in_with_pin_ = false; ///< The PIN was just typed on the sign-in screen (it unlocks).
                                     ///< Prevents subsequent auth_state_changed events (profile
                                     ///< refresh, subscription fetch, focus refresh) from
                                     ///< re-locking the terminal. Reset on lock / logout.

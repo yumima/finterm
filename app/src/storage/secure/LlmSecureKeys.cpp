@@ -6,7 +6,7 @@
 namespace finterm {
 
 namespace {
-constexpr const char* kTag = "LlmSecureKeys";
+constexpr const char* kLlmSecureKeysTag = "LlmSecureKeys";
 }
 
 QString llm_secure_key_for_provider(const QString& provider) {
@@ -24,7 +24,7 @@ QString llm_secure_key_for_profile(const QString& profile_id) {
 QString llm_secure_load(const QString& key) {
     auto r = SecureStorage::instance().retrieve(key);
     if (r.is_err()) {
-        LOG_DEBUG(kTag, QString("retrieve(%1) miss: %2").arg(key, QString::fromStdString(r.error())));
+        LOG_DEBUG(kLlmSecureKeysTag, QString("retrieve(%1) miss: %2").arg(key, QString::fromStdString(r.error())));
         return {};
     }
     return r.value();
@@ -36,7 +36,7 @@ Result<void> llm_secure_store(const QString& key, const QString& value) {
     }
     auto r = SecureStorage::instance().store(key, value);
     if (r.is_err()) {
-        LOG_WARN(kTag, QString("store(%1) failed: %2").arg(key, QString::fromStdString(r.error())));
+        LOG_WARN(kLlmSecureKeysTag, QString("store(%1) failed: %2").arg(key, QString::fromStdString(r.error())));
     }
     return r;
 }
@@ -45,7 +45,7 @@ Result<void> llm_secure_remove(const QString& key) {
     auto r = SecureStorage::instance().remove(key);
     if (r.is_err()) {
         // Treat not-found as success — caller already has the desired state.
-        LOG_DEBUG(kTag, QString("remove(%1) ignored: %2").arg(key, QString::fromStdString(r.error())));
+        LOG_DEBUG(kLlmSecureKeysTag, QString("remove(%1) ignored: %2").arg(key, QString::fromStdString(r.error())));
         return Result<void>::ok();
     }
     return r;

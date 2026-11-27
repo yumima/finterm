@@ -2,6 +2,9 @@
 #include "ui/VisibleRefresh.h"
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 
+#include "core/errors/DataFailure.h"
+#include "services/data_health/DataHealth.h"
+
 #include "core/logging/Logger.h"
 #include "core/util/BarTime.h"
 #include "screens/dashboard/widgets/EarningsMath.h"
@@ -636,6 +639,8 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
     pending_symbols_ = symbols.size();
     ok_symbols_ = 0;
     refused_symbols_.clear();
+    last_refusal_.clear();
+    status_label_->setToolTip(QString());
 
     QPointer<EarningsCalendarWidget> self = this;
     for (const QString& sym : symbols) {
@@ -656,6 +661,7 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                     // read as "no upcoming earnings".
                     LOG_WARN("EarningsCal", QString("earnings_dates failed for %1: %2").arg(sym, r.error.left(120)));
                     self->refused_symbols_.append(sym);
+                    self->last_refusal_ = r.error;
                 } else {
                     // Not a refusal: usually an ETF/index with no earnings —
                     // logged quietly so a real parse bug is still findable.
@@ -669,11 +675,22 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                 if (portfolio_view && self->ok_symbols_ == 0) {
                     // Blame Yahoo only when it refused them all; some may
                     // simply have no earnings (ETFs).
-                    self->show_status(self->refused_symbols_.size() == total
-                                          ? QStringLiteral("Couldn't load earnings dates — no answer from Yahoo.")
-                                          : QStringLiteral("Couldn't load earnings dates for these holdings."));
+                    if (self->refused_symbols_.size() == total) {
+                        // Why, and what to do — in the line, its tooltip and the status bar.
+                        const auto f = data_failure::classify(self->last_refusal_, QStringLiteral("Yahoo Finance"));
+                        self->show_status(data_failure::one_line(QStringLiteral("earnings dates"), f));
+                        self->status_label_->setToolTip(QStringLiteral("What to do: %1\n\n%2").arg(f.action, f.raw));
+                        services::DataHealth::instance().report_failure(QStringLiteral("dashboard:earnings_calendar"),
+                                                                        QStringLiteral("Earnings calendar"),
+                                                                        self->last_refusal_,
+                                                                        QStringLiteral("Yahoo Finance"));
+                    } else {
+                        self->show_status(QStringLiteral("Couldn't load earnings dates for these holdings."));
+                    }
                     return;
                 }
+                if (self->ok_symbols_ > 0)
+                    services::DataHealth::instance().report_success(QStringLiteral("dashboard:earnings_calendar"));
                 // Refused lookups are named, not left to read as "no upcoming
                 // earnings" — per fetch (replaced, not appended to note_). In
                 // the week view they are only an enrichment of rows already

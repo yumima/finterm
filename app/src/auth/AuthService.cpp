@@ -1,6 +1,8 @@
 // src/auth/AuthService.cpp
 #include "auth/AuthService.h"
 
+#include "auth/PinPolicy.h"
+
 #include "core/config/AppPaths.h"
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
@@ -54,6 +56,9 @@ void AuthService::init_schema() {
             last_login_at TEXT
         )
     )");
+    // Added in 4.2.2; an older auth.db gains it here (the error on a second
+    // run — "duplicate column" — is the expected no-op).
+    q.exec("ALTER TABLE users ADD COLUMN recovery_hash TEXT");
     // sessions table: persists AuthManager session JSON so the user DB path
     // (derived from username) can be opened before the per-user DB is available.
     q.exec(R"(
@@ -147,29 +152,74 @@ void AuthService::close_user_db() {
     LOG_INFO("AuthService", "User DB closed");
 }
 
-// ── Password helpers ──────────────────────────────────────────────────────────
+// ── PIN helpers ───────────────────────────────────────────────────────────────
 
-QString AuthService::hash_password(const QString& password) const {
-    // salt_hex:sha256(salt_bytes || password_bytes)
-    QByteArray salt(16, 0);
-    for (int i = 0; i < 16; ++i)
-        salt[i] = static_cast<char>(QRandomGenerator::global()->generate() & 0xFF);
-    const QString salt_hex = QString::fromLatin1(salt.toHex());
-    QByteArray payload = salt + password.toUtf8();
-    const QString hash_hex = QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
-    return salt_hex + ":" + hash_hex;
+QString AuthService::stored_pin_hash(const QString& username) {
+    QSqlQuery q(db_);
+    q.prepare("SELECT password_hash FROM users WHERE username = ? AND otp_verified = 1");
+    q.addBindValue(username.toLower().trimmed());
+    if (!q.exec() || !q.next())
+        return {};
+    return q.value(0).toString();
 }
 
-bool AuthService::verify_password(const QString& password, const QString& stored) const {
-    const int colon = stored.indexOf(':');
-    if (colon < 0)
-        return false;
-    const QByteArray salt = QByteArray::fromHex(stored.left(colon).toLatin1());
-    const QString expected_hash = stored.mid(colon + 1);
-    QByteArray payload = salt + password.toUtf8();
-    const QString actual_hash =
-        QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
-    return actual_hash == expected_hash;
+bool AuthService::verify_local_pin(const QString& username, const QString& pin) {
+    const QString stored = stored_pin_hash(username);
+    return !stored.isEmpty() && pin_policy::verify(pin, stored);
+}
+
+QString AuthService::set_local_pin(const QString& username, const QString& new_pin) {
+    const QString why = pin_policy::problem(new_pin);
+    if (!why.isEmpty())
+        return why;
+    QSqlQuery q(db_);
+    q.prepare("UPDATE users SET password_hash = ? WHERE username = ?");
+    q.addBindValue(pin_policy::hash(new_pin));
+    q.addBindValue(username.toLower().trimmed());
+    if (!q.exec() || q.numRowsAffected() == 0) {
+        LOG_ERROR("AuthService", "set_local_pin failed: " + q.lastError().text());
+        return QStringLiteral("The new PIN could not be saved.");
+    }
+    LOG_INFO("AuthService", "PIN changed for " + username.toLower().trimmed());
+    return {};
+}
+
+bool AuthService::has_recovery_key(const QString& username) {
+    QSqlQuery q(db_);
+    q.prepare("SELECT recovery_hash FROM users WHERE username = ?");
+    q.addBindValue(username.toLower().trimmed());
+    return q.exec() && q.next() && !q.value(0).toString().isEmpty();
+}
+
+QString AuthService::create_recovery_key(const QString& username) {
+    const QString key = pin_policy::new_recovery_key();
+    QSqlQuery q(db_);
+    q.prepare("UPDATE users SET recovery_hash = ? WHERE username = ?");
+    q.addBindValue(pin_policy::hash(pin_policy::normalize_recovery_key(key), pin_policy::kRecoveryIterations));
+    q.addBindValue(username.toLower().trimmed());
+    if (!q.exec() || q.numRowsAffected() == 0) {
+        LOG_ERROR("AuthService", "create_recovery_key failed: " + q.lastError().text());
+        return {};
+    }
+    LOG_INFO("AuthService", "Recovery key created for " + username.toLower().trimmed());
+    return key;
+}
+
+QString AuthService::reset_pin_with_recovery_key(const QString& username, const QString& typed_key,
+                                                 const QString& new_pin) {
+    const QString key = pin_policy::normalize_recovery_key(typed_key);
+    if (key.isEmpty())
+        return QStringLiteral("A recovery key is 20 letters and digits, like 7KQ2M-9XD4T-B3N8V-WQ5ZR.");
+    QSqlQuery q(db_);
+    q.prepare("SELECT recovery_hash FROM users WHERE username = ?");
+    q.addBindValue(username.toLower().trimmed());
+    if (!q.exec() || !q.next() || q.value(0).toString().isEmpty())
+        return QStringLiteral("This user has no recovery key.");
+    if (!pin_policy::verify(key, q.value(0).toString())) {
+        LOG_WARN("AuthService", "Recovery key rejected for " + username.toLower().trimmed());
+        return QStringLiteral("That recovery key is not this user's.");
+    }
+    return set_local_pin(username, new_pin);
 }
 
 QString AuthService::make_token() const {
@@ -212,17 +262,23 @@ void AuthService::register_local_user(const QString& username, const QString& pi
         cb({false, {}, "Username can't be empty.", 400});
         return;
     }
+    if (const QString why = pin_policy::problem(pin); !why.isEmpty()) {
+        cb({false, {}, why, 400});
+        return;
+    }
+    const QString recovery_key = pin_policy::new_recovery_key();
     // Synthetic email — keeps the existing unique-email constraint satisfied
     // without exposing it in the local-user flow.
     const QString synthetic_email = u + QLatin1String(kSyntheticEmailSuffix);
     const QString api_key = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
     QSqlQuery q(db_);
-    q.prepare("INSERT INTO users (username, email, password_hash, api_key, otp_verified, created_at) "
-              "VALUES (?, ?, ?, ?, 1, ?)");
+    q.prepare("INSERT INTO users (username, email, password_hash, recovery_hash, api_key, otp_verified, created_at) "
+              "VALUES (?, ?, ?, ?, ?, 1, ?)");
     q.addBindValue(u);
     q.addBindValue(synthetic_email);
-    q.addBindValue(hash_password(pin));
+    q.addBindValue(pin_policy::hash(pin));
+    q.addBindValue(pin_policy::hash(pin_policy::normalize_recovery_key(recovery_key), pin_policy::kRecoveryIterations));
     q.addBindValue(api_key);
     q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     if (!q.exec()) {
@@ -238,15 +294,17 @@ void AuthService::register_local_user(const QString& username, const QString& pi
     QJsonObject data;
     data["username"] = u;
     data["api_key"] = api_key;
+    data["recovery_key"] = recovery_key; // shown once, never stored
     cb({true, data, {}, 200});
 }
 
 void AuthService::login_local(const QString& username, const QString& pin, Callback cb) {
-    // Instrumentation only — login_local runs one indexed SELECT and a single
-    // SHA-256 verify, sub-ms in practice. Wrapped here so any future slow
-    // path (FS-level lock contention, AV intercept on auth.db) surfaces in
-    // the perf log instead of silently delaying UNLOCK clicks.
-    FT_TIME_SLOT("AuthService.login_local", 50);
+    // Instrumentation only — login_local runs one indexed SELECT and one PIN
+    // verify: PBKDF2 at 100,000 iterations (~90 ms; a pre-4.2.2 SHA-256 hash
+    // is sub-ms). Wrapped so a slow path beyond that (FS-level lock
+    // contention, AV intercept on auth.db) surfaces in the perf log instead
+    // of silently delaying UNLOCK clicks.
+    FT_TIME_SLOT("AuthService.login_local", 400);
     const QString u = username.toLower().trimmed();
     QSqlQuery q(db_);
     q.prepare("SELECT username, email, password_hash, api_key "
@@ -263,10 +321,15 @@ void AuthService::login_local(const QString& username, const QString& pin, Callb
     const QString stored_hash = q.value(2).toString();
     const QString api_key = q.value(3).toString();
 
-    if (!verify_password(pin, stored_hash)) {
+    if (!pin_policy::verify(pin, stored_hash)) {
         cb({false, {}, "Incorrect PIN.", 401});
         return;
     }
+    // An older account's hash is NOT rewritten here: builds before 4.2.2
+    // read only the old form, and the updater's rollback (or running an older
+    // release on the same data) would then refuse the right PIN — whose only
+    // way out there deletes the user. It becomes PBKDF2 when the user sets a
+    // PIN (Change PIN, recovery key), a step they take knowingly.
 
     const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     const QString session_token = make_token();

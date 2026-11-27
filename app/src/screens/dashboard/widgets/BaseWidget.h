@@ -36,6 +36,12 @@ class BaseWidget : public QFrame {
     /// content stays valid across a failure. (It used to delete the content
     /// layout's widgets, and eight widgets nulled / rebuilt / avoided it.)
     void set_error(const QString& error);
+    /// A failed load, explained: "Couldn't load <what>", why (classified from
+    /// `cause` — core/errors/DataFailure), what to do, Retry (emits
+    /// refresh_requested) and the raw error under Details. `source_hint`
+    /// names the source when the error text doesn't.
+    void set_load_error(const QString& what, const QString& cause,
+                        const QString& source_hint = QStringLiteral("Yahoo Finance"));
     /// Back to the content after a failure; call when data arrives again.
     void clear_error();
     bool has_error() const;
@@ -91,10 +97,16 @@ class BaseWidget : public QFrame {
     QLabel* title_label_ = nullptr;
     QLabel* accent_bar_ = nullptr;
     QLabel* loading_label_ = nullptr;
-    QStackedWidget* body_ = nullptr; // page 0: content_, page 1: error_label_
+    QStackedWidget* body_ = nullptr; // page 0: content_, page 1: error_page_
     QWidget* content_ = nullptr;
     QVBoxLayout* content_layout_ = nullptr;
-    QLabel* error_label_ = nullptr;
+    QWidget* error_page_ = nullptr;
+    QLabel* error_label_ = nullptr;   ///< the headline ("Couldn't load quotes")
+    QLabel* error_reason_ = nullptr;  ///< why
+    QLabel* error_action_ = nullptr;  ///< what to do
+    QLabel* error_detail_ = nullptr;  ///< the raw error, behind Details
+    QPushButton* error_retry_ = nullptr;
+    QPushButton* error_details_btn_ = nullptr;
     QPushButton* refresh_btn_ = nullptr;
     QPushButton* config_btn_ = nullptr;
     QString accent_color_;

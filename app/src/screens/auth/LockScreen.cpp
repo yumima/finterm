@@ -1,6 +1,8 @@
 #include "screens/auth/LockScreen.h"
 
+#include "auth/AuthManager.h"
 #include "auth/PinManager.h"
+#include "screens/auth/PinRecoveryPanel.h"
 #include "core/logging/Logger.h"
 #include "ui/theme/Theme.h"
 
@@ -9,7 +11,6 @@
 #include <QIntValidator>
 #include <QKeyEvent>
 #include <QPainter>
-#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace finterm::screens {
@@ -17,8 +18,10 @@ namespace finterm::screens {
 // ── Obsidian Design System Styles ────────────────────────────────────────────
 // Identical palette to LoginScreen for visual consistency.
 
+// Scoped to the card itself: an unscoped rule would box every label in it.
 static QString card_style() {
-    return QString("background: %1; border: 1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM());
+    return QString("QWidget#lockCard { background: %1; border: 1px solid %2; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM());
 }
 
 static QString pin_input_style() {
@@ -47,17 +50,11 @@ static QString btn_primary() {
              ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
 }
 
-static QString btn_danger() {
-    return QString("QPushButton {"
-                   "  background: rgba(220,38,38,0.1); color: %1;"
-                   "  border: 1px solid #7f1d1d;"
-                   "  padding: 0 16px; font-size: 14px; font-weight: 700;"
-                   "  font-family: 'Consolas','Courier New',monospace;"
-                   "}"
-                   "QPushButton:hover { background: %1; color: %2; }"
-                   "QPushButton:disabled { color: %3; background: %4; border-color: %5; }")
-        .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-             ui::colors::BORDER_DIM());
+static QString link_style() {
+    return QString("QPushButton { background: transparent; color: %1; border: none; padding: 2px 4px;"
+                   "  font-size: 12px; font-family: 'Consolas','Courier New',monospace; }"
+                   "QPushButton:hover { color: %2; text-decoration: underline; }")
+        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER());
 }
 
 static QString label_style() {
@@ -138,29 +135,33 @@ LockScreen::LockScreen(QWidget* parent) : QWidget(parent) {
     overlay->setAlignment(Qt::AlignCenter);
     root->addLayout(overlay, 1);
 
-    pages_ = new QStackedWidget;
-    pages_->setMinimumWidth(420);
-    pages_->setMaximumWidth(520);
+    // A box with one page visible, not a QStackedWidget: a stack is as tall
+    // as its tallest page (its heightForWidth takes the maximum of all).
+    pages_ = new QWidget;
+    pages_->setMinimumWidth(440);
+    pages_->setMaximumWidth(540);
     pages_->setStyleSheet("background: transparent;");
+    auto* pages_layout = new QVBoxLayout(pages_);
+    pages_layout->setContentsMargins(0, 0, 0, 0);
 
-    build_setup_page();
     build_unlock_page();
-    build_lockout_page();
+    build_recovery_page();
+    show_page(unlock_page_);
 
     overlay->addWidget(pages_, 0, Qt::AlignCenter);
 
-    // Lockout countdown timer — P3 compliant: only runs when visible
+    // Lockout countdown — runs only while visible
     lockout_timer_ = new QTimer(this);
     lockout_timer_->setInterval(1000);
     connect(lockout_timer_, &QTimer::timeout, this, &LockScreen::update_lockout_display);
 
-    // Listen for PinManager lockout signals
-    auto& pm = auth::PinManager::instance();
-    connect(&pm, &auth::PinManager::lockout_changed, this, [this](bool locked, int /*secs*/) {
-        if (locked)
+    connect(&auth::PinManager::instance(), &auth::PinManager::lockout_changed, this, [this](bool locked, int) {
+        if (locked) {
             update_lockout_display();
+            if (isVisible())
+                lockout_timer_->start();
+        }
     });
-    connect(&pm, &auth::PinManager::max_attempts_exceeded, this, [this]() { show_lockout(); });
 }
 
 // ── Background Paint (matches LoginScreen grid pattern) ─────────────────────
@@ -176,7 +177,6 @@ void LockScreen::paintEvent(QPaintEvent* /*event*/) {
     for (int y = 0; y < height(); y += step)
         p.drawLine(0, y, width(), y);
 
-    // Subtle crosshair at centre
     int cx = width() / 2;
     int cy = height() / 2;
     p.setPen(QPen(QColor(ui::colors::BORDER_DIM()), 1));
@@ -186,7 +186,7 @@ void LockScreen::paintEvent(QPaintEvent* /*event*/) {
 
 void LockScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    if (lockout_timer_ && auth::PinManager::instance().is_locked_out())
+    if (lockout_timer_ && auth::PinManager::instance().is_locked_out(auth::PinManager::instance().account()))
         lockout_timer_->start();
 }
 
@@ -194,144 +194,28 @@ void LockScreen::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     if (lockout_timer_)
         lockout_timer_->stop();
-    // Wipe PIN inputs so a resumed unlock attempt never starts pre-filled.
-    if (setup_pin_input_)
-        setup_pin_input_->clear();
-    if (setup_confirm_input_)
-        setup_confirm_input_->clear();
+    // A resumed unlock never starts pre-filled.
     if (unlock_pin_input_)
         unlock_pin_input_->clear();
 }
 
-// ── PIN Setup Page ──────────────────────────────────────────────────────────
-
-void LockScreen::build_setup_page() {
-    auto* page = new QWidget(this);
-    page->setStyleSheet(card_style());
-
-    auto* vl = new QVBoxLayout(page);
-    vl->setContentsMargins(28, 22, 28, 22);
-    vl->setSpacing(10);
-
-    // Header bar
-    auto* header = new QWidget(this);
-    header->setFixedHeight(38);
-    header->setStyleSheet(QString("background: %1; border: none;").arg(ui::colors::BG_RAISED()));
-    auto* hl = new QHBoxLayout(header);
-    hl->setContentsMargins(14, 0, 14, 0);
-
-    auto* title = new QLabel("SECURITY SETUP");
-    title->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 700;"
-                                 "background: transparent; letter-spacing: 1px;"
-                                 "font-family: 'Consolas','Courier New',monospace;")
-                             .arg(ui::colors::AMBER()));
-    hl->addWidget(title);
-    hl->addStretch();
-
-    auto* badge = new QLabel("REQUIRED");
-    badge->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;"
-                                 "background: transparent; letter-spacing: 0.5px;"
-                                 "font-family: 'Consolas','Courier New',monospace;")
-                             .arg(ui::colors::NEGATIVE()));
-    hl->addWidget(badge);
-    vl->addWidget(header);
-
-    auto* subtitle = new QLabel("Create a 6-digit PIN to secure your terminal");
-    subtitle->setWordWrap(true);
-    subtitle->setStyleSheet(muted_style());
-    vl->addWidget(subtitle);
-
-    auto* info = new QLabel("This PIN will be required each time you open\n"
-                            "the terminal or after a period of inactivity.");
-    info->setWordWrap(true);
-    info->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;"
-                                "font-family: 'Consolas','Courier New',monospace;")
-                            .arg(ui::colors::TEXT_SECONDARY()));
-    vl->addWidget(info);
-
-    vl->addWidget(make_separator());
-
-    // PIN input
-    auto* pin_lbl = new QLabel("ENTER PIN");
-    pin_lbl->setStyleSheet(label_style());
-    vl->addWidget(pin_lbl);
-
-    setup_pin_input_ = new QLineEdit;
-    setup_pin_input_->setPlaceholderText("------");
-    setup_pin_input_->setMaxLength(6);
-    setup_pin_input_->setAlignment(Qt::AlignCenter);
-    setup_pin_input_->setEchoMode(QLineEdit::Password);
-    setup_pin_input_->setFixedHeight(44);
-    setup_pin_input_->setStyleSheet(pin_input_style());
-    harden_pin_input(setup_pin_input_);
-    vl->addWidget(setup_pin_input_);
-
-    // Confirm PIN input
-    auto* confirm_lbl = new QLabel("CONFIRM PIN");
-    confirm_lbl->setStyleSheet(label_style());
-    vl->addWidget(confirm_lbl);
-
-    setup_confirm_input_ = new QLineEdit;
-    setup_confirm_input_->setPlaceholderText("------");
-    setup_confirm_input_->setMaxLength(6);
-    setup_confirm_input_->setAlignment(Qt::AlignCenter);
-    setup_confirm_input_->setEchoMode(QLineEdit::Password);
-    setup_confirm_input_->setFixedHeight(44);
-    setup_confirm_input_->setStyleSheet(pin_input_style());
-    harden_pin_input(setup_confirm_input_);
-    vl->addWidget(setup_confirm_input_);
-
-    // Error label
-    setup_error_ = new QLabel;
-    setup_error_->setWordWrap(true);
-    setup_error_->setStyleSheet(error_style());
-    setup_error_->hide();
-    vl->addWidget(setup_error_);
-
-    vl->addWidget(make_separator());
-
-    // Submit button
-    setup_btn_ = new QPushButton("  SET PIN  ");
-    setup_btn_->setFixedHeight(34);
-    setup_btn_->setStyleSheet(btn_primary());
-    connect(setup_btn_, &QPushButton::clicked, this, &LockScreen::on_setup_submit);
-    vl->addWidget(setup_btn_);
-
-    // Security note
-    auto* note = new QLabel("PIN is encrypted and stored locally on this device.\n"
-                            "It cannot be recovered if forgotten.");
-    note->setWordWrap(true);
-    note->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
-                                "font-family: 'Consolas','Courier New',monospace;")
-                            .arg(ui::colors::TEXT_SECONDARY()));
-    note->setAlignment(Qt::AlignCenter);
-    vl->addWidget(note);
-
-    vl->addStretch();
-
-    connect(setup_pin_input_, &QLineEdit::returnPressed, this, [this]() { setup_confirm_input_->setFocus(); });
-    connect(setup_confirm_input_, &QLineEdit::returnPressed, this, &LockScreen::on_setup_submit);
-
-    pages_->addWidget(page); // index 0
-}
-
-// ── PIN Unlock Page ─────────────────────────────────────────────────────────
+// ── Unlock page ──────────────────────────────────────────────────────────────
 
 void LockScreen::build_unlock_page() {
     auto* page = new QWidget(this);
+    unlock_page_ = page;
+    page->setObjectName("lockCard");
     page->setStyleSheet(card_style());
 
     auto* vl = new QVBoxLayout(page);
     vl->setContentsMargins(28, 22, 28, 22);
     vl->setSpacing(10);
 
-    // Header bar
     auto* header = new QWidget(this);
     header->setFixedHeight(38);
     header->setStyleSheet(QString("background: %1; border: none;").arg(ui::colors::BG_RAISED()));
     auto* hl = new QHBoxLayout(header);
     hl->setContentsMargins(14, 0, 14, 0);
-
     auto* title = new QLabel("TERMINAL LOCKED");
     title->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 700;"
                                  "background: transparent; letter-spacing: 1px;"
@@ -339,22 +223,15 @@ void LockScreen::build_unlock_page() {
                              .arg(ui::colors::AMBER()));
     hl->addWidget(title);
     hl->addStretch();
-
-    auto* secure_badge = new QLabel("SECURE");
-    secure_badge->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;"
-                                        "background: transparent; letter-spacing: 0.5px;"
-                                        "font-family: 'Consolas','Courier New',monospace;")
-                                    .arg(ui::colors::POSITIVE()));
-    hl->addWidget(secure_badge);
     vl->addWidget(header);
 
-    auto* subtitle = new QLabel("Enter your 6-digit PIN to unlock");
-    subtitle->setStyleSheet(muted_style());
-    vl->addWidget(subtitle);
+    unlock_user_ = new QLabel;
+    unlock_user_->setStyleSheet(muted_style());
+    unlock_user_->setWordWrap(true);
+    vl->addWidget(unlock_user_);
 
     vl->addWidget(make_separator());
 
-    // PIN input
     auto* pin_lbl = new QLabel("PIN");
     pin_lbl->setStyleSheet(label_style());
     vl->addWidget(pin_lbl);
@@ -369,7 +246,6 @@ void LockScreen::build_unlock_page() {
     harden_pin_input(unlock_pin_input_);
     vl->addWidget(unlock_pin_input_);
 
-    // Lockout / attempt display
     unlock_lockout_label_ = new QLabel;
     unlock_lockout_label_->setWordWrap(true);
     unlock_lockout_label_->setStyleSheet(QString("color: %1; font-size: 12px;"
@@ -380,237 +256,135 @@ void LockScreen::build_unlock_page() {
     unlock_lockout_label_->hide();
     vl->addWidget(unlock_lockout_label_);
 
-    // Error label
     unlock_error_ = new QLabel;
     unlock_error_->setWordWrap(true);
     unlock_error_->setStyleSheet(error_style());
     unlock_error_->hide();
     vl->addWidget(unlock_error_);
 
-    // Attempts remaining
-    unlock_attempts_ = new QLabel;
-    unlock_attempts_->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;"
-                                            "font-family: 'Consolas','Courier New',monospace;")
-                                        .arg(ui::colors::TEXT_SECONDARY()));
-    unlock_attempts_->setAlignment(Qt::AlignCenter);
-    unlock_attempts_->hide();
-    vl->addWidget(unlock_attempts_);
-
-    vl->addWidget(make_separator());
-
-    // Unlock button
     unlock_btn_ = new QPushButton("  UNLOCK  ");
     unlock_btn_->setFixedHeight(34);
     unlock_btn_->setStyleSheet(btn_primary());
     connect(unlock_btn_, &QPushButton::clicked, this, &LockScreen::on_unlock_submit);
     vl->addWidget(unlock_btn_);
 
-    vl->addStretch();
+    // Always there, not only after failures: someone who knows they forgot
+    // should not have to fail their way to the way out.
+    auto* links = new QHBoxLayout;
+    links->setContentsMargins(0, 2, 0, 0);
+    auto* forgot = new QPushButton("Forgot PIN?");
+    forgot->setStyleSheet(link_style());
+    forgot->setCursor(Qt::PointingHandCursor);
+    connect(forgot, &QPushButton::clicked, this, [this]() {
+        recovery_->start(auth::PinManager::instance().account(), /*signed_in=*/true);
+        show_page(recovery_page_);
+    });
+    auto* other = new QPushButton("Switch user");
+    other->setStyleSheet(link_style());
+    other->setCursor(Qt::PointingHandCursor);
+    connect(other, &QPushButton::clicked, this, &LockScreen::switch_user_requested);
+    links->addWidget(forgot);
+    links->addStretch();
+    links->addWidget(other);
+    vl->addLayout(links);
 
     connect(unlock_pin_input_, &QLineEdit::returnPressed, this, &LockScreen::on_unlock_submit);
-
-    pages_->addWidget(page); // index 1
+    pages_->layout()->addWidget(page);
 }
 
-// ── Lockout Page (max attempts exceeded) ────────────────────────────────────
+// ── Forgot page ──────────────────────────────────────────────────────────────
 
-void LockScreen::build_lockout_page() {
-    auto* page = new QWidget(this);
-    page->setStyleSheet(card_style());
-
-    auto* vl = new QVBoxLayout(page);
+void LockScreen::build_recovery_page() {
+    recovery_page_ = new QWidget(this);
+    recovery_page_->setObjectName("lockCard");
+    recovery_page_->setStyleSheet(card_style());
+    auto* vl = new QVBoxLayout(recovery_page_);
     vl->setContentsMargins(28, 22, 28, 22);
-    vl->setSpacing(10);
-
-    // Header bar
-    auto* header = new QWidget(this);
-    header->setFixedHeight(38);
-    header->setStyleSheet(QString("background: %1; border: none;").arg(ui::colors::BG_RAISED()));
-    auto* hl = new QHBoxLayout(header);
-    hl->setContentsMargins(14, 0, 14, 0);
-
-    auto* title = new QLabel("ACCOUNT LOCKED");
-    title->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 700;"
-                                 "background: transparent; letter-spacing: 1px;"
-                                 "font-family: 'Consolas','Courier New',monospace;")
-                             .arg(ui::colors::NEGATIVE()));
-    hl->addWidget(title);
-    hl->addStretch();
-
-    auto* warn = new QLabel("SECURITY");
-    warn->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;"
-                                "background: transparent; letter-spacing: 0.5px;"
-                                "font-family: 'Consolas','Courier New',monospace;")
-                            .arg(ui::colors::NEGATIVE()));
-    hl->addWidget(warn);
-    vl->addWidget(header);
-
-    lockout_msg_ = new QLabel("Too many failed PIN attempts.\n\n"
-                              "For your security, the terminal has been locked.\n"
-                              "You must sign in again with your email and password\n"
-                              "to reset your PIN and regain access.");
-    lockout_msg_->setWordWrap(true);
-    lockout_msg_->setStyleSheet(QString("color: %1; font-size: 14px; background: transparent;"
-                                        "font-family: 'Consolas','Courier New',monospace;")
-                                    .arg(ui::colors::TEXT_SECONDARY()));
-    vl->addWidget(lockout_msg_);
-
-    vl->addWidget(make_separator());
-
-    auto* reauth_btn = new QPushButton("  SIGN IN AGAIN  ");
-    reauth_btn->setFixedHeight(34);
-    reauth_btn->setStyleSheet(btn_danger());
-    connect(reauth_btn, &QPushButton::clicked, this, [this]() { emit reauth_requested(); });
-    vl->addWidget(reauth_btn);
-
-    vl->addStretch();
-
-    pages_->addWidget(page); // index 2
+    recovery_ = new PinRecoveryPanel(recovery_page_);
+    vl->addWidget(recovery_);
+    connect(recovery_, &PinRecoveryPanel::back, this, &LockScreen::show_unlock);
+    connect(recovery_, &PinRecoveryPanel::switch_user, this, &LockScreen::switch_user_requested);
+    connect(recovery_, &PinRecoveryPanel::pin_reset, this, [this](const QString&, const QString&) {
+        LOG_INFO("Auth", "PIN reset with the recovery key — unlocking");
+        emit unlocked();
+    });
+    pages_->layout()->addWidget(recovery_page_);
 }
 
 // ── Page activation ─────────────────────────────────────────────────────────
 
-void LockScreen::activate() {
-    auto& pm = auth::PinManager::instance();
-    if (pm.failed_attempts() >= auth::PinManager::kMaxAttempts) {
-        show_lockout();
-    } else if (pm.has_pin()) {
-        show_unlock();
-    } else {
-        show_setup();
-    }
+void LockScreen::show_page(QWidget* page) {
+    unlock_page_->setVisible(page == unlock_page_);
+    recovery_page_->setVisible(page == recovery_page_);
 }
 
-void LockScreen::show_setup() {
-    setup_pin_input_->clear();
-    setup_confirm_input_->clear();
-    setup_error_->hide();
-    pages_->setCurrentIndex(0);
-    setup_pin_input_->setFocus();
+void LockScreen::activate() {
+    show_unlock();
 }
 
 void LockScreen::show_unlock() {
     unlock_pin_input_->clear();
     unlock_error_->hide();
     unlock_lockout_label_->hide();
-    pages_->setCurrentIndex(1);
-
-    auto& pm = auth::PinManager::instance();
-    if (pm.failed_attempts() > 0 && pm.failed_attempts() < auth::PinManager::kMaxAttempts) {
-        int remaining = auth::PinManager::kMaxAttempts - pm.failed_attempts();
-        unlock_attempts_->setText(QString("%1 ATTEMPT%2 REMAINING").arg(remaining).arg(remaining == 1 ? "" : "S"));
-        unlock_attempts_->show();
-    } else {
-        unlock_attempts_->hide();
-    }
-
+    const QString user = auth::PinManager::instance().account();
+    unlock_user_->setText(user.isEmpty() ? QStringLiteral("Enter your PIN to unlock")
+                                         : QStringLiteral("Signed in as %1 — enter your PIN to unlock").arg(user));
+    show_page(unlock_page_);
     update_lockout_display();
     unlock_pin_input_->setFocus();
 }
 
-void LockScreen::show_lockout() {
-    pages_->setCurrentIndex(2);
-}
-
 // ── Actions ─────────────────────────────────────────────────────────────────
-
-void LockScreen::on_setup_submit() {
-    const QString pin = setup_pin_input_->text();
-    const QString confirm = setup_confirm_input_->text();
-
-    // Match check is UI-only — PinManager has no concept of a confirm field.
-    if (pin != confirm) {
-        setup_error_->setText("PINs do not match");
-        setup_error_->show();
-        setup_confirm_input_->clear();
-        setup_confirm_input_->setFocus();
-        return;
-    }
-
-    // All length / digit-only / weak-pattern rejection now lives in
-    // PinManager::set_pin() so future setup flows (QR companion, tests) hit
-    // the same guardrails. Render whatever message PinManager returns.
-    auto result = auth::PinManager::instance().set_pin(pin);
-    if (result.is_err()) {
-        setup_error_->setText(QString::fromStdString(result.error()));
-        setup_error_->show();
-        return;
-    }
-
-    setup_error_->hide();
-    LOG_INFO("Auth", "PIN setup complete — unlocking terminal");
-    emit unlocked();
-}
 
 void LockScreen::on_unlock_submit() {
     auto& pm = auth::PinManager::instance();
-
-    if (pm.is_locked_out()) {
+    if (pm.is_locked_out(pm.account())) {
         update_lockout_display();
         return;
     }
-
-    QString pin = unlock_pin_input_->text();
+    const QString pin = unlock_pin_input_->text();
     if (pin.isEmpty()) {
         unlock_error_->setText("Enter your PIN");
         unlock_error_->show();
         return;
     }
-
     if (pm.verify_pin(pin)) {
         unlock_error_->hide();
         unlock_lockout_label_->hide();
-        unlock_attempts_->hide();
         emit unlocked();
         return;
     }
-
-    // Failed
     unlock_pin_input_->clear();
     unlock_pin_input_->setFocus();
-
-    if (pm.failed_attempts() >= auth::PinManager::kMaxAttempts) {
-        // max_attempts_exceeded signal will trigger show_lockout()
-        return;
-    }
-
-    int remaining = auth::PinManager::kMaxAttempts - pm.failed_attempts();
-    unlock_attempts_->setText(QString("%1 ATTEMPT%2 REMAINING").arg(remaining).arg(remaining == 1 ? "" : "S"));
-    unlock_attempts_->show();
-
-    if (pm.is_locked_out()) {
+    if (pm.is_locked_out(pm.account())) {
         unlock_error_->hide();
         update_lockout_display();
         lockout_timer_->start();
     } else {
-        unlock_error_->setText("Incorrect PIN");
+        unlock_error_->setText(pm.failed_attempts(pm.account()) >= auth::PinManager::kFreeAttempts
+                                   ? QStringLiteral("Incorrect PIN. Forgot it? Choose \"Forgot PIN?\" below.")
+                                   : QStringLiteral("Incorrect PIN"));
         unlock_error_->show();
-        unlock_lockout_label_->hide();
     }
 }
 
 void LockScreen::update_lockout_display() {
     auto& pm = auth::PinManager::instance();
-    int secs = pm.lockout_remaining_seconds();
-
+    const int secs = pm.lockout_remaining_seconds(pm.account());
     if (secs <= 0) {
         unlock_lockout_label_->hide();
         unlock_btn_->setEnabled(true);
         unlock_pin_input_->setEnabled(true);
-        unlock_pin_input_->setFocus();
+        if (unlock_page_->isVisible())
+            unlock_pin_input_->setFocus();
         lockout_timer_->stop();
         return;
     }
-
-    int mins = secs / 60;
-    int remaining_secs = secs % 60;
-    QString time_str;
-    if (mins > 0)
-        time_str = QString("%1m %2s").arg(mins).arg(remaining_secs, 2, 10, QChar('0'));
-    else
-        time_str = QString("%1s").arg(secs);
-
-    unlock_lockout_label_->setText(QString("Locked for %1 — too many failed attempts").arg(time_str));
+    const int mins = secs / 60;
+    const QString time_str = mins > 0 ? QString("%1m %2s").arg(mins).arg(secs % 60, 2, 10, QChar('0'))
+                                      : QString("%1s").arg(secs);
+    unlock_lockout_label_->setText(
+        QString("Too many wrong PINs — try again in %1, or choose \"Forgot PIN?\".").arg(time_str));
     unlock_lockout_label_->show();
     unlock_btn_->setEnabled(false);
     unlock_pin_input_->setEnabled(false);

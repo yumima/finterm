@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityOverviewTab.cpp
 #include "screens/equity_research/EquityOverviewTab.h"
 
+#include "core/errors/DataFailure.h"
+
 #include "datahub/DataHub.h"
 #include "screens/equity_research/PriceRangeStrip.h"
 #include "screens/knowledge/HelpHint.h"
@@ -181,6 +183,16 @@ void ResearchCandleCanvas::clear() {
     update();
 }
 
+void ResearchCandleCanvas::set_error_detail(const QString& raw) {
+    if (error_detail_ == raw)
+        return;
+    error_detail_ = raw;
+    if (placeholder_state_ == PlaceholderState::Error) {
+        dirty_ = true;
+        update();
+    }
+}
+
 void ResearchCandleCanvas::set_placeholder_state(PlaceholderState state) {
     if (placeholder_state_ == state)
         return;
@@ -300,10 +312,18 @@ void ResearchCandleCanvas::rebuild_cache() {
         if (placeholder_state_ != PlaceholderState::Loading) {
             p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
             p.setFont(QFont("Consolas", 11));
-            const QString msg = (placeholder_state_ == PlaceholderState::Error)
-                                    ? "Failed to load chart \xe2\x80\x94 try again"
-                                    : "No data available for this period";
-            p.drawText(cache_.rect(), Qt::AlignCenter, msg);
+            QString msg = QStringLiteral("No data available for this period");
+            if (placeholder_state_ == PlaceholderState::Error) {
+                if (error_detail_.isEmpty()) {
+                    msg = QStringLiteral("Failed to load chart \u2014 try again");
+                } else {
+                    const auto f = data_failure::classify(error_detail_, QStringLiteral("Yahoo Finance"));
+                    msg = data_failure::one_line(QStringLiteral("the chart"), f) + QStringLiteral("\n\nWhat to do: ") +
+                          f.action;
+                }
+            }
+            const int pad = qMin(60, cache_.width() / 8);
+            p.drawText(cache_.rect().adjusted(pad, 0, -pad, 0), Qt::AlignCenter | Qt::TextWordWrap, msg);
         }
         return;
     }
@@ -2832,8 +2852,10 @@ void EquityOverviewTab::apply_historical_state(const services::query::QueryStore
         // Fetch failed — show the Error placeholder and hide the overlay so
         // the message is readable. Cached candles, if any, are kept on
         // screen until the next successful fetch overwrites them.
-        if (candle_canvas_)
+        if (candle_canvas_) {
+            candle_canvas_->set_error_detail(s.error);
             candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+        }
         if (loading_overlay_)
             loading_overlay_->hide_loading();
         return;
