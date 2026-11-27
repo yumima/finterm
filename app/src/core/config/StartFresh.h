@@ -54,4 +54,13 @@ void wait_for_parent(int argc, char* argv[]);
 /// Where backups go: a sibling of the data folder, never inside it.
 QString backup_root();
 
+/// Create `dir` (a folder under backup_root()) readable by this user only,
+/// and the backup root with it: a backup holds a user's whole data, and the
+/// folder it was moved out of was private. False when it can't be created.
+bool make_backup_dir(const QString& dir);
+
+/// The backup folder name for one removed user of the active profile:
+/// "deleted-user-<name>-<time>[-<profile>]".
+QString deleted_user_backup_dir(const QString& username);
+
 } // namespace finterm::start_fresh

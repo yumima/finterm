@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`9c4cdef91`](https://github.com/yumima/finterm/commit/9c4cdef91) Defaults: the owner's dashboard as first-run layout; Markets pages fill the window
 - [`92708e657`](https://github.com/yumima/finterm/commit/92708e657) Review fixes: resets keep backups, proxy env on relaunch, no keys in logs
 - [`c82af1de2`](https://github.com/yumima/finterm/commit/c82af1de2) DataHealth: QHash::remove returns bool (MSVC C4804 is an error)
 - [`4cf6fc2b6`](https://github.com/yumima/finterm/commit/4cf6fc2b6) Lock screen, data failures and the Windows uninstaller: what customers hit

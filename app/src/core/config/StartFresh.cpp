@@ -96,6 +96,24 @@ QString backup_root() {
     return QDir::cleanPath(AppPaths::root()) + QStringLiteral("-backups");
 }
 
+bool make_backup_dir(const QString& dir) {
+    if (!QDir().mkpath(dir))
+        return false;
+    // On Windows this only clears read-only; the folder inherits the
+    // user-only access of the local app-data folder it sits beside.
+    const auto owner_only = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+    return QFile::setPermissions(backup_root(), owner_only) && QFile::setPermissions(dir, owner_only);
+}
+
+QString deleted_user_backup_dir(const QString& username) {
+    const QString profile = ProfileManager::instance().active();
+    return QDir(backup_root())
+        .filePath(QStringLiteral("deleted-user-%1-%2%3")
+                      .arg(username.toLower().trimmed(),
+                           QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")),
+                           profile == QLatin1String("default") ? QString() : QStringLiteral("-") + profile));
+}
+
 QString schedule(const Options& options) {
     QFile f(marker_path());
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -168,6 +186,12 @@ Outcome run_if_scheduled() {
         QStringLiteral("pre-reset-%1%2")
             .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")),
                  profile == QLatin1String("default") ? QString() : QStringLiteral("-") + profile));
+    if (!make_backup_dir(out.backup_dir)) {
+        out.problems << QStringLiteral("Could not create the backup folder %1, so nothing was changed.")
+                            .arg(QDir::toNativeSeparators(out.backup_dir));
+        out.backup_dir.clear();
+        return out;
+    }
 
     // 1. Everything personal: user/, and the folders an older layout kept the
     //    same things in. A move, not a delete — nothing personal is lost.
@@ -208,7 +232,6 @@ Outcome run_if_scheduled() {
     //    Not the secure fallback store (kAppSecure): it holds every
     //    profile's secrets; this profile's go in step 3.
     if (profile == QLatin1String("default")) {
-        QDir().mkpath(out.backup_dir);
         {
             QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
             const QFileInfo file(s.fileName());

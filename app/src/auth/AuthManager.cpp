@@ -10,6 +10,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QSysInfo>
@@ -323,7 +324,7 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
                                     const QString& keep_in) {
     AuthService::instance().delete_local_user(
         username,
-        [this, username, on_done = std::move(on_done)](ApiResponse r) {
+        [this, username, keep_in, on_done = std::move(on_done)](ApiResponse r) {
         // Only once the user row is really gone: a failed delete leaves a
         // live user whose channels and device PIN must keep working.
         if (!r.success) {
@@ -331,7 +332,8 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
                 on_done(false, r.error.isEmpty() ? QStringLiteral("Could not delete user.") : r.error);
             return;
         }
-        notifications::remove_user_secrets(username);
+        // Kept beside the database when the reset keeps a backup.
+        notifications::remove_user_secrets(username, keep_in.isEmpty() ? QString() : QFileInfo(keep_in).fileName());
         PinManager::instance().forget_user(username.toLower().trimmed());
         // "Reset this user" is the forgotten-credentials recovery path: the
         // deleted user's device PIN must not gate a future account re-created

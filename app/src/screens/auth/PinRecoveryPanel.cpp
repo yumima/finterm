@@ -6,7 +6,6 @@
 #include "screens/auth/StartFreshDialog.h"
 #include "ui/theme/Theme.h"
 
-#include <QDateTime>
 #include <QDir>
 #include <QFrame>
 #include <QIntValidator>
@@ -189,8 +188,8 @@ void PinRecoveryPanel::build_choices() {
     vl->addWidget(other);
 
     auto* reset_user = new ChoiceCard(QStringLiteral("Reset this user"),
-                                      QStringLiteral("Delete this user and their data on this computer, then create "
-                                                     "the user again."),
+                                      QStringLiteral("Remove this user — their data is moved to a backup folder — then "
+                                                     "create the user again."),
                                       true, [this]() { on_reset_user(); });
     vl->addWidget(reset_user);
 
@@ -292,15 +291,12 @@ void PinRecoveryPanel::on_reset_user() {
         return;
     // Moved aside, not deleted: this runs without the PIN (that is what it is
     // for), so whoever is at the screen must not be able to destroy anything.
-    const QString keep_in = QDir(start_fresh::backup_root())
-                                .filePath(QStringLiteral("deleted-user-%1-%2")
-                                              .arg(username_.toLower().trimmed(),
-                                                   QDateTime::currentDateTime().toString(
-                                                       QStringLiteral("yyyyMMdd-HHmmss"))));
+    const QString keep_in = start_fresh::deleted_user_backup_dir(username_);
     const auto ans = QMessageBox::warning(
         window(), QStringLiteral("Reset this user"),
         QStringLiteral("Remove the user \"%1\" from finterm on this computer — with their portfolios, watchlists, "
-                       "notes, chats and settings?\n\nTheir data is moved to a backup folder, not deleted:\n%2\n\n"
+                       "notes, chats and settings?\n\nTheir data is moved to a backup folder, not deleted:\n%2\n"
+                       "(their saved notification keys are kept too, under a backup name)\n\n"
                        "Other users are not affected. Afterwards you can create the user again.")
             .arg(username_, QDir::toNativeSeparators(keep_in)),
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);

@@ -109,8 +109,11 @@ inline bool write_field(const QString& category, const QString& field, const QSt
     return ok;
 }
 
-/// Drop every notification secret a local user stored (on user deletion).
-inline void remove_user_secrets(const QString& username) {
+/// Remove a deleted user's channel secrets. With `backup_tag` (a reset that
+/// keeps a backup), each is first copied to "pre-reset-<backup_tag>/<key>" in
+/// the same keyring, and one that can't be copied stays where it is (a
+/// locked keyring: kept rather than lost — the reset itself never needs it).
+inline void remove_user_secrets(const QString& username, const QString& backup_tag = {}) {
     const QString prefix = user_secret_prefix(username);
     if (prefix.isEmpty())
         return;
@@ -123,9 +126,17 @@ inline void remove_user_secrets(const QString& username) {
         for (const QString& k : listed.value())
             if (!keys.contains(k))
                 keys.append(k);
-    for (const QString& k : keys)
+    keys.append(index_key(prefix));
+    for (const QString& k : keys) {
+        if (!backup_tag.isEmpty()) {
+            const auto value = store.retrieve(k);
+            if (value.is_err())
+                continue; // absent (the index often is), or unreadable: leave it
+            if (store.store(QStringLiteral("pre-reset-") + backup_tag + QLatin1Char('/') + k, value.value()).is_err())
+                continue;
+        }
         store.remove(k);
-    store.remove(index_key(prefix));
+    }
 }
 
 } // namespace finterm::notifications

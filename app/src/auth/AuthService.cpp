@@ -4,6 +4,7 @@
 #include "auth/PinPolicy.h"
 
 #include "core/config/AppPaths.h"
+#include "core/config/StartFresh.h"
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "storage/sqlite/Database.h"
@@ -361,6 +362,12 @@ void AuthService::delete_local_user(const QString& username, Callback cb, const 
     // then nothing has changed. Only once the files are out of the way is
     // the auth row deleted; if that fails the files are moved back.
     const QString base = user_db_path(u);
+    // A reset that keeps a backup needs its folder first: without one,
+    // nothing is changed (the user was promised the data goes there).
+    if (!keep_in.isEmpty() && !start_fresh::make_backup_dir(keep_in)) {
+        cb({false, {}, "Could not create the backup folder " + QDir::toNativeSeparators(keep_in) + ".", 500});
+        return;
+    }
     QStringList moved;
     auto restore = [&moved]() {
         for (const QString& p : moved)
@@ -391,8 +398,6 @@ void AuthService::delete_local_user(const QString& username, Callback cb, const 
         cb({false, {}, "Could not delete user.", 500});
         return;
     }
-    if (!keep_in.isEmpty() && !moved.isEmpty() && !QDir().mkpath(keep_in))
-        LOG_WARN("AuthService", "delete_local_user: cannot create " + keep_in);
     for (const QString& p : moved) {
         if (!keep_in.isEmpty()) {
             // Kept: a backup the user can copy back. If the move fails the
