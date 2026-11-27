@@ -80,7 +80,25 @@ yd._yahoo_unreachable = reachable
 got = yd._download_refusals(["XYZQ", "OLDCO"], {"XYZQ": TZ, "OLDCO": TZ})
 check("reachable Yahoo: unknown tickers are not refusals", got == {}, got)
 
-# 4. Not this download's tickers: ignored as before.
+# 4. Another ticker was rate-limited: Yahoo answers, so a timezone miss is an
+#    unknown ticker, not a second rate limit (and no probe is needed).
+RATE = "YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')"
+yd._yahoo_unreachable = unreachable
+probes.clear()
+got = yd._download_refusals(["AAPL", "OLDCO"], {"AAPL": RATE, "OLDCO": TZ})
+check("rate limit elsewhere: the limited ticker is refused", got.get("AAPL") == RATE, got)
+check("…the timezone miss is not", "OLDCO" not in got, got)
+check("…without a probe", not probes)
+
+# 5. urllib3 gave up on repeated 429s: "connection" in the text, still Yahoo
+#    answering — a timezone miss beside it is an unknown ticker.
+U429 = ("HTTPSConnectionPool(host='query2.finance.yahoo.com', port=443): Max retries exceeded with url: /v8 "
+        "(Caused by ResponseError('too many 429 error responses'))")
+probes.clear()
+got = yd._download_refusals(["AAPL", "OLDCO"], {"AAPL": U429, "OLDCO": TZ})
+check("urllib3 429 give-up elsewhere: the timezone miss is not refused", "OLDCO" not in got, got)
+
+# 6. Not this download's tickers: ignored as before.
 got = yd._download_refusals(["AAPL"], {"TSLA": CONN})
 check("another download's ticker is not ours", got == {}, got)
 

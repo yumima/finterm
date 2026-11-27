@@ -3,6 +3,7 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/config/ProfileManager.h"
+#include "core/network/ProxySettings.h"
 #include "core/util/ChildEnvironment.h"
 #include "storage/secure/SecureStorage.h"
 
@@ -119,7 +120,7 @@ bool relaunch() {
     QProcess p;
     p.setProgram(program);
     p.setArguments(args);
-    p.setProcessEnvironment(clean_environment());
+    p.setProcessEnvironment(proxy::with_user_proxy_env(clean_environment()));
     p.setWorkingDirectory(QDir::homePath());
     return p.startDetached();
 }
@@ -222,8 +223,9 @@ Outcome run_if_scheduled() {
     }
 
     // 3. Credentials of this profile.
-    if (auto r = SecureStorage::instance().remove_all_in_profile(); r.is_err())
-        out.problems << QStringLiteral("Some saved keys could not be removed from the system keyring (%1).")
+    if (auto r = SecureStorage::instance().remove_all_in_profile(QFileInfo(out.backup_dir).fileName());
+        r.is_err())
+        out.problems << QStringLiteral("Some saved keys could not be set aside in the system keyring (%1).")
                             .arg(QString::fromStdString(r.error()));
 
     // 4. What the app regenerates.

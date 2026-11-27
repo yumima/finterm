@@ -74,11 +74,19 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback) {
         QJsonDocument doc = QJsonDocument::fromJson(data, &parse_err);
 
         if (reply->error() != QNetworkReply::NoError) {
-            // Strip query string to avoid logging embedded tokens/keys
-            QUrl sanitized = reply->url();
-            sanitized.setQuery(QString{});
-            LOG_WARN("HTTP",
-                     QString("HTTP %1: %2 — %3").arg(status).arg(sanitized.toString()).arg(reply->errorString()));
+            // Qt's reason ("Proxy connection refused", "… Service
+            // Unavailable") with every URL in it cut to its host: Qt's text
+            // carries the URL, and a query or path can hold a key or token
+            // (FRED ?api_key=, Discord/Telegram paths). This text reaches the
+            // log, the screen and "Copy details".
+            static const QRegularExpression url_re(QStringLiteral(R"(\b[a-z][a-z0-9+.-]*://[^\s]+)"),
+                                                   QRegularExpression::CaseInsensitiveOption);
+            QString why = reply->errorString();
+            for (auto m = url_re.globalMatch(why); m.hasNext();) {
+                const auto hit = m.next();
+                why.replace(hit.captured(0), QUrl(hit.captured(0)).host());
+            }
+            LOG_WARN("HTTP", QString("HTTP %1: %2 — %3").arg(status).arg(reply->url().host(), why));
 
             // 401/403 are always returned as err() so callers can tell an auth
             // rejection apart from a body-carrying error — even when the body is valid JSON.
@@ -94,24 +102,17 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback) {
                 return;
             }
 
-            // No parseable body — the status sentinel, and Qt's reason after
-            // it ("HTTP_0: Proxy connection refused", "HTTP_503: … Service
-            // Unavailable"): without it a screen could only say "failed".
-            // Never the URL: Qt's text carries it, and a query or path can
-            // hold a key or token (FRED ?api_key=, Discord/Telegram paths) —
-            // this text reaches the screen and "Copy details". Each URL in
-            // it is cut to its host.
-            static const QRegularExpression url_re(QStringLiteral(R"(\b[a-z][a-z0-9+.-]*://[^\s]+)"),
-                                                   QRegularExpression::CaseInsensitiveOption);
-            QString why = reply->errorString();
-            for (auto m = url_re.globalMatch(why); m.hasNext();) {
-                const auto hit = m.next();
-                why.replace(hit.captured(0), QUrl(hit.captured(0)).host());
-            }
+            // No parseable body — the status sentinel, and the reason after
+            // it: without it a screen could only say "failed".
             cb(Result<QJsonDocument>::err(QString("HTTP_%1: %2").arg(status).arg(why.left(200)).toStdString()));
             return;
         }
 
+        // 204 No Content (a Discord webhook's success): nothing to parse.
+        if (status == 204) {
+            cb(Result<QJsonDocument>::ok(QJsonDocument()));
+            return;
+        }
         if (parse_err.error != QJsonParseError::NoError) {
             cb(Result<QJsonDocument>::err(parse_err.errorString().toStdString()));
             return;
@@ -121,13 +122,13 @@ void HttpClient::handle_reply(QNetworkReply* reply, JsonCallback callback) {
 }
 
 void HttpClient::get(const QString& url, JsonCallback callback) {
-    LOG_DEBUG("HTTP", "GET " + url);
+    LOG_DEBUG("HTTP", "GET " + QUrl(url).host()); // never the path or query: keys, tokens
     auto* reply = nam_->get(build_request(url));
     handle_reply(reply, std::move(callback));
 }
 
 void HttpClient::get(const QString& url, const QHash<QByteArray, QByteArray>& extra_headers, JsonCallback callback) {
-    LOG_DEBUG("HTTP", "GET " + url);
+    LOG_DEBUG("HTTP", "GET " + QUrl(url).host()); // never the path or query: keys, tokens
     QNetworkRequest req = build_request(url);
     for (auto it = extra_headers.constBegin(); it != extra_headers.constEnd(); ++it)
         req.setRawHeader(it.key(), it.value());
@@ -136,21 +137,21 @@ void HttpClient::get(const QString& url, const QHash<QByteArray, QByteArray>& ex
 }
 
 void HttpClient::post(const QString& url, const QJsonObject& body, JsonCallback callback) {
-    LOG_DEBUG("HTTP", "POST " + url);
+    LOG_DEBUG("HTTP", "POST " + QUrl(url).host()); // never the path or query: keys, tokens
     QJsonDocument doc(body);
     auto* reply = nam_->post(build_request(url), doc.toJson());
     handle_reply(reply, std::move(callback));
 }
 
 void HttpClient::put(const QString& url, const QJsonObject& body, JsonCallback callback) {
-    LOG_DEBUG("HTTP", "PUT " + url);
+    LOG_DEBUG("HTTP", "PUT " + QUrl(url).host()); // never the path or query: keys, tokens
     QJsonDocument doc(body);
     auto* reply = nam_->put(build_request(url), doc.toJson());
     handle_reply(reply, std::move(callback));
 }
 
 void HttpClient::del(const QString& url, JsonCallback callback) {
-    LOG_DEBUG("HTTP", "DELETE " + url);
+    LOG_DEBUG("HTTP", "DELETE " + QUrl(url).host()); // never the path or query: keys, tokens
     auto* reply = nam_->deleteResource(build_request(url));
     handle_reply(reply, std::move(callback));
 }

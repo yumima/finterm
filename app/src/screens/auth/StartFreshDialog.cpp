@@ -35,8 +35,9 @@ bool ask(QWidget* parent) {
             "<p><b>finterm will restart and set itself up as on its first start.</b></p>"
             "<p><b>Moved to a backup folder</b> (not deleted — you can copy it back):<br>"
             "every user, with their portfolios, watchlists, notes, chats and workspaces%1.</p>"
-            "<p><b>Removed:</b> the API keys and passwords saved in finterm (in the system keyring) and the "
-            "cache.</p>"
+            "<p><b>Set aside in the system keyring</b> (kept under a backup name the new setup doesn't "
+            "use): the API keys and passwords saved in finterm.</p>"
+            "<p><b>Removed:</b> the cache.</p>"
             "<p><b>Kept:</b> logs, downloaded public data%2.</p>"
             "<p>Backup folder: <code>%3</code></p>")
             .arg(profile == QLatin1String("default") ? QStringLiteral(", and the app settings") : QString(),

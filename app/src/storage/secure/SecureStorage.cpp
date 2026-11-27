@@ -894,7 +894,7 @@ void SecureStorage::migrate_identity() {
         flags.setValue(flag, true);
 }
 
-Result<int> SecureStorage::remove_all_in_profile() {
+Result<int> SecureStorage::remove_all_in_profile(const QString& backup_tag) {
     const auto listed = entries_of(kCurrentId);
     if (listed.is_err())
         return Result<int>::err(listed.error());
@@ -908,6 +908,16 @@ Result<int> SecureStorage::remove_all_in_profile() {
         const bool in_scope = scope.isEmpty() ? !e.key.startsWith(QLatin1String("profiles/")) : e.key.startsWith(scope);
         if (!in_scope)
             continue;
+        const QString rest = e.key.mid(scope.size());
+        if (rest.startsWith(QLatin1String("pre-reset-")))
+            continue; // an earlier fresh start's backup
+        if (!backup_tag.isEmpty()) {
+            const auto value = e.value ? Result<QString>::ok(*e.value) : backend_retrieve(e.key);
+            if (value.is_err() || backend_store(scope + backup_tag + QLatin1Char('/') + rest, value.value()).is_err()) {
+                failed = "could not back up " + e.key.toStdString() + " (left in place)";
+                continue;
+            }
+        }
         if (backend_remove(e.key).is_ok())
             ++removed;
         else
@@ -956,7 +966,8 @@ Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
                 scope.isEmpty() ? !full.startsWith(QLatin1String("profiles/")) : full.startsWith(scope);
             if (in_scope) {
                 const QString key = full.mid(scope.size());
-                if (key.startsWith(prefix))
+                // A fresh start's backups are not stored credentials.
+                if (key.startsWith(prefix) && !key.startsWith(QLatin1String("pre-reset-")))
                     out.append(key);
             }
         }

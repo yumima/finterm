@@ -56,6 +56,11 @@ class TestDataFailure : public QObject {
         // QNetworkReply::errorString()
         row("qt dns", "Host query1.finance.yahoo.com not found", Kind::Unresolved, "Yahoo Finance", 0);
         row("qt refused", "Connection refused", Kind::Unreachable, "", 0);
+        row("qt proxy needs credentials", "Proxy requires authentication", Kind::Proxy, "", 0);
+        row("urllib3 gave up on 429s",
+            "HTTPSConnectionPool(host='query2.finance.yahoo.com', port=443): Max retries exceeded with url: /v10 "
+            "(Caused by ResponseError('too many 429 error responses'))",
+            Kind::RateLimited, "Yahoo Finance", 429);
         row("qt 429", "Error transferring https://api.nasdaq.com/api/calendar - server replied: Too Many Requests",
             Kind::RateLimited, "Nasdaq", 429);
         row("qt 503", "Error transferring https://www.sec.gov/x - server replied: Service Unavailable",

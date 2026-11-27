@@ -7,6 +7,7 @@
 // they inherit (yfinance's curl and requests read them). Loopback always
 // goes direct — the data daemon's socket, a local AI server.
 
+#include <QProcessEnvironment>
 #include <QString>
 
 class QNetworkProxyFactory;
@@ -39,5 +40,11 @@ QNetworkProxyFactory* make_factory(const Config& config);
 /// What `config` resolves to right now, in words ("system: http://… ",
 /// "direct", …).
 QString describe(const Config& config);
+
+/// `env` with the proxy variables put back as finterm was started with: for a
+/// new finterm (a relaunch after Start fresh or an update), which must read
+/// the user's own variables as "the system's", not what apply() exported for
+/// this process's children.
+QProcessEnvironment with_user_proxy_env(QProcessEnvironment env);
 
 } // namespace finterm::proxy

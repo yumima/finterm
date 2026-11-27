@@ -156,11 +156,16 @@ void NetworkSection::on_test() {
             return;
         self->update_state();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        // Any HTTP answer means the route works — this tests the network
-        // path (proxy, VPN, DNS, TLS), not Yahoo's mood: a bare request
-        // without its cookies is often answered 429 while the data service,
-        // which has them, does fine.
-        if (status > 0) {
+        // The proxy itself answered — asking for credentials (407) or
+        // refusing — not Yahoo: the route does not work.
+        const auto err = reply->error();
+        const bool proxy_refused = status == 407 || (err >= QNetworkReply::ProxyConnectionRefusedError &&
+                                                     err <= QNetworkReply::UnknownProxyError);
+        // Any other HTTP answer means the route works — this tests the
+        // network path (proxy, VPN, DNS, TLS), not Yahoo's mood: a bare
+        // request without its cookies is often answered 429 while the data
+        // service, which has them, does fine.
+        if (status > 0 && !proxy_refused) {
             QString text = QStringLiteral("✓ Yahoo Finance answered in %1 s — the connection works this way.")
                                .arg(ms / 1000.0, 0, 'f', 1);
             if (status == 429)
@@ -172,8 +177,9 @@ void NetworkSection::on_test() {
             return;
         }
         QString raw = reply->errorString();
-        if (reply->error() == QNetworkReply::OperationCanceledError ||
-            reply->error() == QNetworkReply::TimeoutError)
+        if (status == 407 || err == QNetworkReply::ProxyAuthenticationRequiredError)
+            raw = QStringLiteral("Proxy authentication required (HTTP 407): ") + raw;
+        if (err == QNetworkReply::OperationCanceledError || err == QNetworkReply::TimeoutError)
             raw = QStringLiteral("timed out after %1 s").arg(ms / 1000);
         const auto f = data_failure::classify(raw, QStringLiteral("Yahoo Finance"));
         self->result_->setText(QStringLiteral("✗ %1\n%2\n(%3)").arg(f.reason, f.action, f.raw));

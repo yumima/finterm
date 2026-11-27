@@ -254,23 +254,30 @@ void AuthManager::login_local(const QString& username, const QString& pin) {
     // Each user's wrong PINs count against that user only.
     const QString user = username.toLower().trimmed();
     auto& gate = PinManager::instance();
+    auto locked_text = [&gate](const QString& u) {
+        const int secs = gate.lockout_remaining_seconds(u);
+        return QStringLiteral("Too many wrong PINs — try again in %1, or choose \"Forgot PIN?\".")
+            .arg(secs >= 120 ? QStringLiteral("%1 min").arg((secs + 59) / 60) : QStringLiteral("%1 s").arg(secs));
+    };
     if (gate.is_locked_out(user)) {
-        const int secs = gate.lockout_remaining_seconds(user);
-        emit login_failed(QStringLiteral("Too many wrong PINs — try again in %1, or choose \"Forgot PIN?\".")
-                              .arg(secs >= 120 ? QStringLiteral("%1 min").arg((secs + 59) / 60)
-                                               : QStringLiteral("%1 s").arg(secs)));
+        emit login_failed(locked_text(user));
         return;
     }
     set_loading(true);
-    AuthService::instance().login_local(username, pin, [this, user](ApiResponse r) {
+    AuthService::instance().login_local(username, pin, [this, user, locked_text](ApiResponse r) {
+        auto& pins = PinManager::instance();
         if (r.status_code == 401)
-            PinManager::instance().record_attempt(user, false);
+            pins.record_attempt(user, false);
         if (!r.success) {
             set_loading(false);
-            emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
+            // The wrong PIN that starts a wait says so now, not on the next try.
+            if (r.status_code == 401 && pins.is_locked_out(user))
+                emit login_failed(QStringLiteral("Incorrect PIN. ") + locked_text(user));
+            else
+                emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
             return;
         }
-        PinManager::instance().record_attempt(user, true);
+        pins.record_attempt(user, true);
         const auto data = unwrap_data(r.data);
         const QString api_key = data["api_key"].toString();
         if (api_key.isEmpty()) {
@@ -312,8 +319,11 @@ QVector<QJsonObject> AuthManager::list_local_users() const {
     return AuthService::instance().list_local_users();
 }
 
-void AuthManager::delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done) {
-    AuthService::instance().delete_local_user(username, [this, username, on_done = std::move(on_done)](ApiResponse r) {
+void AuthManager::delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done,
+                                    const QString& keep_in) {
+    AuthService::instance().delete_local_user(
+        username,
+        [this, username, on_done = std::move(on_done)](ApiResponse r) {
         // Only once the user row is really gone: a failed delete leaves a
         // live user whose channels and device PIN must keep working.
         if (!r.success) {
@@ -334,7 +344,8 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
         emit local_users_changed();
         if (on_done)
             on_done(true, {});
-    });
+        },
+        keep_in);
 }
 
 // ── Logout ───────────────────────────────────────────────────────────────────

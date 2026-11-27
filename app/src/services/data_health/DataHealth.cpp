@@ -47,22 +47,25 @@ void DataHealth::start() {
         record(topic, std::move(e));
     });
     // Every publish passes here (thousands a minute): nothing to do unless
-    // something is failing. Data arriving from the hub's source means the way
-    // to it works again: its network-kind failures (proxy, DNS, connection,
-    // timeout, rate limit, refusal) are over, whichever topic they were on —
-    // a topic nobody asks again soon must not keep the status bar amber.
-    // Failures about the request itself (unknown symbol, no data) stay until
-    // that request succeeds.
+    // something is failing. Data arriving for a kind of topic (Quotes, News,
+    // Charts…) means the way to its source works again: that kind's
+    // network-kind failures (proxy, DNS, connection, timeout, rate limit,
+    // refusal) are over, whichever topic they were on — a topic nobody asks
+    // again soon must not keep the status bar amber. Other kinds may come
+    // from elsewhere (quotes keep ticking while news is blocked), so theirs
+    // stay. Failures about the request itself (unknown symbol, no data) stay
+    // until that request succeeds.
     connect(&hub, &datahub::DataHub::topic_updated, this, [this](const QString& topic, const QVariant&) {
         if (entries_.isEmpty())
             return;
         bool changed = entries_.remove(topic);
+        const QString group = describe_topic(topic).first;
         const QDateTime settled = QDateTime::currentDateTime().addSecs(-2); // not the same burst's errors
         for (auto it = entries_.begin(); it != entries_.end();) {
             const auto k = it->failure.kind;
             const bool network = k != data_failure::Kind::NotFound && k != data_failure::Kind::NoData &&
                                  k != data_failure::Kind::NeedsKey;
-            if (it->hub && network && it->last < settled) {
+            if (it->hub && network && it->group == group && it->last < settled) {
                 it = entries_.erase(it);
                 changed = true;
             } else {

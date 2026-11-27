@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QRandomGenerator>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -351,7 +352,7 @@ void AuthService::login_local(const QString& username, const QString& pin, Callb
     cb({true, data, {}, 200});
 }
 
-void AuthService::delete_local_user(const QString& username, Callback cb) {
+void AuthService::delete_local_user(const QString& username, Callback cb, const QString& keep_in) {
     const QString u = username.toLower().trimmed();
     // The per-user DB must really go: a re-created account of the same name
     // would otherwise open users/<name>.db and inherit the deleted user's
@@ -368,7 +369,10 @@ void AuthService::delete_local_user(const QString& username, Callback cb) {
     for (const QString& p : {base, base + "-wal", base + "-shm"}) {
         if (!QFile::exists(p))
             continue;
-        QFile::remove(p + ".deleted"); // leftover from an earlier failed cleanup
+        // A leftover from an earlier reset whose backup move failed: kept,
+        // under a name of its own — never deleted.
+        if (QFile::exists(p + ".deleted"))
+            QFile::rename(p + ".deleted", p + ".deleted-" + QString::number(QDateTime::currentMSecsSinceEpoch()));
         if (!QFile::rename(p, p + ".deleted")) {
             LOG_ERROR("AuthService", "delete_local_user: cannot move " + p);
             restore();
@@ -387,7 +391,17 @@ void AuthService::delete_local_user(const QString& username, Callback cb) {
         cb({false, {}, "Could not delete user.", 500});
         return;
     }
+    if (!keep_in.isEmpty() && !moved.isEmpty() && !QDir().mkpath(keep_in))
+        LOG_WARN("AuthService", "delete_local_user: cannot create " + keep_in);
     for (const QString& p : moved) {
+        if (!keep_in.isEmpty()) {
+            // Kept: a backup the user can copy back. If the move fails the
+            // file stays as <name>.deleted — never deleted when asked to keep.
+            const QString to = QDir(keep_in).filePath(QFileInfo(p).fileName());
+            if (!QFile::rename(p + ".deleted", to))
+                LOG_WARN("AuthService", "delete_local_user: could not move " + p + ".deleted to " + to);
+            continue;
+        }
         // Under its new name the file can no longer be picked up by a new
         // account, so a failed removal here is only disk litter.
         if (!QFile::remove(p + ".deleted"))

@@ -293,9 +293,13 @@ def _download_refusals(symbols, dl_errors):
     caller asked with (yfinance uppercases its keys; a merged request can
     carry "brk-b" and "BRK-B"); only tickers THIS download asked for (a
     concurrent standalone history() can write into the shared dict).
-    ("no timezone found" is NOT read as a refusal: yfinance says the same for
-    a ticker Yahoo doesn't know, and a chunk of delisted tickers would then
-    "refuse" — and pause every background refresh — on every ask.)"""
+    ("no timezone found" is NOT read as a refusal on its own: yfinance says
+    the same for a ticker Yahoo doesn't know, and a chunk of delisted tickers
+    would then "refuse" — and pause every background refresh — on every ask.
+    It is one only when the network itself failed: another ticker of this
+    download names a connection failure, or Yahoo can't be reached at all.
+    A rate limit or 401 on another ticker proves Yahoo answers — then a
+    timezone miss is an unknown ticker.)"""
     asked = {}
     for sym in symbols:
         asked.setdefault(sym.upper(), []).append(sym)
@@ -312,7 +316,9 @@ def _download_refusals(symbols, dl_errors):
     # all right now, those are refusals with that reason, not missing data.
     tz_missing = [k for k, e in mine.items() if "timezone" in e.lower() and asked[k][0] not in refused]
     if tz_missing:
-        why = next(iter(refused.values()), None) or _yahoo_unreachable()
+        network = [e for e in refused.values() if _is_network_failure_text(e)]
+        answered = len(network) < len(refused)  # a 429/401/5xx: Yahoo is there
+        why = network[0] if network else (None if answered else _yahoo_unreachable())
         if why:
             for k in tz_missing:
                 for spelling in asked[k]:
@@ -362,6 +368,19 @@ def _is_refusal_text(msg):
         return True
     # Status codes as whole words only — a timestamp or ticker can contain 401.
     return re.search(r"\b(?:http(?: error)? ?)(401|403|429|5\d\d)\b", m) is not None
+
+
+def _is_network_failure_text(msg):
+    """A refusal that never reached Yahoo (no connection, DNS, proxy, TLS,
+    timeout) — as opposed to Yahoo answering with a limit or an error."""
+    m = msg.lower()
+    if re.search(r"\b(?:http(?: error)? ?)(401|403|429|5\d\d)\b", m) or any(
+            k in m for k in ("ratelimit", "too many requests", "unauthorized", "invalid crumb", "forbidden",
+                             "server error", "service unavailable", "bad gateway", "gateway time",
+                             "too many 429", "429 error")):
+        return False
+    return any(k in m for k in ("timed out", "timeout", "connection", "could not resolve", "failed to connect",
+                                "couldn't connect", "proxy", "ssl", "certificate", "name or service"))
 
 
 def _trace_last_refused():

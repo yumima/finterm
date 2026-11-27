@@ -30,7 +30,9 @@ class AuthManager : public QObject {
     QVector<QJsonObject> list_local_users() const;
     /// Delete a local user (auth.db row + users/<name>.db). on_done, when set,
     /// receives (ok, error) after the attempt.
-    void delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done = {});
+    /// With `keep_in`, the user's database is moved there, not deleted.
+    void delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done = {},
+                           const QString& keep_in = {});
     /// Sign out. An older build's device PIN is kept unless wipe_device_pin
     /// (account deletion).
     void logout(bool wipe_device_pin = false);

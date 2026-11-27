@@ -156,6 +156,18 @@ QString with_loopback(const QString& no_proxy) {
 
 } // namespace
 
+QProcessEnvironment with_user_proxy_env(QProcessEnvironment env) {
+    const OriginalEnv& orig = original_env();
+    for (const char* v : kVars) {
+        const QString name = QString::fromLatin1(v);
+        if (orig.values.contains(name))
+            env.insert(name, QString::fromUtf8(orig.values.value(name)));
+        else
+            env.remove(name);
+    }
+    return env;
+}
+
 QNetworkProxyFactory* make_factory(const Config& config) {
     return new Factory(config);
 }

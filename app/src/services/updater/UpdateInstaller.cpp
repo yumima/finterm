@@ -5,6 +5,7 @@
 #include "core/config/BuildInfo.h"
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
+#include "core/network/ProxySettings.h"
 #include "services/updater/UpdatePolicy.h"
 
 #include <QCoreApplication>
@@ -371,7 +372,9 @@ bool launch_helper(const Target& t, const QString& staged, const QString& from, 
     QProcess p;
     p.setProgram(program);
     p.setArguments(args);
-    p.setProcessEnvironment(clean_environment());
+    // The helper relaunches finterm: with the user's proxy variables, not
+    // the ones this process exported for its children.
+    p.setProcessEnvironment(proxy::with_user_proxy_env(clean_environment()));
     p.setWorkingDirectory(QDir::homePath()); // not inside the version being replaced
     qint64 helper_pid = 0;
     if (!p.startDetached(&helper_pid)) {

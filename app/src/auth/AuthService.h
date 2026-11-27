@@ -59,7 +59,9 @@ class AuthService : public QObject {
     /// its WAL/SHM files). Fails, changing nothing, when the DB file cannot be
     /// moved out of the way. Used by LoginScreen "reset user" and Settings →
     /// Account "delete local account" (which closes the DB first).
-    void delete_local_user(const QString& username, Callback cb);
+    /// Delete a user: the auth row and their database. With `keep_in`, the
+    /// database files are moved into that folder instead of deleted.
+    void delete_local_user(const QString& username, Callback cb, const QString& keep_in = {});
 
     // ── The account PIN and its recovery key ─────────────────────────────────
     /// Whether `pin` is `username`'s PIN. Counts nothing: lockout is the

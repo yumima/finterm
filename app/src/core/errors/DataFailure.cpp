@@ -104,9 +104,15 @@ Failure classify(const QString& error, const QString& source_hint) {
     static const QRegularExpression loopback_refused(
         QStringLiteral(R"((?:failed to connect|could not connect|connection refused)[^\n]*(?:127\.0\.0\.1|localhost|\[::1\]))"
                        R"(|(?:127\.0\.0\.1|localhost)[^\n]*(?:connection refused|could not connect))"));
+    // urllib3 gives up on repeated 429s with "Max retries exceeded … too many
+    // 429 error responses": a rate limit, though it reads like a lost
+    // connection.
+    const bool rate_named =
+        f.http_status == 429 || df_has(lower, {"too many requests", "rate limit", "ratelimit", "rate-limit",
+                                               "rate limited", "too many 429", "429 error"});
     if (f.http_status == 407 || loopback_refused.match(lower).hasMatch() ||
         df_has(lower, {"proxyerror", "proxy error", "proxy connection", "unable to connect to proxy", "proxy refused",
-                       "proxy authentication"})) {
+                       "proxy authentication", "proxy requires authentication"})) {
         f.kind = Kind::Proxy;
         f.reason = QStringLiteral("The proxy between this computer and %1 failed or refused the connection.").arg(src);
         f.action = QStringLiteral("Check the proxy in Settings › Data Sources › Network, and that the proxy (or the VPN "
@@ -140,13 +146,13 @@ Failure classify(const QString& error, const QString& source_hint) {
                            "no route to host", "failed to connect", "couldn't connect", "remotedisconnected",
                            "remote end closed", "connectionerror", "max retries exceeded", "curl: (7)",
                            "curl: (56)", "recv failure", "network unreachable", "network access is disabled",
-                           "connection closed"})) {
+                           "connection closed"}) &&
+               !rate_named) {
         f.kind = Kind::Unreachable;
         f.reason = QStringLiteral("finterm could not connect to %1.").arg(src);
         f.action = kNetworkAdvice.arg(src);
         f.transient = true;
-    } else if (f.http_status == 429 || df_has(lower, {"too many requests", "rate limit", "ratelimit", "rate-limit",
-                                                   "rate limited"})) {
+    } else if (rate_named) {
         f.kind = Kind::RateLimited;
         if (!f.http_status)
             f.http_status = 429;

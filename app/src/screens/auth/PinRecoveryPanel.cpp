@@ -2,9 +2,12 @@
 
 #include "auth/AuthManager.h"
 #include "auth/PinPolicy.h"
+#include "core/config/StartFresh.h"
 #include "screens/auth/StartFreshDialog.h"
 #include "ui/theme/Theme.h"
 
+#include <QDateTime>
+#include <QDir>
 #include <QFrame>
 #include <QIntValidator>
 #include <QKeyEvent>
@@ -287,31 +290,44 @@ void PinRecoveryPanel::on_reset_with_key() {
 void PinRecoveryPanel::on_reset_user() {
     if (username_.isEmpty())
         return;
+    // Moved aside, not deleted: this runs without the PIN (that is what it is
+    // for), so whoever is at the screen must not be able to destroy anything.
+    const QString keep_in = QDir(start_fresh::backup_root())
+                                .filePath(QStringLiteral("deleted-user-%1-%2")
+                                              .arg(username_.toLower().trimmed(),
+                                                   QDateTime::currentDateTime().toString(
+                                                       QStringLiteral("yyyyMMdd-HHmmss"))));
     const auto ans = QMessageBox::warning(
         window(), QStringLiteral("Reset this user"),
-        QStringLiteral("Delete the user \"%1\" and everything they keep in finterm on this computer — portfolios, "
-                       "watchlists, notes, chats and settings?\n\nThis can't be undone. Other users are not "
-                       "affected. Afterwards you can create the user again.")
-            .arg(username_),
+        QStringLiteral("Remove the user \"%1\" from finterm on this computer — with their portfolios, watchlists, "
+                       "notes, chats and settings?\n\nTheir data is moved to a backup folder, not deleted:\n%2\n\n"
+                       "Other users are not affected. Afterwards you can create the user again.")
+            .arg(username_, QDir::toNativeSeparators(keep_in)),
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     if (ans != QMessageBox::Yes)
         return;
     auto& auth = auth::AuthManager::instance();
     // The lock screen: the user's database is open — close the session first.
+    // The device PIN stays until the delete succeeds (delete_local_user
+    // retires it then, when it was this user's): a failed reset must leave
+    // the user able to unlock as before.
     if (signed_in_)
-        auth.logout(/*wipe_device_pin=*/true);
+        auth.logout(/*wipe_device_pin=*/false);
     const QString who = username_;
     QPointer<PinRecoveryPanel> self(this);
     QPointer<QWidget> win(window());
-    auth.delete_local_user(who, [self, win, who](bool ok, const QString& error) {
-        if (!ok) {
-            QMessageBox::warning(win, QStringLiteral("Reset this user"),
-                                 QStringLiteral("Could not reset \"%1\": %2").arg(who, error));
-            return;
-        }
-        if (self)
-            emit self->user_reset(who);
-    });
+    auth.delete_local_user(
+        who,
+        [self, win, who](bool ok, const QString& error) {
+            if (!ok) {
+                QMessageBox::warning(win, QStringLiteral("Reset this user"),
+                                     QStringLiteral("Could not reset \"%1\": %2").arg(who, error));
+                return;
+            }
+            if (self)
+                emit self->user_reset(who);
+        },
+        keep_in);
 }
 
 void PinRecoveryPanel::on_start_fresh() {

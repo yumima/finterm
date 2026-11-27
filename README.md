@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`c82af1de2`](https://github.com/yumima/finterm/commit/c82af1de2) DataHealth: QHash::remove returns bool (MSVC C4804 is an error)
 - [`4cf6fc2b6`](https://github.com/yumima/finterm/commit/4cf6fc2b6) Lock screen, data failures and the Windows uninstaller: what customers hit
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
@@ -127,7 +128,7 @@ More: [development guide](docs/DEVELOPMENT.md) · [architecture](docs/ARCHITECTU
 | Odd windows, stale layout, general flakiness | `finterm repair` |
 | Data scripts or Python environment broken | `finterm repair` |
 | Quotes stuck or timing out | `pkill -f "yfinance_data.py --daemon"` — the app restarts it |
-| Forgot your PIN | **Forgot PIN?** on the lock or sign-in screen: your recovery key sets a new PIN (keeps everything); or sign in as / create another user; or reset that user; or **Start fresh** — finterm sets itself up again and moves your old data to `finterm-backups/` |
+| Forgot your PIN | **Forgot PIN?** on the lock or sign-in screen: your recovery key sets a new PIN (keeps everything); or sign in as / create another user; or reset that user (their data goes to `finterm-backups/`); or **Start fresh** — finterm sets itself up again, moves your old data to `finterm-backups/` and keeps your saved keys under a backup name in the system keyring |
 
 ## License
 

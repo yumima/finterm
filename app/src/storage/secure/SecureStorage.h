@@ -53,9 +53,13 @@ class SecureStorage {
     Result<QStringList> list_keys(const QString& prefix = {});
 
     /// Remove every secret of the active profile, on every backend (a fresh
-    /// start). The number removed, or an error when the keyring could not be
-    /// searched or an entry would not go.
-    Result<int> remove_all_in_profile();
+    /// start). With `backup_tag`, each one is first copied, in the same
+    /// keyring, to "<profile scope><backup_tag>/<key>" — out of the way of the
+    /// new setup, which never reads that name, but still there; an entry that
+    /// can't be copied is left in place. Earlier backups ("pre-reset-…/") are
+    /// never touched. The number removed, or an error when the keyring could
+    /// not be searched or an entry would not go.
+    Result<int> remove_all_in_profile(const QString& backup_tag = {});
 
     /// Run every known legacy-id migration once. Called at startup so
     /// Settings › Credentials shows the value services actually use.
