@@ -620,8 +620,10 @@ void EarningsCalendarWidget::on_holdings_ready() {
 
     if (symbols.isEmpty()) {
         set_loading(false);
-        show_status(effective_portfolio_ids().isEmpty() ? QStringLiteral("No portfolio selected.")
-                                                        : QStringLiteral("The selected portfolios have no holdings."));
+        show_status(portfolios_loaded_ && portfolios_.isEmpty() ? QStringLiteral("No portfolios yet — create one in "
+                                                                                 "PORTFOLIO, or choose THIS WEEK.")
+                    : effective_portfolio_ids().isEmpty() ? QStringLiteral("No portfolio selected.")
+                                                          : QStringLiteral("The selected portfolios have no holdings."));
         return;
     }
     if (symbols.size() > kMaxSymbolFetches) {

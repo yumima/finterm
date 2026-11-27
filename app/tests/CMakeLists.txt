@@ -946,6 +946,16 @@ target_link_libraries(test_grid_refit PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_grid_refit PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME grid_refit COMMAND test_grid_refit)
 
+# ── Dashboard templates: fit the grid, no overlaps, the default kept as laid out ─
+add_executable(test_dashboard_templates
+    screens/test_dashboard_templates.cpp
+    ../src/screens/dashboard/canvas/DashboardTemplates.cpp
+)
+target_include_directories(test_dashboard_templates PRIVATE ../src)
+target_link_libraries(test_dashboard_templates PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_dashboard_templates PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME dashboard_templates COMMAND test_dashboard_templates)
+
 # ── Private Market valuation math + marketplace slug matching ────────────────
 # An implied valuation needs the price and the share count from the same round
 # of the same source; a near-miss name must not bind another company's price.

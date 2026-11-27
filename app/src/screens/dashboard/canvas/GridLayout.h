@@ -311,4 +311,36 @@ inline int max_row(const QVector<GridItem>& items) {
     return m;
 }
 
+/// A fit-to-view page fills the view: each tile grows down into the free rows
+/// beneath it, to the page's last row (`rows`, or the lowest tile's bottom),
+/// so no column ends short of the window's bottom edge. A tile stops at the
+/// first tile below it; nothing moves sideways. Lowest tiles grow first, so a
+/// wide tile above several narrow ones never takes their room. True when a
+/// tile changed.
+inline bool fill_down(QVector<GridItem>& items, int rows = 0) {
+    const int last = std::max(rows, max_row(items));
+    QVector<int> order(items.size());
+    for (int i = 0; i < order.size(); ++i)
+        order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&items](int a, int b) {
+        return items[a].cell.y + items[a].cell.h > items[b].cell.y + items[b].cell.h;
+    });
+    bool changed = false;
+    for (int i : order) {
+        GridCell& c = items[i].cell;
+        while (c.y + c.h < last) {
+            GridCell next = c;
+            next.h += 1;
+            bool blocked = false;
+            for (int j = 0; j < items.size() && !blocked; ++j)
+                blocked = j != i && cells_overlap(next, items[j].cell);
+            if (blocked)
+                break;
+            c = next;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 } // namespace finterm::screens

@@ -85,13 +85,23 @@ void MarketScreenPage::restore() {
     const auto r = SettingsRepository::instance().get(key());
     const auto layout = r.is_ok() ? layout_codec::decode(r.value()) : std::nullopt;
     canvas_->load_layout(layout ? *layout : markets::template_layout(template_));
+    fit_to_view();
     if (!layout)
         save();
+}
+
+void MarketScreenPage::fit_to_view() {
+    const int vp_w = scroll_->viewport()->width();
+    if (vp_w > 0 && vp_w != canvas_->width())
+        canvas_->resize(vp_w, canvas_->height());
+    if (const int vp_h = scroll_->viewport()->height(); vp_h > 0)
+        canvas_->fit_rows_to_viewport(vp_h);
 }
 
 void MarketScreenPage::load_layout(const GridLayout& layout) {
     restored_ = true;
     canvas_->load_layout(layout);
+    fit_to_view();
     save();
 }
 
@@ -119,6 +129,7 @@ void MarketScreenPage::add_widget_dialog() {
 void MarketScreenPage::reset_layout() {
     restored_ = true;
     canvas_->load_layout(markets::template_layout(template_));
+    fit_to_view();
     save();
 }
 

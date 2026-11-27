@@ -321,7 +321,7 @@ void DashboardScreen::restore_layout() {
 }
 
 void DashboardScreen::build_default_layout() {
-    canvas_->apply_template("portfolio_manager");
+    canvas_->apply_template("market_desk");
 }
 
 } // namespace finterm::screens

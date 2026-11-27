@@ -13,7 +13,7 @@ struct DashboardTemplate {
     QVector<GridItem> items; // instance_id is empty — filled on apply
 };
 
-/// Returns all 6 built-in dashboard templates (12-column grid).
+/// Returns all 7 built-in dashboard templates (12-column grid).
 QVector<DashboardTemplate> all_dashboard_templates();
 
 } // namespace finterm::screens

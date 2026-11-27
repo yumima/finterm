@@ -11,6 +11,8 @@
 
 #include <QtTest/QtTest>
 
+#include <algorithm>
+
 using namespace finterm::screens;
 
 namespace {
@@ -101,6 +103,32 @@ class TestGridRefit : public QObject {
         QCOMPARE(v1->rows, 0);
         QCOMPARE(v1->items.size(), 1);
         QCOMPARE(v1->items[0].cell.w, 3);
+    }
+
+    void fill_down_takes_every_column_to_the_bottom() {
+        // The old EQUITY default: columns ending at rows 7, 9 and 3.
+        QVector<GridItem> l{item("cond_equity", 0, 0, 3, 4), item("chart", 3, 0, 6, 5), item("movers", 9, 0, 3, 3),
+                            item("heatmap", 0, 4, 3, 3), item("corr", 3, 5, 6, 4)};
+        QVERIFY(fill_down(l, 9));
+        auto cell = [&l](const char* id) {
+            return std::find_if(l.begin(), l.end(), [id](const GridItem& i) { return i.id == id; })->cell;
+        };
+        QCOMPARE(cell("heatmap").y + cell("heatmap").h, 9); // short column grown
+        QCOMPARE(cell("movers").h, 9);                      // the right column, from row 0
+        QCOMPARE(cell("cond_equity").h, 4);                 // stopped by the tile below it
+        QCOMPARE(cell("chart").h, 5);
+        QVERIFY(!any_overlap(l));
+        QVERIFY(!fill_down(l, 9)); // filled: nothing more to do
+    }
+
+    void fill_down_lets_the_lower_narrow_tiles_have_their_room() {
+        // A wide tile above two narrow ones, one shorter: the short one grows,
+        // the wide one does not swallow the gap.
+        QVector<GridItem> l{item("wide", 0, 0, 6, 2), item("a", 0, 2, 3, 4), item("b", 3, 2, 3, 2)};
+        fill_down(l, 6);
+        QCOMPARE(l[2].cell.h, 4);
+        QCOMPARE(l[0].cell.h, 2);
+        QVERIFY(!any_overlap(l));
     }
 };
 

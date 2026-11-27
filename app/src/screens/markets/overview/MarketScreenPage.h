@@ -52,6 +52,9 @@ class MarketScreenPage : public QWidget {
   private:
     void save();
     void restore();
+    /// Rows stretched to the view's height. A page is built on its first
+    /// show, after its view got its size, so a load must fit by itself.
+    void fit_to_view();
     QString key() const;
 
     QString id_;

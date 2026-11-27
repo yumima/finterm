@@ -265,19 +265,29 @@ const ScreenTemplate& my_view_template() {
     return k;
 }
 
+namespace {
+/// The arrangements were taken from a desk whose columns end at different
+/// rows; on a page that fits the view that left empty bands under the short
+/// columns. Every column reaches the bottom.
+GridLayout filled(GridLayout l) {
+    fill_down(l.items, l.rows);
+    return l;
+}
+} // namespace
+
 GridLayout template_layout(const QString& id) {
     if (id == QLatin1String("markets"))
-        return arranged_markets();
+        return filled(arranged_markets());
     if (id == QLatin1String("equity"))
-        return arranged_equity();
+        return filled(arranged_equity());
     if (id == QLatin1String("rates"))
-        return arranged_rates();
+        return filled(arranged_rates());
     if (id == QLatin1String("world"))
-        return arranged_world();
+        return filled(arranged_world());
     if (id == QLatin1String("myview"))
-        return arranged_myview();
+        return filled(arranged_myview());
     if (id.startsWith(QLatin1String("futures:")))
-        return futures_page(id.mid(8));
+        return filled(futures_page(id.mid(8)));
     GridLayout blank;
     blank.cols = 12;
     blank.rows = 12;
