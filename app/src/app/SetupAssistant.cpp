@@ -172,8 +172,9 @@ Answer ask(const install::Env& env, const install::State& st, bool running_now) 
                                "to be.");
 #if defined(Q_OS_LINUX)
     if (!env.fuse2 && st.found != Found::Newer)
-        text += QStringLiteral("\n\nFUSE 2 is not installed, so finterm unpacks itself each time it starts, which is "
-                               "slower. To fix it: sudo apt install libfuse2");
+        text += QStringLiteral("\n\nFUSE can't be used here (it needs the libfuse2 library, /dev/fuse and fusermount), "
+                               "so finterm unpacks itself each time it starts, which is slower. On Ubuntu: sudo apt "
+                               "install libfuse2");
     if (st.foreign_launcher && st.found != Found::Newer)
         text += QStringLiteral("\n\nThere is already a finterm launcher (from a source checkout). It is kept as "
                                "finterm.desktop.bak.");

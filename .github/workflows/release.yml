@@ -900,8 +900,14 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          # Run directly where FUSE 2 works, unpacked where it doesn't.
-          grep -Eq "^Exec=(env APPIMAGE_EXTRACT_AND_RUN=1 )?${APP}$" "${DESK}"
+          # Run directly where FUSE 2 works (library, device, mount helper),
+          # unpacked where it doesn't — exactly what this runner has.
+          if ldconfig -p | grep -q 'libfuse\.so\.2' && [ -e /dev/fuse ] && \
+             { command -v fusermount >/dev/null || command -v fusermount3 >/dev/null; }; then
+            grep -q "^Exec=${APP}$" "${DESK}"
+          else
+            grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
+          fi
           [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
           # Again, from another copy (the same version): put in place again,
           # in one rename; no "previous" made of it (that is a rollback's).
@@ -1539,7 +1545,9 @@ jobs:
             defaults read com.apple.dock persistent-apps | grep -q "${APP}"
             OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
             echo "${OUT}" | jq -e '.ok == true and (.done | any(test("removed from the Dock")))' >/dev/null
-            ! defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+            if defaults read com.apple.dock persistent-apps | grep -q "${APP}"; then
+              echo "::error::the Dock tile was not removed"; exit 1
+            fi
           else
             echo "::warning::no Dock preferences on this runner - the Dock tile is not checked"
           fi

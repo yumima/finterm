@@ -217,19 +217,22 @@ QString unpack(const Where& w, const QString& file, const QString& into) {
     QString listing;
     if (const QString err = tar({QStringLiteral("-tzf"), file}, &listing); !err.isEmpty())
         return QStringLiteral("not a finterm data file (%1)").arg(err);
-    for (const QString& line : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+    const QStringList names = listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString& line : names)
         if (!safe_entry(line.trimmed()))
             return QStringLiteral("the file holds something other than finterm data (%1)").arg(line.trimmed());
-    // No link entries at all (symbolic or hard), before anything is written:
-    // the verbose listing's type column ("l", "h"), or its "->" / "link to".
+    // Only files and folders, before anything is written: no links (symbolic
+    // or hard), FIFOs or devices. The verbose listing's mode column, entry by
+    // entry in the same order as the names.
     QString detail;
     if (const QString err = tar({QStringLiteral("-tvzf"), file}, &detail); !err.isEmpty())
         return QStringLiteral("not a finterm data file (%1)").arg(err);
-    for (const QString& line : detail.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
-        const QString l = line.trimmed();
-        if (l.startsWith(QLatin1Char('l')) || l.startsWith(QLatin1Char('h')) || l.contains(QLatin1String(" -> ")) ||
-            l.contains(QLatin1String(" link to ")))
-            return QStringLiteral("the file holds a link (%1)").arg(l.section(QLatin1Char(' '), -3));
+    const QStringList modes = detail.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (qsizetype i = 0; i < modes.size(); ++i) {
+        const QChar type = modes.at(i).trimmed().isEmpty() ? QChar() : modes.at(i).trimmed().at(0);
+        if (type != QLatin1Char('-') && type != QLatin1Char('d'))
+            return QStringLiteral("the file holds something other than files and folders (%1)")
+                .arg(i < names.size() ? names.at(i).trimmed() : modes.at(i).trimmed());
     }
     if (const QString err = tar({QStringLiteral("-xzf"), file, QStringLiteral("-C"), into}); !err.isEmpty())
         return err;

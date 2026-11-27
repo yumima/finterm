@@ -15,7 +15,7 @@ void import_if_scheduled();
 /// which no one watches): no questions — newer data stops it, problems are
 /// logged. `sole`: no other finterm process has this data folder open; when
 /// one has, nothing is upgraded or put back, and a database still behind is
-/// not migrated at login either (MigrationRunner::hold): its login is
+/// not migrated at login either (MigrationRunner::set_hold): its login is
 /// refused until finterm runs alone.
 bool run(bool interactive, bool sole);
 

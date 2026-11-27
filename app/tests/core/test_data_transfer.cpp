@@ -179,7 +179,14 @@ class TestDataTransfer : public QObject {
         QDir().mkpath(lsrc + "/user");
         QVERIFY(QFile::link("/etc/passwd", lsrc + "/user/passwd"));
         QCOMPARE(QProcess::execute(tar_exe(), {"-czf", tmp_.filePath("link.tar.gz"), "-C", lsrc, "manifest.json", "user"}), 0);
-        QVERIFY(dt::check_archive(b, tmp_.filePath("link.tar.gz")).contains("link"));
+        QVERIFY(dt::check_archive(b, tmp_.filePath("link.tar.gz")).contains("other than files and folders"));
+        // A FIFO (opening it would hang the app) is no file either.
+        const QString fsrc = tmp_.filePath("fifo");
+        write(fsrc + "/manifest.json", R"({"kind":"finterm-data","format":1,"databases":[]})");
+        QDir().mkpath(fsrc + "/user/data/users");
+        QCOMPARE(QProcess::execute("mkfifo", {fsrc + "/user/data/users/alice.db"}), 0);
+        QCOMPARE(QProcess::execute(tar_exe(), {"-czf", tmp_.filePath("fifo.tar.gz"), "-C", fsrc, "manifest.json", "user"}), 0);
+        QVERIFY(dt::check_archive(b, tmp_.filePath("fifo.tar.gz")).contains("user/data/users/alice.db"));
 #endif
         // Made by a newer finterm.
         const dt::Where a = where("newer");

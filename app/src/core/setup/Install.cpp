@@ -35,8 +35,10 @@ constexpr const char* kDontAskKey = "setup/dont_ask";
 constexpr const char* kBuiltKey = "X-Finterm-Built";
 constexpr const char* kInstalledKey = "setup/installed"; ///< [path, version, built] of the install
 
+/// One per thread (QSettings is reentrant, not thread-safe): the install
+/// runs off the GUI thread. They share the store underneath.
 QSettings& settings() {
-    static QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
+    thread_local QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     return s;
 }
 
@@ -396,7 +398,8 @@ Env current_env() {
     // An AppImage mounts itself through FUSE 2: the library, the device and
     // the helper that mounts for a user.
     env.fuse2 = QLibrary(QStringLiteral("fuse"), 2).load() && QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
-                !QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty();
+                (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
+                 !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty());
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
