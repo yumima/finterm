@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`4cf6fc2b6`](https://github.com/yumima/finterm/commit/4cf6fc2b6) Lock screen, data failures and the Windows uninstaller: what customers hit
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

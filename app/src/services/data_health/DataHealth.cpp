@@ -56,7 +56,7 @@ void DataHealth::start() {
     connect(&hub, &datahub::DataHub::topic_updated, this, [this](const QString& topic, const QVariant&) {
         if (entries_.isEmpty())
             return;
-        bool changed = entries_.remove(topic) > 0;
+        bool changed = entries_.remove(topic);
         const QDateTime settled = QDateTime::currentDateTime().addSecs(-2); // not the same burst's errors
         for (auto it = entries_.begin(); it != entries_.end();) {
             const auto k = it->failure.kind;
