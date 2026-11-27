@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`933f30341`](https://github.com/yumima/finterm/commit/933f30341) finterm 4.2.2
 - [`0b62fae6e`](https://github.com/yumima/finterm/commit/0b62fae6e) Reset this user keeps everything; backups are private
 - [`9c4cdef91`](https://github.com/yumima/finterm/commit/9c4cdef91) Defaults: the owner's dashboard as first-run layout; Markets pages fill the window
 - [`92708e657`](https://github.com/yumima/finterm/commit/92708e657) Review fixes: resets keep backups, proxy env on relaunch, no keys in logs

@@ -175,8 +175,8 @@ WidgetRegistry::WidgetRegistry() {
                      [](const QJsonObject&) { return new widgets::EconomicCalendarWidget; }});
 
     register_widget({"ipo_calendar", "IPO Calendar", "Research",
-                     "Upcoming and recently priced IPOs — this month and next", 4, 5, 2, 1,
-                     [](const QJsonObject&) { return new widgets::IpoCalendarWidget; }});
+                     "IPOs priced in the last 30 days, and expected in the next 7 or 30", 4, 5, 2, 1,
+                     [](const QJsonObject& cfg) { return new widgets::IpoCalendarWidget(cfg); }});
 
     register_widget({"ownership_calendar", "Ownership Calendar", "Research",
                      "13F deadlines, short-interest publication dates, IPO lock-up expiries", 4, 5, 2, 1,
