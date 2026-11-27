@@ -173,16 +173,8 @@ QString AuthService::user_data_refusal(const QString& api_key) {
             if (version < known && !finterm::MigrationRunner::hold().isEmpty()) {
                 why = finterm::MigrationRunner::hold();
             } else if (version > known) {
-                QString kept;
-                if (q.exec(QStringLiteral("SELECT kept_in FROM finterm_set_aside LIMIT 1")) && q.next())
-                    kept = q.value(0).toString();
-                why = kept.isEmpty()
-                          ? QStringLiteral("This account's data was saved by a newer version of finterm. Start that "
-                                           "version to use it.")
-                          : QStringLiteral("This account's data was made by a newer finterm and was set aside when "
-                                           "finterm went back to an earlier backup. It is in %1; the newer finterm "
-                                           "can use it once it is copied back.")
-                                .arg(QDir::toNativeSeparators(kept));
+                why = QStringLiteral("This account's data was saved by a newer version of finterm. Start that "
+                                     "version to use it.");
             }
         }
         db.close();

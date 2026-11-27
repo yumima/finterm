@@ -37,65 +37,17 @@ data_upgrade::Plan plan() {
     return setup_paths::current_plan();
 }
 
-QString when_of(const QString& backup_dir) {
-    QFile f(QDir(backup_dir).filePath(QStringLiteral("manifest.json")));
-    if (!f.open(QIODevice::ReadOnly))
-        return QFileInfo(backup_dir).fileName();
-    const QJsonObject m = QJsonDocument::fromJson(f.readAll()).object();
-    const QDateTime at = QDateTime::fromString(m.value(QStringLiteral("at")).toString(), Qt::ISODateWithMs);
-    const QString from = m.value(QStringLiteral("from")).toString();
-    return QStringLiteral("%1%2")
-        .arg(at.isValid() ? QLocale().toString(at.toLocalTime(), QLocale::ShortFormat) : QFileInfo(backup_dir).fileName(),
-             from.isEmpty() ? QString() : QStringLiteral(", finterm %1").arg(from));
-}
-
-/// Data a newer finterm wrote. True to go on (a backup was put back).
-bool newer_data(const data_upgrade::Plan& p, bool no_restore, bool sole) {
+/// Data a newer finterm wrote: say so; it is never opened.
+void newer_data(const data_upgrade::Plan& p) {
     const QString writer = data_upgrade::read_stamp(p.profile_root).value(QStringLiteral("version")).toString();
-    const QString backup =
-        no_restore ? QString() : data_upgrade::restorable_backup(p.backup_root, p.profile, p.known_version);
-    LOG_WARN("DataGate", QString("Data in %1 is newer than this build (%2)%3")
-                             .arg(p.profile_root, p.app_version, backup.isEmpty() ? "" : "; restorable: " + backup));
-
-    QMessageBox box;
-    box.setIcon(QMessageBox::Warning);
-    box.setWindowTitle(QStringLiteral("finterm"));
-    box.setText(QStringLiteral("Your data was last used by a newer finterm%1.")
-                    .arg(writer.isEmpty() || writer == p.app_version ? QString() : QStringLiteral(" (%1)").arg(writer)));
-    QString info = QStringLiteral("This is finterm %1. It does not open that data, because it could damage it.\n\n"
-                                  "Start the newer finterm instead, or install it again from "
-                                  "github.com/yumima/finterm.")
-                       .arg(p.app_version);
-    QPushButton* restore = nullptr;
-    if (!backup.isEmpty() && !sole)
-        info += QStringLiteral("\n\nAnother finterm has this data open: close it to be offered the data from before "
-                               "the upgrade.");
-    if (!backup.isEmpty() && sole) {
-        info += QStringLiteral("\n\nOr go back to your data as it was before it was upgraded (%1). The data it "
-                               "replaces is moved, not deleted, to a folder in %2.")
-                    .arg(when_of(backup), QDir::toNativeSeparators(p.backup_root));
-        restore = box.addButton(QStringLiteral("Go Back to That Data"), QMessageBox::AcceptRole);
-    }
-    box.setInformativeText(info);
-    QPushButton* quit = box.addButton(QStringLiteral("Quit"), QMessageBox::RejectRole);
-    box.setDefaultButton(quit);
-    box.exec();
-    if (!restore || box.clickedButton() != restore)
-        return false;
-    QStringList set_aside;
-    if (const QString err = data_upgrade::restore(p, backup, &set_aside); !err.isEmpty()) {
-        QMessageBox::warning(nullptr, QStringLiteral("finterm"),
-                             QStringLiteral("Could not go back to that data: %1.\n\nNothing was changed.").arg(err));
-        return false;
-    }
-    if (!set_aside.isEmpty())
-        QMessageBox::information(
-            nullptr, QStringLiteral("finterm"),
-            QStringLiteral("These users were added by the newer finterm, and this version can't read their data: "
-                           "%1.\n\nTheir data was moved, not deleted, to a folder in %2; the newer finterm can use "
-                           "it once it is copied back.")
-                .arg(set_aside.join(QStringLiteral(", ")), QDir::toNativeSeparators(p.backup_root)));
-    return true;
+    LOG_WARN("DataGate", QString("Data in %1 is newer than this build (%2): not opened").arg(p.profile_root, p.app_version));
+    QMessageBox::warning(
+        nullptr, QStringLiteral("finterm"),
+        QStringLiteral("Your data was last used by a newer finterm%1.\n\nThis is finterm %2. It does not open that "
+                       "data, because it could damage it. Start the newer finterm instead, or install it again from "
+                       "github.com/yumima/finterm.\n\nCopies of your data from before each upgrade are in %3.")
+            .arg(writer.isEmpty() || writer == p.app_version ? QString() : QStringLiteral(" (%1)").arg(writer),
+                 p.app_version, QDir::toNativeSeparators(p.backup_root)));
 }
 
 void say_json(const QJsonObject& o) {
@@ -221,11 +173,8 @@ bool run(bool interactive, bool sole) {
             LOG_ERROR("DataGate", "The data is newer than this build (" + p.app_version + "): not opened");
             return false;
         }
-        // A layout a newer build moved things to can't be undone from here:
-        // no going back to a backup then.
-        if (!newer_data(p, layout_newer, sole))
-            return false;
-        // Put back: the backup's data is at or below this build's version.
+        newer_data(p);
+        return false;
     }
 
     // Upgrading takes a moment only when there is something to do: the window
@@ -240,7 +189,6 @@ bool run(bool interactive, bool sole) {
         }
         return true;
     }
-    data_upgrade::tidy(p);
     if (!data_upgrade::needs_upgrade(p))
         return true;
 

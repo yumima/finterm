@@ -10,7 +10,7 @@
 //   inventory  every user database and its schema version, against the
 //              highest this build has
 //   newer      a database written by a newer finterm: nothing is opened or
-//              changed; main() says so (and offers a backup to go back to)
+//              changed; main() says so (run the newer version)
 //   upgrade    only when a step is pending — copy auth.db and every user
 //              database (VACUUM INTO: consistent with WAL files present) to
 //              <backups>/pre-upgrade-<from>-to-<to>-<time>[-<profile>]/
@@ -34,14 +34,13 @@ struct DbInfo {
     QString path;
     int version = 0; ///< highest schema_version row; 0 when there is none
     bool readable = true;
-    bool set_aside = false; ///< a placeholder a restore left (the real one is in a backup)
 };
 
 struct Inventory {
     QVector<DbInfo> user_dbs;
     int known_version = 0; ///< the highest migration this build has
 
-    QVector<DbInfo> newer() const; ///< databases above known_version (placeholders aside)
+    QVector<DbInfo> newer() const; ///< databases above known_version
 };
 
 /// The user databases under `data_dir` and their schema versions.
@@ -79,35 +78,15 @@ struct Outcome {
 /// Refuses (ok=false, nothing changed) when the backup can't be made.
 Outcome upgrade(const Plan& plan);
 
-/// Files the app itself left in the data folder that nothing reads any more,
-/// moved (never deleted) to <backup_root>/tidied-<time>[-<profile>]/ with a
-/// note saying what each was. Each is a named rule, not a sweep: a file the
-/// rules don't name may be the user's own and is left where it is. Returns
-/// the files moved.
-QStringList tidy(const Plan& plan);
-
 /// <profile_root>/data-version.json, or {} when there is none.
 QJsonObject read_stamp(const QString& profile_root);
 
-/// The newest pre-upgrade backup of `profile` under `backup_root` whose every
-/// database is at or below `known_version` — what a build that finds newer
-/// data can go back to. "" when there is none.
-QString restorable_backup(const QString& backup_root, const QString& profile, int known_version);
-
-/// Put the user databases of a pre-upgrade backup back. The ones they replace
-/// — and any user database newer than this build (plan.known_version), which
-/// it could not open — are moved (never deleted) to
-/// <backup_root>/rolled-back-<time>[-<profile>]/; `set_aside` names those
-/// users, whose login is then refused (a placeholder holds their place). auth.db is not put back (no migration changes it): users added since
-/// keep their accounts. Nothing may have the databases open. "" on success,
-/// else why — and then nothing was changed.
-QString restore(const Plan& plan, const QString& backup_dir, QStringList* set_aside = nullptr);
-
 /// For an update being rolled back by the build that failed to start
 /// (plan.app_build): when it upgraded the data, put back each database as
-/// its first backup by that build had it, so the previous version finds the
-/// data it left. "" when there was
-/// nothing to do or it was done; else why.
+/// the first backup by that build had it, so the previous version finds the
+/// data it left; what they replace is moved to rolled-back-<time>/. Nothing
+/// may have the databases open. "" when there was nothing to do or it was
+/// done; else why — and then nothing was changed.
 QString restore_for_rollback(const Plan& plan);
 
 } // namespace finterm::data_upgrade

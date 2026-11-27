@@ -902,7 +902,8 @@ jobs:
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
           # Run directly where FUSE 2 works (library, device, mount helper),
           # unpacked where it doesn't — exactly what this runner has.
-          if ldconfig -p | grep -q 'libfuse\.so\.2' && [ -e /dev/fuse ] && \
+          LIBS="$(ldconfig -p)"   # (a pipe into grep -q can SIGPIPE ldconfig under pipefail)
+          if echo "${LIBS}" | grep 'libfuse\.so\.2' >/dev/null && [ -e /dev/fuse ] && \
              { command -v fusermount >/dev/null || command -v fusermount3 >/dev/null; }; then
             grep -q "^Exec=${APP}$" "${DESK}"
           else
@@ -1542,10 +1543,12 @@ jobs:
             OUT="$(fin "${FROM}" --install)"; echo "${OUT}"
             echo "${OUT}" | jq -e '.ok == true and (.done | any(test("added to the Dock")))' >/dev/null
             APP="$(echo "${OUT}" | jq -r .installed)"
-            defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+            DOCK="$(defaults read com.apple.dock persistent-apps)"
+            echo "${DOCK}" | grep -F "${APP}" >/dev/null
             OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
             echo "${OUT}" | jq -e '.ok == true and (.done | any(test("removed from the Dock")))' >/dev/null
-            if defaults read com.apple.dock persistent-apps | grep -q "${APP}"; then
+            DOCK="$(defaults read com.apple.dock persistent-apps)"
+            if echo "${DOCK}" | grep -F "${APP}" >/dev/null; then
               echo "::error::the Dock tile was not removed"; exit 1
             fi
           else

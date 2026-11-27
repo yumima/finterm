@@ -103,26 +103,6 @@ bool vacuum_into(const QString& src, const QString& dest) {
     return ok;
 }
 
-/// A placeholder a restore left for a set-aside user (DataUpgrade): no one's
-/// data, and above every real schema — never exported.
-bool is_placeholder(const QString& path) {
-    const QString name = QStringLiteral("finterm_transfer_") + QUuid::createUuid().toString(QUuid::Id128);
-    bool yes = false;
-    {
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
-        db.setDatabaseName(path);
-        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-        if (db.open()) {
-            QSqlQuery q(db);
-            yes = q.exec(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type='table' AND name='finterm_set_aside'")) &&
-                  q.next();
-        }
-        db.close();
-    }
-    QSqlDatabase::removeDatabase(name);
-    return yes;
-}
-
 bool skipped(const QString& name) {
     // A deleted account's database its removal could not finish deleting.
     if (name.contains(QLatin1String(".db.deleted")))
@@ -147,11 +127,7 @@ QString stage_tree(const QString& from, const QString& to, const QString& rel_ba
         const QString dest = QDir(to).filePath(rel);
         QDir().mkpath(QFileInfo(dest).absolutePath());
         const bool db = fi.suffix() == QLatin1String("db");
-        // A set-aside user's placeholder goes along (so the account's login
-        // is refused there too, saying where the data went) but is not listed:
-        // it is no one's data, and its version is above every real one.
-        const bool placeholder = db && is_placeholder(src);
-        if (!(db && !placeholder && vacuum_into(src, dest))) {
+        if (!(db && vacuum_into(src, dest))) {
             // Not a database, or one VACUUM INTO could not read: copied as it
             // is — with its WAL, which holds committed changes the file may
             // not have yet (a failed VACUUM may have left a partial copy).
@@ -163,7 +139,7 @@ QString stage_tree(const QString& from, const QString& to, const QString& rel_ba
                     if (QFileInfo::exists(src + side) && !QFile::copy(src + side, dest + side))
                         return QStringLiteral("could not copy %1").arg(QDir::toNativeSeparators(src + side));
         }
-        if (db && !placeholder && QFileInfo(rel_base + rel).path() == QLatin1String("user/data/users"))
+        if (db && QFileInfo(rel_base + rel).path() == QLatin1String("user/data/users"))
             dbs.append(QJsonObject{{QStringLiteral("file"), rel_base + rel},
                                    {QStringLiteral("version"), schema_version_of(dest)}});
     }
@@ -229,10 +205,11 @@ QString unpack(const Where& w, const QString& file, const QString& into) {
         return QStringLiteral("not a finterm data file (%1)").arg(err);
     const QStringList modes = detail.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (qsizetype i = 0; i < modes.size(); ++i) {
-        const QChar type = modes.at(i).trimmed().isEmpty() ? QChar() : modes.at(i).trimmed().at(0);
-        if (type != QLatin1Char('-') && type != QLatin1Char('d'))
+        const QString line = modes.at(i).trimmed();
+        // l symbolic link, h hard link, p FIFO, c/b device, s socket.
+        if (!line.isEmpty() && QStringLiteral("lhpcbs").contains(line.at(0)))
             return QStringLiteral("the file holds something other than files and folders (%1)")
-                .arg(i < names.size() ? names.at(i).trimmed() : modes.at(i).trimmed());
+                .arg(modes.size() == names.size() ? names.at(i).trimmed() : line);
     }
     if (const QString err = tar({QStringLiteral("-xzf"), file, QStringLiteral("-C"), into}); !err.isEmpty())
         return err;

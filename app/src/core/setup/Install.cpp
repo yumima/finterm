@@ -36,7 +36,8 @@ constexpr const char* kBuiltKey = "X-Finterm-Built";
 constexpr const char* kInstalledKey = "setup/installed"; ///< [path, version, built] of the install
 
 /// One per thread (QSettings is reentrant, not thread-safe): the install
-/// runs off the GUI thread. They share the store underneath.
+/// runs off the GUI thread. They share the store underneath. Every path that
+/// writes ends in sync(): a pool thread's copy may outlive the app.
 QSettings& settings() {
     thread_local QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     return s;

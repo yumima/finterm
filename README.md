@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`9f5df6dfb`](https://github.com/yumima/finterm/commit/9f5df6dfb) Installer review fixes: only files and folders in an import; settings per thread
 - [`77a3dcfef`](https://github.com/yumima/finterm/commit/77a3dcfef) Installer review fixes: CI checks, installed record, FUSE, links, export overwrite
 - [`40b07bb43`](https://github.com/yumima/finterm/commit/40b07bb43) One download installs, updates, migrates and adds the launcher
 - [`ceae7b26e`](https://github.com/yumima/finterm/commit/ceae7b26e) Plan: one download that installs, updates, migrates and adds the launcher

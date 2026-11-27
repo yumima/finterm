@@ -17,7 +17,6 @@
 #include <QUuid>
 
 #include <algorithm>
-#include <optional>
 #include <utility>
 
 namespace finterm::data_upgrade {
@@ -192,40 +191,6 @@ bool write_json(const QString& path, const QJsonObject& o) {
 }
 
 
-/// The schema version a placeholder carries: above any real one, so a build
-/// that opens it refuses it (MigrationRunner) instead of using it.
-constexpr int kPlaceholderVersion = 1000000;
-
-/// A user database set aside by a restore leaves this in its place.
-bool write_placeholder(const QString& path, const QString& kept_in) {
-    {
-        Conn c(path, /*read_only=*/false);
-        if (!c.ok())
-            return false;
-        QSqlQuery q(c.db());
-        if (!q.exec(QStringLiteral("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, name TEXT NOT NULL, "
-                                   "applied_at TEXT)")) ||
-            !q.exec(QStringLiteral("INSERT INTO schema_version (version, name) VALUES (%1, 'set aside')")
-                        .arg(kPlaceholderVersion)) ||
-            !q.exec(QStringLiteral("CREATE TABLE finterm_set_aside (kept_in TEXT NOT NULL)")))
-            return false;
-        q.prepare(QStringLiteral("INSERT INTO finterm_set_aside (kept_in) VALUES (?)"));
-        q.addBindValue(kept_in);
-        if (!q.exec())
-            return false;
-    }
-    return true;
-}
-
-bool is_placeholder(const QString& path) {
-    Conn c(path, /*read_only=*/true);
-    if (!c.ok())
-        return false;
-    QSqlQuery q(c.db());
-    return q.exec(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type='table' AND name='finterm_set_aside'")) &&
-           q.next();
-}
-
 QString manifest_of(const QString& backup_dir) {
     return QDir(backup_dir).filePath(QString::fromLatin1(kManifestFile));
 }
@@ -282,9 +247,9 @@ QSet<QString> keys_in(const Plan& plan, const QJsonObject& stamp, const char* fi
     return out;
 }
 
-/// Below this build and readable (a placeholder is neither).
+/// Below this build, and readable.
 bool behind(const Plan& plan, const DbInfo& d) {
-    return d.readable && !d.set_aside && d.version < plan.known_version;
+    return d.readable && d.version < plan.known_version;
 }
 
 /// To migrate now.
@@ -314,7 +279,7 @@ QVector<DbInfo> deferred(const Plan& plan, const Inventory& inv, const QJsonObje
 QVector<DbInfo> Inventory::newer() const {
     QVector<DbInfo> out;
     for (const auto& d : user_dbs)
-        if (d.version > known_version && !d.set_aside)
+        if (d.version > known_version)
             out.append(d);
     return out;
 }
@@ -329,7 +294,6 @@ Inventory inventory(const QString& data_dir, int known) {
         const int v = schema_version_of(d.path);
         d.readable = v >= 0;
         d.version = std::max(v, 0);
-        d.set_aside = d.readable && is_placeholder(d.path);
         inv.user_dbs.append(d);
     }
     return inv;
@@ -386,8 +350,7 @@ Outcome upgrade(const Plan& plan) {
     if (QFileInfo::exists(auth_db(plan.data_dir)))
         sources << auth_db(plan.data_dir);
     for (const auto& d : inv.user_dbs)
-        if (!d.set_aside) // a placeholder is no one's data (the real one is in a backup)
-            sources << d.path;
+        sources << d.path;
     for (const QString& src : sources) {
         const QString rel = data.relativeFilePath(src);
         const QString dest = QDir(out.backup_dir).filePath(QStringLiteral("data/") + rel);
@@ -516,141 +479,36 @@ Outcome upgrade(const Plan& plan) {
     return out;
 }
 
-QStringList tidy(const Plan& plan) {
-    struct Rule {
-        const char* file;   ///< in the data folder
-        const char* needs;  ///< present only once this is there (what superseded it)
-        const char* what;   ///< for the note
-    };
-    // main.cpp archives the single-user database when the multi-user one
-    // (auth.db) is first set up; nothing reads the archive after that.
-    static const Rule rules[] = {
-        {"fincept.db.pre-multiuser.bak", "auth.db",
-         "The single-user database of finterm before it had accounts (archived when auth.db was set up)."},
-    };
-    QStringList moved;
-    QString dir;
-    QStringList note;
-    const QDir data(plan.data_dir);
-    for (const Rule& rule : rules) {
-        const QString path = data.filePath(QLatin1String(rule.file));
-        if (!QFileInfo(path).isFile() || !QFileInfo::exists(data.filePath(QLatin1String(rule.needs))))
+QString restore_for_rollback(const Plan& plan) {
+    const QJsonObject stamp = read_stamp(plan.profile_root);
+    if (plan.app_build.isEmpty() || stamp.value(QStringLiteral("build")).toString() != plan.app_build)
+        return {}; // this build did not upgrade the data: the previous one reads it as it is
+    // Every backup this build made, oldest first: each database comes back
+    // from the first that holds it — as it was before this build touched it.
+    // (No user can have been added since: the build being rolled back never
+    // had its window up.)
+    QVector<std::pair<QString, QString>> entries; // (copy in a backup, place in the data folder)
+    QSet<QString> seen;
+    QString first;
+    for (const auto& v : stamp.value(QStringLiteral("backups")).toArray()) {
+        const QString b = v.toString();
+        if (!QFileInfo(b).isDir())
             continue;
-        if (dir.isEmpty()) {
-            dir = unique_dir(QDir(plan.backup_root)
-                                 .filePath(QStringLiteral("tidied-%1%2").arg(now_tag(), profile_suffix(plan.profile))));
-            if (!make_private_dir(plan.backup_root, dir))
-                return moved;
-        }
-        if (!QFile::rename(path, QDir(dir).filePath(QLatin1String(rule.file))))
-            continue;
-        for (const char* side : {"-wal", "-shm"})
-            if (QFileInfo::exists(path + side))
-                QFile::rename(path + side, QDir(dir).filePath(QLatin1String(rule.file) + side));
-        moved << path;
-        note << QStringLiteral("%1 (was in %2): %3").arg(QLatin1String(rule.file), plan.data_dir, QLatin1String(rule.what));
+        if (first.isEmpty())
+            first = b;
+        for (const auto& e : restorable_dbs(b, plan.data_dir))
+            if (!seen.contains(e.second)) {
+                seen.insert(e.second);
+                entries.append(e);
+            }
     }
-    if (!dir.isEmpty()) {
-        if (moved.isEmpty()) {
-            QDir(dir).removeRecursively();
-        } else {
-            QFile f(QDir(dir).filePath(QStringLiteral("README.txt")));
-            if (f.open(QIODevice::WriteOnly))
-                f.write((QStringLiteral("finterm moved these here from its data folder; nothing reads them any more. "
-                                        "Delete this folder once you are sure you don't need them.\n\n") +
-                         note.join(QStringLiteral("\n")) + QStringLiteral("\n"))
-                            .toUtf8());
-            LOG_INFO("DataUpgrade", "Tidied into " + dir + ": " + moved.join(", "));
-        }
-    }
-    return moved;
-}
-
-QString restorable_backup(const QString& backup_root, const QString& profile, int known) {
-    for (const QString& dir : upgrade_backups(backup_root, profile)) {
-        const QJsonArray dbs = read_json(manifest_of(dir)).value(QStringLiteral("databases")).toArray();
-        const bool fits = std::all_of(dbs.begin(), dbs.end(), [known](const QJsonValue& v) {
-            return v.toObject().value(QStringLiteral("version")).toInt() <= known;
-        });
-        if (fits && !restorable_dbs(dir, QStringLiteral("/")).isEmpty())
-            return dir;
-    }
-    return {};
-}
-
-namespace {
-
-/// What restore_entries puts back: the user databases, each from one backup.
-struct Entry {
-    QString from; ///< the copy in a backup
-    QString to;   ///< its place in the data folder
-};
-
-/// The accounts auth.db lists now (lower-case), or nullopt when it can't be
-/// read — then no entry is left out for it.
-std::optional<QSet<QString>> current_accounts(const QString& data_dir) {
-    const QString path = auth_db(data_dir);
-    if (!QFileInfo::exists(path))
-        return std::nullopt;
-    Conn c(path, /*read_only=*/true);
-    if (!c.ok())
-        return std::nullopt;
-    QSqlQuery q(c.db());
-    if (!q.exec(QStringLiteral("SELECT username FROM users")))
-        return std::nullopt;
-    QSet<QString> names;
-    while (q.next())
-        names.insert(q.value(0).toString().toLower());
-    return names;
-}
-
-/// Put `entries` back. `stamp_from`: the version the restored data was at.
-/// `reads_up_to`: the newest schema the version that runs next reads — this
-/// build (going back from newer data), or, for a rollback (-1), the newest in
-/// the backups (the previous version's own data).
-QString restore_entries(const Plan& plan, const QVector<Entry>& entries, const QString& origin,
-                        const QString& stamp_from, QStringList* set_aside, int reads_up_to) {
     if (entries.isEmpty())
-        return QStringLiteral("the backup %1 lists no user data").arg(QDir::toNativeSeparators(origin));
-    for (const auto& e : entries)
-        if (!QFileInfo::exists(e.from))
-            return QStringLiteral("the backup is missing %1").arg(QDir::toNativeSeparators(e.from));
-    // auth.db stays as it is now: a user deleted since the backup has no
-    // account, and their data is not brought back (a new account of that
-    // name would inherit it).
-    QVector<Entry> live;
-    const auto accounts = current_accounts(plan.data_dir);
-    for (const auto& e : entries)
-        if (!accounts || accounts->contains(QFileInfo(e.to).completeBaseName().toLower()))
-            live.append(e);
+        return {};
+    for (const auto& [from, to] : entries)
+        if (!QFileInfo::exists(from))
+            return QStringLiteral("the backup is missing %1").arg(QDir::toNativeSeparators(from));
 
-    // A user database the backup has no copy of (a user added since) stays —
-    // unless it is newer than anything in the backup, which the version going
-    // back could not open: that one is moved aside, and a placeholder takes
-    // its place so its user's login is refused rather than given a new, empty
-    // database where the real one belongs.
-    int backup_max = 0;
-    QSet<QString> in_backup;
-    for (const auto& e : live) {
-        if (!is_placeholder(e.from))
-            backup_max = std::max(backup_max, schema_version_of(e.from));
-        in_backup.insert(QFileInfo(e.to).absoluteFilePath());
-    }
-    QVector<Entry> steps = live; // from "" = moved aside, placeholder put in
-    QStringList aside_users;
-    // (Not for a rollback: the build that failed never had its window up, so
-    // no user can have been added by it — and a placeholder would mean nothing
-    // to a build older than 4.2.3.)
-    const QDir users(users_dir(plan.data_dir));
-    for (const QString& name : reads_up_to < 0 ? QStringList() : users.entryList({QStringLiteral("*.db")}, QDir::Files)) {
-        const QString path = QFileInfo(users.filePath(name)).absoluteFilePath();
-        const int limit = reads_up_to >= 0 ? reads_up_to : backup_max;
-        if (!in_backup.contains(path) && schema_version_of(path) > limit && !is_placeholder(path)) {
-            steps.append({QString(), path});
-            aside_users << QFileInfo(path).completeBaseName();
-        }
-    }
-
+    // What they replace is moved, never deleted, to rolled-back-<time>/.
     const QString aside = unique_dir(QDir(plan.backup_root)
                                          .filePath(QStringLiteral("rolled-back-%1%2")
                                                        .arg(now_tag(), profile_suffix(plan.profile))));
@@ -664,7 +522,7 @@ QString restore_entries(const Plan& plan, const QVector<Entry>& entries, const Q
             for (const char* side : {"", "-wal", "-shm"})
                 QFile::remove(c + side);
         for (const auto& [kept, original] : moved) {
-            // Whatever was copied in goes first — a backup's -wal left beside
+            // Whatever was copied in goes first: a backup's -wal left beside
             // the original would be replayed onto it.
             for (const char* side : {"", "-wal", "-shm"})
                 QFile::remove(original + side);
@@ -674,12 +532,10 @@ QString restore_entries(const Plan& plan, const QVector<Entry>& entries, const Q
         }
         QDir(aside).removeRecursively();
     };
-    for (const auto& step : steps) {
-        const QString& to = step.to;
+    for (const auto& [from, to] : entries) {
         const bool existed = QFileInfo::exists(to);
-        QString kept;
         if (existed) {
-            kept = QDir(aside).filePath(QStringLiteral("data/") + data.relativeFilePath(to));
+            const QString kept = QDir(aside).filePath(QStringLiteral("data/") + data.relativeFilePath(to));
             QDir().mkpath(QFileInfo(kept).absolutePath());
             if (!QFile::rename(to, kept)) {
                 undo();
@@ -689,72 +545,26 @@ QString restore_entries(const Plan& plan, const QVector<Entry>& entries, const Q
             for (const char* side : {"-wal", "-shm"})
                 if (QFileInfo::exists(to + side))
                     QFile::rename(to + side, kept + side);
+        } else {
+            created << to;
         }
         QDir().mkpath(QFileInfo(to).absolutePath());
-        if (!existed)
-            created << to;
-        const bool ok = step.from.isEmpty() ? write_placeholder(to, kept) : put_db(step.from, to);
-        if (!ok) {
-            if (existed)
-                created << to; // the placeholder or partial copy goes; the original comes back
+        if (!put_db(from, to)) {
             undo();
-            return QStringLiteral("could not put %1 back").arg(QDir::toNativeSeparators(to));
+            return QStringLiteral("could not copy %1 back").arg(QDir::toNativeSeparators(from));
         }
     }
-    // The stamp now describes the data as the backup had it.
+    // The record now describes the data as the previous version left it.
     const QString stamp_path = QDir(plan.profile_root).filePath(QString::fromLatin1(kStampFile));
-    if (QFileInfo::exists(stamp_path))
-        QFile::rename(stamp_path, QDir(aside).filePath(QString::fromLatin1(kStampFile)));
-    if (!stamp_from.isEmpty())
-        write_json(stamp_path, QJsonObject{{QStringLiteral("version"), stamp_from},
-                                           {QStringLiteral("restored_from"), origin},
+    QFile::rename(stamp_path, QDir(aside).filePath(QString::fromLatin1(kStampFile)));
+    const QString was = read_json(manifest_of(first)).value(QStringLiteral("from")).toString();
+    if (!was.isEmpty())
+        write_json(stamp_path, QJsonObject{{QStringLiteral("version"), was},
                                            {QStringLiteral("at"),
                                             QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}});
-    if (set_aside)
-        *set_aside = aside_users;
-    LOG_INFO("DataUpgrade", QString("Restored %1; the data it replaced is in %2%3")
-                                .arg(origin, aside,
-                                     aside_users.isEmpty() ? QString()
-                                                           : "; set aside (newer): " + aside_users.join(", ")));
+    LOG_INFO("DataUpgrade", QString("Rollback: the data is back as it was before %1; what it replaced is in %2")
+                                .arg(plan.app_build, aside));
     return {};
-}
-
-} // namespace
-
-QString restore(const Plan& plan, const QString& backup_dir, QStringList* set_aside) {
-    QVector<Entry> entries;
-    for (const auto& [from, to] : restorable_dbs(backup_dir, plan.data_dir))
-        entries.append({from, to});
-    return restore_entries(plan, entries, backup_dir,
-                           read_json(manifest_of(backup_dir)).value(QStringLiteral("from")).toString(), set_aside,
-                           plan.known_version);
-}
-
-QString restore_for_rollback(const Plan& plan) {
-    const QJsonObject stamp = read_stamp(plan.profile_root);
-    if (plan.app_build.isEmpty() || stamp.value(QStringLiteral("build")).toString() != plan.app_build)
-        return {}; // this build did not upgrade the data: the previous one reads it as it is
-    // Every backup this build made, oldest first: each database comes back
-    // from the first that holds it — as it was before this build touched it.
-    QStringList backups;
-    for (const auto& v : stamp.value(QStringLiteral("backups")).toArray())
-        if (QFileInfo(v.toString()).isDir())
-            backups << v.toString();
-    if (backups.isEmpty())
-        return {};
-    QVector<Entry> entries;
-    QSet<QString> seen;
-    for (const QString& b : backups)
-        for (const auto& [from, to] : restorable_dbs(b, plan.data_dir))
-            if (!seen.contains(to)) {
-                seen.insert(to);
-                entries.append({from, to});
-            }
-    QStringList set_aside;
-    const QString err = restore_entries(plan, entries, backups.join(QStringLiteral(", ")),
-                                        read_json(manifest_of(backups.first())).value(QStringLiteral("from")).toString(),
-                                        &set_aside, -1);
-    return err;
 }
 
 } // namespace finterm::data_upgrade

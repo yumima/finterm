@@ -233,54 +233,6 @@ class TestDataUpgrade : public QObject {
         QCOMPARE(version_of(user_db("ann")), kKnown + 2); // untouched
     }
 
-    void newer_data_can_go_back_to_its_backup() {
-        // 4.2.3 upgraded ann from 1; then a newer build took her to 5 and added
-        // a user this build can't read either.
-        make_db(user_db("ann"), 1);
-        const auto out = du::upgrade(plan());
-        QVERIFY(out.ok);
-        sql(user_db("ann"), "INSERT INTO schema_version (version, name) VALUES (4, 'm4')");
-        sql(user_db("ann"), "INSERT INTO schema_version (version, name) VALUES (5, 'm5')");
-        make_db(user_db("cat"), 5);
-        make_db(user_db("old"), 1); // added since too, but readable: it stays
-        make_db(user_db("mid"), kKnown); // as new as this build reads: stays too
-
-        // A build that knows up to 2 can't use the 4.2.3 backup (it holds v1,
-        // fine) — and one that knows 0 can't use any.
-        QCOMPARE(du::restorable_backup(backups_, "default", 2), out.backup_dir);
-        QVERIFY(du::restorable_backup(backups_, "default", 0).isEmpty());
-        QVERIFY(du::restorable_backup(backups_, "work", 2).isEmpty()); // another profile's
-
-        sql(root_ + "/user/data/auth.db", "CREATE TABLE users (name TEXT)");
-        sql(root_ + "/user/data/auth.db", "INSERT INTO users VALUES ('ann'), ('cat'), ('old'), ('mid')");
-        QStringList aside_users;
-        QVERIFY(du::restore(plan(), out.backup_dir, &aside_users).isEmpty());
-        QCOMPARE(aside_users, QStringList{"cat"});
-        QCOMPARE(version_of(user_db("ann")), 1);
-        // auth.db is not put back: users added since keep their accounts.
-        QCOMPARE(sql(root_ + "/user/data/auth.db", "SELECT COUNT(*) FROM users").toInt(), 4);
-        // cat's place is held, so a login can't make her a new, empty one.
-        QVERIFY(QFileInfo::exists(user_db("cat")));
-        const auto inv = du::inventory(root_ + "/user/data", kKnown);
-        QVERIFY(inv.newer().isEmpty()); // the placeholder is not "newer data"
-        QVERIFY(du::needs_upgrade(plan())); // ann, back at v1, is upgraded again at the next start
-        QVERIFY(QFileInfo::exists(user_db("old")));
-        QCOMPARE(version_of(user_db("mid")), kKnown);
-        const QStringList aside = backups("rolled-back-");
-        QCOMPARE(aside.size(), 1);
-        const QString kept = backups_ + "/" + aside.first() + "/data/users/";
-        QCOMPARE(version_of(kept + "ann.db"), 5); // nothing lost
-        QCOMPARE(version_of(kept + "cat.db"), 5);
-
-        // A later backup leaves the placeholder out, so it stays usable to go back to.
-        QFile::remove(user_db("ann"));
-        make_db(user_db("ann"), 1);
-        const auto again = du::upgrade(plan(QStringLiteral("4.2.3+later")));
-        QVERIFY(again.ran);
-        QVERIFY(!QFileInfo::exists(again.backup_dir + "/data/users/cat.db"));
-        QCOMPARE(du::restorable_backup(backups_, "default", kKnown), again.backup_dir);
-    }
-
     void a_rollback_restores_only_this_builds_upgrade() {
         make_db(user_db("ann"), 1);
         QVERIFY(du::upgrade(plan()).ok);
@@ -308,7 +260,7 @@ class TestDataUpgrade : public QObject {
         // …then ann's copy can't be read, so the restore stops there.
         const QString copy = out.backup_dir + "/data/users/ann.db";
         QFile::setPermissions(copy, QFileDevice::Permissions());
-        const QString err = du::restore(plan(), out.backup_dir);
+        const QString err = du::restore_for_rollback(plan());
         QFile::setPermissions(copy, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         QVERIFY(!err.isEmpty());
         QCOMPARE(version_of(user_db("ann")), kKnown);
@@ -318,21 +270,7 @@ class TestDataUpgrade : public QObject {
     }
 #endif
 
-    void a_user_deleted_since_the_backup_is_not_brought_back() {
-        make_db(user_db("ann"), 1);
-        make_db(user_db("bob"), 1);
-        sql(root_ + "/user/data/auth.db", "CREATE TABLE users (username TEXT)");
-        sql(root_ + "/user/data/auth.db", "INSERT INTO users VALUES ('ann'), ('bob')");
-        const auto out = du::upgrade(plan());
-        QVERIFY(out.ok);
-        QFile::remove(user_db("bob")); // bob deleted
-        sql(root_ + "/user/data/auth.db", "DELETE FROM users WHERE username = 'bob'");
-        QVERIFY(du::restore(plan(), out.backup_dir).isEmpty());
-        QCOMPARE(version_of(user_db("ann")), 1);
-        QVERIFY(!QFileInfo::exists(user_db("bob")));
-    }
-
-    void a_rollback_sets_no_one_aside() {
+    void a_rollback_leaves_other_users_where_they_are() {
         make_db(user_db("ann"), 1);
         QVERIFY(du::upgrade(plan()).ok);
         make_db(user_db("zed"), kKnown + 1); // would be "newer" on the go-back path

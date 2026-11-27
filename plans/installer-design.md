@@ -388,11 +388,14 @@ Where it differs from the plan, and why:
   and v015 writes cache.db. Run for every user at once, one user's keys would land under another's. Such a database
   is still backed up first.
 - **Another finterm process on the same data:** nothing is upgraded or put back. The newer-data check still runs.
-- **Going back to a backup** keeps `auth.db` as it is now, so users added since keep their accounts. A user whose data
-  is newer than the backup is set aside, and a placeholder takes their place. Their login is refused with a message
-  saying where the data went; they don't get a new, empty database.
-- **Rollback** puts each database back from the *first* backup this build made of it. A second pass by the same
-  build cannot hand the previous version already-upgraded data.
+- **Newer data is refused, with no in-app way back to a backup.** The dialog says to run the newer version and
+  where the backups are. An in-app restore was built and then removed, because it bred edge cases: placeholders for
+  users added since, deleted users coming back, and exports that included them.
+- **Rollback** puts each database back from the *first* backup this build made of it, so a second pass by the same
+  build cannot hand the previous version already-upgraded data. It does so only with the data folder to itself;
+  otherwise the rollback waits for a later start.
+- **No copy, no upgrade:** if the backup can't be made, or another finterm holds the data, the login refuses a
+  database that is still behind, with the reason, rather than migrating it in place with no way back.
 - **Uninstall never deletes data.** The plan had an option to delete it; it was dropped. Deleting the folder by hand,
   or Start fresh, does that.
 - **An install of unknown version** (copied by hand, so no launcher of ours) is never run to ask its version: an old
@@ -400,8 +403,8 @@ Where it differs from the plan, and why:
 - **Export** is a `.tar.gz` written with the system's tar. It holds no keyring secrets at all; the plan had an
   option to include them under a passphrase, which was dropped. Enter the keys again on the new computer. An import
   restarts finterm and runs before anything opens a database.
-- **Tidy** has one rule so far: the pre-multi-user `fincept.db` archive. The `users/*.db.bak-*` files seen on one
-  machine were made by hand, not by the app, so they stay where they are.
+- **Tidy** was dropped. The only file it would have moved, the pre-multi-user `fincept.db` archive, is
+  harmless where it is.
 - **Windows:** QtIFW refuses a folder that already holds an installation on its target page, before any hook a
   component script has. So the installed copy is removed as soon as the user agrees to update, at the start, and the
   question says so. The data is always kept, and running the installer again installs finterm.

@@ -92,21 +92,7 @@ class TestDataTransfer : public QObject {
 #ifndef Q_OS_WIN // (NTFS has no ':' in names)
         write(a.profile_root + "/user/files/notes 10:30.md", "colon"); // a ':' in a name is fine
 #endif
-        {
-            // A set-aside user's placeholder: carried, never counted as data.
-            make_db(a.data_dir + "/users/gone.db", 0);
-            const QString name = QUuid::createUuid().toString();
-            {
-                QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", name);
-                db.setDatabaseName(a.data_dir + "/users/gone.db");
-                QVERIFY(db.open());
-                QSqlQuery q(db);
-                QVERIFY(q.exec("INSERT INTO schema_version (version, name) VALUES (1000000, 'set aside')"));
-                QVERIFY(q.exec("CREATE TABLE finterm_set_aside (kept_in TEXT)"));
-                db.close();
-            }
-            QSqlDatabase::removeDatabase(name);
-        }
+
         write(a.data_dir + "/users/ann.db-wal", "x"); // left out (VACUUM INTO holds it)
         const QString file = tmp_.filePath("ann.tar.gz");
         const auto r = dt::export_to(a, file);
@@ -125,9 +111,6 @@ class TestDataTransfer : public QObject {
 #ifndef Q_OS_WIN
         QCOMPARE(read(b.profile_root + "/user/files/notes 10:30.md"), QByteArray("colon"));
 #endif
-        // The set-aside user's placeholder came along (its login is refused
-        // there too), but it is not an account the manifest counts.
-        QVERIFY(QFileInfo::exists(b.data_dir + "/users/gone.db"));
         QCOMPARE(i.databases, 1);
         QCOMPARE(read(i.backup_dir + "/user/data/auth.db"), QByteArray("theirs"));
         QVERIFY(!QFileInfo::exists(b.profile_root + "/data-version.json"));
