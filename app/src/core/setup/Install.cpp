@@ -393,8 +393,10 @@ Env current_env() {
             env.package_icon = QDir(appdir).filePath(rel);
             break;
         }
-    // An AppImage mounts itself through FUSE 2.
-    env.fuse2 = QLibrary(QStringLiteral("fuse"), 2).load();
+    // An AppImage mounts itself through FUSE 2: the library, the device and
+    // the helper that mounts for a user.
+    env.fuse2 = QLibrary(QStringLiteral("fuse"), 2).load() && QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
+                !QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty();
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
@@ -440,6 +442,13 @@ State state(const Env& env) {
             st.built = env.built;
         } else {
             st.version = linux_installed_version(env, st.path, &st.built);
+            // What the installed copy said of itself when it last ran (the
+            // in-app updater replaces it without touching the launcher).
+            const QStringList rec = settings().value(QLatin1String(kInstalledKey)).toStringList();
+            if (rec.size() == 3 && same_file(rec.at(0), st.path) && !rec.at(1).isEmpty()) {
+                st.version = rec.at(1);
+                st.built = rec.at(2);
+            }
         }
     }
 #elif defined(Q_OS_MACOS)
@@ -702,7 +711,7 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     p.setProgram(installed);
     p.setArguments(all);
     QProcessEnvironment e = clean_environment();
-    if (!QLibrary(QStringLiteral("fuse"), 2).load())
+    if (!current_env().fuse2)
         e.insert(QStringLiteral("APPIMAGE_EXTRACT_AND_RUN"), QStringLiteral("1"));
     p.setProcessEnvironment(e);
     p.setWorkingDirectory(QDir::homePath());

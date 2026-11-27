@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QProgressDialog>
@@ -62,8 +63,15 @@ void export_data(QWidget* parent) {
                                                 QStringLiteral("finterm data (*.tar.gz)"));
     if (file.isEmpty())
         return;
-    if (!file.endsWith(QLatin1String(".tar.gz")))
+    if (!file.endsWith(QLatin1String(".tar.gz"))) {
         file += QStringLiteral(".tar.gz");
+        // The dialog asked about the name as typed, not this one.
+        if (QFileInfo::exists(file) &&
+            QMessageBox::question(parent, QStringLiteral("Export my data"),
+                                  QStringLiteral("%1 already exists. Replace it?").arg(QDir::toNativeSeparators(file)),
+                                  QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+            return;
+    }
     const auto r = busy<data_transfer::Result>(parent, QStringLiteral("Exporting your data…"),
                                                [w, file] { return data_transfer::export_to(w, file); });
     if (!r.ok) {

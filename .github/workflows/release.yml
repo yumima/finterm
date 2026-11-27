@@ -900,7 +900,8 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"   # no FUSE on the runner
+          # Run directly where FUSE 2 works, unpacked where it doesn't.
+          grep -Eq "^Exec=(env APPIMAGE_EXTRACT_AND_RUN=1 )?${APP}$" "${DESK}"
           [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
           # Again, from another copy (the same version): put in place again,
           # in one rename; no "previous" made of it (that is a rollback's).
@@ -1529,6 +1530,19 @@ jobs:
           trap 'hdiutil detach "${MNT}" -quiet || true' EXIT
           FROM="${MNT}/${{ env.APP_NAME }}.app/Contents/MacOS/${{ env.APP_NAME }}"
           fin() { QT_QPA_PLATFORM=offscreen "$@"; }
+          # First (the Dock tile is offered on the first install only): the
+          # tile, and the uninstall taking it away.
+          if defaults read com.apple.dock persistent-apps >/dev/null 2>&1; then
+            OUT="$(fin "${FROM}" --install)"; echo "${OUT}"
+            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("added to the Dock")))' >/dev/null
+            APP="$(echo "${OUT}" | jq -r .installed)"
+            defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+            OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
+            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("removed from the Dock")))' >/dev/null
+            ! defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+          else
+            echo "::warning::no Dock preferences on this runner - the Dock tile is not checked"
+          fi
           OUT="$(fin "${FROM}" --install --no-favourite)"; echo "${OUT}"
           echo "${OUT}" | jq -e '.ok == true' >/dev/null
           APP="$(echo "${OUT}" | jq -r .installed)"
@@ -1545,17 +1559,6 @@ jobs:
           OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
           echo "${OUT}" | jq -e '.ok == true' >/dev/null
           [ ! -e "${APP}" ] && [ ! -e "$(dirname "${APP}")/.finterm-previous.app" ]
-          # A first install with the Dock tile, and the uninstall taking it away.
-          if defaults read com.apple.dock persistent-apps >/dev/null 2>&1; then
-            OUT="$(fin "${FROM}" --install)"; echo "${OUT}"
-            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("added to the Dock")))' >/dev/null
-            defaults read com.apple.dock persistent-apps | grep -q "${APP}"
-            OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
-            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("removed from the Dock")))' >/dev/null
-            ! defaults read com.apple.dock persistent-apps | grep -q "${APP}"
-          else
-            echo "::warning::no Dock preferences on this runner - the Dock tile is not checked"
-          fi
           echo "install + update + uninstall OK"
 
       # ── Upload ────────────────────────────────────────────────────────────

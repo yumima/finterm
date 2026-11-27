@@ -220,6 +220,17 @@ QString unpack(const Where& w, const QString& file, const QString& into) {
     for (const QString& line : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
         if (!safe_entry(line.trimmed()))
             return QStringLiteral("the file holds something other than finterm data (%1)").arg(line.trimmed());
+    // No link entries at all (symbolic or hard), before anything is written:
+    // the verbose listing's type column ("l", "h"), or its "->" / "link to".
+    QString detail;
+    if (const QString err = tar({QStringLiteral("-tvzf"), file}, &detail); !err.isEmpty())
+        return QStringLiteral("not a finterm data file (%1)").arg(err);
+    for (const QString& line : detail.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        const QString l = line.trimmed();
+        if (l.startsWith(QLatin1Char('l')) || l.startsWith(QLatin1Char('h')) || l.contains(QLatin1String(" -> ")) ||
+            l.contains(QLatin1String(" link to ")))
+            return QStringLiteral("the file holds a link (%1)").arg(l.section(QLatin1Char(' '), -3));
+    }
     if (const QString err = tar({QStringLiteral("-xzf"), file, QStringLiteral("-C"), into}); !err.isEmpty())
         return err;
     // AppleDouble twins (see safe_entry) are not data.

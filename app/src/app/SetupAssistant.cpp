@@ -14,6 +14,10 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QEventLoop>
+#include <QFutureWatcher>
+#include <QProgressDialog>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
@@ -63,8 +67,6 @@ QStringList profile_args() {
     return p == QLatin1String("default") ? QStringList() : QStringList{QStringLiteral("--profile"), p};
 }
 
-/// The profile has data (an account database) — where AppPaths keeps it,
-/// whichever layout it is on.
 /// What the installer did, appended to <logs>/install.log: it runs before the
 /// app's log file is set, and hands over to the installed copy right after.
 void log_install(const install::Result& r) {
@@ -80,6 +82,8 @@ void log_install(const install::Result& r) {
                 .toUtf8());
 }
 
+/// The profile has data (an account database) — where AppPaths keeps it,
+/// whichever layout it is on.
 bool has_data() {
     return QFileInfo::exists(QDir(AppPaths::data()).filePath(QStringLiteral("auth.db")));
 }
@@ -340,7 +344,20 @@ bool offer(bool another_running) {
         install::Options opt;
         opt.favourite = a.favourite;
         opt.replace_unknown = true; // the user saw it can't be told, and chose Replace
-        const auto r = install::install(env, opt);
+        // Copying a few hundred MB: off the GUI thread, behind a note.
+        QProgressDialog note(QStringLiteral("Installing finterm…"), QString(), 0, 0);
+        note.setWindowTitle(QStringLiteral("finterm"));
+        note.setCancelButton(nullptr);
+        note.setMinimumDuration(0);
+        note.show();
+        QFutureWatcher<install::Result> watcher;
+        QEventLoop loop;
+        QObject::connect(&watcher, &QFutureWatcher<install::Result>::finished, &loop, &QEventLoop::quit);
+        watcher.setFuture(QtConcurrent::run([env, opt] { return install::install(env, opt); }));
+        if (!watcher.isFinished())
+            loop.exec(QEventLoop::ExcludeUserInputEvents);
+        note.close();
+        const install::Result r = watcher.result();
         log_install(r);
         if (!r.ok) {
             QMessageBox::warning(nullptr, QStringLiteral("finterm"),

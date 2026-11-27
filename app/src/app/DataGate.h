@@ -14,8 +14,9 @@ void import_if_scheduled();
 /// data" question). Needs the QApplication. `interactive` false (a self-test,
 /// which no one watches): no questions — newer data stops it, problems are
 /// logged. `sole`: no other finterm process has this data folder open; when
-/// one has, nothing is upgraded or put back (each user's login migrates
-/// their database, as before).
+/// one has, nothing is upgraded or put back, and a database still behind is
+/// not migrated at login either (MigrationRunner::hold): its login is
+/// refused until finterm runs alone.
 bool run(bool interactive, bool sole);
 
 /// `finterm --export FILE` / `finterm --import FILE`: one JSON line on stdout.
