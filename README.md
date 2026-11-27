@@ -6,6 +6,9 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`aace8bac5`](https://github.com/yumima/finterm/commit/aace8bac5) **chore(release):** download counts of the releases before v4.2.2
+- [`9c4c01317`](https://github.com/yumima/finterm/commit/9c4c01317) **chore(release):** update README download links and updates.json for v4.2.2
+- [`2149cad0b`](https://github.com/yumima/finterm/commit/2149cad0b) Dashboard IPO calendar: PRICED | NEXT 7 DAYS | NEXT 30 DAYS, as the screen
 - [`933f30341`](https://github.com/yumima/finterm/commit/933f30341) finterm 4.2.2
 - [`0b62fae6e`](https://github.com/yumima/finterm/commit/0b62fae6e) Reset this user keeps everything; backups are private
 - [`9c4cdef91`](https://github.com/yumima/finterm/commit/9c4cdef91) Defaults: the owner's dashboard as first-run layout; Markets pages fill the window
