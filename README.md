@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`ceae7b26e`](https://github.com/yumima/finterm/commit/ceae7b26e) Plan: one download that installs, updates, migrates and adds the launcher
 - [`aace8bac5`](https://github.com/yumima/finterm/commit/aace8bac5) **chore(release):** download counts of the releases before v4.2.2
 - [`9c4c01317`](https://github.com/yumima/finterm/commit/9c4c01317) **chore(release):** update README download links and updates.json for v4.2.2
 - [`2149cad0b`](https://github.com/yumima/finterm/commit/2149cad0b) Dashboard IPO calendar: PRICED | NEXT 7 DAYS | NEXT 30 DAYS, as the screen
@@ -23,9 +24,9 @@ Latest first.
 <!-- DOWNLOAD-TABLE-START -->
 | System | Download | First launch |
 |---|---|---|
-| **Linux** x86-64 | [AppImage (.run)](https://github.com/yumima/finterm/releases/download/v4.2.2/finterm-4.2.2-linux-x64-setup.run) | `chmod +x finterm-*.run && ./finterm-*.run` |
+| **Linux** x86-64 | [AppImage (.run)](https://github.com/yumima/finterm/releases/download/v4.2.2/finterm-4.2.2-linux-x64-setup.run) | `chmod +x finterm-*.run && ./finterm-*.run`, then **Install** |
 | **Windows** 10/11 x64 | [Installer (.exe)](https://github.com/yumima/finterm/releases/download/v4.2.2/finterm-4.2.2-windows-x64-setup.exe) | Run it. At SmartScreen: **More info → Run anyway** |
-| **macOS** 13+ Apple Silicon | [Disk image (.dmg)](https://github.com/yumima/finterm/releases/download/v4.2.2/finterm-4.2.2-macos-arm64-setup.dmg) | Drag to Applications, then **right-click → Open → Open** |
+| **macOS** 13+ Apple Silicon | [Disk image (.dmg)](https://github.com/yumima/finterm/releases/download/v4.2.2/finterm-4.2.2-macos-arm64-setup.dmg) | Open it, **right-click finterm → Open → Open**, then **Install** |
 
 Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2) · [all releases](https://github.com/yumima/finterm/releases)
 <!-- DOWNLOAD-TABLE-END -->
@@ -34,18 +35,24 @@ Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2)
 
 **Windows 10/11 (x64)**
 
-1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts. (Have an older finterm in `C:\Program Files\finterm`? Uninstall it first and answer **No** to removing your data — the new one keeps it.)
+1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts.
 2. Start **finterm** from the Start Menu.
+
+Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission).
 
 **macOS 13+ (Apple Silicon)**
 
-1. Open the `.dmg` and drag **finterm** to Applications.
-2. The first time, **right-click the app → Open → Open** (or System Settings → Privacy & Security → **Open Anyway**). After that, start it like any app.
+1. Open the `.dmg` and start **finterm** from it: the first time, **right-click → Open → Open** (or System Settings → Privacy & Security → **Open Anyway**).
+2. It offers to **Install**: it copies itself to Applications (yours, `~/Applications`, if you can't write to the shared one), keeps it in the Dock, starts from there and ejects the disk image. Dragging it to Applications yourself works too.
+
+A newer `.dmg` started the same way offers to **update** the installed finterm.
 
 **Linux (x86-64)**
 
-1. `chmod +x finterm-*.run`
-2. `./finterm-*.run` — it is an AppImage: nothing is installed and no root is needed. On Ubuntu 22.04+ run `sudo apt install libfuse2` once, or start it with `--appimage-extract-and-run`.
+1. `chmod +x finterm-*.run`, then `./finterm-*.run` (or double-click it).
+2. It offers to **Install**: it copies itself to `~/Applications/finterm.AppImage`, adds finterm to your applications menu (and, on GNOME, to the dock), and a `finterm` command. No root is needed. **Run Without Installing** runs the file where it is.
+
+A newer `.run` started the same way offers to **update** the installed one. Without FUSE 2 (Ubuntu 22.04+: `sudo apt install libfuse2`) finterm still starts, unpacking itself each time, which is slower.
 
 **Then, on every system**
 
@@ -58,16 +65,19 @@ Later starts skip setup and go straight to the PIN.
 | | Windows | macOS | Linux |
 |---|---|---|---|
 | Your data | `%LOCALAPPDATA%\finterm` | `~/Library/Application Support/finterm` | `~/.local/share/finterm` |
-| Uninstall | Settings → Apps → **finterm** (installs before 4.2.2: `io.github.yumima.finterm`) | Drag the app to the Bin | Delete the `.run` file |
+| Uninstall | Settings → Apps → **finterm** (installs before 4.2.2: `io.github.yumima.finterm`) | `/Applications/finterm.app/Contents/MacOS/finterm --uninstall` (also takes it out of the Dock), or drag the app to the Bin | `finterm --uninstall` |
+| Move to another computer | Settings → Storage & Data → **Export…** there, **Import…** here (or tick *Start with my data* when installing) | same | same |
 
-Uninstalling leaves your data folder in place; delete it too for a clean removal.
+Uninstalling leaves your data folder in place; delete it too for a clean removal. An export holds your accounts and everything in them, sign-in details included: keep it as private as the data folder. API keys and service passwords stay in the system keyring and are not part of it: enter them again on the new computer.
+
+**Updating keeps your data and brings it up to date.** When a new version changes how data is stored, it first copies your databases to a private backup folder (`finterm-backups/pre-upgrade-…`, beside the data folder; the last three are kept), then upgrades and checks each one; one that fails is put back as it was. A version older than your data does not open it. If an update fails to start, finterm goes back to the previous version and puts the data back as that version left it.
 
 **If no data appears,** run the built-in check. Close finterm first. It runs the same setup, starts the data process and fetches one quote, then writes what it found:
 
 ```
 Windows   "%LOCALAPPDATA%\Programs\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
 macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finterm-selftest.json
-Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
+Linux     ~/Applications/finterm.AppImage --selftest /tmp/finterm-selftest.json
 ```
 
 The report says `"ok": true`, or names the stage that failed (setup or data) and why. Every release is installed and put through this check on all three systems before it is published.

@@ -24,6 +24,31 @@ const QVector<Migration>& MigrationRunner::all_migrations() {
     return migration_registry();
 }
 
+namespace {
+QString& hold_reason() {
+    static QString reason;
+    return reason;
+}
+} // namespace
+
+void MigrationRunner::set_hold(const QString& reason) {
+    hold_reason() = reason;
+}
+
+QString MigrationRunner::hold() {
+    return hold_reason();
+}
+
+int MigrationRunner::newest_version() {
+    const auto& all = all_migrations();
+    return all.isEmpty() ? 0 : all.last().version;
+}
+
+bool MigrationRunner::external_after(int version) {
+    const auto& all = all_migrations();
+    return std::any_of(all.begin(), all.end(), [version](const Migration& m) { return m.version > version && m.external; });
+}
+
 // ── Instance methods ─────────────────────────────────────────────────────────
 
 MigrationRunner::MigrationRunner(QSqlDatabase& db) : db_(db) {}
@@ -35,6 +60,12 @@ Result<void> MigrationRunner::run() {
 
     int current = read_current_version();
     const auto& migrations = all_migrations();
+    // Written by a newer finterm: its tables are not what this build's code
+    // reads and writes, and running on them could damage them.
+    if (newer_than_build())
+        return Result<void>::err("This data was written by a newer version of finterm (data version " +
+                                 std::to_string(current) + "; this version reads up to " +
+                                 std::to_string(migrations.last().version) + ")");
 
     for (const auto& m : migrations) {
         if (m.version <= current)
@@ -77,6 +108,11 @@ Result<void> MigrationRunner::run() {
         LOG_INFO("DB", QString("Schema at version %1").arg(read_current_version()));
     }
     return Result<void>::ok();
+}
+
+bool MigrationRunner::newer_than_build() {
+    const auto& migrations = all_migrations();
+    return !migrations.isEmpty() && read_current_version() > migrations.last().version;
 }
 
 // ── Private helpers ──────────────────────────────────────────────────────────

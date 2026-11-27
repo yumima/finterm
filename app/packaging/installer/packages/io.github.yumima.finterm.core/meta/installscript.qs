@@ -42,7 +42,7 @@ function Component()
     // scripts — connections silently no-op on some versions.
     if (installer.isInstaller()) {
         installer.installationFinished.connect(onInstallationFinished);
-        refuseWhileUninstallerOpen() || refuseBesideProgramFilesInstall();
+        refuseWhileUninstallerOpen() || replaceExistingInstall();
     }
 
     if (installer.isUninstaller()) {
@@ -59,7 +59,9 @@ Component.prototype.createOperations = function()
 {
     if (installer.isInstaller() && uninstallerRunning())
         throw new Error("a finterm uninstaller window is still open - close it first");
-    var other = installer.isInstaller() ? installToRefuseBeside() : "";
+    // The update above removes an existing install first; one still there
+    // (declined, or its removal failed) is never installed over or beside.
+    var other = installer.isInstaller() ? existingInstall() : "";
     if (other)
         throw new Error("finterm is already installed in " + other + " - uninstall it first");
 
@@ -132,31 +134,138 @@ function otherWindowsInstall(ownDir)
     return "";
 }
 
-// The install to refuse beside, or "".
-function installToRefuseBeside()
+
+// ---------------------------------------------------------------------------
+// Windows: running the installer over an existing finterm UPDATES it. QtIFW
+// refuses a folder that already holds an installation (on its target page,
+// before any hook a component script has), and an older Program Files copy
+// (4.0.10 and before) would stay beside a per-user one, sharing its data.
+// So, when the user agrees at the start: the existing one is removed by its
+// own uninstaller — which keeps the data (its question defaults to No, and
+// --default-answer takes it) — then this one installs. Data is never touched
+// here; the question says the removal happens at once.
+// ---------------------------------------------------------------------------
+
+// Every finterm installation found (the target folder, the per-user one, an
+// old Program Files one), each once.
+function existingInstalls()
 {
-    return otherWindowsInstall(installer.value("TargetDir"));
+    if (systemInfo.kernelType !== "winnt")
+        return [];
+    var candidates = [
+        installer.value("TargetDir"),
+        installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",
+        installer.environmentVariable("ProgramFiles") + "/finterm"
+    ];
+    var found = [], seen = {};
+    for (var i = 0; i < candidates.length; ++i) {
+        var dir = (candidates[i] || "").replace(/\\/g, "/");
+        var key = dir.toLowerCase().replace(/\/+$/, "");
+        if (dir && !seen[key] && installer.fileExists(dir + "/FintermMaintenanceTool.exe")) {
+            seen[key] = true;
+            found.push(dir);
+        }
+    }
+    return found;
 }
 
-function refuseBesideProgramFilesInstall()
+function existingInstall()
 {
-    var other = installToRefuseBeside();
-    if (!other)
-        return;
-    console.log("[finterm] another installation found: " + other);
-    QMessageBox.critical(
-        "finterm.install.other",
-        "finterm is already installed",
-        "An earlier finterm is installed in:\n" + toWin(other) + "\n\n" +
-        "Uninstall it first (Settings > Apps > finterm) and answer No when it asks " +
-        "to remove your data — this version keeps it — then run this installer again.",
-        QMessageBox.Ok);
-    // The wizard closes; a command-line install stops (and, should it go on,
-    // createOperations refuses). `gui` exists in both.
+    var all = existingInstalls();
+    return all.length > 0 ? all[0] : "";
+}
+
+function inProgramFiles(dir)
+{
+    var pf = (installer.environmentVariable("ProgramFiles") || "").replace(/\\/g, "/").toLowerCase();
+    return pf.length > 0 && dir.toLowerCase().indexOf(pf + "/") === 0;
+}
+
+function fintermRunning()
+{
+    var r = installer.execute("tasklist.exe", ["/FI", "IMAGENAME eq finterm.exe", "/NH"]);
+    return !!(r && r.length > 0 && /finterm\.exe/i.test(String(r[0])));
+}
+
+function stopInstaller()
+{
     if (installer.isCommandLineInstance())
         installer.interrupt();
     else
         gui.rejectWithoutPrompt();
+}
+
+function psQuote(s)
+{
+    return "'" + String(s).replace(/'/g, "''") + "'";
+}
+
+function replaceExistingInstall()
+{
+    var dirs = existingInstalls();
+    if (dirs.length === 0)
+        return;
+    var anyProgramFiles = false, list = "";
+    for (var i = 0; i < dirs.length; ++i) {
+        anyProgramFiles = anyProgramFiles || inProgramFiles(dirs[i]);
+        list += "\n" + toWin(dirs[i]);
+    }
+    console.log("[finterm] existing installation(s): " + dirs.join(", "));
+    var answer = QMessageBox.question(
+        "finterm.install.update",
+        "Update finterm",
+        "finterm is already installed in:" + list + "\n\n" +
+        "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
+        "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
+        "the installer after this, run it again to install finterm." +
+        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission, and finterm then " +
+                           "installs for your user only." : ""),
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
+    if (answer !== QMessageBox.Yes) {
+        stopInstaller();
+        return;
+    }
+    for (var tries = 0; fintermRunning(); ++tries) {
+        if (tries >= 2 || installer.isCommandLineInstance()) {
+            QMessageBox.critical("finterm.install.running", "finterm is running",
+                                 "Quit finterm, then run this installer again.", QMessageBox.Ok);
+            stopInstaller();
+            return;
+        }
+        QMessageBox.warning("finterm.install.running_ask", "finterm is running",
+                            "Quit finterm (every window), then click OK.", QMessageBox.Ok);
+    }
+    var args = ["purge", "--default-answer", "--confirm-command"];
+    for (var j = 0; j < dirs.length; ++j) {
+        var dir = dirs[j];
+        var tool = dir + "/FintermMaintenanceTool.exe";
+        var r;
+        if (inProgramFiles(dir)) {
+            // Elevated: the old install was made by an administrator.
+            r = installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                "$p = Start-Process -FilePath " + psQuote(toWin(tool)) + " -ArgumentList " +
+                args.map(psQuote).join(",") + " -Verb RunAs -Wait -PassThru; exit $p.ExitCode"]);
+        } else {
+            r = installer.execute(toWin(tool), args);
+        }
+        console.log("[finterm] removing " + dir + ": exit " + (r && r.length > 1 ? r[1] : "?"));
+        // The uninstaller deletes itself from a helper after it exits: wait for
+        // that, or it would delete the maintenance tool this install puts there.
+        installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(tool)) + ") -and $i -lt 120; $i++) " +
+            "{ Start-Sleep -Milliseconds 500 }"]);
+        if (installer.fileExists(tool)) {
+            QMessageBox.critical(
+                "finterm.install.update_failed", "finterm could not be updated",
+                "The installed finterm in " + toWin(dir) + " could not be removed. Uninstall it from Settings > " +
+                "Apps (answer No when asked to remove your data — this version keeps it), then run this installer " +
+                "again.",
+                QMessageBox.Ok);
+            stopInstaller();
+            return;
+        }
+    }
+    console.log("[finterm] previous install(s) removed; installing.");
 }
 
 // ---------------------------------------------------------------------------

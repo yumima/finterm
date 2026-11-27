@@ -4,6 +4,8 @@
 #include "core/config/AppPaths.h"
 #include "core/config/BuildInfo.h"
 #include "core/config/ProfileManager.h"
+#include "core/config/LayoutMigrations.h"
+#include "core/setup/SetupPaths.h"
 #include "core/logging/Logger.h"
 #include "core/network/ProxySettings.h"
 #include "services/updater/UpdatePolicy.h"
@@ -494,6 +496,32 @@ bool boot_check() {
     }
     (*pending)[QStringLiteral("rollbacks")] = rollbacks + 1;
     write_json(pending_path(), *pending);
+    // The data this version upgraded goes back first (nothing has opened it
+    // yet): the previous version could not read it, or would damage it.
+    // Only with the data folder to itself: no other finterm may have the
+    // databases open while they are moved and put back.
+    data_upgrade::Plan data = setup_paths::current_plan();
+    data.app_build = running;
+    // The previous version is put back only on data it can read: when the
+    // data can't be put back now, this start goes on as it is, and the next
+    // one tries again (the rollbacks count above ends that after two).
+    {
+        QDir().mkpath(data.data_dir);
+        QLockFile lock(QDir(data.data_dir).filePath(QStringLiteral("finterm.db.lock")));
+        lock.setStaleLockTime(0);
+        if (AppPaths::data_dir_in_use(data.data_dir) || !lock.tryLock(0)) {
+            LOG_ERROR("UpdateInstaller", "Another finterm has the data open: no rollback now (the data this "
+                                         "version upgraded could not be put back)");
+            return false;
+        }
+        if (const QString err = data_upgrade::restore_for_rollback(data); !err.isEmpty()) {
+            LOG_ERROR("UpdateInstaller", "No rollback now: the data this version upgraded could not be put back: " +
+                                             err);
+            return false;
+        }
+        // And the data layout version, if this build raised it.
+        LayoutMigrations::undo_for_rollback(running);
+    }
     return launch_helper(t, QString(), to, pending->value(QStringLiteral("from")).toString(), /*relaunch=*/true,
                          /*rollback=*/true);
 }

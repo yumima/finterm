@@ -27,6 +27,7 @@
 #include "screens/settings/AiConfigSection.h"
 #include "screens/settings/ArtefactsSection.h"
 #include "screens/settings/CredentialsSection.h"
+#include "screens/settings/DataTransferDialog.h"
 #include "screens/settings/KeybindingsSection.h"
 #include "screens/settings/LlmConfigSection.h"
 #include "screens/settings/PythonEnvSection.h"
@@ -1098,6 +1099,21 @@ QWidget* SettingsScreen::build_storage() {
         fresh_btn->setToolTip(tr("Restart finterm as on its first start. Your data is moved to a backup folder, "
                                  "not deleted."));
         connect(fresh_btn, &QPushButton::clicked, this, [this]() { StartFreshDialog::ask(this); });
+        // The personal data as one file — to keep, or to take to another
+        // computer — and back (an import restarts finterm to do it).
+        auto* export_btn = new QPushButton(tr("Export…"));
+        export_btn->setStyleSheet(settings_style::btn_secondary_ss());
+        export_btn->setToolTip(tr("Save your data (every account with its portfolios, watchlists, notes, "
+                                  "workspaces…) to one file — keep it private. API keys stay in this computer's "
+                                  "keyring."));
+        connect(export_btn, &QPushButton::clicked, this, [this]() { data_transfer_dialog::export_data(this); });
+        auto* import_btn = new QPushButton(tr("Import…"));
+        import_btn->setStyleSheet(settings_style::btn_secondary_ss());
+        import_btn->setToolTip(tr("Replace this profile's data with an exported file. The current data is moved to a "
+                                  "backup folder, not deleted."));
+        connect(import_btn, &QPushButton::clicked, this, [this]() { data_transfer_dialog::import_data(this); });
+        wl->addWidget(export_btn);
+        wl->addWidget(import_btn);
         wl->addWidget(fresh_btn);
         vl->addWidget(where);
         vl->addSpacing(10);

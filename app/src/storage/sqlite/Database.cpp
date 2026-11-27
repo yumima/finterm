@@ -2,7 +2,10 @@
 
 #include "core/logging/Logger.h"
 
+#include <QFileInfo>
+#include <QSqlQuery>
 #include <QThread>
+#include <QUuid>
 
 #include <cstring>
 #include "storage/sqlite/migrations/MigrationRunner.h"
@@ -14,9 +17,50 @@ Database& Database::instance() {
     return s;
 }
 
+namespace {
+
+/// The highest schema_version row of a database file, read-only; 0 when it
+/// has none (or does not exist yet).
+int stored_schema_version(const QString& path) {
+    if (!QFileInfo::exists(path))
+        return 0;
+    const QString name = QStringLiteral("finterm_version_probe_") + QUuid::createUuid().toString(QUuid::Id128);
+    int v = 0;
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+        db.setDatabaseName(path);
+        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+        if (db.open()) {
+            QSqlQuery q(db);
+            if (q.exec(QStringLiteral("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")) &&
+                q.next() && q.exec(QStringLiteral("SELECT MAX(version) FROM schema_version")) && q.next())
+                v = q.value(0).toInt();
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(name);
+    return v;
+}
+
+} // namespace
+
 Database::Database() : conns_(QStringLiteral("finterm_main"), &Database::apply_pragmas) {}
 
 Result<void> Database::open(const QString& path) {
+    // Data a newer finterm wrote is refused before anything touches it (this
+    // build's pragmas, its schema_version table): read with a connection of
+    // its own, read-only. DataGate refuses it at start; this is the guard for
+    // anything that slips past.
+    // (The same rule as MigrationRunner::newer_than_build(), on a file not yet open.)
+    if (const int stored = stored_schema_version(path); stored > MigrationRunner::newest_version())
+        return Result<void>::err("This data was written by a newer version of finterm (data version " +
+                                 std::to_string(stored) + "; this version reads up to " +
+                                 std::to_string(MigrationRunner::newest_version()) + ")");
+    // Behind this build while the copy that must come first could not be
+    // made: not migrated in place (see MigrationRunner::hold).
+    if (!MigrationRunner::hold().isEmpty() && QFileInfo::exists(path) &&
+        stored_schema_version(path) < MigrationRunner::newest_version())
+        return Result<void>::err(MigrationRunner::hold().toStdString());
     const QString error = conns_.set_path(path);
     if (!error.isEmpty()) {
         conns_.set_path({});

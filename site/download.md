@@ -22,24 +22,25 @@ Version {{ r.version }}{% if r.released %} · released <time datetime="{{ r.rele
 
 **Windows 10/11 (x64)**
 
-1. If an older copy is in `C:\Program Files\finterm`, uninstall it first. Answer **No** to removing data; the new version uses it.
-2. Run the installer. At SmartScreen: **More info → Run anyway**. No administrator rights; installs per user to `%LOCALAPPDATA%\Programs\finterm`.
-3. Start **finterm** from the Start Menu.
+1. Run the installer. At SmartScreen: **More info → Run anyway**. No administrator rights; installs per user to `%LOCALAPPDATA%\Programs\finterm`, with Start Menu and Desktop shortcuts.
+2. Start **finterm** from the Start Menu.
 
 **macOS 13+ (Apple Silicon)**
 
-1. Open the disk image and drag **finterm** to Applications.
-2. First launch: **right-click → Open → Open**, or System Settings → Privacy & Security → **Open Anyway** (macOS 15+).
+1. Open the disk image and start **finterm** from it. First launch: **right-click → Open → Open**, or System Settings → Privacy & Security → **Open Anyway** (macOS 15+).
+2. **Install** copies it to Applications, keeps it in the Dock and ejects the disk image.
 
 **Linux (x86-64)**
 
-1. `chmod +x finterm-*.run`
-2. `./finterm-*.run` (AppImage; no install, no root). Ubuntu 22.04+: `sudo apt install libfuse2` once.
+1. `chmod +x finterm-*.run`, then run it.
+2. **Install** copies it to `~/Applications/finterm.AppImage`, with a menu entry, a GNOME dock favourite and a `finterm` command. No root. Without FUSE 2 (Ubuntu 22.04+: `sudo apt install libfuse2`) it still runs, unpacking itself each start.
+
+**Updating, moving, removing** — the same download over an installed finterm offers **Update**, keeping your data; when a version changes how data is stored, the data is backed up first (`finterm-backups/`, beside the data folder). Settings › Storage & Data › **Export…** / **Import…** moves your data to another computer: keep the file private (it holds your accounts); API keys stay in the keyring. Uninstall: Windows Settings › Apps; macOS `/Applications/finterm.app/Contents/MacOS/finterm --uninstall` (or drag it to the Bin); Linux `finterm --uninstall`. The data folder stays.
 
 ## First start
 
 1. **Setup** — downloads Python and builds the data environment: 5–15 minutes, internet required, once.
-2. **Local account** — username and 4–6 digit PIN, then a 6-digit security PIN. Stored locally; neither PIN can be recovered.
+2. **Local account** — username and a 4–6 digit PIN, then a **recovery key**, shown once: it sets a new PIN if you forget yours. Both stay on this computer.
 3. **Dashboard** — the data process starts in the background. Later starts go to the PIN.
 
 ## Troubleshooting
@@ -49,7 +50,7 @@ If no data appears, close finterm and run the self-test. It repeats setup, start
 ```
 Windows   "%LOCALAPPDATA%\Programs\finterm\finterm.exe" --selftest "%TEMP%\finterm-selftest.json"
 macOS     /Applications/finterm.app/Contents/MacOS/finterm --selftest /tmp/finterm-selftest.json
-Linux     ./finterm-*.run --selftest /tmp/finterm-selftest.json
+Linux     ~/Applications/finterm.AppImage --selftest /tmp/finterm-selftest.json
 ```
 
 Every release passes the self-test on all three systems before publication.
@@ -57,4 +58,4 @@ Every release passes the self-test on all three systems before publication.
 ## Signing and updates
 
 - **Signing** — installers are unsigned, hence the Windows and macOS prompts. Built from [source]({{ site.repo_url }}) by public CI.
-- **Updates** — off by default. Enable the daily check at the status-bar prompt or in About, or run Help › Check for Updates. Updates download in the background and install on restart or quit; workspace and data are kept, and a version that fails to start is rolled back.
+- **Updates** — off by default. Enable the daily check at the status-bar prompt or in About, or run Help › Check for Updates. Updates download in the background and install on restart or quit; workspace and data are kept, and a version that fails to start is rolled back, with its data as that version left it.

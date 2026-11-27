@@ -441,6 +441,35 @@ void move_settings_org() {
 
 } // namespace
 
+namespace {
+constexpr const char* kBeforeKey = "meta/layout_version_before";
+} // namespace
+
+void LayoutMigrations::remember_before(const QString& build) {
+    move_settings_org(); // (idempotent) the version as run() will see it
+    QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
+    const int stored = s.value(QString::fromLatin1(kVersionKey), 0).toInt();
+    if (stored >= kCurrentVersion || build.isEmpty())
+        return;
+    s.setValue(QString::fromLatin1(kBeforeKey), QStringList{build, QString::number(stored)});
+    s.sync();
+}
+
+void LayoutMigrations::undo_for_rollback(const QString& build) {
+    QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
+    const QStringList before = s.value(QString::fromLatin1(kBeforeKey)).toStringList();
+    if (before.size() != 2 || before.first() != build)
+        return;
+    s.setValue(QString::fromLatin1(kVersionKey), before.last().toInt());
+    s.remove(QString::fromLatin1(kBeforeKey));
+    s.sync();
+}
+
+bool LayoutMigrations::newer_than_build() {
+    QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
+    return s.value(QString::fromLatin1(kVersionKey), 0).toInt() > kCurrentVersion;
+}
+
 void LayoutMigrations::run() {
     move_settings_org();
     QSettings s(AppIdentity::kOrg, AppIdentity::kApp);

@@ -26,7 +26,10 @@
 #include "datahub/TopicPolicy.h"
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
+#include "app/DataGate.h"
+#include "core/setup/SetupPaths.h"
 #include "app/SelfTest.h"
+#include "app/SetupAssistant.h"
 #include "services/updater/UpdateInstaller.h"
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
@@ -117,6 +120,11 @@ int main(int argc, char* argv[]) {
     // ── Started again by "Start fresh": let the old process go first ───────
     // so this one becomes the primary instance (and its data is free).
     finterm::start_fresh::wait_for_parent(argc, argv);
+
+    // Every migration this build has, before anything asks which data it can
+    // read: the install offer and a scheduled import check exported files
+    // against it, the gate below upgrades with it.
+    finterm::register_all_migrations();
 
     // ── Move an older build's data folder to the current name ───────────────
     // Before anything below creates the new root: once it exists, the old
@@ -238,6 +246,33 @@ int main(int argc, char* argv[]) {
     // of every widget already built.
     finterm::ui::tooltips::install(app);
 
+    // ── The downloaded package: install / update / uninstall ────────────────
+    // --install and --uninstall (scripts, CI) do their work and exit. Started
+    // from anywhere but its install location, a release package offers to
+    // install itself, or to open the installed one (core/setup/Install.h).
+    if (const int code = finterm::setup_assistant::handle_command_line(); code >= 0)
+        return code;
+    // --upgrade-data (scripts, CI, support): before anything interactive — the
+    // install offer, the update's boot count, a scheduled Start fresh — but
+    // never on a data folder an older build's could not finish moving.
+    {
+        const QStringList args = QCoreApplication::arguments();
+        if (!data_root_ready && (args.contains(QStringLiteral("--upgrade-data")) ||
+                                 args.contains(QStringLiteral("--import")) || args.contains(QStringLiteral("--export")))) {
+            std::printf("{\"ok\":false,\"error\":\"the data folder is still being moved from an older finterm: "
+                        "close every finterm and try again\"}\n");
+            std::fflush(stdout);
+            return 1;
+        }
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--upgrade-data")))
+        return finterm::data_gate::run_command_line();
+    // --export FILE / --import FILE: a profile's personal data as one file.
+    if (const int code = finterm::data_gate::transfer_command_line(); code >= 0)
+        return code;
+    if (!finterm::setup_assistant::offer(app.isSecondary()))
+        return 0;
+
     // ── Secondary instance: signal primary to open a new window, then exit ───
     // The primary receives receivedMessage() and calls open_new_window().
     if (app.isSecondary()) {
@@ -293,6 +328,7 @@ int main(int argc, char* argv[]) {
     // a terminal launch shows what happened before the GUI. Secondary instances
     // returned above, so this runs once per primary launch. See
     // core/config/LayoutMigrations.h.
+    finterm::LayoutMigrations::remember_before(finterm::setup_paths::current_plan().app_build);
     finterm::LayoutMigrations::run();
     // Secrets an older build filed under the previous keyring identity move
     // before anything below reads one (Polymarket credentials, a few lines on).
@@ -326,6 +362,11 @@ int main(int argc, char* argv[]) {
         else
             QMessageBox::warning(nullptr, QStringLiteral("finterm"), text);
     }
+
+    // ── An import asked for in the previous run (Settings › Data) ───────────
+    // Like Start fresh: before anything opens a database. The data upgrade
+    // below brings what it put in place up to date.
+    finterm::data_gate::import_if_scheduled();
 
     // Register DataHub payload meta-types (QuoteData, HistoryPoint, InfoData,
     // NewsArticle, EconomicsResult) so they can flow through QVariant-keyed
@@ -474,68 +515,20 @@ int main(int argc, char* argv[]) {
     auto& config = finterm::AppConfig::instance();
     finterm::HttpClient::instance().set_base_url(config.api_base_url());
 
-    // Register migrations explicitly (avoids MSVC /OPT:REF stripping static-init TUs).
-    // Actual migration execution happens inside Database::open() which is called by
-    // AuthService::open_user_db() — no manual Database::open() call here.
-    finterm::register_migration_v001();
-    finterm::register_migration_v002();
-    finterm::register_migration_v003();
-    finterm::register_migration_v004();
-    finterm::register_migration_v005();
-    finterm::register_migration_v006();
-    finterm::register_migration_v007();
-    finterm::register_migration_v008();
-    finterm::register_migration_v009();
-    finterm::register_migration_v010();
-    finterm::register_migration_v011();
-    finterm::register_migration_v012();
-    finterm::register_migration_v013();
-    finterm::register_migration_v014();
-    finterm::register_migration_v015();
-    finterm::register_migration_v016();
-    finterm::register_migration_v017();
-    finterm::register_migration_v018();
-    finterm::register_migration_v019();
-    finterm::register_migration_v020();
-    finterm::register_migration_v021();
-    finterm::register_migration_v022();
-    finterm::register_migration_v023();
-    finterm::register_migration_v024();
-    finterm::register_migration_v025();
-    finterm::register_migration_v026();
-    finterm::register_migration_v027();
-    finterm::register_migration_v028();
-    finterm::register_migration_v029();
-    finterm::register_migration_v030();
-    finterm::register_migration_v031();
-    finterm::register_migration_v032();
-    finterm::register_migration_v033();
-    finterm::register_migration_v034();
-    finterm::register_migration_v035();
-    finterm::register_migration_v036();
-    finterm::register_migration_v037();
-    finterm::register_migration_v038();
-    finterm::register_migration_v039();
-    finterm::register_migration_v040();
-    finterm::register_migration_v041();
-    finterm::register_migration_v042();
-    finterm::register_migration_v043();
-    finterm::register_migration_v044();
-    finterm::register_migration_v045();
-    finterm::register_migration_v046();
-    finterm::register_migration_v047();
-    finterm::register_migration_v048();
-    finterm::register_migration_v049();
-    finterm::register_migration_v050();
-    finterm::register_migration_v051();
-    finterm::register_migration_v052();
-    finterm::register_migration_v053();
-    finterm::register_migration_v054();
-    finterm::register_migration_v055();
-    finterm::register_migration_v056();
-    finterm::register_migration_v057();
-    finterm::register_migration_v058();
-    finterm::register_migration_v059();
+    // (The migrations were registered first thing in main(); the ones still
+    // pending for a user run inside Database::open() at their login.)
+
+    // ── The data, before anything opens it ──────────────────────────────────
+    // Newer than this build: not opened (the user may go back to the backup
+    // taken when it was upgraded). Older: backed up, then every user database
+    // brought up to date and checked — not one by one at each user's login.
+    if (!finterm::data_gate::run(!QCoreApplication::arguments().contains(QStringLiteral("--selftest")),
+                                 sole_instance)) {
+        // Not a failed start of a just-applied update: it reached its window's
+        // equivalent — a decision — and must not be rolled back for it.
+        finterm::services::update_install::confirm_boot();
+        return 1;
+    }
 
     // Open cache database (non-fatal if fails)
     QString cache_path = finterm::AppPaths::data() + "/cache.db";

@@ -101,6 +101,15 @@ void AuthManager::load_session() {
         session_.api_key = secure_key.value(); // SecureStorage is authoritative
     }
 
+    // Data this build can't open (a newer finterm's, or set aside when the
+    // data went back to a backup): no restored session — the sign-in screen
+    // says why when the user tries. The saved session itself is kept.
+    if (!AuthService::instance().user_data_refusal(session_.api_key).isEmpty()) {
+        LOG_WARN("Auth", "Saved session not restored: this account's data can't be opened by this version");
+        session_ = SessionData{};
+        return;
+    }
+
     // Step 3: open the per-user DB now — synchronous, so repos work during
     // validate_saved_session() and any startup code that follows.
     AuthService::instance().open_user_db(session_.api_key);
@@ -200,6 +209,12 @@ void AuthManager::fetch_user_profile(std::function<void()> on_done) {
 
 void AuthManager::complete_auth_flow(std::function<void()> on_done) {
     if (!session_.api_key.isEmpty()) {
+        if (const QString refusal = AuthService::instance().user_data_refusal(session_.api_key); !refusal.isEmpty()) {
+            session_.authenticated = false;
+            set_loading(false);
+            emit login_failed(refusal);
+            return;
+        }
         session_.authenticated = true;
         // open_user_db is idempotent: skips reopen if the correct path is
         // already open (handles both fresh login and session-restore paths).
@@ -284,6 +299,13 @@ void AuthManager::login_local(const QString& username, const QString& pin) {
         if (api_key.isEmpty()) {
             set_loading(false);
             emit login_failed("Internal error (no api_key)");
+            return;
+        }
+        // Data this build can't open: say so instead of letting the user in
+        // to an app with no data.
+        if (const QString refusal = AuthService::instance().user_data_refusal(api_key); !refusal.isEmpty()) {
+            set_loading(false);
+            emit login_failed(refusal);
             return;
         }
         const QString session_token = data["session_token"].toString();

@@ -30,7 +30,7 @@
 namespace finterm {
 namespace {
 
-constexpr const char* kTag = "Migration053";
+constexpr const char* kV053Tag = "Migration053";
 
 // Stale glob -> real tool wire names (see src/mcp/tools/*).
 QStringList replacement_for(const QString& glob) {
@@ -51,7 +51,7 @@ Result<void> apply_v053(QSqlDatabase& db) {
     if (!exists.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_configs'"))
         return Result<void>::err(exists.lastError().text().toStdString());
     if (!exists.next()) {
-        LOG_WARN(kTag, "agent_configs table missing — skipping v053");
+        LOG_WARN(kV053Tag, "agent_configs table missing — skipping v053");
         return Result<void>::ok();
     }
 
@@ -115,7 +115,7 @@ Result<void> apply_v053(QSqlDatabase& db) {
             return Result<void>::err(up.lastError().text().toStdString());
         ++updated;
     }
-    LOG_INFO(kTag, QString("Backfilled instructions / tool globs on %1 agent config(s)").arg(updated));
+    LOG_INFO(kV053Tag, QString("Backfilled instructions / tool globs on %1 agent config(s)").arg(updated));
     return Result<void>::ok();
 }
 

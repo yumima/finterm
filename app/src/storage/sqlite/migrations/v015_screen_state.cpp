@@ -45,7 +45,7 @@ void register_migration_v015() {
     if (done)
         return;
     done = true;
-    MigrationRunner::register_migration({15, "screen_state", apply_v015});
+    MigrationRunner::register_migration({15, "screen_state", apply_v015, /*external=*/true}); // cache.db
 }
 
 } // namespace finterm

@@ -1,6 +1,8 @@
 // src/core/config/LayoutMigrations.h
 #pragma once
 
+#include <QString>
+
 namespace finterm {
 
 /// Versioned, idempotent migrations for on-disk *layout* changes — where the
@@ -36,6 +38,21 @@ class LayoutMigrations {
     /// stamp the current version. Call once, early in main(), primary instance
     /// only. Safe to call on a fresh install (all steps no-op).
     static void run();
+
+    /// The stored layout version is above kCurrentVersion: a newer finterm
+    /// moved the data to a layout this build does not know.
+    static bool newer_than_build();
+
+    /// Before run(): note the stored version `build` found, when run() is
+    /// about to raise it — what a rollback of `build` puts back.
+    static void remember_before(const QString& build);
+
+    /// An update being rolled back by `build`, which raised the layout
+    /// version: put back the version the previous build left, so it does not
+    /// take its own data for a newer finterm's. (Each layout step keeps the
+    /// old location readable by the build before it — a step that can't must
+    /// be undone here.)
+    static void undo_for_rollback(const QString& build);
 };
 
 } // namespace finterm

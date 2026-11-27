@@ -43,6 +43,12 @@ class AuthService : public QObject {
     void open_user_db(const QString& api_key);
     /// Close the per-user DB (called at logout). Safe to call when not open.
     void close_user_db();
+    /// Why this account's data can't be opened by this build, or "": its
+    /// database was saved by a newer finterm, or set aside when the data went
+    /// back to an earlier backup (core/setup/DataUpgrade.h). Checked before a
+    /// login goes through — opening it would refuse it anyway, and the user
+    /// would be in with no data and no word why.
+    QString user_data_refusal(const QString& api_key);
 
     // ── Local multi-user (username + PIN, no email/OTP/MFA) ──────────────────
     /// Listed for the LoginScreen user picker. Each entry is { "username":

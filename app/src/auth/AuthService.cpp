@@ -1,5 +1,6 @@
 // src/auth/AuthService.cpp
 #include "auth/AuthService.h"
+#include "storage/sqlite/migrations/MigrationRunner.h"
 
 #include "auth/PinPolicy.h"
 
@@ -147,6 +148,47 @@ void AuthService::open_user_db(const QString& api_key) {
         LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": " + QString::fromStdString(r.error()));
     else
         LOG_INFO("AuthService", "Opened user DB: " + path);
+}
+
+QString AuthService::user_data_refusal(const QString& api_key) {
+    const QString username = username_for_key(api_key);
+    if (username.isEmpty())
+        return {};
+    const QString path = finterm::AppPaths::data() + "/users/" + username + ".db";
+    if (!QFileInfo::exists(path))
+        return {}; // a first login: made fresh
+    const int known = finterm::MigrationRunner::newest_version();
+    const QString conn = QStringLiteral("finterm_refusal_") + QUuid::createUuid().toString(QUuid::Id128);
+    QString why;
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+        db.setDatabaseName(path);
+        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+        if (db.open()) {
+            QSqlQuery q(db);
+            int version = 0;
+            if (q.exec(QStringLiteral("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")) &&
+                q.next() && q.exec(QStringLiteral("SELECT MAX(version) FROM schema_version")) && q.next())
+                version = q.value(0).toInt();
+            if (version < known && !finterm::MigrationRunner::hold().isEmpty()) {
+                why = finterm::MigrationRunner::hold();
+            } else if (version > known) {
+                QString kept;
+                if (q.exec(QStringLiteral("SELECT kept_in FROM finterm_set_aside LIMIT 1")) && q.next())
+                    kept = q.value(0).toString();
+                why = kept.isEmpty()
+                          ? QStringLiteral("This account's data was saved by a newer version of finterm. Start that "
+                                           "version to use it.")
+                          : QStringLiteral("This account's data was made by a newer finterm and was set aside when "
+                                           "finterm went back to an earlier backup. It is in %1; the newer finterm "
+                                           "can use it once it is copied back.")
+                                .arg(QDir::toNativeSeparators(kept));
+            }
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(conn);
+    return why;
 }
 
 void AuthService::close_user_db() {

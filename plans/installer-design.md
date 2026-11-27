@@ -1,6 +1,6 @@
 # One download that installs, updates, migrates and adds the launcher
 
-Status: design, 2026-11-27. Nothing here is built yet.
+Status: built for 4.2.3 (2026-11-27). Where the build differs from the plan below, **As built** at the end says how and why.
 
 ## Goal
 
@@ -370,3 +370,40 @@ Each phase is shippable on its own and follows the usual loop: build →
 | A backup only when a migration is pending, and the last three kept | Most releases change no schema. A backup on every update would fill the disk. |
 | Keyring secrets are never written into backups unencrypted | Backups are files and can be copied off the computer. Secrets stay in the keyring unless the user exports them with a passphrase. |
 | Tidying uses named repairs, not a sweep | An unknown file in the data folder may be the user's own. |
+
+## As built (4.2.3)
+
+Code: `app/src/core/setup/` (DataUpgrade, Install, DataTransfer, SetupPaths), `app/src/app/` (DataGate, SetupAssistant),
+`installscript.qs` (Windows update), Settings › Storage & Data (Export…, Import…). Tests: `test_data_upgrade`,
+`test_install`, `test_data_transfer`, `tests/installer/test_installscript.js`, and the release workflow's install,
+update and uninstall steps on all three systems.
+
+Where it differs from the plan, and why:
+
+- **The backup holds the databases the upgrade touches**: `auth.db` and `users/*.db`. Files, workspaces and
+  feature data are not copied, because no migration changes them. A failed database is put back from that copy.
+  The check after the upgrade is `quick_check`, and no foreign-key violations beyond those that were there before.
+  There is no `.recover` offer: a database that is already damaged is left exactly as it was and reported.
+- **A migration that reaches outside its database waits for its user's login**, as before: v022 writes the keyring
+  and v015 writes cache.db. Run for every user at once, one user's keys would land under another's. Such a database
+  is still backed up first.
+- **Another finterm process on the same data:** nothing is upgraded or put back. The newer-data check still runs.
+- **Going back to a backup** keeps `auth.db` as it is now, so users added since keep their accounts. A user whose data
+  is newer than the backup is set aside, and a placeholder takes their place. Their login is refused with a message
+  saying where the data went; they don't get a new, empty database.
+- **Rollback** puts each database back from the *first* backup this build made of it. A second pass by the same
+  build cannot hand the previous version already-upgraded data.
+- **Uninstall never deletes data.** The plan had an option to delete it; it was dropped. Deleting the folder by hand,
+  or Start fresh, does that.
+- **An install of unknown version** (copied by hand, so no launcher of ours) is never run to ask its version: an old
+  build would open its whole window. Replacing it needs the user's say-so (`--install --replace` on the command line).
+- **Export** is a `.tar.gz` written with the system's tar. It holds no keyring secrets at all; the plan had an
+  option to include them under a passphrase, which was dropped. Enter the keys again on the new computer. An import
+  restarts finterm and runs before anything opens a database.
+- **Tidy** has one rule so far: the pre-multi-user `fincept.db` archive. The `users/*.db.bak-*` files seen on one
+  machine were made by hand, not by the app, so they stay where they are.
+- **Windows:** QtIFW refuses a folder that already holds an installation on its target page, before any hook a
+  component script has. So the installed copy is removed as soon as the user agrees to update, at the start, and the
+  question says so. The data is always kept, and running the installer again installs finterm.
+- **macOS Dock** changes go through `defaults` (export, edit, import), then the Dock is restarted. This is not an
+  Apple API: it is done only on a first install, and recorded.

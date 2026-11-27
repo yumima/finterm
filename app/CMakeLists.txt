@@ -599,6 +599,10 @@ set(CORE_SOURCES
     src/core/config/BuildInfo.cpp
     src/core/config/LayoutMigrations.cpp
     src/core/config/StartFresh.cpp
+    src/core/setup/DataTransfer.cpp
+    src/core/setup/DataUpgrade.cpp
+    src/core/setup/Install.cpp
+    src/core/setup/SetupPaths.cpp
     src/core/errors/DataFailure.cpp
     src/core/network/ProxySettings.cpp
     src/core/config/ProfileManager.cpp
@@ -654,6 +658,7 @@ set(STORAGE_SOURCES
 
     # Migration system
     src/storage/sqlite/migrations/MigrationRunner.cpp
+    src/storage/sqlite/migrations/MigrationRegistry.cpp
     src/storage/sqlite/migrations/v001_initial.cpp
     src/storage/sqlite/migrations/v002_llm_chat.cpp
     src/storage/sqlite/migrations/v003_data_mcp_agents.cpp
@@ -1049,6 +1054,7 @@ set(SCREEN_SOURCES
     src/screens/devtools/DataHubInspector.cpp
     src/screens/profile/ProfileScreen.cpp
     src/screens/settings/SettingsScreen.cpp
+    src/screens/settings/DataTransferDialog.cpp
     src/screens/settings/LlmConfigSection.cpp
     src/screens/settings/EnginePanel.cpp
     src/screens/settings/AiRolesSection.cpp
@@ -1436,6 +1442,8 @@ set(SCREEN_SOURCES
 # App
 set(APP_SOURCES
     src/app/main.cpp
+    src/app/DataGate.cpp
+    src/app/SetupAssistant.cpp
     src/app/MainWindow.cpp
     src/app/DockScreenRouter.cpp
 )
@@ -1718,6 +1726,7 @@ set_source_files_properties(
     src/screens/settings/AiConfigSection.cpp
     src/screens/settings/McpServersSection.cpp
     src/screens/settings/SettingsScreen.cpp
+    src/screens/settings/DataTransferDialog.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/social/SocialScreen.cpp
     src/screens/social/BriefsPanel.cpp

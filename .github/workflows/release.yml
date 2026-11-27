@@ -422,17 +422,85 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "no maintenance tool beside finterm.exe" }
           Write-Host "default install: $dir"
+
+          # Run again over it: an update in place — the old copy is removed by
+          # its own uninstaller (keeping the data), then this one goes in.
+          $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
+          Set-Content -Path $mark -Value "mine"
+          $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+              "install", "--accept-licenses", "--default-answer", "--confirm-command")
+          if ($p.ExitCode -ne 0) { throw "installing over the install failed ($($p.ExitCode))" }
+          # The old uninstaller's self-delete helper must not have taken the new tool.
+          Start-Sleep -Seconds 15
+          foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
+              if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after installing over the install" }
+          }
+          if (-not (Test-Path $mark)) { throw "installing over the install removed the user's data" }
+          Remove-Item $mark
+          Write-Host "installed over itself: OK"
+
           $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
               "purge", "--default-answer", "--confirm-command")
           if ($t.ExitCode -ne 0) { throw "removing the default install failed ($($t.ExitCode))" }
           if (Test-Path (Join-Path $dir "finterm.exe")) { throw "the default install is still there after purge" }
+          for ($i = 0; (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe")) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
           Write-Host "removed"
+
+      # ── Update from the published release ─────────────────────────────────
+      # What an existing user does: run the new installer over the release
+      # they have. It updates in place; the data stays. Skipped when no
+      # release is published.
+      - name: Update from the published release
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sys = Join-Path $env:SystemRoot "System32"
+          $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0;$env:ProgramFiles\GitHub CLI"
+          $work = Join-Path $env:RUNNER_TEMP "published"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $tag = (& gh release view --repo $env:GITHUB_REPOSITORY --json tagName --jq .tagName 2>$null)
+          if ($LASTEXITCODE -ne 0 -or -not $tag) { Write-Host "::warning::no published release - update test skipped"; exit 0 }
+          & gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "finterm-*-windows-x64-setup.exe" --dir $work
+          if ($LASTEXITCODE -ne 0) { throw "cannot download $tag" }
+          $old = (Get-ChildItem (Join-Path $work "finterm-*-windows-x64-setup.exe") | Select-Object -First 1).FullName
+          $new = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
+          $install = @("install", "--accept-licenses", "--default-answer", "--confirm-command")
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
+          $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-published-mark.txt"
+          $p = Start-Process -FilePath $old -Wait -PassThru -ArgumentList $install
+          if ($p.ExitCode -ne 0) { throw "$tag did not install ($($p.ExitCode))" }
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
+          Set-Content -Path $mark -Value "mine"
+          $p = Start-Process -FilePath $new -Wait -PassThru -ArgumentList $install
+          if ($p.ExitCode -ne 0) { throw "updating $tag failed ($($p.ExitCode))" }
+          Start-Sleep -Seconds 15
+          foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
+              if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after updating $tag" }
+          }
+          # The installed program is this build's (the one in its update zip).
+          $zip = (Get-ChildItem "app/build/finterm-*-windows-x64-update.zip" | Select-Object -First 1).FullName
+          $unz = Join-Path $work "unz"
+          Expand-Archive -Path $zip -DestinationPath $unz -Force
+          $want = (Get-ChildItem -Recurse -Filter finterm.exe $unz | Select-Object -First 1).FullName
+          if ((Get-FileHash $want).Hash -ne (Get-FileHash (Join-Path $dir "finterm.exe")).Hash) {
+              throw "after the update the installed finterm.exe is not this build's"
+          }
+          if (-not (Test-Path $mark)) { throw "updating $tag removed the user's data" }
+          Write-Host "$tag -> this build: OK"
+          $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
+              "purge", "--default-answer", "--confirm-command")
+          if ($t.ExitCode -ne 0) { throw "removing the updated install failed ($($t.ExitCode))" }
+          for ($i = 0; (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe")) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
 
       # ── Upgrade from the last Program Files release (4.0.10) ──────────────
       # 4.1.0 installs per user. What an existing user meets: the new
-      # installer refuses beside the old install; the old one is uninstalled;
-      # then the new one goes in; the data folder is there throughout. 4.0.10
-      # comes from its release; skipped only once that is confirmed purged.
+      # installer removes the old Program Files install (elevated, keeping the
+      # data) and installs per user. 4.0.10 comes from its release; skipped
+      # only once that is confirmed purged.
       - name: Upgrade from 4.0.10 (Program Files)
         timeout-minutes: 30
         shell: pwsh
@@ -471,20 +539,14 @@ jobs:
           if ((Run $old $install) -ne 0) { throw "4.0.10 did not install" }
           if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "4.0.10 is not in $pf" }
 
-          $code = Run $new $install
-          if (Test-Path (Join-Path $pu "finterm.exe")) { throw "4.1.0 installed beside 4.0.10 (exit $code)" }
-          if ($code -eq 0) { throw "a refused install reported success" }
-          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "the refused install removed 4.0.10" }
-          Write-Host "refused beside 4.0.10: OK"
-
-          if ((Run (Join-Path $pf $tool) @("purge", "--default-answer", "--confirm-command")) -ne 0) { throw "4.0.10 did not uninstall" }
+          # The new installer replaces it (elevated removal, data kept) and
+          # installs per user.
+          if ((Run $new $install) -ne 0) { throw "installing over 4.0.10 failed" }
           for ($i = 0; (Test-Path (Join-Path $pf $tool)) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
-          if (Test-Path (Join-Path $pf $tool)) { throw "4.0.10 is still there" }
-          if (-not (Test-Path $mark)) { throw "uninstalling 4.0.10 removed the user's data" }
-          if ((Run $new $install) -ne 0) { throw "4.1.0 did not install after 4.0.10 was removed" }
-          if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "4.1.0 is not in $pu" }
-          if (-not (Test-Path $mark)) { throw "installing 4.1.0 removed the user's data" }
-          Write-Host "4.0.10 -> 4.1.0: OK"
+          if (Test-Path (Join-Path $pf "finterm.exe")) { throw "4.0.10 is still in $pf" }
+          if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "the new version is not in $pu" }
+          if (-not (Test-Path $mark)) { throw "replacing 4.0.10 removed the user's data" }
+          Write-Host "4.0.10 -> this version: OK"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
@@ -814,6 +876,51 @@ jobs:
           run --kind appimage-rollback --from 0.0.2 --to 0.0.1
           [ "$("${D}/finterm.AppImage")" = old ] || { echo "::error::rollback did not restore"; exit 1; }
           echo "in-place update + rollback OK"
+
+      # ── The download installs itself: install, update, uninstall ──────────
+      # What a user's first run of the .run offers, by its command-line form,
+      # in a throwaway home: the image goes to ~/Applications/finterm.AppImage
+      # with a launcher and a command; run again from elsewhere it updates in
+      # one rename and keeps the previous; --uninstall removes what it added
+      # and leaves the data.
+      - name: Install, update and uninstall (AppImage)
+        timeout-minutes: 15
+        working-directory: app
+        run: |
+          set -euo pipefail
+          BUILT="$(pwd)/$(ls build/finterm-*-linux-x64-setup.run | head -1)"
+          H="${RUNNER_TEMP}/install-home"; rm -rf "${H}"; mkdir -p "${H}/Downloads" "${H}/.local/share/finterm/user"
+          echo mine > "${H}/.local/share/finterm/user/ci-mark.txt"
+          cp "${BUILT}" "${H}/Downloads/finterm-setup.run"
+          fin() { env -u XDG_DATA_HOME -u XDG_CONFIG_HOME HOME="${H}" QT_QPA_PLATFORM=offscreen \
+                    "$1" --appimage-extract-and-run "${@:2}"; }
+          OUT="$(fin "${H}/Downloads/finterm-setup.run" --install --no-favourite)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true' >/dev/null
+          APP="${H}/Applications/finterm.AppImage"
+          cmp "${BUILT}" "${APP}"
+          DESK="${H}/.local/share/applications/finterm.desktop"
+          grep -q '^X-Finterm-Installer=1$' "${DESK}"
+          grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"   # no FUSE on the runner
+          [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
+          # Again, from another copy (the same version): put in place again,
+          # in one rename; no "previous" made of it (that is a rollback's).
+          cp "${BUILT}" "${H}/Downloads/finterm-again.run"
+          OUT="$(fin "${H}/Downloads/finterm-again.run" --install --no-favourite)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true and (.done | any(test("installed:")))' >/dev/null
+          cmp "${BUILT}" "${APP}"
+          [ ! -e "${H}/Applications/.finterm-previous.AppImage" ]
+          # The installed one knows it is the install.
+          OUT="$(fin "${APP}" --install)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true and (.done | any(test("already running from")))' >/dev/null
+          # Its data check runs, and finds nothing newer.
+          OUT="$(fin "${APP}" --upgrade-data --check-only)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true and .newer_data == false' >/dev/null
+          OUT="$(fin "${APP}" --uninstall)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true' >/dev/null
+          [ ! -e "${APP}" ] && [ ! -e "${H}/Applications/.finterm-previous.AppImage" ] && [ ! -e "${DESK}" ]
+          [ ! -e "${H}/.local/bin/finterm" ]
+          grep -q mine "${H}/.local/share/finterm/user/ci-mark.txt"
+          echo "install + update + uninstall OK"
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Version-stamped filename so update-manifest regex picks it up.
@@ -1406,6 +1513,51 @@ jobs:
           ls build/finterm-*-macos-arm64-setup.dmg >/dev/null || { echo "::error::the release DMG is gone"; exit 1; }
           echo "in-place update + rollback OK"
 
+      # ── The app installs itself from the disk image ───────────────────────
+      # What a user's first start from the DMG offers, by its command-line
+      # form: copied to /Applications (or ~/Applications), updated in place
+      # with the previous kept, a Dock tile on the first install, and
+      # --uninstall removing what it added.
+      - name: Install, update and uninstall (from the disk image)
+        timeout-minutes: 15
+        working-directory: app
+        run: |
+          set -euo pipefail
+          DMG="$(ls build/finterm-*-macos-arm64-setup.dmg | head -1)"
+          MNT="${RUNNER_TEMP}/finterm-install-dmg"; mkdir -p "${MNT}"
+          hdiutil attach "${DMG}" -nobrowse -readonly -mountpoint "${MNT}"
+          trap 'hdiutil detach "${MNT}" -quiet || true' EXIT
+          FROM="${MNT}/${{ env.APP_NAME }}.app/Contents/MacOS/${{ env.APP_NAME }}"
+          fin() { QT_QPA_PLATFORM=offscreen "$@"; }
+          OUT="$(fin "${FROM}" --install --no-favourite)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true' >/dev/null
+          APP="$(echo "${OUT}" | jq -r .installed)"
+          case "${APP}" in /Applications/finterm.app|"${HOME}/Applications/finterm.app") ;; *) echo "::error::installed to ${APP}"; exit 1 ;; esac
+          codesign --verify --deep --strict "${APP}"
+          [ -z "$(xattr -p com.apple.quarantine "${APP}" 2>/dev/null || true)" ]
+          # Again (the same version): put in place again, no "previous" made of it.
+          OUT="$(fin "${FROM}" --install --no-favourite)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true and (.done | any(test("installed:")))' >/dev/null
+          [ ! -e "$(dirname "${APP}")/.finterm-previous.app" ] && [ ! -e "$(dirname "${APP}")/.finterm-replaced.app" ]
+          codesign --verify --deep --strict "${APP}"
+          OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --install)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true and (.done | any(test("already running from")))' >/dev/null
+          OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
+          echo "${OUT}" | jq -e '.ok == true' >/dev/null
+          [ ! -e "${APP}" ] && [ ! -e "$(dirname "${APP}")/.finterm-previous.app" ]
+          # A first install with the Dock tile, and the uninstall taking it away.
+          if defaults read com.apple.dock persistent-apps >/dev/null 2>&1; then
+            OUT="$(fin "${FROM}" --install)"; echo "${OUT}"
+            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("added to the Dock")))' >/dev/null
+            defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+            OUT="$(fin "${APP}/Contents/MacOS/${{ env.APP_NAME }}" --uninstall)"; echo "${OUT}"
+            echo "${OUT}" | jq -e '.ok == true and (.done | any(test("removed from the Dock")))' >/dev/null
+            ! defaults read com.apple.dock persistent-apps | grep -q "${APP}"
+          else
+            echo "::warning::no Dock preferences on this runner - the Dock tile is not checked"
+          fi
+          echo "install + update + uninstall OK"
+
       # ── Upload ────────────────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -1493,8 +1645,8 @@ jobs:
             | Platform | File | Notes |
             |----------|------|-------|
             | **Windows x64** | `finterm-*-setup.exe` | Run the installer → `finterm.exe` |
-            | **Linux x64** | `finterm-*-linux-x64-setup.run` | An AppImage: `chmod +x` and run it — nothing is installed |
-            | **macOS Apple Silicon** | `finterm-*.dmg` | Open, drag to Applications |
+            | **Linux x64** | `finterm-*-linux-x64-setup.run` | `chmod +x` and run it, then **Install** (to `~/Applications`, with a menu entry) |
+            | **macOS Apple Silicon** | `finterm-*.dmg` | Open it, start finterm, then **Install** (to Applications, with a Dock tile) |
 
             These builds are free and **not code-signed by a paid certificate**, so the
             first launch needs one extra click:
@@ -1506,9 +1658,9 @@ jobs:
 
             The first start sets up finterm's Python environment (5–15 minutes, once).
 
-            **Upgrading on Windows from 4.0.10 or older** (installed in Program Files):
-            uninstall it first and answer **No** when asked to remove your data, then run
-            this installer. It installs per user and will not install beside the old one.
+            **Already installed?** Run the new download the same way: it offers to update
+            the installed finterm and keeps your data (backed up first when its format
+            changes). On Windows an old copy in Program Files is replaced too.
 
             ### Requirements
             - Windows 10/11 x64
@@ -1657,9 +1809,9 @@ jobs:
           NEW_BLOCK="${START_MARKER}
           | System | Download | First launch |
           |---|---|---|
-          | **Linux** x86-64 | [AppImage (.run)](${LIN_URL}) | \`chmod +x finterm-*.run && ./finterm-*.run\` |
+          | **Linux** x86-64 | [AppImage (.run)](${LIN_URL}) | \`chmod +x finterm-*.run && ./finterm-*.run\`, then **Install** |
           | **Windows** 10/11 x64 | [Installer (.exe)](${WIN_URL}) | Run it. At SmartScreen: **More info → Run anyway** |
-          | **macOS** 13+ Apple Silicon | [Disk image (.dmg)](${MAC_URL}) | Drag to Applications, then **right-click → Open → Open** |
+          | **macOS** 13+ Apple Silicon | [Disk image (.dmg)](${MAC_URL}) | Open it, **right-click finterm → Open → Open**, then **Install** |
 
           Current release: [${TAG}](${RELEASE_URL}) · [all releases](https://github.com/yumima/finterm/releases)
           ${END_MARKER}"

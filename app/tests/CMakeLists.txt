@@ -1683,6 +1683,41 @@ target_link_libraries(test_data_failure PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_data_failure PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME data_failure COMMAND test_data_failure)
 
+# ── Data upgrade at startup (backup, migrate every user DB, newer data, rollback)
+add_executable(test_data_upgrade
+    core/test_data_upgrade.cpp
+    ../src/core/setup/DataUpgrade.cpp
+    ../src/storage/sqlite/migrations/MigrationRunner.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_data_upgrade PRIVATE ../src)
+target_link_libraries(test_data_upgrade PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+set_target_properties(test_data_upgrade PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME data_upgrade COMMAND test_data_upgrade)
+
+# ── The package installing itself (Linux: image, launcher, update, uninstall)
+add_executable(test_install
+    core/test_install.cpp
+    ../src/core/setup/Install.cpp
+    ../src/core/config/BuildInfo.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_install PRIVATE ../src)
+target_link_libraries(test_install PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_install PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME install COMMAND test_install)
+
+# ── A profile's data as one file: export, import, refusals
+add_executable(test_data_transfer
+    core/test_data_transfer.cpp
+    ../src/core/setup/DataTransfer.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_data_transfer PRIVATE ../src)
+target_link_libraries(test_data_transfer PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+set_target_properties(test_data_transfer PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME data_transfer COMMAND test_data_transfer)
+
 # ── all_tests: build every test executable without the app ───────────────────
 # CI (.github/workflows/tests.yml) builds this target and runs ctest.
 get_property(_finterm_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
@@ -1693,3 +1728,4 @@ foreach(_t IN LISTS _finterm_test_targets)
         add_dependencies(all_tests ${_t})
     endif()
 endforeach()
+

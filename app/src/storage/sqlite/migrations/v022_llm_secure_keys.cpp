@@ -130,7 +130,7 @@ void register_migration_v022() {
     if (done)
         return;
     done = true;
-    MigrationRunner::register_migration({22, "llm_secure_keys", apply_v022});
+    MigrationRunner::register_migration({22, "llm_secure_keys", apply_v022, /*external=*/true}); // the keyring
 }
 
 } // namespace finterm

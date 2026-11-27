@@ -16,6 +16,9 @@ struct Migration {
     int version;
     QString name;
     std::function<Result<void>(QSqlDatabase&)> apply;
+    /// Reaches outside the database (the keyring, cache.db): run only for
+    /// the user who is logging in, never for every user at startup.
+    bool external = false;
 };
 
 /// Runs versioned migrations tracked in a schema_version table.
@@ -24,14 +27,31 @@ class MigrationRunner {
   public:
     explicit MigrationRunner(QSqlDatabase& db);
 
-    /// Apply all pending migrations in order.
+    /// Apply all pending migrations in order. An error, and nothing changed,
+    /// when the database was written by a newer finterm (newer_than_build()).
     Result<void> run();
+
+    /// The database's schema is above every migration this build has.
+    bool newer_than_build();
 
     /// Register a migration (called at static-init time by each v00N file).
     static void register_migration(Migration m);
 
     /// All registered migrations, sorted by version.
     static const QVector<Migration>& all_migrations();
+
+    /// The highest registered migration (0 when none is registered).
+    static int newest_version();
+
+    /// Why a user database may not be migrated where it is now ("" = it
+    /// may): set at startup when the copy that must come first could not be
+    /// made (DataGate). Database::open then refuses a database still behind,
+    /// and the login says why, rather than changing it with no way back.
+    static void set_hold(const QString& reason);
+    static QString hold();
+
+    /// A registered migration above `version` is `external`.
+    static bool external_after(int version);
 
   private:
     Result<void> ensure_schema_version_table();
@@ -41,6 +61,10 @@ class MigrationRunner {
 
     QSqlDatabase& db_;
 };
+
+/// Register every migration this build has (once; later calls do nothing).
+/// Before anything opens or upgrades a user database.
+void register_all_migrations();
 
 // Explicit registration functions — call these before Database::open()
 // to ensure MSVC linker doesn't strip the migration translation units.
