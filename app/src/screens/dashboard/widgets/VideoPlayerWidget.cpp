@@ -2766,6 +2766,7 @@ void VideoPlayerWidget::on_player_error() {
 void VideoPlayerWidget::set_loading(bool loading) {
     if (loading) {
         status_label_->setText("Resolving stream via yt-dlp...");
+        status_label_->setToolTip(QString()); // an earlier failure's detail no longer applies
         status_label_->show();
     } else {
         status_label_->hide();

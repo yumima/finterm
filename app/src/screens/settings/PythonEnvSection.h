@@ -62,6 +62,7 @@ class PythonEnvSection : public QWidget {
         QString venv;         // "venv-numpy1" or "venv-numpy2"
         QStringList packages; // raw spec strings to pass to uv
         bool upgrade = false;
+        bool everything = false; ///< Upgrade All: dependencies move too (within the requirements)
     };
     QList<ActionBatch> action_queue_;
 

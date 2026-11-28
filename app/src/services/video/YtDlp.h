@@ -11,6 +11,16 @@
 
 namespace finterm::services::video {
 
+/// The yt-dlp finterm's Python environment installs (requirements-numpy2.txt)
+/// — the one Settings › Python Env upgrades.
+inline QString ytdlp_venv_program() {
+#ifdef _WIN32
+    return finterm::AppPaths::root() + "/venv-numpy2/Scripts/yt-dlp.exe";
+#else
+    return finterm::AppPaths::root() + "/venv-numpy2/bin/yt-dlp";
+#endif
+}
+
 /// The yt-dlp to run: a copy next to the binary (a build may put one there),
 /// else the one finterm's own Python environment installs (requirements-
 /// numpy2.txt — what a release relies on), else one on PATH; empty if none
@@ -29,11 +39,7 @@ inline QString ytdlp_program() {
         if (QFileInfo::exists(candidate))
             return QDir::cleanPath(candidate);
     }
-#ifdef _WIN32
-    const QString in_venv = finterm::AppPaths::root() + "/venv-numpy2/Scripts/yt-dlp.exe";
-#else
-    const QString in_venv = finterm::AppPaths::root() + "/venv-numpy2/bin/yt-dlp";
-#endif
+    const QString in_venv = ytdlp_venv_program();
     if (QFileInfo::exists(in_venv))
         return QDir::cleanPath(in_venv);
     return QStandardPaths::findExecutable("yt-dlp");
@@ -47,16 +53,17 @@ inline QStringList ytdlp_resolve_args(const QString& format, const QString& url)
 }
 
 /// "Update yt-dlp" is worth saying: the failure looks like an outdated
-/// yt-dlp (its own "is older than" notice, or an extractor that no longer
-/// understands the site), and the yt-dlp in use is finterm's own — the one
+/// yt-dlp (an extractor that no longer understands the site), and the yt-dlp
+/// in use is finterm's own — the one
 /// Settings › Python Env › Upgrade updates. Not for answers an update can't
 /// change (not live yet, private, removed).
 inline bool ytdlp_update_may_help(const QByteArray& stderr_bytes) {
-    if (!ytdlp_program().startsWith(finterm::AppPaths::root()))
+    if (QDir::cleanPath(ytdlp_program()) != QDir::cleanPath(ytdlp_venv_program()))
         return false;
     const QString s = QString::fromUtf8(stderr_bytes);
-    for (const char* sign : {"is older than", "Unable to extract", "nsig", "n challenge", "Signature extraction",
-                             "player response", "Unsupported URL"})
+    // (Not its "is older than" notice — an old copy prints it on every run —
+    // nor "Unsupported URL", which is mostly a mistyped address.)
+    for (const char* sign : {"Unable to extract", "nsig", "n challenge", "Signature extraction", "player response"})
         if (s.contains(QLatin1String(sign), Qt::CaseInsensitive))
             return true;
     return false;

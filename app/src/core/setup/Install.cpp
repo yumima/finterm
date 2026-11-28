@@ -264,9 +264,10 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
 /// Ask the image to mount itself (--appimage-mount prints the mount point
 /// and holds it until stopped): whether FUSE works here for this runtime.
 bool image_can_mount(const QString& image) {
-    // A definite answer is kept for the process (current_env() is asked more
-    // than once, and one run's decisions rest on the same answer): mounted, or
-    // the runtime gave up. A probe that only ran out of time is not.
+    // One answer per process (current_env() is asked more than once, and one
+    // run's decisions must rest on the same answer). A probe that ran out of
+    // time counts as no mount: if FUSE does work, the next run that mounts
+    // writes the launcher's direct form (refresh_launcher).
     static QHash<QString, bool> known;
     if (const auto it = known.constFind(image); it != known.cend())
         return it.value();
@@ -278,22 +279,16 @@ bool image_can_mount(const QString& image) {
     if (!p.waitForStarted(3000))
         return known[image] = false; // can't run it at all
     bool mounted = false;
-    bool definite = false;
     if (p.waitForReadyRead(5000)) {
         const QString where = QString::fromUtf8(p.readLine()).trimmed();
         mounted = !where.isEmpty() && QFileInfo(where).isDir();
-        definite = true;
-    } else {
-        definite = p.state() == QProcess::NotRunning; // it exited: no mount
     }
     p.terminate();
     if (!p.waitForFinished(2000)) {
         p.kill();
         p.waitForFinished(1000);
     }
-    if (definite)
-        known[image] = mounted;
-    return mounted;
+    return known[image] = mounted;
 }
 
 // ── macOS ────────────────────────────────────────────────────────────────────

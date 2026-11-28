@@ -286,8 +286,10 @@ void PythonEnvSection::build_ui() {
         ActionBatch b1, b2;
         b1.venv = "venv-numpy1";
         b1.upgrade = true;
+        b1.everything = true;
         b2.venv = "venv-numpy2";
         b2.upgrade = true;
+        b2.everything = true;
         for (const auto& row : std::as_const(all_packages_)) {
             if (!row.missing) {
                 if (row.venv == "venv-numpy1")
@@ -631,10 +633,10 @@ QList<PythonEnvSection::ActionBatch> PythonEnvSection::build_batches_for_selecte
 
         if (row.venv == "venv-numpy1") {
             b1.packages << row.required_spec;
-            b1.upgrade = !row.missing;
+            b1.upgrade = b1.upgrade || !row.missing; // any installed one checked: upgrade
         } else {
             b2.packages << row.required_spec;
-            b2.upgrade = !row.missing;
+            b2.upgrade = b2.upgrade || !row.missing;
         }
     }
 
@@ -686,8 +688,12 @@ void PythonEnvSection::run_next_batch() {
         for (const PackageRow& row : all_packages_)
             if (row.venv == batch.venv && batch.packages.contains(row.required_spec)) {
                 chosen.insert(row.name);
-                args << "--upgrade-package" << row.display_name;
+                if (!batch.everything)
+                    args << "--upgrade-package" << row.display_name;
             }
+        // Upgrade All: their dependencies too (within the requirements).
+        if (batch.everything)
+            args << "--upgrade";
         for (const PackageRow& row : all_packages_)
             if (row.venv == batch.venv && !chosen.contains(row.name) && !row.required_spec.contains('['))
                 pins << row.required_spec;
