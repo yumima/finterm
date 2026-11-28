@@ -209,11 +209,11 @@ void refresh_desktop_caches(const Env& env) {
 }
 
 /// The small script the menu entry and the `finterm` command start, beside
-/// the image. It starts the image as it is (mounted through FUSE); when the
-/// AppImage runtime can't mount it — no FUSE, no permission, a sandbox — the
-/// runtime exits with 127 before finterm runs, and the script starts it
-/// unpacked instead, which always works. No guess at what FUSE needs: what
-/// happens decides, at every start.
+/// the image. It asks the image to mount itself (--appimage-mount: the
+/// AppImage runtime prints the mount point, or fails at once without FUSE),
+/// then execs it — mounted when that worked, unpacked (always works) when it
+/// didn't or gave no answer in 10 s. No guess at what FUSE needs, and finterm
+/// is the started process itself (exec): its signals and output are its own.
 QString launch_script_path(const QString& installed) {
     return QDir(QFileInfo(installed).absolutePath()).filePath(QStringLiteral(".finterm-launch"));
 }
@@ -225,13 +225,21 @@ QString launch_script_text(const QString& installed) {
     quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
     return QStringLiteral(
         "#!/bin/sh\n"
-        "# finterm's launcher, written by its installer: the image mounted through\n"
-        "# FUSE, or unpacked when it can't be mounted here (the runtime exits 127).\n"
+        "# finterm's launcher, written by its installer: the image mounted through FUSE\n"
+        "# where a test mount works, else unpacked (which always works).\n"
         "app='%1'\n"
         "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && exec \"$app\" \"$@\"\n"
-        "\"$app\" \"$@\"\n"
-        "code=$?\n"
-        "[ \"$code\" -eq 127 ] || exit \"$code\"\n"
+        "out=$(mktemp) || APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n"
+        "\"$app\" --appimage-mount >\"$out\" 2>/dev/null &\n"
+        "probe=$!\n"
+        "i=0\n"
+        "while [ \"$i\" -lt 50 ] && [ ! -s \"$out\" ] && kill -0 \"$probe\" 2>/dev/null; do\n"
+        "    sleep 0.2; i=$((i + 1))\n"
+        "done\n"
+        "mounted=no\n"
+        "[ -s \"$out\" ] && [ -d \"$(head -n 1 \"$out\")\" ] && mounted=yes\n"
+        "kill \"$probe\" 2>/dev/null; wait \"$probe\" 2>/dev/null; rm -f \"$out\"\n"
+        "[ \"$mounted\" = yes ] && exec \"$app\" \"$@\"\n"
         "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
         .arg(quoted);
 }
@@ -249,8 +257,20 @@ bool write_launch_script(const QString& installed) {
 /// `add_command`: create the `finterm` command when there is none (an install
 /// does; a refresh only keeps one of ours current, never puts back one the
 /// user removed).
-QStringList write_launcher(const Env& env, const QString& installed, bool add_command) {
+QStringList write_launcher(const Env& env, const QString& installed, bool add_command, bool* ok = nullptr) {
     QStringList done;
+    if (ok)
+        *ok = true;
+    // The launch script first, before anything else is touched: the menu
+    // entry and the command start it, so without it they are left as they
+    // are (an earlier launcher keeps working) and the caller is told.
+    if (!write_launch_script(installed)) {
+        if (ok)
+            *ok = false;
+        done << QStringLiteral("could not write the launch script ") + launch_script_path(installed);
+        return done;
+    }
+    done << QStringLiteral("launch script: ") + launch_script_path(installed);
     if (!env.package_icon.isEmpty() && QFileInfo(env.package_icon).isFile()) {
         QDir().mkpath(QFileInfo(icon_path(env)).absolutePath());
         QFile::remove(icon_path(env));
@@ -267,13 +287,6 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
         if (QFile::rename(desktop, bak))
             done << QStringLiteral("kept the previous launcher as ") + bak;
     }
-    // The launch script first: the menu entry and the command start it, so
-    // without it they are not changed (an earlier one keeps working).
-    if (!write_launch_script(installed)) {
-        done << QStringLiteral("could not write the launch script ") + launch_script_path(installed);
-        return done;
-    }
-    done << QStringLiteral("launch script: ") + launch_script_path(installed);
     if (write_text(desktop, desktop_entry(env, installed)))
         done << QStringLiteral("launcher: ") + desktop;
     // The command: a link we own, never someone's own file of that name.
@@ -607,7 +620,15 @@ Result install(const Env& env, const Options& opt) {
         return r;
     }
     r.done << QStringLiteral("installed: ") + st.path;
-    r.done << write_launcher(env, st.path, /*add_command=*/true);
+    bool launcher_ok = true;
+    r.done << write_launcher(env, st.path, /*add_command=*/true, &launcher_ok);
+    if (!launcher_ok) {
+        // The image is in place (and runs); the launcher could not be made.
+        r.installed = st.path;
+        r.error = QStringLiteral("finterm is in %1, but its launcher could not be written (%2)")
+                      .arg(st.path, launch_script_path(st.path));
+        return r;
+    }
     // Offered once: recorded whether it was taken or not (unticked), so it is
     // never offered again — not after an uninstall either. Only when it was
     // offered (an update shows no such choice).
@@ -763,10 +784,12 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     return QProcess::startDetached(QStringLiteral("/usr/bin/open"), open_args, QDir::homePath());
 #else
     // Through the launch script (mounted, or unpacked where that fails), as
-    // the menu entry starts it — written first if it isn't there.
+    // the menu entry starts it — written only if it isn't there (an existing
+    // one is the installed build's own, kept current by its refresh).
     QProcess p;
     const QString script = launch_script_path(installed);
-    p.setProgram(write_launch_script(installed) ? script : installed);
+    const bool have_script = QFileInfo::exists(script) || write_launch_script(installed);
+    p.setProgram(have_script ? script : installed);
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());
     p.setWorkingDirectory(QDir::homePath());

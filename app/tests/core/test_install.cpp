@@ -75,7 +75,7 @@ class TestInstall : public QObject {
         QVERIFY(QFileInfo(installed()).isExecutable());
         const QString text = read(desktop());
         // The menu entry and the command start the launch script beside the
-        // image (it decides FUSE or unpacked at each start).
+        // image (mounted, or unpacked when the runtime can't mount it).
         const QString script = env_.home + "/Applications/.finterm-launch";
         QVERIFY(text.contains("Exec=" + script + "\n"));
         QVERIFY(text.contains("TryExec=" + installed() + "\n"));
@@ -184,29 +184,41 @@ class TestInstall : public QObject {
         QVERIFY(!QFileInfo::exists(desktop()));
     }
 
-    void the_launch_script_falls_back_to_unpacked() {
-        // An image whose runtime can't mount (exits 127) unless asked to run
-        // unpacked: the script starts it again unpacked; any other exit code
-        // is the app's own and is passed on.
+    void the_launch_script_runs_mounted_or_unpacked() {
+        // A stand-in image: --appimage-mount prints a mount point and holds it
+        // when FAKE_FUSE=1, fails at once otherwise (as the runtime does
+        // without FUSE); run, it says how it was started.
         env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/fuse.run", "4.2.3");
         QFile f(env_.package);
         QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
         f.write("#!/bin/sh\n"
+                "if [ \"$1\" = --appimage-mount ]; then\n"
+                "  [ \"$FAKE_FUSE\" = 1 ] || { echo 'Cannot mount AppImage' >&2; exit 127; }\n"
+                "  echo /tmp; exec sleep 30\n"
+                "fi\n"
                 "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && { echo unpacked \"$@\"; exit 0; }\n"
-                "[ \"$1\" = app-fails ] && exit 3\n"
-                "echo 'Cannot mount AppImage' >&2; exit 127\n");
+                "echo mounted \"$@\"; [ \"$1\" = app-fails ] && exit 127; exit 0\n");
         f.close();
         QVERIFY(install::install(env_, {false}).ok);
         const QString script = env_.home + "/Applications/.finterm-launch";
-        QProcess p;
-        p.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-        p.start(script, {"--version"});
-        QVERIFY(p.waitForFinished(5000));
-        QCOMPARE(p.exitCode(), 0);
-        QCOMPARE(QString::fromUtf8(p.readAllStandardOutput()).trimmed(), QStringLiteral("unpacked --version"));
-        p.start(script, {"app-fails"});
-        QVERIFY(p.waitForFinished(5000));
-        QCOMPARE(p.exitCode(), 3); // not retried
+        const auto run = [&](bool fuse, const QStringList& args, int* code = nullptr) {
+            QProcess p;
+            QProcessEnvironment e = QProcessEnvironment::systemEnvironment();
+            e.remove("APPIMAGE_EXTRACT_AND_RUN"); // the test's own environment must not decide
+            e.insert("FAKE_FUSE", fuse ? "1" : "0");
+            p.setProcessEnvironment(e);
+            p.start(script, args);
+            p.waitForFinished(15000);
+            if (code)
+                *code = p.exitCode();
+            return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+        };
+        QCOMPARE(run(true, {"--version"}), QStringLiteral("mounted --version"));
+        QCOMPARE(run(false, {"--version"}), QStringLiteral("unpacked --version"));
+        // The app's own exit code (even 127) is its own: no second start.
+        int code = 0;
+        QCOMPARE(run(true, {"app-fails"}, &code), QStringLiteral("mounted app-fails"));
+        QCOMPARE(code, 127);
     }
 
     void exec_paths_are_quoted() {
