@@ -16,7 +16,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QRandomGenerator>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>

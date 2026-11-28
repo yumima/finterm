@@ -69,9 +69,10 @@ class TestPinPolicy : public QObject {
         const QByteArray big = finterm::util::secure_random_bytes(1000);
         QCOMPARE(big.size(), 1000);
         QSet<QByteArray> chunks;
-        for (int at = 0; at < 1000; at += 250) {
-            QVERIFY(big.mid(at, 250) != QByteArray(250, '\0'));
-            chunks.insert(big.mid(at, 250));
+        for (int at = 0; at < 1000; at += 256) { // 256, 256, 256 and the 232 left
+            const QByteArray chunk = big.mid(at, 256);
+            QVERIFY(chunk != QByteArray(chunk.size(), '\0'));
+            chunks.insert(chunk);
         }
         QCOMPARE(chunks.size(), 4);
         QCOMPARE(finterm::util::secure_token().size(), 64);

@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`b29af40ba`](https://github.com/yumima/finterm/commit/b29af40ba) Every token from the OS random source; full installer logs in CI
 - [`290ec396b`](https://github.com/yumima/finterm/commit/290ec396b) Secrets from the OS random source; CI installer verbose for real
 - [`25ca55fa6`](https://github.com/yumima/finterm/commit/25ca55fa6) CI: installer verbose flag before the command; output always shown
 - [`9c692d8e2`](https://github.com/yumima/finterm/commit/9c692d8e2) Tests build on macOS/Windows; CI shows what the installer said
