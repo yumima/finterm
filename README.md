@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`d8c7d44f0`](https://github.com/yumima/finterm/commit/d8c7d44f0) CI lookup check: no export/import restore; stderr in every failure
 - [`638e06386`](https://github.com/yumima/finterm/commit/638e06386) CI lookup run: -EncodedCommand like the installer's -Command; fresh output
 - [`2918981d6`](https://github.com/yumima/finterm/commit/2918981d6) CI lockdown window in one native process; the machine's value restored
 - [`fb7e29c3b`](https://github.com/yumima/finterm/commit/fb7e29c3b) CI's locked-down lookup locked down from the start, asserted
