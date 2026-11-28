@@ -438,7 +438,7 @@ class TestInstall : public QObject {
             QVERIFY(f.open(QIODevice::ReadWrite));
             QVERIFY(f.setFileTime(QDateTime::currentDateTime().addDays(3), QFileDevice::FileModificationTime));
         }
-        env_.version = "4.2.3.1"; // the menu entry is rewritten
+        env_.version = "4.2.3.1"; // (an install writes the menu entry, which sweeps beside it)
         env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/later.run", "4.2.3");
         QVERIFY(install::install(env_, {false}).ok);
         QVERIFY(!QFileInfo::exists(ahead));
@@ -496,13 +496,6 @@ class TestInstall : public QObject {
         install::refresh_launcher(env_);
         QVERIFY(!read(script).contains("an older text"));
         QCOMPARE(bits(), owner_only);
-        // Runnable but not readable: sh can't open it — rewritten, readable
-        // and runnable by the owner (and nothing more than it had).
-        QFile::setPermissions(script, QFileDevice::ExeOwner);
-        if (QFileInfo(script).isReadable())
-            QSKIP("an unreadable file doesn't stop this user (root)");
-        install::refresh_launcher(env_);
-        QCOMPARE(bits(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
         // A wide mode (777) is narrowed by a rewrite: no write bit for others.
         QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
                                           QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
@@ -514,6 +507,14 @@ class TestInstall : public QObject {
         }
         install::refresh_launcher(env_);
         QCOMPARE(bits() & (QFileDevice::WriteGroup | QFileDevice::WriteOther), QFileDevice::Permissions());
+        // Runnable but not readable: sh can't open it — rewritten, readable
+        // and runnable by the owner (and nothing more than it had).
+        QFile::setPermissions(script, QFileDevice::ExeOwner);
+        if (QFileInfo(script).isReadable())
+            QSKIP("an unreadable file doesn't stop this user (root)");
+        install::refresh_launcher(env_);
+        QCOMPARE(bits(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+
     }
 
     void their_entry_stays_when_its_copy_cant_be_made() {

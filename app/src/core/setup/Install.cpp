@@ -35,7 +35,6 @@ constexpr const char* kDontAskKey = "setup/dont_ask";
 constexpr const char* kBuiltKey = "X-Finterm-Built";
 constexpr const char* kInstalledKey = "setup/installed"; ///< [path, version, built] of the install
 
-
 /// One per thread (QSettings is reentrant, not thread-safe): the install
 /// runs off the GUI thread. They share the store underneath. Every path that
 /// writes ends in sync(): a pool thread's copy may outlive the app.
@@ -43,7 +42,6 @@ QSettings& settings() {
     thread_local QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     return s;
 }
-
 
 /// "4.2.3" from "4.2.3", "4.2.3-dev", "finterm 4.2.3"; false when none.
 bool parse(const QString& text, int& a, int& b, int& c) {
@@ -133,17 +131,14 @@ QString read_text(const QString& path) {
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
 }
 
-/// `text` written to a temporary of its own beside `path` (unique name, every
-/// byte checked), for `put` to rename over it. A rename replaces the entry
-/// itself — a link, a read-only file — never what a link points to; a full
-/// disk or an error leaves the old file as it was, and nothing behind.
 /// Temporaries a killed write left beside `path`: Beside's own
-/// ".<name>.finterm-tmp.XXXXXX" (exactly that; ten minutes old or more, or
-/// dated a day or more ahead — a write in progress elsewhere keeps its own),
-/// and the ".new"/".part" earlier builds used. Nothing else is touched.
-/// `now`: the filesystem's own time (the temporary just written there — a
-/// file server's clock ahead or behind changes nothing); `skip`: that one.
-void sweep_temporaries(const QString& path, const QDateTime& now, const QString& skip) {
+/// ".<name>.finterm-tmp.XXXXXX" (exactly that; older than `now` by `age` or
+/// more, or dated a day or more ahead — a write in progress elsewhere keeps
+/// its own), and the ".new"/".part" earlier builds used. Nothing else is
+/// touched. Beside passes the filesystem's own time (the temporary it just
+/// wrote) and ten minutes; write_launcher, at every run, the local clock and
+/// a day — a margin no clock skew reaches. `skip`: one to keep.
+void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, const QString& skip = {}) {
     const QFileInfo fi(path);
     const QDir dir(fi.absolutePath());
     QStringList names;
@@ -154,13 +149,18 @@ void sweep_temporaries(const QString& path, const QDateTime& now, const QString&
                                       QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
         for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
             if (e.fileName() != skip && ours.match(e.fileName()).hasMatch() &&
-                (e.lastModified() < now.addSecs(-600) || e.lastModified() > now.addDays(1)))
+                (e.lastModified() < now.addSecs(-age) || e.lastModified() > now.addDays(1)))
                 names << e.fileName();
     }
     for (const QString& n : names)
         if (QFileInfo(dir.filePath(n)).isFile() && !QFileInfo(dir.filePath(n)).isSymLink())
             QFile::remove(dir.filePath(n));
 }
+
+/// `text` written to a temporary of its own beside `path` (unique name, every
+/// byte checked), for `put` to rename over it. A rename replaces the entry
+/// itself — a link, a read-only file — never what a link points to; a full
+/// disk or an error leaves the old file as it was, and nothing behind.
 
 class Beside {
   public:
@@ -182,7 +182,7 @@ class Beside {
         tmp_.close();
         ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
         // What killed writes left here, timed by this temporary's own stamp.
-        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(),
+        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(), 600,
                           QFileInfo(tmp_.fileName()).fileName());
     }
     bool ok() const { return ok_; }
@@ -218,7 +218,6 @@ QString link_text(const QString& path) {
     return QFileInfo(path).symLinkTarget();
 #endif
 }
-
 
 bool ours(const QString& desktop_text) {
     return desktop_text.contains(QLatin1String(kMarker) + QStringLiteral("=1"));
@@ -451,6 +450,9 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     QStringList done;
     if (ok)
         *ok = true;
+    // Leftovers of killed writes, whether or not this run writes these files.
+    sweep_temporaries(desktop_path(env), QDateTime::currentDateTime(), 86400);
+    sweep_temporaries(launch_script_path(installed), QDateTime::currentDateTime(), 86400);
     // The launch script first, before anything else is touched: the menu
     // entry and the command start it, so without it they are left as they
     // are (an earlier launcher keeps working) and the caller is told.
