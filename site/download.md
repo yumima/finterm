@@ -33,7 +33,7 @@ Version {{ r.version }}{% if r.released %} · released <time datetime="{{ r.rele
 **Linux (x86-64)**
 
 1. `chmod +x finterm-*.run`, then run it.
-2. **Install** copies it to `~/Applications/finterm.AppImage`, with a menu entry, a GNOME dock favourite and a `finterm` command. No root. Without FUSE 2 (Ubuntu 22.04+: `sudo apt install libfuse2`) it still runs, unpacking itself each start.
+2. **Install** copies it to `~/Applications/finterm.AppImage`, with a menu entry, a GNOME dock favourite and a `finterm` command. No root. Without FUSE (Ubuntu: `sudo apt install libfuse2 fuse3`) it still runs, unpacking itself each start.
 
 **Updating, moving, removing** — the same download over an installed finterm offers **Update**, keeping your data; when a version changes how data is stored, the data is backed up first (`finterm-backups/`, beside the data folder). Settings › Storage & Data › **Export…** / **Import…** moves your data to another computer: keep the file private (it holds your accounts); API keys stay in the keyring. Uninstall: Windows Settings › Apps; macOS `/Applications/finterm.app/Contents/MacOS/finterm --uninstall` (or drag it to the Bin); Linux `finterm --uninstall`. The data folder stays.
 

@@ -76,7 +76,9 @@ void import_if_scheduled() {
     if (!QFileInfo::exists(QDir(w.profile_root).filePath(QStringLiteral("import.json"))))
         return;
     // Like Start fresh: never while another finterm (or its helper) still has
-    // the data open — the import waits for the next start.
+    // the data open — the import waits for the next start. (Another instance
+    // of this profile can't be starting: this is past SingleApplication's
+    // check; another build starting in the same instant is not guarded.)
     if (AppPaths::data_dir_in_use(w.data_dir)) {
         QMessageBox::warning(nullptr, QStringLiteral("finterm"),
                              QStringLiteral("Your data could not be imported yet: another finterm is still using it.\n\n"

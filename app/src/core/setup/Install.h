@@ -59,6 +59,9 @@ bool should_offer(const Env& env, const State& st);
 
 struct Options {
     bool favourite = true; ///< GNOME favourite / Dock tile — on a first install only
+    /// The user was asked (and said no when !favourite): recorded, never asked
+    /// again. False when no choice was shown (an update).
+    bool favourite_offered = true;
     /// Replace an install whose version can't be told (copied there by hand):
     /// it may be newer. Only when the user said so.
     bool replace_unknown = false;

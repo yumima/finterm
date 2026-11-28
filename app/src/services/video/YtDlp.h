@@ -1,5 +1,7 @@
 // src/services/video/YtDlp.h
 #pragma once
+#include "core/config/AppPaths.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -9,9 +11,11 @@
 
 namespace finterm::services::video {
 
-/// The yt-dlp to run: the copy bundled next to the binary (the build copies
-/// it there), else one on PATH; empty if neither exists. Shared by the
-/// dashboard video player and the earnings-call audio player.
+/// The yt-dlp to run: a copy next to the binary (a build may put one there),
+/// else the one finterm's own Python environment installs (requirements-
+/// numpy2.txt — what a release relies on), else one on PATH; empty if none
+/// exists. Shared by the dashboard video player and the earnings-call audio
+/// player.
 inline QString ytdlp_program() {
 #ifdef _WIN32
     const QString exe_name = "yt-dlp.exe";
@@ -25,6 +29,13 @@ inline QString ytdlp_program() {
         if (QFileInfo::exists(candidate))
             return QDir::cleanPath(candidate);
     }
+#ifdef _WIN32
+    const QString in_venv = finterm::AppPaths::root() + "/venv-numpy2/Scripts/yt-dlp.exe";
+#else
+    const QString in_venv = finterm::AppPaths::root() + "/venv-numpy2/bin/yt-dlp";
+#endif
+    if (QFileInfo::exists(in_venv))
+        return QDir::cleanPath(in_venv);
     return QStandardPaths::findExecutable("yt-dlp");
 }
 

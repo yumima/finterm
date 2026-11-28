@@ -128,7 +128,7 @@ void EarningsCallAudio::stop() {
 void EarningsCallAudio::resolve(bool refresh_session) {
     const QString program = services::video::ytdlp_program();
     if (program.isEmpty()) {
-        fail(QStringLiteral("yt-dlp is not installed"));
+        fail(QStringLiteral("yt-dlp is missing: Settings › Python Env › Install Missing adds it"));
         return;
     }
     if (proc_)

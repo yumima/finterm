@@ -114,6 +114,7 @@ enum class Choice { Install, OpenInstalled, RunThis, Quit };
 struct Answer {
     Choice choice = Choice::Quit;
     bool favourite = true;
+    bool favourite_offered = false; ///< the checkbox was shown
     bool start_fresh = false;
     bool dont_ask = false;
     QString import_file; ///< an exported data file to start with ("" = none)
@@ -172,9 +173,8 @@ Answer ask(const install::Env& env, const install::State& st, bool running_now) 
                                "to be.");
 #if defined(Q_OS_LINUX)
     if (!env.fuse2 && st.found != Found::Newer)
-        text += QStringLiteral("\n\nFUSE can't be used here (it needs the libfuse2 library, /dev/fuse and fusermount), "
-                               "so finterm unpacks itself each time it starts, which is slower. On Ubuntu: sudo apt "
-                               "install libfuse2 fuse3");
+        text += QStringLiteral("\n\nFUSE isn't working here, so finterm unpacks itself each time it starts, which is "
+                               "slower. On Ubuntu: sudo apt install libfuse2 fuse3");
     if (st.foreign_launcher && st.found != Found::Newer)
         text += QStringLiteral("\n\nThere is already a finterm launcher (from a source checkout). It is kept as "
                                "finterm.desktop.bak.");
@@ -268,6 +268,7 @@ Answer ask(const install::Env& env, const install::State& st, bool running_now) 
     });
     dlg.exec();
     a.favourite = favourite && favourite->isChecked();
+    a.favourite_offered = favourite != nullptr;
     a.start_fresh = fresh && fresh->isChecked();
     a.dont_ask = dont_ask->isChecked();
     a.import_file = import && import->isChecked() ? import_file : QString();
@@ -344,6 +345,7 @@ bool offer(bool another_running) {
     case Choice::Install: {
         install::Options opt;
         opt.favourite = a.favourite;
+        opt.favourite_offered = a.favourite_offered;
         opt.replace_unknown = true; // the user saw it can't be told, and chose Replace
         // Copying a few hundred MB: off the GUI thread, behind a note.
         QProgressDialog note(QStringLiteral("Installing finterm…"), QString(), 0, 0);

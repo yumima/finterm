@@ -121,6 +121,14 @@ int main(int argc, char* argv[]) {
     // so this one becomes the primary instance (and its data is free).
     finterm::start_fresh::wait_for_parent(argc, argv);
 
+    // The AppImage carries Qt's X11 platform plugin only: on a Wayland desktop
+    // Qt would look for its Wayland plugin first and say it is missing before
+    // falling back. Ask for X11 (XWayland) directly. A choice the user made
+    // (QT_QPA_PLATFORM set) stands; builds against the system's Qt are not
+    // affected.
+    if (!qEnvironmentVariableIsEmpty("APPIMAGE") && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "xcb");
+
     // Every migration this build has, before anything asks which data it can
     // read: the install offer and a scheduled import check exported files
     // against it, the gate below upgrades with it.

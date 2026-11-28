@@ -10,7 +10,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QLibrary>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -236,7 +235,9 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
     // The command: a link we own, never someone's own file of that name.
     const QString cmd = command_path(env);
     const QFileInfo ci(cmd);
-    if (ci.isSymLink() || (add_command && !ci.exists())) {
+    const bool our_link = ci.isSymLink() && (same_file(ci.symLinkTarget(), installed) ||
+                                             same_file(ci.symLinkTarget(), previous_path(installed)));
+    if (our_link || (add_command && !ci.exists() && !ci.isSymLink())) {
         QDir().mkpath(ci.absolutePath());
         QFile::remove(cmd);
         if (QFile::link(installed, cmd))
@@ -396,11 +397,17 @@ Env current_env() {
             env.package_icon = QDir(appdir).filePath(rel);
             break;
         }
-    // An AppImage mounts itself through FUSE 2: the library, the device and
-    // the helper that mounts for a user.
-    env.fuse2 = QLibrary(QStringLiteral("fuse"), 2).load() && QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
-                (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
-                 !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty());
+    // Whether the image can mount itself here, by what this run did: a
+    // mounted AppImage runs from /tmp/.mount_*, an unpacked one (no working
+    // FUSE, or --appimage-extract-and-run) from appimage_extracted_*. No
+    // guess at which FUSE library its runtime needs. Without an image (a dev
+    // build trying the installer) the device and the mount helper decide.
+    if (!appdir.isEmpty())
+        env.fuse2 = appdir.contains(QLatin1String("/.mount_"));
+    else
+        env.fuse2 = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
+                    (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
+                     !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty());
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
@@ -569,8 +576,9 @@ Result install(const Env& env, const Options& opt) {
     r.done << QStringLiteral("installed: ") + st.path;
     r.done << write_launcher(env, st.path, /*add_command=*/true);
     // Offered once: recorded whether it was taken or not (unticked), so it is
-    // never offered again — not after an uninstall either.
-    if (!opt.favourite && !settings().value(QLatin1String(kFavouriteKey)).isValid()) {
+    // never offered again — not after an uninstall either. Only when it was
+    // offered (an update shows no such choice).
+    if (opt.favourite_offered && !opt.favourite && !settings().value(QLatin1String(kFavouriteKey)).isValid()) {
         settings().setValue(QLatin1String(kFavouriteKey), false);
     } else if (opt.favourite && !settings().value(QLatin1String(kFavouriteKey)).isValid()) {
         QStringList favs;
@@ -622,7 +630,7 @@ Result install(const Env& env, const Options& opt) {
     }
     remove_path(QDir(dir).filePath(QStringLiteral(".finterm-replaced.app")));
     r.done << QStringLiteral("installed: ") + st.path;
-    if (!settings().value(QLatin1String(kFavouriteKey)).isValid()) {
+    if ((opt.favourite || opt.favourite_offered) && !settings().value(QLatin1String(kFavouriteKey)).isValid()) {
         settings().setValue(QLatin1String(kFavouriteKey), false); // offered once (see Linux)
         if (opt.favourite && !mac_dock_has(st.path) && mac_dock_add(st.path)) {
             settings().setValue(QLatin1String(kFavouriteKey), true);
@@ -662,14 +670,18 @@ Result uninstall(const Env& env) {
         return r;
     }
     r.installed = path;
+    // Only an install: on macOS a link in its place is a source checkout's
+    // (finterm.sh install), not ours to remove.
+    const QFileInfo fi(path);
+    const bool installed = fi.exists() && !fi.isSymLink();
     const QString previous = previous_path(path);
-    for (const QString& p : {path, previous}) {
+    for (const QString& p : installed ? QStringList{path, previous} : QStringList{previous}) {
         if (!remove_path(p)) {
             r.error = QStringLiteral("could not remove %1").arg(p);
             return r;
         }
     }
-    r.done << QStringLiteral("removed ") + path;
+    r.done << (installed ? QStringLiteral("removed ") + path : QStringLiteral("nothing installed in ") + path);
 #if defined(Q_OS_LINUX)
     if (ours(read_text(desktop_path(env)))) {
         QFile::remove(desktop_path(env));

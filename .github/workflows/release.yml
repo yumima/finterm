@@ -900,15 +900,9 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          # Run directly where FUSE 2 works (library, device, mount helper),
-          # unpacked where it doesn't — exactly what this runner has.
-          LIBS="$(ldconfig -p)"   # (a pipe into grep -q can SIGPIPE ldconfig under pipefail)
-          if echo "${LIBS}" | grep 'libfuse\.so\.2' >/dev/null && [ -e /dev/fuse ] && \
-             { command -v fusermount >/dev/null || command -v fusermount3 >/dev/null; }; then
-            grep -q "^Exec=${APP}$" "${DESK}"
-          else
-            grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
-          fi
+          # Run here unpacked (--appimage-extract-and-run): the launcher runs it
+          # unpacked too — the installer goes by how the image actually ran.
+          grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
           [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
           # Again, from another copy (the same version): put in place again,
           # in one rename; no "previous" made of it (that is a rollback's).
@@ -1667,7 +1661,7 @@ jobs:
             - **Windows** — SmartScreen says "Windows protected your PC": *More info* → *Run anyway*.
             - **macOS** — "cannot be opened because the developer cannot be verified":
               right-click the app → *Open* → *Open* (once), or System Settings → Privacy & Security → *Open Anyway*.
-            - **Linux** — on Ubuntu 22.04+ install FUSE 2 first: `sudo apt install libfuse2`
+            - **Linux** — without FUSE it still runs, unpacking itself each start; to fix that on Ubuntu: `sudo apt install libfuse2 fuse3`
               (or run with `--appimage-extract-and-run`).
 
             The first start sets up finterm's Python environment (5–15 minutes, once).

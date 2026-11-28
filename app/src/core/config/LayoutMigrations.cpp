@@ -451,6 +451,11 @@ void LayoutMigrations::remember_before(const QString& build) {
     const int stored = s.value(QString::fromLatin1(kVersionKey), 0).toInt();
     if (stored >= kCurrentVersion || build.isEmpty())
         return;
+    // The version as the previous build left it: a later start of this same
+    // build (a step deferred) must not replace it with one this build set.
+    if (const QStringList before = s.value(QString::fromLatin1(kBeforeKey)).toStringList();
+        before.size() == 2 && before.first() == build)
+        return;
     s.setValue(QString::fromLatin1(kBeforeKey), QStringList{build, QString::number(stored)});
     s.sync();
 }

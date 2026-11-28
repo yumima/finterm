@@ -20,6 +20,8 @@
 #include <QTemporaryDir>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace finterm::data_transfer {
 
 namespace {
@@ -187,7 +189,9 @@ bool safe_entry(QString name) {
 }
 
 /// Unpack and check `file` into `into`; "" or why.
-QString unpack(const Where& w, const QString& file, const QString& into) {
+/// Check `file` and unpack it into `into` — all of it, or (`manifest_only`,
+/// for a check that must not need the space) just its manifest. "" or why.
+QString unpack(const Where& w, const QString& file, const QString& into, bool manifest_only = false) {
     if (!QFileInfo(file).isFile())
         return QStringLiteral("%1 is not a file").arg(QDir::toNativeSeparators(file));
     QString listing;
@@ -211,7 +215,15 @@ QString unpack(const Where& w, const QString& file, const QString& into) {
             return QStringLiteral("the file holds something other than files and folders (%1)")
                 .arg(modes.size() == names.size() ? names.at(i).trimmed() : line);
     }
-    if (const QString err = tar({QStringLiteral("-xzf"), file, QStringLiteral("-C"), into}); !err.isEmpty())
+    if (!names.contains(QStringLiteral("manifest.json")) && !names.contains(QStringLiteral("./manifest.json")))
+        return QStringLiteral("not a finterm data file (no manifest)");
+    if (!names.contains(QStringLiteral("user/")) && !names.contains(QStringLiteral("user")) &&
+        std::none_of(names.begin(), names.end(), [](const QString& n) { return n.startsWith(QLatin1String("user/")); }))
+        return QStringLiteral("the file holds no data");
+    QStringList xargs{QStringLiteral("-xzf"), file, QStringLiteral("-C"), into};
+    if (manifest_only)
+        xargs << QStringLiteral("manifest.json");
+    if (const QString err = tar(xargs); !err.isEmpty())
         return err;
     // AppleDouble twins (see safe_entry) are not data.
     {
@@ -236,8 +248,16 @@ QString unpack(const Where& w, const QString& file, const QString& into) {
         if (v.toObject().value(QStringLiteral("version")).toInt() > w.known_version)
             return QStringLiteral("made by a newer finterm (%1): update finterm first")
                 .arg(m.value(QStringLiteral("app_version")).toString());
+    if (manifest_only)
+        return {};
     if (!QFileInfo(QDir(into).filePath(QStringLiteral("user"))).isDir())
         return QStringLiteral("the file holds no data");
+    // The databases themselves, not only what the manifest says of them.
+    const QDir users(QDir(into).filePath(QStringLiteral("user/data/users")));
+    for (const QString& name : users.entryList({QStringLiteral("*.db")}, QDir::Files))
+        if (schema_version_of(users.filePath(name)) > w.known_version)
+            return QStringLiteral("made by a newer finterm (%1): update finterm first")
+                .arg(m.value(QStringLiteral("app_version")).toString());
     return {};
 }
 
@@ -341,10 +361,12 @@ Result export_to(const Where& w, const QString& file) {
 }
 
 QString check_archive(const Where& w, const QString& file) {
+    // The listing and the manifest only: the whole archive may not fit in the
+    // temporary folder (often a small tmpfs). The import checks the rest.
     QTemporaryDir tmp;
     if (!tmp.isValid())
         return QStringLiteral("no temporary folder");
-    return unpack(w, file, tmp.path());
+    return unpack(w, file, tmp.path(), /*manifest_only=*/true);
 }
 
 QString schedule_import(const Where& w, const QString& file) {

@@ -218,6 +218,15 @@ class TestInstall : public QObject {
         QVERIFY(read(env_.home + "/.local/bin/finterm").contains("mine"));
     }
 
+    void a_command_link_of_the_users_own_is_left_alone() {
+        QDir().mkpath(env_.home + "/.local/bin");
+        QVERIFY(QFile::link(env_.home + "/src/finterm/build/finterm", env_.home + "/.local/bin/finterm"));
+        QVERIFY(install::install(env_, {false}).ok);
+        QCOMPARE(QFileInfo(env_.home + "/.local/bin/finterm").symLinkTarget(), env_.home + "/src/finterm/build/finterm");
+        QVERIFY(install::uninstall(env_).ok);
+        QVERIFY(QFileInfo(env_.home + "/.local/bin/finterm").isSymLink()); // still there
+    }
+
     void dont_ask_is_per_file() {
         QVERIFY(install::should_offer(env_, install::state(env_)));
         install::set_dont_ask(env_.package);

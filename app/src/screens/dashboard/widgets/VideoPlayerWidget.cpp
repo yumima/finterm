@@ -1750,8 +1750,8 @@ void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url,
             build_web_view();
         web_view_->setHtml(QStringLiteral("<html><body style='background:#000;color:#999;font:14px sans-serif;"
                                           "display:flex;align-items:center;justify-content:center;height:100vh'>"
-                                          "<div>yt-dlp not found — cannot resolve live stream ID for WEB mode.<br>"
-                                          "Switch engine to GL.</div></body></html>"));
+                                          "<div>yt-dlp is missing, so the live stream can't be found.<br>"
+                                          "Settings › Python Env › Install Missing adds it.</div></body></html>"));
         controls_->show();
         stack_->setCurrentIndex(2);
         return;
@@ -2153,9 +2153,9 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     if (ytdlp_program.isEmpty()) {
         set_loading(false);
         status_label_->setText(
-            "yt-dlp not found. Place the binary next to the finterm executable, or install it on your PATH.");
+            "yt-dlp is missing: Settings › Python Env › Install Missing adds it (or install yt-dlp on your PATH).");
         status_label_->show();
-        LOG_ERROR("VideoPlayer", "yt-dlp not found in app directory or PATH");
+        LOG_ERROR("VideoPlayer", "yt-dlp not found (app directory, Python environment, PATH)");
         return;
     }
 

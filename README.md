@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`1a93f53f2`](https://github.com/yumima/finterm/commit/1a93f53f2) Installer: cut the in-app restore and tidy; review fixes
 - [`9f5df6dfb`](https://github.com/yumima/finterm/commit/9f5df6dfb) Installer review fixes: only files and folders in an import; settings per thread
 - [`77a3dcfef`](https://github.com/yumima/finterm/commit/77a3dcfef) Installer review fixes: CI checks, installed record, FUSE, links, export overwrite
 - [`40b07bb43`](https://github.com/yumima/finterm/commit/40b07bb43) One download installs, updates, migrates and adds the launcher
@@ -55,7 +56,7 @@ A newer `.dmg` started the same way offers to **update** the installed finterm.
 1. `chmod +x finterm-*.run`, then `./finterm-*.run` (or double-click it).
 2. It offers to **Install**: it copies itself to `~/Applications/finterm.AppImage`, adds finterm to your applications menu (and, on GNOME, to the dock), and a `finterm` command. No root is needed. **Run Without Installing** runs the file where it is.
 
-A newer `.run` started the same way offers to **update** the installed one. Without FUSE 2 (Ubuntu 22.04+: `sudo apt install libfuse2`) finterm still starts, unpacking itself each time, which is slower.
+A newer `.run` started the same way offers to **update** the installed one. Without FUSE (Ubuntu: `sudo apt install libfuse2 fuse3`) finterm still starts, unpacking itself each time, which is slower.
 
 **Then, on every system**
 

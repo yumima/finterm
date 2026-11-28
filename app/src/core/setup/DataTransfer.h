@@ -44,7 +44,9 @@ struct Result {
 /// Write the profile's personal data to `file` (.tar.gz).
 Result export_to(const Where& w, const QString& file);
 
-/// Check an archive without changing anything: "" when it can be imported.
+/// Check an archive without changing anything — its listing and manifest
+/// (not unpacked: the import checks the databases themselves): "" when it
+/// can be imported.
 QString check_archive(const Where& w, const QString& file);
 
 /// Ask for `file` to be imported at the next start of this profile (check it
