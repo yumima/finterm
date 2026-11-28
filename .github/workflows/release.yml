@@ -412,9 +412,19 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
-          $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
-              "install", "--accept-licenses", "--default-answer", "--confirm-command")
-          if ($p.ExitCode -ne 0) { throw "default install failed ($($p.ExitCode))" }
+          # The installer, verbose; what it said is shown when it fails.
+          function Setup([string]$what) {
+              Get-Process -Name finterm, FintermMaintenanceTool -ErrorAction SilentlyContinue |
+                  ForEach-Object { Write-Host "running before ${what}: $($_.Name) $($_.Id) $($_.Path)" }
+              $out = Join-Path $env:RUNNER_TEMP "setup-out.txt"; $err = Join-Path $env:RUNNER_TEMP "setup-err.txt"
+              $p = Start-Process -FilePath $setup -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
+                  -ArgumentList @("install", "--accept-licenses", "--default-answer", "--confirm-command", "-v")
+              if ($p.ExitCode -ne 0) {
+                  Get-Content $out, $err -ErrorAction SilentlyContinue | Select-Object -Last 80 | Write-Host
+                  throw "$what failed ($($p.ExitCode))"
+              }
+          }
+          Setup "default install"
           $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
           if (-not (Test-Path (Join-Path $dir "finterm.exe"))) {
               Get-ChildItem -Recurse -Depth 1 (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -First 40
@@ -428,9 +438,7 @@ jobs:
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
-              "install", "--accept-licenses", "--default-answer", "--confirm-command")
-          if ($p.ExitCode -ne 0) { throw "installing over the install failed ($($p.ExitCode))" }
+          Setup "installing over the install"
           # The old uninstaller's self-delete helper must not have taken the new tool.
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {

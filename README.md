@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`6a4a69120`](https://github.com/yumima/finterm/commit/6a4a69120) Sweep comment: why behind is short and ahead generous
 - [`c1336b3a1`](https://github.com/yumima/finterm/commit/c1336b3a1) Sweep margins explained and tested; dead non-Unix branches gone
 - [`eaf0a4a13`](https://github.com/yumima/finterm/commit/eaf0a4a13) Linux-only install helpers fenced; sweep margins per clock
 - [`a5c036038`](https://github.com/yumima/finterm/commit/a5c036038) Install.cpp builds clean off Linux; sweeps on every install path

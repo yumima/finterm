@@ -45,10 +45,11 @@ class TestInstall : public QObject {
     void initTestCase() {
 #ifndef Q_OS_LINUX
         QSKIP("Linux install only");
-#endif
+#else
         // The settings the installer records go to the temporary folder.
         QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, tmp_.filePath("settings"));
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, tmp_.filePath("settings"));
+#endif
     }
 
     void init() {

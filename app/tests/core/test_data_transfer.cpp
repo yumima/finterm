@@ -65,7 +65,6 @@ class TestDataTransfer : public QObject {
     Q_OBJECT
 
     QTemporaryDir tmp_;
-    int n_ = 0;
 
     dt::Where where(const QString& name) {
         dt::Where w;
