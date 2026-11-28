@@ -173,8 +173,10 @@ function powershell(command)
 // registers each install in HKCU with its InstallLocation (a folder chosen
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
-// console. Each key on its own — one another program left unreadable is
-// skipped. Asked once; null when the list could not be read at all.
+// console. No Uninstall key is an empty list; each key on its own — one
+// another program left unreadable is skipped; null only when none could be
+// read. Cmdlets and [uri] only (a restricted PowerShell allows them). Asked
+// once.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
 var registered;
@@ -182,12 +184,14 @@ function registeredInstalls()
 {
     if (registered !== undefined)
         return registered;
-    var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
-                       "Get-ChildItem -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | " +
-                       "ForEach-Object { $k = $null; try { $k = Get-ItemProperty -LiteralPath $_.PSPath } catch {}; " +
+    var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
+                       "if (-not (Test-Path -LiteralPath $r)) { exit 0 }; " +
+                       "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
+                       "if ($ev -and $keys.Count -eq 0) { exit 1 }; " +
+                       "foreach ($key in $keys) { $k = $null; " +
+                       "try { $k = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop } catch {}; " +
                        "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains " +
-                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0 } " +
-                       "catch { exit 1 }");
+                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0");
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read");
         return (registered = null);
@@ -219,20 +223,18 @@ function onUninstallationStarted()
         console.log("[finterm] another installation (" + other + ") uses the same data — keeping it.");
         return;
     }
-    if (other === null) {
-        // Can't tell whether another install shares the data: kept.
-        QMessageBox.information("finterm.uninstall.data_kept", "finterm user data kept",
-            "Your finterm data was kept: Windows' list of installed apps could not be read, so another finterm " +
-            "install using it could not be ruled out. To remove the data, delete " +
-            toWin(installer.environmentVariable("LOCALAPPDATA") + "/finterm") + ".", QMessageBox.Ok);
-        return;
-    }
+    // Can't tell whether another install shares the data: asked all the
+    // same, warned, No by default.
+    var unsure = other === null
+        ? "Windows' list of installed apps could not be read, so another finterm install using this data can't " +
+          "be ruled out — if there is one, it loses its data too.\n\n"
+        : "";
     console.log("[finterm] uninstallationStarted — prompting for user-data removal.");
 
     var answer = QMessageBox.question(
         "finterm.uninstall.data",
         "Remove finterm user data?",
-        "Do you want to remove all finterm user data?\n\n" +
+        unsure + "Do you want to remove all finterm user data?\n\n" +
         "This includes:\n" +
         "  - Databases (chat history, portfolio, watchlists)\n" +
         "  - Log files\n" +

@@ -104,8 +104,10 @@ function powershell(command)
 // registers each install in HKCU with its InstallLocation (a folder chosen
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
-// console. Each key on its own — one another program left unreadable is
-// skipped. Asked once; null when the list could not be read at all.
+// console. No Uninstall key is an empty list; each key on its own — one
+// another program left unreadable is skipped; null only when none could be
+// read. Cmdlets and [uri] only (a restricted PowerShell allows them). Asked
+// once.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
 var registered;
@@ -113,12 +115,14 @@ function registeredInstalls()
 {
     if (registered !== undefined)
         return registered;
-    var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
-                       "Get-ChildItem -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | " +
-                       "ForEach-Object { $k = $null; try { $k = Get-ItemProperty -LiteralPath $_.PSPath } catch {}; " +
+    var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
+                       "if (-not (Test-Path -LiteralPath $r)) { exit 0 }; " +
+                       "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
+                       "if ($ev -and $keys.Count -eq 0) { exit 1 }; " +
+                       "foreach ($key in $keys) { $k = $null; " +
+                       "try { $k = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop } catch {}; " +
                        "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains " +
-                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0 } " +
-                       "catch { exit 1 }");
+                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0");
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read");
         return (registered = null);
@@ -200,7 +204,8 @@ function removeInstall(dir, grace)
 
 // Where a finterm installation can be — the target folder, the per-user one,
 // an old Program Files one, and any the Apps list has — each once, with
-// forward slashes.
+// forward slashes. An Apps list that can't be read leaves the usual folders:
+// refusing every install where it can't be read would block installing.
 function installCandidates()
 {
     var raw = [installer.value("TargetDir"), installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",

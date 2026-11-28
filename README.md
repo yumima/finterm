@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`1eeb7e628`](https://github.com/yumima/finterm/commit/1eeb7e628) Apps lookup: per key, and 'unknown' keeps the data
 - [`050d3e653`](https://github.com/yumima/finterm/commit/050d3e653) Uninstall never takes its own Apps entry for another install
 - [`7710b9cd0`](https://github.com/yumima/finterm/commit/7710b9cd0) Installs in a folder of their own: found from the Apps list (HKCU), both ways
 - [`5cb0ad78a`](https://github.com/yumima/finterm/commit/5cb0ad78a) Cut the Apps-list lookup: custom folders by TargetDir= again

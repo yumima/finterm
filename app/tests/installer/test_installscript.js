@@ -55,7 +55,7 @@ function stubs(o) {
                 const ci = (a, b) => a.toLowerCase() === b.toLowerCase(); // Windows: case-insensitive
                 return installs.some(d => ci(q, d + "/FintermMaintenanceTool.exe")) || folders.some(d => ci(q, d)) ||
                        stranded.some(d => ci(q, d + ".finterm-check/FintermMaintenanceTool.exe")) ||
-                       /AppData\/Local\/finterm$/.test(q);
+                       /AppData\/Local\/finterm$/i.test(q);
             },
             interrupt: () => { ++seen.interrupted; },
             execute: (p, a) => {
@@ -172,7 +172,7 @@ for (const cli of [false, true]) {
     s = install1({ installs: [PF], answerYes: true, purgeFails: true });
     check(how + ": the uninstaller fails: told, stopped, no wait",
           s.critical.includes("finterm.install.update_failed") && s.stopped && s.refused &&
-          !s.commands.some(c => /Test-Path/.test(c) && !/Directory\]::Move/.test(c)));
+          !s.commands.some(c => /Test-Path/.test(c) && !/Directory\]::Move|CurrentVersion\\Uninstall/.test(c)));
     s = install1({ installs: [PU], answerYes: true, folderStays: true });
     check(how + ": uninstalled but its folder stays: told, stopped (nothing installs under its uninstall.vbs)",
           s.critical.includes("finterm.install.update_incomplete") && s.stopped && s.refused);
@@ -266,8 +266,15 @@ check("an Apps entry whose folder holds no install: ignored", a0.installed && !a
 a0 = install({ cli: true, installs: [PU], appsFails: true });
 check("the Apps list unreadable: the usual folders still checked", a0.ifwRefused && !purged(a0, PU));
 a0 = uninstall({ target: PU, installs: [PU], appsFails: true, answerYes: true });
-check("uninstall, the Apps list unreadable: the data kept, and said so",
-      a0.asked === 0 && changes(a0) === 0 && a0.informed.includes("finterm.uninstall.data_kept"));
+check("uninstall, the Apps list unreadable: asked, warned that another install can't be ruled out",
+      a0.asked === 1 && /can't be ruled out/.test(a0.questions[0] || ""));
+a0 = uninstall({ target: PU, installs: [PU], answerYes: true });
+check("uninstall, the Apps list read: asked without the warning", a0.asked === 1 && !/ruled out/.test(a0.questions[0] || ""));
+const lookup = a0.commands.find(c => /CurrentVersion\\Uninstall/.test(c)) || "";
+check("the Apps lookup: no key is empty, a key it can't read skipped, unreadable only when none is",
+      /if \(-not \(Test-Path -LiteralPath \$r\)\) \{ exit 0 \}/.test(lookup) &&
+      /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /if \(\$ev -and \$keys\.Count -eq 0\) \{ exit 1 \}/.test(lookup) &&
+      !/ErrorActionPreference/.test(lookup));
 a0 = install({ installs: [PU], answerYes: true });
 check("GUI update question: the folder is chosen next", /\(you choose the folder next\)/.test(a0.questions[0] || ""));
 a0 = install({ cli: true, update: true, installs: [PU], answerYes: true });
