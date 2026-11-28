@@ -418,16 +418,15 @@ jobs:
                   ForEach-Object { Write-Host "running before ${what}: $($_.Name) $($_.Id) $($_.Path)" }
               $out = Join-Path $env:RUNNER_TEMP "setup-out.txt"; $err = Join-Path $env:RUNNER_TEMP "setup-err.txt"
               $p = Start-Process -FilePath $setup -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
-                  -ArgumentList @("install", "--accept-licenses", "--default-answer", "--confirm-command", "-v")
-              if ($p.ExitCode -ne 0) {
-                  Get-Content $out, $err -ErrorAction SilentlyContinue | Select-Object -Last 80 | Write-Host
-                  throw "$what failed ($($p.ExitCode))"
-              }
+                  -ArgumentList @("-v", "install", "--accept-licenses", "--default-answer", "--confirm-command")
+              Write-Host "── $what (exit $($p.ExitCode)) ──"
+              Get-Content $out, $err -ErrorAction SilentlyContinue | Select-Object -Last 120 | Write-Host
+              if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }
           }
           Setup "default install"
           $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
           if (-not (Test-Path (Join-Path $dir "finterm.exe"))) {
-              Get-ChildItem -Recurse -Depth 1 (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -First 40
+              Get-ChildItem -Recurse -Depth 1 (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -First 40 | Out-Host
               throw "the default install is not in $dir"
           }
           if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "no maintenance tool beside finterm.exe" }
