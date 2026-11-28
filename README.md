@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`eb9e86f8d`](https://github.com/yumima/finterm/commit/eb9e86f8d) Installer: full-review fixes; Linux package gets yt-dlp, no Wayland warning
 - [`1a93f53f2`](https://github.com/yumima/finterm/commit/1a93f53f2) Installer: cut the in-app restore and tidy; review fixes
 - [`9f5df6dfb`](https://github.com/yumima/finterm/commit/9f5df6dfb) Installer review fixes: only files and folders in an import; settings per thread
 - [`77a3dcfef`](https://github.com/yumima/finterm/commit/77a3dcfef) Installer review fixes: CI checks, installed record, FUSE, links, export overwrite
