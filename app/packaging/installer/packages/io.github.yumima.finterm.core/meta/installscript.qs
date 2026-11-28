@@ -139,6 +139,8 @@ function run(program, args)
 // uninstall never offers to remove it.
 // ---------------------------------------------------------------------------
 
+// Another install's folder, "" for none — or null when that can't be told
+// (the Apps list unreadable): then the data is kept.
 function otherWindowsInstall(ownDir)
 {
     if (systemInfo.kernelType !== "winnt")
@@ -148,13 +150,13 @@ function otherWindowsInstall(ownDir)
     var candidates = [
         installer.environmentVariable("ProgramFiles") + "/finterm",
         installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm"
-    ].concat(registeredInstalls());
+    ].concat(registeredInstalls() || []);
     for (var i = 0; i < candidates.length; ++i) {
         var dir = String(candidates[i] || "").replace(/\\/g, "/").replace(/\/+$/, "");
         if (dir.toLowerCase() !== own && installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
             return dir;
     }
-    return "";
+    return registeredInstalls() === null ? null : "";
 }
 
 function psQuote(s)
@@ -171,24 +173,26 @@ function powershell(command)
 // registers each install in HKCU with its InstallLocation (a folder chosen
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
-// console. Asked once; a lookup that fails leaves the usual folders (logged).
+// console. Each key on its own — one another program left unreadable is
+// skipped. Asked once; null when the list could not be read at all.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
-var registered = null;
+var registered;
 function registeredInstalls()
 {
-    if (registered !== null)
+    if (registered !== undefined)
         return registered;
     var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
-                       "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
-                       "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
-                       "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
-                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0 } catch { exit 1 }");
-    registered = [];
+                       "Get-ChildItem -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | " +
+                       "ForEach-Object { $k = $null; try { $k = Get-ItemProperty -LiteralPath $_.PSPath } catch {}; " +
+                       "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains " +
+                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0 } " +
+                       "catch { exit 1 }");
     if (r === null || r[1] !== 0) {
-        console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
-        return registered;
+        console.log("[finterm] the Apps list could not be read");
+        return (registered = null);
     }
+    registered = [];
     var lines = r[0].split(/\s+/);
     for (var i = 0; i < lines.length; ++i) {
         try {
@@ -213,6 +217,14 @@ function onUninstallationStarted()
     var other = otherWindowsInstall(installer.value("TargetDir"));
     if (other) {
         console.log("[finterm] another installation (" + other + ") uses the same data — keeping it.");
+        return;
+    }
+    if (other === null) {
+        // Can't tell whether another install shares the data: kept.
+        QMessageBox.information("finterm.uninstall.data_kept", "finterm user data kept",
+            "Your finterm data was kept: Windows' list of installed apps could not be read, so another finterm " +
+            "install using it could not be ruled out. To remove the data, delete " +
+            toWin(installer.environmentVariable("LOCALAPPDATA") + "/finterm") + ".", QMessageBox.Ok);
         return;
     }
     console.log("[finterm] uninstallationStarted — prompting for user-data removal.");

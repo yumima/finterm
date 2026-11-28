@@ -104,24 +104,26 @@ function powershell(command)
 // registers each install in HKCU with its InstallLocation (a folder chosen
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
-// console. Asked once; a lookup that fails leaves the usual folders (logged).
+// console. Each key on its own — one another program left unreadable is
+// skipped. Asked once; null when the list could not be read at all.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
-var registered = null;
+var registered;
 function registeredInstalls()
 {
-    if (registered !== null)
+    if (registered !== undefined)
         return registered;
     var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
-                       "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
-                       "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
-                       "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
-                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0 } catch { exit 1 }");
-    registered = [];
+                       "Get-ChildItem -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' | " +
+                       "ForEach-Object { $k = $null; try { $k = Get-ItemProperty -LiteralPath $_.PSPath } catch {}; " +
+                       "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains " +
+                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0 } " +
+                       "catch { exit 1 }");
     if (r === null || r[1] !== 0) {
-        console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
-        return registered;
+        console.log("[finterm] the Apps list could not be read");
+        return (registered = null);
     }
+    registered = [];
     var lines = r[0].split(/\s+/);
     for (var i = 0; i < lines.length; ++i) {
         try {
@@ -202,7 +204,7 @@ function removeInstall(dir, grace)
 function installCandidates()
 {
     var raw = [installer.value("TargetDir"), installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",
-               installer.environmentVariable("ProgramFiles") + "/finterm"].concat(registeredInstalls());
+               installer.environmentVariable("ProgramFiles") + "/finterm"].concat(registeredInstalls() || []);
     var out = [], seen = {};
     for (var i = 0; i < raw.length; ++i) {
         var dir = String(raw[i] || "").replace(/\\/g, "/").replace(/\/+$/, "");
@@ -317,7 +319,7 @@ function updateExisting()
         "finterm is already installed in:" + list + "\n\n" +
         "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
         "is removed now, then this one is installed" +
-        (installer.isCommandLineInstance() ? " in " + toWin(installer.value("TargetDir")) : " (you choose the folder next)") +
+        (installer.isCommandLineInstance() ? " in its target folder" : " (you choose the folder next)") +
         ". Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
         (anyProgramFiles ? "\n\nA copy in Program Files, shared by every user of this computer, is removed with " +

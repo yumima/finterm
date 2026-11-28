@@ -32,7 +32,7 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 // registered (InstallLocation values in the Apps list), appsFails,
 // toolsBroken, uninstall.
 function stubs(o) {
-    const seen = { texts: [], purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
+    const seen = { informed: [], questions: [], texts: [], purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
     const env = Object.assign({ SystemRoot: "C:\\Windows", ProgramFiles: "C:\\Program Files",
                                 LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a", TEMP: "C:\\t",
@@ -52,8 +52,9 @@ function stubs(o) {
             environmentVariable: n => env[n] || "",
             fileExists: p => {
                 const q = norm(p);
-                return installs.some(d => q === d + "/FintermMaintenanceTool.exe") || folders.includes(q) ||
-                       stranded.some(d => q === d + ".finterm-check/FintermMaintenanceTool.exe") ||
+                const ci = (a, b) => a.toLowerCase() === b.toLowerCase(); // Windows: case-insensitive
+                return installs.some(d => ci(q, d + "/FintermMaintenanceTool.exe")) || folders.some(d => ci(q, d)) ||
+                       stranded.some(d => ci(q, d + ".finterm-check/FintermMaintenanceTool.exe")) ||
                        /AppData\/Local\/finterm$/.test(q);
             },
             interrupt: () => { ++seen.interrupted; },
@@ -103,7 +104,8 @@ function stubs(o) {
                            if (o.closedOnAsk) inUse = [];
                            if (o.vbsOnAsk) { vbs = inUse.slice(); installs = installs.filter(d => !vbs.includes(d)); inUse = []; }
                        },
-                       question: () => { ++seen.asked; return o.answerYes ? 1 : 2; } },
+                       information: (id, title, text) => { seen.informed.push(id); seen.texts.push(String(text)); },
+                       question: (id, title, text) => { ++seen.asked; seen.questions.push(String(text)); return o.answerYes ? 1 : 2; } },
     };
     // IFW gives each script its own engine; they share the installer (and
     // its values).
@@ -263,6 +265,13 @@ a0 = install({ cli: true, installs: [], registered: ["D:/gone"] });
 check("an Apps entry whose folder holds no install: ignored", a0.installed && !a0.refused);
 a0 = install({ cli: true, installs: [PU], appsFails: true });
 check("the Apps list unreadable: the usual folders still checked", a0.ifwRefused && !purged(a0, PU));
+a0 = uninstall({ target: PU, installs: [PU], appsFails: true, answerYes: true });
+check("uninstall, the Apps list unreadable: the data kept, and said so",
+      a0.asked === 0 && changes(a0) === 0 && a0.informed.includes("finterm.uninstall.data_kept"));
+a0 = install({ installs: [PU], answerYes: true });
+check("GUI update question: the folder is chosen next", /\(you choose the folder next\)/.test(a0.questions[0] || ""));
+a0 = install({ cli: true, update: true, installs: [PU], answerYes: true });
+check("command line update question: installed in its target folder", / in its target folder\./.test(a0.questions[0] || ""));
 a0 = uninstall({ target: PU, installs: [PU, D], registered: [D], answerYes: true });
 check("uninstall beside an install in a folder of its own (Apps list): not asked, data stays",
       a0.asked === 0 && changes(a0) === 0);
