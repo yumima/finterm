@@ -72,7 +72,7 @@ struct Result {
     bool ok = false;
     QString installed;   ///< the installed file / bundle
     QStringList done;    ///< one line per step, for the log and --install's report
-    QString error;       ///< why it stopped (nothing half-done is left behind)
+    QString error;       ///< why it stopped (nothing half-done is left behind); with ok, what is missing (a warning)
 };
 
 /// Put the running package in place (replacing an older or same version),

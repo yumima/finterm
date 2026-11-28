@@ -308,6 +308,26 @@ class TestInstall : public QObject {
         QVERIFY(QFileInfo(env_.home + "/.local/bin/finterm").isSymLink()); // still there
     }
 
+    void a_launcher_that_could_not_be_made_is_retried() {
+        // The applications folder can't be written at install time: the
+        // install still succeeds, says so, and the next start makes it.
+        const QString apps = env_.data_home + "/applications";
+        QDir().mkpath(apps);
+        QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        const auto r = install::install(env_, {false});
+        QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        QVERIFY(r.ok);
+        QVERIFY(r.error.contains("could not write the launcher"));
+        QVERIFY(!QFileInfo::exists(desktop()));
+        env_.package = installed();
+        install::refresh_launcher(env_);
+        QVERIFY(QFileInfo::exists(desktop()));
+        // Removed by the user afterwards: not put back.
+        QFile::remove(desktop());
+        install::refresh_launcher(env_);
+        QVERIFY(!QFileInfo::exists(desktop()));
+    }
+
     void dont_ask_is_per_file() {
         QVERIFY(install::should_offer(env_, install::state(env_)));
         install::set_dont_ask(env_.package);

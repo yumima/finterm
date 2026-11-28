@@ -369,6 +369,9 @@ bool offer(bool another_running) {
                                      .arg(r.error));
             return true;
         }
+        if (!r.error.isEmpty())
+            QMessageBox::warning(nullptr, QStringLiteral("finterm"),
+                                 QStringLiteral("finterm is installed, but %1.").arg(r.error));
         break;
     }
     }
