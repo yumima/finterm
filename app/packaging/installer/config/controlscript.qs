@@ -117,8 +117,8 @@ function registeredInstalls()
         return registered;
     var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
         "$root = Get-Item -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable e0; " +
-        "if (-not $root) { if (@($e0 | Where-Object { $_.Exception -isnot " +
-        "[Management.Automation.ItemNotFoundException] }).Count) { exit 1 }; exit 0 }; " +
+        "if (-not $root) { if (@($e0 | Where-Object { $_.CategoryInfo.Category -ne 'ObjectNotFound' }).Count) " +
+        "{ exit 1 }; exit 0 }; " +
         "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
         "$bad = @($ev).Count; $read = 0; " +
         "foreach ($key in $keys) { $k = $null; " +
@@ -213,8 +213,9 @@ function removeInstall(dir, grace)
 
 // Where a finterm installation can be — the target folder, the per-user one,
 // an old Program Files one, and any the Apps list has — each once, with
-// forward slashes. An Apps list that can't be read leaves the usual folders:
-// refusing every install where it can't be read would block installing.
+// forward slashes. An Apps list that can't be read, or only partly, leaves
+// the usual folders and the entries read: refusing every install where it
+// can't be read would block installing.
 function installCandidates()
 {
     var raw = [installer.value("TargetDir"), installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",

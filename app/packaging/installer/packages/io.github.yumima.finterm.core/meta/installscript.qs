@@ -187,8 +187,8 @@ function registeredInstalls()
         return registered;
     var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
         "$root = Get-Item -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable e0; " +
-        "if (-not $root) { if (@($e0 | Where-Object { $_.Exception -isnot " +
-        "[Management.Automation.ItemNotFoundException] }).Count) { exit 1 }; exit 0 }; " +
+        "if (-not $root) { if (@($e0 | Where-Object { $_.CategoryInfo.Category -ne 'ObjectNotFound' }).Count) " +
+        "{ exit 1 }; exit 0 }; " +
         "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
         "$bad = @($ev).Count; $read = 0; " +
         "foreach ($key in $keys) { $k = $null; " +
@@ -236,8 +236,8 @@ function onUninstallationStarted()
     // Can't tell whether another install shares the data: asked all the
     // same, warned, No by default.
     var unsure = other === null
-        ? "Windows' list of installed apps could not be read, so another finterm install using this data can't " +
-          "be ruled out — if there is one, it loses its data too.\n\n"
+        ? "Windows' list of installed apps could not be read in full, so another finterm install using this data " +
+          "can't be ruled out — if there is one, it loses its data too.\n\n"
         : "";
     console.log("[finterm] uninstallationStarted — prompting for user-data removal.");
 

@@ -422,6 +422,17 @@ jobs:
           if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "no maintenance tool beside finterm.exe" }
           Write-Host "default install: $dir"
 
+          # The control script's Apps-list lookup, run for real (the node test
+          # checks it by its structure only): it must find this install.
+          $lookup = & node app/tests/installer/print_apps_lookup.js app/packaging/installer/config/controlscript.qs
+          $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+          $found = & $winps -NoProfile -ExecutionPolicy Bypass -Command $lookup
+          if ($LASTEXITCODE -ne 0) { throw "the Apps-list lookup failed ($LASTEXITCODE): $found" }
+          $locations = @($found | Where-Object { $_ -like "L *" } |
+              ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') })
+          if (-not ($locations | Where-Object { $_ -ieq $dir })) { throw "the Apps-list lookup did not find $dir (got: $found)" }
+          Write-Host "Apps-list lookup: found $dir"
+
           # Run again over it — an update in place: the old copy is removed by
           # its own uninstaller (keeping the data), then this one goes in.
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
