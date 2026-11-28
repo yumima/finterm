@@ -410,3 +410,11 @@ Where it differs from the plan, and why:
   question says so. The data is always kept, and running the installer again installs finterm.
 - **macOS Dock** changes go through `defaults` (export, edit, import), then the Dock is restarted. This is not an
   Apple API: it is done only on a first install, and recorded.
+
+- **Windows, updating from the command line is impossible** (found on the
+  4.2.3 CI run): IFW's CLI `install` checks the target folder
+  (TargetDirectoryInUse) before it loads any component script, so the
+  constructor that removes the installed copy never runs. The GUI loads the
+  scripts first (at the introduction page), so a user's update works; CI
+  drives that GUI with `.github/ci/ifw-gui-install.qs`. A silent update
+  purges the old copy first (README, download page).

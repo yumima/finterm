@@ -425,6 +425,25 @@ jobs:
               }
               if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }
           }
+          # The GUI, clicked through (.github/ci/ifw-gui-install.qs): how a user
+          # updates — the command line refuses an occupied folder before any
+          # component script runs, so it cannot.
+          function GuiSetup([string]$file, [string]$what) {
+              $qs = (Resolve-Path ".github/ci/ifw-gui-install.qs").Path
+              $out = Join-Path $env:RUNNER_TEMP "gui-out.txt"; $err = Join-Path $env:RUNNER_TEMP "gui-err.txt"
+              $p = Start-Process -FilePath $file -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
+                  -ArgumentList @("--verbose", "--script", "`"$qs`"")
+              $done = $p.WaitForExit(600000)
+              if (-not $done) { $p.Kill() }
+              Write-Host "── $what (exit $(if ($done) { $p.ExitCode } else { 'killed after 10 min' })) ──"
+              foreach ($f in $out, $err) {
+                  Write-Host "· $(Split-Path -Leaf $f):"; Get-Content $f -ErrorAction SilentlyContinue | Write-Host
+              }
+              if (-not $done -or $p.ExitCode -ne 0) { throw "$what failed" }
+              if (Select-String -Path $out, $err -Pattern "OverwriteTargetDirectory" -Quiet -ErrorAction SilentlyContinue) {
+                  throw "$what asked whether to install into a folder that is not empty"
+              }
+          }
           Setup "default install"
           $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
           if (-not (Test-Path (Join-Path $dir "finterm.exe"))) {
@@ -439,7 +458,7 @@ jobs:
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          Setup "installing over the install"
+          GuiSetup $setup "installing over the install"
           # The old uninstaller's self-delete helper must not have taken the new tool.
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
@@ -484,8 +503,18 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "$tag did not install ($($p.ExitCode))" }
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          $p = Start-Process -FilePath $new -Wait -PassThru -ArgumentList $install
-          if ($p.ExitCode -ne 0) { throw "updating $tag failed ($($p.ExitCode))" }
+          # As a user updates: the new installer's GUI (see GuiSetup above).
+          $qs = (Resolve-Path ".github/ci/ifw-gui-install.qs").Path
+          $out = Join-Path $env:RUNNER_TEMP "gui-out.txt"; $err = Join-Path $env:RUNNER_TEMP "gui-err.txt"
+          $p = Start-Process -FilePath $new -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
+              -ArgumentList @("--verbose", "--script", "`"$qs`"")
+          $done = $p.WaitForExit(600000)
+          if (-not $done) { $p.Kill() }
+          foreach ($f in $out, $err) { Write-Host "· $(Split-Path -Leaf $f):"; Get-Content $f -ErrorAction SilentlyContinue | Write-Host }
+          if (-not $done -or $p.ExitCode -ne 0) { throw "updating $tag failed" }
+          if (Select-String -Path $out, $err -Pattern "OverwriteTargetDirectory" -Quiet -ErrorAction SilentlyContinue) {
+              throw "updating $tag asked whether to install into a folder that is not empty"
+          }
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
               if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after updating $tag" }
