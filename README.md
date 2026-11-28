@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`2918981d6`](https://github.com/yumima/finterm/commit/2918981d6) CI lockdown window in one native process; the machine's value restored
 - [`fb7e29c3b`](https://github.com/yumima/finterm/commit/fb7e29c3b) CI's locked-down lookup locked down from the start, asserted
 - [`769aa7066`](https://github.com/yumima/finterm/commit/769aa7066) CI's restricted lookup asserted restricted; unreadable told from a crash
 - [`fc5e34c99`](https://github.com/yumima/finterm/commit/fc5e34c99) CI runs the Apps lookup as a locked-down machine would, every branch

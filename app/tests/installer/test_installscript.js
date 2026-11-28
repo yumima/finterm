@@ -284,9 +284,10 @@ check("uninstall, the Apps list read: asked without the warning", a0.asked === 1
 const lookup = a0.commands.find(c => /CurrentVersion\\Uninstall/.test(c)) || "";
 check("the Apps lookup: not there is empty, can't open is unreadable, unreadable entries counted (none read: unreadable; some: partial)",
       /-not \(\$_\.FullyQualifiedErrorId -like 'PathNotFound\*'\) \}\)\.Count\) \{ 'UNREADABLE'; exit 1 \}; exit 0 \}/.test(lookup) &&
-      // Restricted-safe: no type literal but [uri]/[string] (any case, with or
-      // without System.), no type by name, no method call on an object (only
-      // on [uri]), no compiled or evaluated code.
+      // Restricted-safe, as an early warning (CI runs the lookup locked down
+      // for real, the actual guard): no type literal but [uri]/[string] (any
+      // case, with or without System.), no type by name, no method call on a
+      // variable, no compiled or evaluated code.
       !/\[\s*(?!(?:system\.)?(?:uri|string)\s*\])[A-Za-z][\w.`+]*\s*[\]\[,`]/i.test(lookup) &&
       !/New-Object|Add-Type|Invoke-Expression|\biex\b|::new\(|-(as|is|isnot)\b|InvokeCommand|\.Invoke\(/i.test(lookup) &&
       !/\$[\w:]+(\.\w+)*\.\w+\(/.test(lookup) &&

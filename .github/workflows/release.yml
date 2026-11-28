@@ -434,31 +434,40 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
           # The locked-down window is one native process (a .cmd: set the
-          # policy, run the child, keep its code, put the machine's value
-          # back), so no other PowerShell host runs inside it.
+          # policy, run the child, keep its code, put the machine's value back
+          # exactly — reg export/import), so no other PowerShell host runs
+          # inside it. The lookup goes as -EncodedCommand: the same as the
+          # installer's -Command, with no quoting through cmd.
           $envKey = "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
-          $before = [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")
-          $restore = if ($before) { "reg add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d `"$before`" /f >nul" }
+          $saved = Join-Path $env:RUNNER_TEMP "lockdown-before.reg"
+          $had = $null -ne (Get-ItemProperty -Path "Registry::$envKey" -Name __PSLockdownPolicy -ErrorAction SilentlyContinue)
+          if ($had) { & reg export "$envKey" $saved /y | Out-Null; if ($LASTEXITCODE -ne 0) { throw "could not save the machine's environment" } }
+          $restore = if ($had) { "reg import `"$saved`" >nul 2>nul" }
                      else { "reg delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul" }
+          $beforeValue = [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")
           function Lookup([string]$command, [bool]$restricted) {
               $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
-              $ps1 = Join-Path $env:RUNNER_TEMP "apps-lookup.ps1"; $txt = Join-Path $env:RUNNER_TEMP "apps-lookup.txt"
-              Set-Content -Path $ps1 -Value ("'MODE ' + `$ExecutionContext.SessionState.LanguageMode`r`n" + $command)
+              $txt = Join-Path $env:RUNNER_TEMP "apps-lookup.txt"; $errTxt = Join-Path $env:RUNNER_TEMP "apps-lookup-err.txt"
+              Remove-Item $txt, $errTxt -ErrorAction SilentlyContinue
+              $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(
+                  "'MODE ' + `$ExecutionContext.SessionState.LanguageMode; " + $command))
               $cmd = Join-Path $env:RUNNER_TEMP "apps-lookup.cmd"
               Set-Content -Path $cmd -Encoding ascii -Value @(
                   "@echo off",
                   $(if ($restricted) { "reg add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d 4 /f >nul" } else { "rem" }),
-                  "`"$winps`" -NoProfile -ExecutionPolicy Bypass -File `"$ps1`" > `"$txt`" 2>&1",
+                  "`"$winps`" -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded > `"$txt`" 2> `"$errTxt`"",
                   "set code=%errorlevel%",
                   $(if ($restricted) { $restore } else { "rem" }),
                   "exit /b %code%")
               & cmd.exe /d /c "`"$cmd`""
               $code = $LASTEXITCODE
-              if ([Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine") -ne $before) {
+              if ([Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine") -ne $beforeValue) {
                   throw "the machine's lockdown policy was not put back"
               }
+              if (-not (Test-Path $txt)) { throw "the lookup did not run (cmd exit $code)" }
               $out = @(Get-Content $txt)
-              if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out" }
+              $err = (Get-Content $errTxt -Raw -ErrorAction SilentlyContinue)
+              if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out $err" }
               return @{ code = $code; out = $out; locations = @($out | Where-Object { $_ -like "L *" } |
                   ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') }) }
           }
