@@ -143,20 +143,21 @@ void EarningsCallAudio::resolve(bool refresh_session) {
         if (code != 0 || out.isEmpty()) {
             if (refresh_session)
                 return; // not fatal: the stall watch is the backstop
-            const QByteArray stderr_bytes = proc->readAllStandardError();
-            QString err = services::video::ytdlp_error(stderr_bytes);
+            QString err = services::video::ytdlp_error(proc->readAllStandardError());
             // "ERROR: [youtube] UiUWuWd9-Hk: This live event will begin in 6 days."
             err.remove(QRegularExpression(QStringLiteral("^ERROR:\\s*(\\[[^\\]]*\\]\\s*)?([\\w-]+:\\s*)?")));
             err = err.trimmed();
-            // Not live is said only when YouTube says it; an outdated yt-dlp
-            // (YouTube changed) says where the update is; nothing at all (a
-            // timeout, an empty answer) says that.
+            // Not live is said only when YouTube says it; nothing at all (a
+            // timeout, an empty answer) says that; any other error is shown,
+            // with where yt-dlp is updated when that may be the cause.
             if (kind_ == QLatin1String("youtube_live") && services::video::ytdlp_not_live(err))
                 fail(QStringLiteral("the channel isn't live right now"));
-            else if (services::video::ytdlp_update_may_help(stderr_bytes))
-                fail(services::video::ytdlp_update_hint());
+            else if (err.isEmpty())
+                fail(QStringLiteral("no stream came back (yt-dlp gave no answer)"));
             else
-                fail(err.isEmpty() ? QStringLiteral("no stream came back (yt-dlp gave no answer)") : err.left(160));
+                fail(err.left(160) + (services::video::ytdlp_hint_applies(err)
+                                          ? QStringLiteral(" — ") + services::video::ytdlp_update_hint()
+                                          : QString()));
             return;
         }
         // An HLS answer from YouTube is a LIVE stream (a recording resolves

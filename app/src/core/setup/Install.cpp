@@ -262,13 +262,11 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
 }
 
 /// Ask the image to mount itself (--appimage-mount prints the mount point
-/// and holds it until stopped): whether FUSE works here for this runtime.
-bool image_can_mount(const QString& image) {
-    // One answer per process (current_env() is asked more than once, and one
-    // run's decisions must rest on the same answer). A probe that ran out of
-    // time counts as no mount: if FUSE does work, the next run that mounts
-    // writes the launcher's direct form (refresh_launcher).
-    static QHash<QString, bool> known;
+/// and holds it until stopped): 1 it mounted, 0 it can't, -1 no answer in
+/// time (unknown). One answer per process: current_env() is asked more than
+/// once, and one run's decisions must rest on the same answer.
+int image_can_mount(const QString& image) {
+    static QHash<QString, int> known;
     if (const auto it = known.constFind(image); it != known.cend())
         return it.value();
     QProcess p;
@@ -277,18 +275,20 @@ bool image_can_mount(const QString& image) {
     p.setProcessEnvironment(e);
     p.start(image, {QStringLiteral("--appimage-mount")});
     if (!p.waitForStarted(3000))
-        return known[image] = false; // can't run it at all
-    bool mounted = false;
+        return known[image] = 0; // can't run it at all
+    int answer = -1;
     if (p.waitForReadyRead(5000)) {
         const QString where = QString::fromUtf8(p.readLine()).trimmed();
-        mounted = !where.isEmpty() && QFileInfo(where).isDir();
+        answer = !where.isEmpty() && QFileInfo(where).isDir() ? 1 : 0;
+    } else if (p.state() == QProcess::NotRunning) {
+        answer = 0; // it gave up: no mount here
     }
     p.terminate();
     if (!p.waitForFinished(2000)) {
         p.kill();
         p.waitForFinished(1000);
     }
-    return known[image] = mounted;
+    return known[image] = answer;
 }
 
 // ── macOS ────────────────────────────────────────────────────────────────────
@@ -434,11 +434,13 @@ Env current_env() {
     // launcher / --appimage-extract-and-run that asked for it) tries a mount.
     // Without an image (a dev build trying the installer) the device and the
     // mount helper decide.
-    if (!appdir.isEmpty() && appdir.contains(QLatin1String("/.mount_")))
+    if (!appdir.isEmpty() && appdir.contains(QLatin1String("/.mount_"))) {
         env.fuse2 = true;
-    else if (!env.package.isEmpty())
-        env.fuse2 = image_can_mount(env.package);
-    else
+    } else if (!env.package.isEmpty()) {
+        const int can = image_can_mount(env.package);
+        env.fuse2 = can == 1;
+        env.fuse_known = can != -1; // no answer in time: the launcher's form is left as it is
+    } else
         env.fuse2 = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
                     (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
                      !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty());
@@ -681,6 +683,8 @@ Result install(const Env& env, const Options& opt) {
 
 void refresh_launcher(const Env& env) {
 #if defined(Q_OS_LINUX)
+    if (!env.fuse_known)
+        return; // whether FUSE works is unknown this run: change nothing
     const State st = state(env);
     if (!st.running_installed)
         return;

@@ -65,6 +65,7 @@ class PythonEnvSection : public QWidget {
         bool everything = false; ///< Upgrade All: dependencies move too (within the requirements)
     };
     QList<ActionBatch> action_queue_;
+    int worst_exit_ = 0; ///< the worst exit code of the queue's batches
 
     // ── stdout accumulators — readyReadStandardOutput fires many times ────────
     QByteArray list_stdout_buf_;

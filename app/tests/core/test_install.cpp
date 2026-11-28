@@ -165,6 +165,15 @@ class TestInstall : public QObject {
         env_.fuse2 = false;
         install::refresh_launcher(env_);
         QVERIFY(read(desktop()).contains("Exec=env APPIMAGE_EXTRACT_AND_RUN=1 " + installed()));
+        // FUSE unknown this run (the test mount gave no answer in time): the
+        // launcher's form stays as it is.
+        const QString before = read(desktop());
+        env_.fuse2 = true;
+        env_.fuse_known = false;
+        install::refresh_launcher(env_);
+        QCOMPARE(read(desktop()), before);
+        env_.fuse2 = false;
+        env_.fuse_known = true;
         // The command the user removed is not put back by a refresh.
         QFile::remove(env_.home + "/.local/bin/finterm");
         env_.version = "4.2.4"; // the launcher is out of date: rewritten

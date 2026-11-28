@@ -655,6 +655,7 @@ void PythonEnvSection::start_action(const QList<ActionBatch>& batches) {
         return;
 
     action_queue_ = batches;
+    worst_exit_ = 0;
     set_actions_enabled(false);
     install_bar_->setValue(0);
     install_bar_->setVisible(true);
@@ -682,7 +683,10 @@ void PythonEnvSection::run_next_batch() {
     if (batch.upgrade) {
         // Only what was chosen moves (--upgrade-package): everything else in
         // the environment stays at its requirement — the others of this venv
-        // are constraints (lines with extras can't be constraints).
+        // are constraints (lines with extras can't be constraints). Upgrade
+        // All (batch.everything) uses --upgrade instead: dependencies outside
+        // the requirements move too, and the constraints hold only the rows
+        // that aren't installed.
         QStringList pins;
         QSet<QString> chosen;
         for (const PackageRow& row : all_packages_)
@@ -725,12 +729,15 @@ void PythonEnvSection::run_next_batch() {
     });
 
     connect(action_proc_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [this](int exit_code, QProcess::ExitStatus) {
+            [this](int exit_code, QProcess::ExitStatus status) {
                 action_stdout_buf_.clear();
+                // The worst of all batches is what is reported, not the last.
+                if (exit_code != 0 || status != QProcess::NormalExit)
+                    worst_exit_ = exit_code != 0 ? exit_code : 1;
                 if (!action_queue_.isEmpty()) {
                     run_next_batch();
                 } else {
-                    on_action_finished(exit_code);
+                    on_action_finished(worst_exit_);
                 }
             });
 

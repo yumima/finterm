@@ -30,6 +30,7 @@ struct Env {
     QString version;        ///< this build's version
     QString built;          ///< this build's commit time (ISO, UTC); "" for a dev build — tells two builds of one version apart
     bool fuse2 = true;      ///< Linux: the image can mount itself here (this run mounted, or a test mount worked)
+    bool fuse_known = true; ///< Linux: false when the test mount gave no answer in time (fuse2 is then false)
     bool system_apps_writable = true; ///< macOS: /Applications can be written
 };
 

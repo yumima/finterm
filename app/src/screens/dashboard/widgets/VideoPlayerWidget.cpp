@@ -2215,8 +2215,7 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     }
 
     if (exit_code != 0) {
-        const QByteArray stderr_bytes = proc->readAllStandardError();
-        const QString err = ytdlp_real_error(stderr_bytes);
+        const QString err = ytdlp_real_error(proc->readAllStandardError());
         play_in_progress_ = false;
         // Remember what failed. current_url_ has to go so refresh_data() stops
         // retrying, but PLAY re-resolves from one of the two — and clearing
@@ -2224,14 +2223,14 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         url_before_error_ = current_url_;
         current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
-        // One short line (the label is one line high); the whole error in its
-        // tooltip. YouTube changes break an older yt-dlp: then the line says
-        // where the update is.
+        // One short line (the label is one line high): the error; its tooltip
+        // the whole error and, when it may be YouTube's change, where yt-dlp
+        // is updated.
         const QString why = err.isEmpty() ? QStringLiteral("yt-dlp failed") : err;
-        const bool outdated = finterm::services::video::ytdlp_update_may_help(stderr_bytes);
-        status_label_->setText(outdated ? finterm::services::video::ytdlp_update_hint()
-                                        : QStringLiteral("yt-dlp: ") + why.left(90));
-        status_label_->setToolTip(why);
+        status_label_->setText(QStringLiteral("yt-dlp: ") + why.left(90));
+        status_label_->setToolTip(finterm::services::video::ytdlp_hint_applies(why)
+                                      ? why + QStringLiteral("\n\n") + finterm::services::video::ytdlp_update_hint()
+                                      : why);
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp failed: " + err.left(250));
         return;
@@ -2764,9 +2763,10 @@ void VideoPlayerWidget::on_player_error() {
 }
 
 void VideoPlayerWidget::set_loading(bool loading) {
+    // An earlier failure's detail no longer applies, whatever comes next.
+    status_label_->setToolTip(QString());
     if (loading) {
         status_label_->setText("Resolving stream via yt-dlp...");
-        status_label_->setToolTip(QString()); // an earlier failure's detail no longer applies
         status_label_->show();
     } else {
         status_label_->hide();
