@@ -451,16 +451,24 @@ class TestInstall : public QObject {
         const auto aged = [&](const QString& path, qint64 secs) {
             write_package(path, "t");
             QFile f(path);
-            QVERIFY(f.open(QIODevice::ReadWrite));
-            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-secs), QFileDevice::FileModificationTime));
+            return f.open(QIODevice::ReadWrite) &&
+                   f.setFileTime(QDateTime::currentDateTime().addSecs(-secs), QFileDevice::FileModificationTime);
         };
-        aged(apps + "/.finterm.desktop.finterm-tmp.Old001", 2 * 86400);
-        aged(apps + "/.finterm.desktop.finterm-tmp.New001", 2 * 3600); // perhaps a write in progress elsewhere
-        aged(env_.home + "/Applications/.finterm-launch.part", 2 * 86400);
+        QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.Old001", 2 * 86400));
+        QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.New001", 2 * 3600)); // perhaps a write in progress
+        QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.Fut001", -3 * 86400)); // a clock since put right
+        QVERIFY(aged(env_.home + "/Applications/.finterm-launch.part", 2 * 86400));
+        QVERIFY(aged(env_.home + "/Applications/.finterm-launch.new", 2 * 3600)); // an older build writing now
         install::refresh_launcher(env_); // nothing stale: no rewrite
         QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Old001"));
         QVERIFY(QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.New001"));
+        QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Fut001"));
         QVERIFY(!QFileInfo::exists(env_.home + "/Applications/.finterm-launch.part"));
+        QVERIFY(QFileInfo::exists(env_.home + "/Applications/.finterm-launch.new"));
+        // --install from the installed copy sweeps too.
+        QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.Old002", 2 * 86400));
+        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Old002"));
     }
 
     void links_are_kept_as_written_and_bak_names_never_collide() {

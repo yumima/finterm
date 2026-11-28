@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`aa03ba850`](https://github.com/yumima/finterm/commit/aa03ba850) Day-old leftovers swept at every start, before the up-to-date return
 - [`e7465bd40`](https://github.com/yumima/finterm/commit/e7465bd40) Sweep leftovers at every launcher write, not only at a rewrite
 - [`545b7f3c7`](https://github.com/yumima/finterm/commit/545b7f3c7) Launch script rewrite only narrows; sweep timed by its own temporary
 - [`976f94bde`](https://github.com/yumima/finterm/commit/976f94bde) Launch script: readable to be usable; a narrowed mode survives a rewrite

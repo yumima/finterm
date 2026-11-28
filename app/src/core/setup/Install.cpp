@@ -91,6 +91,7 @@ bool replace_file(const QString& from, const QString& to) {
 #endif
 }
 
+#if defined(Q_OS_UNIX)
 QString run(const QString& program, const QStringList& args, int timeout_ms = 15000, bool* ok = nullptr) {
     QProcess p;
     p.setProcessEnvironment(clean_environment());
@@ -102,20 +103,25 @@ QString run(const QString& program, const QStringList& args, int timeout_ms = 15
         *ok = done && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
     return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
 }
+#endif
 
 // ── Linux ────────────────────────────────────────────────────────────────────
 
+#if defined(Q_OS_LINUX)
 QString desktop_path(const Env& env) {
     return QDir(env.data_home).filePath(QStringLiteral("applications/finterm.desktop"));
 }
+#endif
 
 QString icon_path(const Env& env) {
     return QDir(env.data_home).filePath(QStringLiteral("icons/hicolor/256x256/apps/finterm.png"));
 }
 
+#if defined(Q_OS_LINUX)
 QString command_path(const Env& env) {
     return QDir(env.home).filePath(QStringLiteral(".local/bin/finterm"));
 }
+#endif
 
 QString previous_path(const QString& installed) {
 #if defined(Q_OS_MACOS)
@@ -127,10 +133,12 @@ QString previous_path(const QString& installed) {
 #endif
 }
 
+#if defined(Q_OS_LINUX)
 QString read_text(const QString& path) {
     QFile f(path);
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
 }
+#endif
 
 /// Temporaries a killed write left beside `path`: Beside's own
 /// ".<name>.finterm-tmp.XXXXXX" (exactly that) and the ".new"/".part" names
@@ -147,7 +155,11 @@ void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, bo
     if (!now.isValid())
         return;
     const QFileInfo fi(path);
-    const QDir dir(fi.absolutePath());
+    QDir dir(fi.absolutePath());
+    // Only these names are listed (an applications folder holds hundreds).
+    dir.setNameFilters({QStringLiteral(".") + fi.fileName() + QStringLiteral(".finterm-tmp.*"),
+                        fi.fileName() + QStringLiteral(".new"), fi.fileName() + QStringLiteral(".new.part"),
+                        fi.fileName() + QStringLiteral(".part")});
     const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
                                   QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
     QSet<QString> legacy;
@@ -160,7 +172,6 @@ void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, bo
             QFile::remove(e.absoluteFilePath());
     }
 }
-
 
 /// `text` written to a temporary of its own beside `path` (unique name, every
 /// byte checked), for `put` to rename over it. A rename replaces the entry
@@ -186,8 +197,12 @@ class Beside {
         tmp_.close();
         ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
         // What killed writes left here, timed by this temporary's own stamp.
-        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(), 600, true,
-                          QFileInfo(tmp_.fileName()).fileName());
+        // (A failed write has no stamp of its own: the local clock and a day.)
+        if (ok_)
+            sweep_temporaries(path, QFileInfo(tmp_.fileName()).lastModified(), 600, true,
+                              QFileInfo(tmp_.fileName()).fileName());
+        else
+            sweep_temporaries(path, QDateTime::currentDateTime(), 86400, true, QFileInfo(tmp_.fileName()).fileName());
     }
     bool ok() const { return ok_; }
     /// Rename it over `path`; false (and it goes) when that fails.
@@ -209,11 +224,14 @@ constexpr QFileDevice::Permissions kReadable = QFileDevice::ReadOwner | QFileDev
 constexpr QFileDevice::Permissions kRunnable = kReadable | QFileDevice::ExeOwner | QFileDevice::ExeGroup |
                                                QFileDevice::ExeOther;
 
+#if defined(Q_OS_LINUX)
 bool write_text(const QString& path, const QString& text, QFileDevice::Permissions perms = kReadable) {
     Beside b(path, text, perms);
     return b.put();
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 /// What a symbolic link says (as written — relative stays relative).
 QString link_text(const QString& path) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
@@ -222,17 +240,22 @@ QString link_text(const QString& path) {
     return QFileInfo(path).symLinkTarget();
 #endif
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 bool ours(const QString& desktop_text) {
     return desktop_text.contains(QLatin1String(kMarker) + QStringLiteral("=1"));
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 QString desktop_value(const QString& text, const char* key) {
     const QRegularExpression re(QStringLiteral("^%1=(.*)$").arg(QRegularExpression::escape(QLatin1String(key))),
                                 QRegularExpression::MultilineOption);
     const auto m = re.match(text);
     return m.hasMatch() ? m.captured(1).trimmed() : QString();
 }
+#endif
 
 /// A string value of a desktop entry: \\ escaped (Desktop Entry spec).
 QString desktop_string(const QString& value) {
@@ -255,6 +278,7 @@ QString exec_arg(const QString& arg) {
     return desktop_string(out);
 }
 
+#if defined(Q_OS_LINUX)
 bool gsettings_favourites(QStringList& out) {
     if (QStandardPaths::findExecutable(QStringLiteral("gsettings")).isEmpty())
         return false;
@@ -270,7 +294,9 @@ bool gsettings_favourites(QStringList& out) {
         out << it.next().captured(1);
     return true;
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 bool set_gsettings_favourites(const QStringList& list) {
     QStringList quoted;
     for (const QString& s : list)
@@ -281,7 +307,9 @@ bool set_gsettings_favourites(const QStringList& list) {
         5000, &ok);
     return ok;
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 void refresh_desktop_caches(const Env& env) {
     if (!QStandardPaths::findExecutable(QStringLiteral("update-desktop-database")).isEmpty())
         run(QStringLiteral("update-desktop-database"), {QDir(env.data_home).filePath(QStringLiteral("applications"))});
@@ -289,6 +317,7 @@ void refresh_desktop_caches(const Env& env) {
         run(QStringLiteral("gtk-update-icon-cache"),
             {QStringLiteral("-q"), QStringLiteral("-t"), QDir(env.data_home).filePath(QStringLiteral("icons/hicolor"))});
 }
+#endif
 
 /// The small script the menu entry and the `finterm` command start, beside
 /// the image. It asks the image to mount itself (--appimage-mount: the
@@ -303,6 +332,7 @@ QString launch_script_path(const QString& installed) {
     return QDir(QFileInfo(installed).absolutePath()).filePath(QStringLiteral(".finterm-launch"));
 }
 
+#if defined(Q_OS_LINUX)
 /// The script for `installed`: its path written in (the command starts the
 /// script through a link, so the script's own location says nothing).
 QString launch_script_text(const QString& installed) {
@@ -377,7 +407,9 @@ QString launch_script_text(const QString& installed) {
         "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
         .arg(quoted);
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 /// A plain file the user can run, not a link (a link's target is not ours to
 /// run or chmod). The rest of its mode is the user's to narrow.
 bool launch_script_usable(const QString& installed) {
@@ -385,13 +417,17 @@ bool launch_script_usable(const QString& installed) {
     // (Readable too: /bin/sh opens it to run it.)
     return !fi.isSymLink() && fi.isFile() && fi.isExecutable() && fi.isReadable();
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 /// The launch script is this build's, and usable.
 bool launch_script_ok(const QString& installed) {
     return launch_script_usable(installed) &&
            read_text(launch_script_path(installed)) == launch_script_text(installed);
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 bool write_launch_script(const QString& installed) {
     if (launch_script_ok(installed))
         return true;
@@ -406,13 +442,16 @@ bool write_launch_script(const QString& installed) {
         perms = (QFile::permissions(path) & kRunnable) | QFileDevice::ReadOwner | QFileDevice::ExeOwner;
     return write_text(path, launch_script_text(installed), perms);
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 /// The start's and the install's own sweep (see sweep_temporaries).
 void sweep_leftovers(const Env& env, const QString& installed) {
     const QDateTime now = QDateTime::currentDateTime();
-    sweep_temporaries(desktop_path(env), now, 86400, false);
-    sweep_temporaries(launch_script_path(installed), now, 86400, false);
+    sweep_temporaries(desktop_path(env), now, 86400, true);
+    sweep_temporaries(launch_script_path(installed), now, 86400, true);
 }
+#endif
 
 /// What could not be added, and how: by the installed image's own path (the
 /// `finterm` command may be what is missing).
@@ -445,6 +484,7 @@ QString launcher_hint(const QStringList& missed, const QString& installed) {
 #endif
 }
 
+#if defined(Q_OS_LINUX)
 /// What write_launcher writes: the menu entry (an install; a refresh when it
 /// is ours and out of date), and whether the command may be made where there
 /// is none (an install only — a refresh keeps one of ours current, never puts
@@ -538,7 +578,9 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     }
     return done;
 }
+#endif
 
+#if defined(Q_OS_LINUX)
 /// The installed image's version, from the launcher we wrote with it. An
 /// image we did not install (copied there by hand) is not run to ask — an
 /// old build would open its whole window: its version is unknown.
@@ -551,6 +593,7 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
     }
     return {};
 }
+#endif
 
 // ── macOS ────────────────────────────────────────────────────────────────────
 #if defined(Q_OS_MACOS)
@@ -693,6 +736,8 @@ Env current_env() {
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
         env.package = d.absolutePath();
     env.system_apps_writable = QFileInfo(QStringLiteral("/Applications")).isWritable();
+#else
+    Q_UNUSED(release);
 #endif
     return env;
 }
@@ -824,6 +869,7 @@ Result install(const Env& env, const Options& opt) {
         r.ok = true;
         r.done << QStringLiteral("already running from ") + st.path;
 #if defined(Q_OS_LINUX)
+        sweep_leftovers(env, st.path);
         bool launcher_ok = true;
         r.done << write_launcher(env, st.path, Items{}, &launcher_ok);
         if (!launcher_ok) {
@@ -1064,9 +1110,13 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     // (whatever version wrote it; its refresh keeps it current), written only
     // when it is missing or unusable.
     QProcess p;
+#if defined(Q_OS_LINUX)
     const QString script = launch_script_path(installed);
     const bool have_script = launch_script_usable(installed) || write_launch_script(installed);
     p.setProgram(have_script ? script : installed);
+#else
+    p.setProgram(installed);
+#endif
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());
     p.setWorkingDirectory(QDir::homePath());
