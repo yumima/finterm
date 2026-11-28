@@ -37,14 +37,12 @@ function Component()
                 " isUpdater=" + installer.isUpdater() +
                 " isPackageManager=" + installer.isPackageManager());
 
+    // Installing over an installed finterm (the update) is the control
+    // script's (config/controlscript.qs): it runs before IFW's folder check.
+
     // Connect signals using the 1-arg form. The 2-arg form (thisObj, fn) is
     // not reliably supported by the QJSEngine that backs QtIFW component
     // scripts — connections silently no-op on some versions.
-    if (installer.isInstaller()) {
-        installer.installationFinished.connect(onInstallationFinished);
-        refuseWhileUninstallerOpen() || replaceExistingInstall();
-    }
-
     if (installer.isUninstaller()) {
         installer.uninstallationStarted.connect(onUninstallationStarted);
         installer.uninstallationFinished.connect(onUninstallationFinished);
@@ -57,14 +55,6 @@ function Component()
 
 Component.prototype.createOperations = function()
 {
-    if (installer.isInstaller() && uninstallerRunning())
-        throw new Error("a finterm uninstaller window is still open - close it first");
-    // The update above removes an existing install first; one still there
-    // (declined, or its removal failed) is never installed over or beside.
-    var other = installer.isInstaller() ? existingInstall() : "";
-    if (other)
-        throw new Error("finterm is already installed in " + other + " - uninstall it first");
-
     // Always call base first so file extraction happens.
     component.createOperations();
 
@@ -111,10 +101,35 @@ Component.prototype.createOperations = function()
 };
 
 // ---------------------------------------------------------------------------
-// Windows: one install per machine. finterm installs per user since 4.1.0
-// (%LOCALAPPDATA%\Programs\finterm); an earlier one in Program Files would
-// stay beside it, both sharing one data folder — and the old one's uninstall
-// could remove that data. Ask for the old one to go first.
+// Windows' own tools, by full path — never whatever PATH finds first: a
+// broken PATH made every call fail without a word (a data removal that
+// removed nothing), and a planted copy earlier on it would run instead.
+// (Kept identical in config/controlscript.qs; test_installscript.js checks.)
+// ---------------------------------------------------------------------------
+
+function winTool(name)
+{
+    var root = (installer.environmentVariable("SystemRoot") || installer.environmentVariable("windir") ||
+                "C:\\Windows").replace(/[\\\/]+$/, "");
+    return root + (name === "powershell.exe" ? "\\System32\\WindowsPowerShell\\v1.0\\" : "\\System32\\") + name;
+}
+
+// [stdout, exit code], or null when the program could not be started — a
+// failure to report, never an answer.
+function run(program, args)
+{
+    var r = installer.execute(program, args);
+    if (!r || r.length === 0) {
+        console.log("[finterm] could not start " + program);
+        return null;
+    }
+    return [String(r[0]), r.length > 1 ? Number(r[1]) : 0];
+}
+
+// ---------------------------------------------------------------------------
+// Windows: another finterm install on this machine (an old Program Files one
+// beside the per-user one) shares the data — its uninstall never offers to
+// remove it.
 // ---------------------------------------------------------------------------
 
 function otherWindowsInstall(ownDir)
@@ -134,179 +149,9 @@ function otherWindowsInstall(ownDir)
     return "";
 }
 
-
-// ---------------------------------------------------------------------------
-// Windows: running the installer over an existing finterm UPDATES it. QtIFW
-// refuses a folder that already holds an installation (on its target page,
-// before any hook a component script has), and an older Program Files copy
-// (4.0.10 and before) would stay beside a per-user one, sharing its data.
-// So, when the user agrees at the start: the existing one is removed by its
-// own uninstaller — which keeps the data (its question defaults to No, and
-// --default-answer takes it) — then this one installs. Data is never touched
-// here; the question says the removal happens at once.
-// ---------------------------------------------------------------------------
-
-// Every finterm installation found (the target folder, the per-user one, an
-// old Program Files one), each once.
-function existingInstalls()
-{
-    if (systemInfo.kernelType !== "winnt")
-        return [];
-    var candidates = [
-        installer.value("TargetDir"),
-        installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",
-        installer.environmentVariable("ProgramFiles") + "/finterm"
-    ];
-    var found = [], seen = {};
-    for (var i = 0; i < candidates.length; ++i) {
-        var dir = (candidates[i] || "").replace(/\\/g, "/");
-        var key = dir.toLowerCase().replace(/\/+$/, "");
-        if (dir && !seen[key] && installer.fileExists(dir + "/FintermMaintenanceTool.exe")) {
-            seen[key] = true;
-            found.push(dir);
-        }
-    }
-    return found;
-}
-
-function existingInstall()
-{
-    var all = existingInstalls();
-    return all.length > 0 ? all[0] : "";
-}
-
-function inProgramFiles(dir)
-{
-    var pf = (installer.environmentVariable("ProgramFiles") || "").replace(/\\/g, "/").toLowerCase();
-    return pf.length > 0 && dir.toLowerCase().indexOf(pf + "/") === 0;
-}
-
-function fintermRunning()
-{
-    var r = installer.execute("tasklist.exe", ["/FI", "IMAGENAME eq finterm.exe", "/NH"]);
-    return !!(r && r.length > 0 && /finterm\.exe/i.test(String(r[0])));
-}
-
-function stopInstaller()
-{
-    if (installer.isCommandLineInstance())
-        installer.interrupt();
-    else
-        gui.rejectWithoutPrompt();
-}
-
 function psQuote(s)
 {
     return "'" + String(s).replace(/'/g, "''") + "'";
-}
-
-function replaceExistingInstall()
-{
-    var dirs = existingInstalls();
-    if (dirs.length === 0)
-        return;
-    var anyProgramFiles = false, list = "";
-    for (var i = 0; i < dirs.length; ++i) {
-        anyProgramFiles = anyProgramFiles || inProgramFiles(dirs[i]);
-        list += "\n" + toWin(dirs[i]);
-    }
-    console.log("[finterm] existing installation(s): " + dirs.join(", "));
-    var answer = QMessageBox.question(
-        "finterm.install.update",
-        "Update finterm",
-        "finterm is already installed in:" + list + "\n\n" +
-        "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
-        "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
-        "the installer after this, run it again to install finterm." +
-        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission, and finterm then " +
-                           "installs for your user only." : ""),
-        QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
-    if (answer !== QMessageBox.Yes) {
-        stopInstaller();
-        return;
-    }
-    for (var tries = 0; fintermRunning(); ++tries) {
-        if (tries >= 2 || installer.isCommandLineInstance()) {
-            QMessageBox.critical("finterm.install.running", "finterm is running",
-                                 "Quit finterm, then run this installer again.", QMessageBox.Ok);
-            stopInstaller();
-            return;
-        }
-        QMessageBox.warning("finterm.install.running_ask", "finterm is running",
-                            "Quit finterm (every window), then click OK — the installer then waits up to 10 seconds for it to close.",
-                            QMessageBox.Ok);
-        // Closing takes a moment (its data daemon, the window): up to 10 s.
-        installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-            "Wait-Process -Name finterm -Timeout 10 -ErrorAction SilentlyContinue"]);
-    }
-    var args = ["purge", "--default-answer", "--confirm-command"];
-    for (var j = 0; j < dirs.length; ++j) {
-        var dir = dirs[j];
-        var tool = dir + "/FintermMaintenanceTool.exe";
-        var r;
-        if (inProgramFiles(dir)) {
-            // Elevated: the old install was made by an administrator.
-            r = installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                "$p = Start-Process -FilePath " + psQuote(toWin(tool)) + " -ArgumentList " +
-                args.map(psQuote).join(",") + " -Verb RunAs -Wait -PassThru; exit $p.ExitCode"]);
-        } else {
-            r = installer.execute(toWin(tool), args);
-        }
-        console.log("[finterm] removing " + dir + ": exit " + (r && r.length > 1 ? r[1] : "?"));
-        // The uninstaller deletes itself from a helper after it exits: wait for
-        // that, or it would delete the maintenance tool this install puts there.
-        installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-            "for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(tool)) + ") -and $i -lt 120; $i++) " +
-            "{ Start-Sleep -Milliseconds 500 }"]);
-        if (installer.fileExists(tool)) {
-            QMessageBox.critical(
-                "finterm.install.update_failed", "finterm could not be updated",
-                "The installed finterm in " + toWin(dir) + " could not be removed. Uninstall it from Settings > " +
-                "Apps (answer No when asked to remove your data — this version keeps it), then run this installer " +
-                "again.",
-                QMessageBox.Ok);
-            stopInstaller();
-            return;
-        }
-    }
-    console.log("[finterm] previous install(s) removed; installing.");
-}
-
-// ---------------------------------------------------------------------------
-// Windows: an uninstaller window still open (on its last page). IFW removes
-// the uninstaller with a helper that waits for that window to close and then
-// deletes FintermMaintenanceTool.* in the folder — by then the NEW install's,
-// leaving it without an uninstaller. Ask for the window to be closed first.
-// ---------------------------------------------------------------------------
-
-function uninstallerRunning()
-{
-    if (systemInfo.kernelType !== "winnt")
-        return false;
-    var r = installer.execute("tasklist.exe", ["/FI", "IMAGENAME eq FintermMaintenanceTool.exe", "/NH"]);
-    return !!(r && r.length > 0 && /FintermMaintenanceTool\.exe/i.test(String(r[0])));
-}
-
-function refuseWhileUninstallerOpen()
-{
-    if (!uninstallerRunning())
-        return false;
-    console.log("[finterm] an uninstaller window is still open");
-    QMessageBox.critical(
-        "finterm.install.uninstaller_open",
-        "Close the finterm uninstaller first",
-        "A finterm uninstaller window is still open. Close it (click Finish), then run this installer again.",
-        QMessageBox.Ok);
-    if (installer.isCommandLineInstance())
-        installer.interrupt();
-    else
-        gui.rejectWithoutPrompt();
-    return true;
-}
-
-function onInstallationFinished()
-{
-    console.log("[finterm] Installation finished.");
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +233,7 @@ function removeUpdaterLeftovers()
     var name = target.substring(cut + 1);
     if (!name)
         return;
-    runAndLog("powershell.exe", [
+    runAndLog(winTool("powershell.exe"), [
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
         "Get-ChildItem -LiteralPath '" + toWin(parent).replace(/'/g, "''") + "' -Directory -ErrorAction SilentlyContinue | " +
         "Where-Object { $_.Name -match '" + updaterLeftoverPattern(name).replace(/'/g, "''") + "' } | " +
@@ -436,27 +281,28 @@ function cleanUserDataWindows()
     removeDirIfEmptyWindows(appData + "/Fincept");
 
     // 4. Registry — QSettings default format on Windows
-    runAndLog("reg.exe", ["delete", "HKCU\\Software\\finterm", "/f"]);
-    runAndLog("reg.exe", ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal", "/f"]);
-    runAndLog("reg.exe", ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal-Secure", "/f"]);
+    runAndLog(winTool("reg.exe"), ["delete", "HKCU\\Software\\finterm", "/f"]);
+    runAndLog(winTool("reg.exe"), ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal", "/f"]);
+    runAndLog(winTool("reg.exe"), ["delete", "HKCU\\Software\\Fincept\\FinceptTerminal-Secure", "/f"]);
     // Remove parent key last — only succeeds if no other Fincept apps remain.
-    runAndLog("reg.exe", ["delete", "HKCU\\Software\\Fincept", "/f"]);
+    runAndLog(winTool("reg.exe"), ["delete", "HKCU\\Software\\Fincept", "/f"]);
 
     // 5. Windows Credential Manager entries: FinceptTerminal/*
     //    cmdkey has no wildcard delete. Enumerate via PowerShell and delete each.
-    runAndLog("powershell.exe", [
+    runAndLog(winTool("powershell.exe"), [
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-        "$list = cmdkey /list 2>$null | Select-String -Pattern '(finterm|FinceptTerminal)/'; " +
+        "$cmdkey = " + psQuote(winTool("cmdkey.exe")) + "; " +
+        "$list = & $cmdkey /list 2>$null | Select-String -Pattern '(finterm|FinceptTerminal)/'; " +
         "foreach ($line in $list) { " +
         "  $target = ($line.ToString() -replace '^\\s*Target:\\s*','').Trim(); " +
-        "  if ($target) { cmdkey /delete:$target | Out-Null } " +
+        "  if ($target) { & $cmdkey /delete:$target | Out-Null } " +
         "}"
     ]);
 
     // 6. Temp files — single shell string so wildcards expand inside cmd.
     //    Covers: fincept_cell_*, fincept_arg_*, fincept_report_autosave.*,
     //            fincept_paste_*, fincept_chart_*, fincept_spark_*, UpdateService temp.
-    runAndLog("cmd.exe", ["/c",
+    runAndLog(winTool("cmd.exe"), ["/c",
         "del /q /f \"" + toWin(tempDir) + "\\fincept_*\" 2>nul & " +
         "del /q /f \"" + toWin(tempDir) + "\\fincept-boot.log\" 2>nul & " +
         "exit /b 0"]);
@@ -466,7 +312,7 @@ function cleanUserDataWindows()
     //    exact shape so we don't delete unrelated user files.
     var userProfile = installer.environmentVariable("USERPROFILE");
     if (userProfile) {
-        runAndLog("powershell.exe", [
+        runAndLog(winTool("powershell.exe"), [
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
             "Get-ChildItem -LiteralPath '" + toWin(userProfile) + "' -File " +
             "-Filter 'fincept_*.png' -ErrorAction SilentlyContinue | " +
@@ -486,7 +332,7 @@ function removeDirWindows(pathFwd)
     var win = toWin(pathFwd);
     // Quote the path inside a single shell string so spaces in the path
     // survive argv splitting. `exit /b 0` ensures we never surface an error.
-    runAndLog("cmd.exe", ["/c",
+    runAndLog(winTool("cmd.exe"), ["/c",
         "rmdir /s /q \"" + win + "\" 2>nul & exit /b 0"]);
 }
 
@@ -495,13 +341,13 @@ function removeDirIfEmptyWindows(pathFwd)
     if (!pathFwd || !installer.fileExists(pathFwd)) return;
     var win = toWin(pathFwd);
     // `rmdir` without /s fails if the directory isn't empty — which is what we want.
-    runAndLog("cmd.exe", ["/c",
+    runAndLog(winTool("cmd.exe"), ["/c",
         "rmdir \"" + win + "\" 2>nul & exit /b 0"]);
 }
 
-function toWin(pathFwd)
+function toWin(path)
 {
-    return pathFwd.replace(/\//g, "\\");
+    return String(path).replace(/\//g, "\\");
 }
 
 // ---------- macOS ----------
@@ -646,13 +492,7 @@ function shellEscape(s)
 
 function runAndLog(program, args)
 {
-    var result = installer.execute(program, args);
-    // installer.execute returns [stdout, exitCode] on success,
-    // or [] (empty) if the program failed to launch.
-    if (!result || result.length === 0) {
-        console.log("[finterm] FAILED to launch: " + program + " " + args.join(" "));
-        return;
-    }
-    var exitCode = result.length >= 2 ? result[1] : "?";
-    console.log("[finterm] ran " + program + " (exit=" + exitCode + ")");
+    var r = run(program, args);
+    if (r !== null)
+        console.log("[finterm] ran " + program + " (exit=" + r[1] + ")");
 }

@@ -2745,6 +2745,13 @@ if(FINTERM_BUILD_INSTALLER)
     # an install-time identifier, like io.github.yumima.finterm.
     set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FintermMaintenanceTool")
     set(CPACK_IFW_PACKAGE_WIZARD_STYLE "Modern")
+    # Installing over an installed finterm updates it (Windows): the control
+    # script removes the installed copy before IFW's folder check, then waits
+    # until its uninstaller has removed the whole folder — which it does with
+    # RemoveTargetDir on (IFW's default, spelled out because the wait relies
+    # on it).
+    set(CPACK_IFW_PACKAGE_CONTROL_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/config/controlscript.qs")
+    set(CPACK_IFW_PACKAGE_REMOVE_TARGET_DIR ON)
     set(CPACK_IFW_PACKAGE_ALLOW_SPACE_IN_PATH ON)
     set(CPACK_IFW_PACKAGE_ALLOW_NON_ASCII_CHARACTERS ON)
 

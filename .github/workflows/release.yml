@@ -412,21 +412,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
-          # The installer, verbose (IFW: -v is --version); what it said is shown.
-          function Setup([string]$what) {
-              Get-Process -Name finterm, FintermMaintenanceTool -ErrorAction SilentlyContinue |
-                  ForEach-Object { Write-Host "running before ${what}: $($_.Name) $($_.Id) $($_.Path)" }
-              $out = Join-Path $env:RUNNER_TEMP "setup-out.txt"; $err = Join-Path $env:RUNNER_TEMP "setup-err.txt"
-              $p = Start-Process -FilePath $setup -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
-                  -ArgumentList @("--verbose", "install", "--accept-licenses", "--default-answer", "--confirm-command")
-              Write-Host "── $what (exit $($p.ExitCode)) ──"
-              foreach ($f in $out, $err) {
-                  Write-Host "· $(Split-Path -Leaf $f):"; Get-Content $f -ErrorAction SilentlyContinue | Write-Host
-              }
-              if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }
-          }
-          . ./.github/ci/gui-setup.ps1 # GuiSetup: the GUI, clicked through, as a user updates
-          Setup "default install"
+          . ./.github/ci/ifw-setup.ps1
+          Setup $setup "default install"
           $dir = Join-Path $env:LOCALAPPDATA "Programs\finterm"
           if (-not (Test-Path (Join-Path $dir "finterm.exe"))) {
               Get-ChildItem -Recurse -Depth 1 (Join-Path $env:LOCALAPPDATA "Programs") -ErrorAction SilentlyContinue | Select-Object -First 40 | Out-Host
@@ -443,7 +430,7 @@ jobs:
           # The installed copy marked (bytes appended): afterwards finterm.exe
           # must be this build's again — the one in its update zip.
           [System.IO.File]::AppendAllText((Join-Path $dir "finterm.exe"), "ci-old-copy")
-          GuiSetup $setup "installing over the install"
+          Setup $setup "installing over the install"
           $zip = (Get-ChildItem "app/build/finterm-*-windows-x64-update.zip" | Select-Object -First 1).FullName
           $unz = Join-Path $env:RUNNER_TEMP "over-unz"
           Expand-Archive -Path $zip -DestinationPath $unz -Force
@@ -495,9 +482,8 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "$tag did not install ($($p.ExitCode))" }
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          # As a user updates: the new installer's GUI.
-          . ./.github/ci/gui-setup.ps1
-          GuiSetup $new "updating $tag"
+          . ./.github/ci/ifw-setup.ps1
+          Setup $new "updating $tag"
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
               if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after updating $tag" }
@@ -881,7 +867,7 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/updater/test_apply_update.sh src/services/updater/scripts/apply-update.sh
-          node tests/installer/test_installscript.js packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs
+          node tests/installer/test_installscript.js packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs packaging/installer/config/controlscript.qs
           BUILT="$(ls build/finterm-*-linux-x64-setup.run | head -1)"
           D="${RUNNER_TEMP}/appimage-update"; STATUS="${RUNNER_TEMP}/update-status.json"
           rm -rf "${D}"; mkdir -p "${D}"

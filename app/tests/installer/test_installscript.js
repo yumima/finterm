@@ -1,116 +1,169 @@
-// tests/installer/test_installscript.js — the Windows rules of installscript.qs,
-// run with IFW's objects stubbed (a command-line purge never loads component
-// scripts, so CI cannot reach them through the uninstaller):
-//   - installing over an existing finterm (its own folder, or an old Program
-//     Files one) updates it: the old one is removed by its own uninstaller
-//     (elevated for Program Files) — or, declined or failed, nothing installs;
-//   - an uninstall offers to remove the user's data only when no other install
-//     shares it, and removes it only on Yes.
-// Usage: node test_installscript.js <path to installscript.qs>
+// tests/installer/test_installscript.js — the Windows rules of finterm's QtIFW
+// scripts, run with IFW's objects stubbed:
+//   - controlscript.qs: installing over an installed finterm (its own folder,
+//     or an old Program Files one) updates it — the old one is removed by its
+//     own uninstaller (elevated for Program Files) and the installer waits
+//     until its folder is gone; declined, failed or unverifiable, it stops.
+//     On the command line from the constructor, in the GUI from the
+//     introduction page.
+//   - installscript.qs: an uninstall offers to remove the user's data only
+//     when no other install shares it, and removes it only on Yes.
+//   - both: Windows' tools only by full path (the stub starts nothing else,
+//     as a broken PATH wouldn't), and the helpers they share are identical.
+// Usage: node test_installscript.js <installscript.qs> <controlscript.qs>
 const fs = require("fs"), vm = require("vm");
-const source = fs.readFileSync(process.argv[2], "utf8");
+const componentSource = fs.readFileSync(process.argv[2], "utf8");
+const controlSource = fs.readFileSync(process.argv[3], "utf8");
 let failures = 0;
 function check(name, ok) { console.log((ok ? "ok   - " : "FAIL - ") + name); if (!ok) ++failures; }
 
 const PF = "C:/Program Files/finterm", PU = "C:/Users/u/AppData/Local/Programs/finterm";
-function run(o) {
-    const seen = { critical: 0, warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], operations: 0, hooks: {} };
+const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
+
+// o: installs (folders with a maintenance tool), kernel, cli, answerYes,
+// running, uninstallerOpen, purgeFails, folderStays, toolsBroken, uninstall.
+function stubs(o) {
+    const seen = { critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
-    const env = Object.assign({ ProgramFiles: "C:\\Program Files", LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local",
-                                APPDATA: "C:\\a", TEMP: "C:\\t", USERPROFILE: "C:\\Users\\u" }, o.env || {});
+    const env = Object.assign({ SystemRoot: "C:\\Windows", ProgramFiles: "C:\\Program Files",
+                                LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a", TEMP: "C:\\t",
+                                USERPROFILE: "C:\\Users\\u" }, o.env || {});
+    let installs = (o.installs || []).slice(), folders = installs.slice();
     const ctx = {
         console: { log() {} },
         systemInfo: { kernelType: o.kernel || "winnt" },
         installer: {
             isInstaller: () => !o.uninstall, isUninstaller: () => !!o.uninstall, isUpdater: () => false,
             isPackageManager: () => false, isCommandLineInstance: () => !!o.cli,
-            value: k => k === "TargetDir" ? o.target : k === "ProductVersion" ? "4.2.3" : "", environmentVariable: n => env[n] || "",
-            fileExists: p => o.installs.some(d => p === d + "/FintermMaintenanceTool.exe") || /AppData\/Local\/finterm$/.test(p.replace(/\\/g, "/")),
-            interrupt: () => { ++seen.interrupted; }, execute: (p, a) => {
+            value: k => k === "TargetDir" ? (o.target || PU) : k === "ProductVersion" ? "4.2.3" : "",
+            environmentVariable: n => env[n] || "",
+            fileExists: p => {
+                const q = norm(p);
+                return installs.some(d => q === d + "/FintermMaintenanceTool.exe") || folders.includes(q) ||
+                       /AppData\/Local\/finterm$/.test(q);
+            },
+            interrupt: () => { ++seen.interrupted; },
+            execute: (p, a) => {
                 const line = p + " " + (a || []).join(" ");
                 seen.commands.push(line);
+                // Only what a broken PATH can't touch starts: Windows' tools by
+                // full path, and the installed copy's own uninstaller.
+                const win = /^C:\\Windows\\System32\\/i.test(p), own = /FintermMaintenanceTool\.exe$/i.test(p);
+                if (!(win || own) || (win && o.toolsBroken)) { ++seen.unstarted; return []; }
                 if (/tasklist/i.test(p)) {
                     const q = (a || []).join(" ");
                     if (/FintermMaintenanceTool/.test(q) && o.uninstallerOpen) return ["FintermMaintenanceTool.exe   4242 Console", 0];
                     if (/finterm\.exe/.test(q) && o.running) return ["finterm.exe   4243 Console", 0];
                     return ["INFO: No tasks", 0];
                 }
-                // The old install's uninstaller (direct, or elevated through PowerShell) removes it.
-                if (/purge/.test(line) && !o.purgeFails)
-                    o.installs = o.installs.filter(d => !line.replace(/\\/g, "/").includes(d));
+                // The uninstaller (direct, or elevated through PowerShell): its
+                // tool goes, then — its uninstall.vbs — the folder.
+                if (/purge/.test(line) && !o.purgeFails) {
+                    const gone = installs.filter(d => norm(line).includes(d));
+                    installs = installs.filter(d => !gone.includes(d));
+                    if (!o.folderStays) folders = folders.filter(d => !gone.includes(d));
+                }
                 return ["", 0];
             },
-            installationFinished: hook("installed"), uninstallationStarted: hook("uninstall"), uninstallationFinished: hook("uninstalled"),
+            uninstallationStarted: hook("uninstall"), uninstallationFinished: hook("uninstalled"),
         },
-        gui: { rejectWithoutPrompt: () => { ++seen.rejected; } }, // defined on the command line too (IFW 4.7)
-        component: { createOperations: () => { ++seen.operations; }, addOperation() {} },
-        QMessageBox: { Yes: 1, No: 2, Ok: 4, critical: () => { ++seen.critical; }, warning: () => { ++seen.warned; },
+        gui: { rejectWithoutPrompt: () => { ++seen.rejected; } },
+        component: { createOperations() {}, addOperation() {} },
+        QMessageBox: { Yes: 1, No: 2, Ok: 4, critical: id => { seen.critical.push(id); }, warning: () => { ++seen.warned; },
                        question: () => { ++seen.asked; return o.answerYes ? 1 : 2; } },
     };
     vm.createContext(ctx);
-    vm.runInContext(source, ctx);
-    const c = vm.runInContext("new Component()", ctx);
-    if (o.operations) try { c.createOperations(); } catch (e) { seen.threw = String(e); }
-    if (o.uninstall) seen.hooks.uninstall();
+    return { ctx, seen, left: () => installs };
+}
+
+// The installer starting: the control script, as IFW runs it.
+function install(o) {
+    const { ctx, seen, left } = stubs(o);
+    vm.runInContext(controlSource, ctx);
+    const c = vm.runInContext("new Controller()", ctx);
+    if (!o.cli && typeof c.IntroductionPageCallback === "function") {
+        c.IntroductionPageCallback();
+        c.IntroductionPageCallback(); // shown again (Back): asked once
+    }
+    seen.left = left();
+    seen.stopped = seen.interrupted + seen.rejected > 0;
     return seen;
 }
 
-const purged = (s, dir) => s.commands.some(c => /purge.*--default-answer.*--confirm-command/.test(c) &&
-                                                 c.replace(/\\/g, "/").includes(dir));
-let s = run({ target: PU, installs: [PU], operations: true, answerYes: true });
-check("over its own install, Yes: removed by its uninstaller, then installed",
-      s.asked === 1 && purged(s, PU) && !s.threw && s.operations === 1 && s.rejected === 0);
-s = run({ target: PU, installs: [PF], operations: true, answerYes: true });
-check("over Program Files, Yes: removed elevated, then installed per user",
-      purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && !s.threw && s.operations === 1);
-s = run({ target: PU, installs: [PF], cli: true, operations: true, answerYes: true });
-check("command line over Program Files (default Yes): replaced", purged(s, PF) && s.operations === 1 && s.interrupted === 0);
-s = run({ target: PU, installs: [PU], operations: true, answerYes: true, env: { ProgramFiles: "" } });
+function uninstall(o) {
+    const { ctx, seen } = stubs(Object.assign({ uninstall: true }, o));
+    vm.runInContext(componentSource, ctx);
+    vm.runInContext("new Component()", ctx);
+    seen.hooks.uninstall();
+    return seen;
+}
+
+const purged = (s, dir) => s.commands.some(c => /purge.*--default-answer.*--confirm-command/.test(c) && norm(c).includes(dir));
+const fullPaths = s => s.unstarted === 0 &&
+    s.commands.every(c => /^C:\\Windows\\System32\\|FintermMaintenanceTool\.exe /i.test(c));
+
+for (const cli of [false, true]) {
+    const how = cli ? "command line" : "GUI";
+    let s = install({ cli, installs: [PU], answerYes: true });
+    check(how + ": over its own install, Yes: removed by its uninstaller, then goes ahead",
+          s.asked === 1 && purged(s, PU) && s.left.length === 0 && !s.stopped && s.critical.length === 0);
+    check(how + ": every Windows tool by full path", fullPaths(s));
+    s = install({ cli, installs: [PF], answerYes: true });
+    check(how + ": over Program Files: removed elevated, then goes ahead",
+          purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && !s.stopped);
+    s = install({ cli, installs: [PU, PF], answerYes: true });
+    check(how + ": per-user and Program Files: both removed, asked once",
+          s.asked === 1 && purged(s, PU) && purged(s, PF) && !s.stopped);
+    s = install({ cli, installs: [PU], answerYes: false });
+    check(how + ": No: stopped, nothing removed", s.stopped && !purged(s, PU) && s.left.length === 1);
+    s = install({ cli, installs: [PF], answerYes: true, purgeFails: true });
+    check(how + ": not removed: told, stopped",
+          s.critical.includes("finterm.install.update_failed") && s.stopped);
+    s = install({ cli, installs: [PU], answerYes: true, folderStays: true });
+    check(how + ": uninstalled but its folder stays: told, stopped (nothing installs under its uninstall.vbs)",
+          s.critical.includes("finterm.install.update_incomplete") && s.stopped);
+    s = install({ cli, installs: [PU], answerYes: true, toolsBroken: true });
+    check(how + ": a Windows tool won't start: told it can't check, stopped, nothing removed",
+          s.critical.includes("finterm.install.cannot_check") && s.stopped && !purged(s, PU));
+    s = install({ cli, installs: [], uninstallerOpen: true });
+    check(how + ": an uninstaller window open: told, stopped",
+          s.critical.includes("finterm.install.uninstaller_open") && s.stopped);
+    s = install({ cli, installs: [] });
+    check(how + ": first install: goes ahead, nothing asked", !s.stopped && s.asked === 0 && s.critical.length === 0);
+}
+let s = install({ cli: true, installs: [PU], answerYes: true, running: true });
+check("finterm running, command line: told, stopped, nothing removed",
+      s.critical.includes("finterm.install.running") && s.stopped && !purged(s, PU));
+s = install({ installs: [PU], answerYes: true, running: true });
+check("finterm running, GUI: asked to quit (twice), then told, stopped",
+      s.warned === 2 && s.critical.includes("finterm.install.running") && s.stopped && !purged(s, PU));
+s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
-      purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)) && s.operations === 1);
-s = run({ target: PU, installs: [PU, PF], operations: true, answerYes: true });
-check("per-user and Program Files both installed: both removed (asked once), then installed",
-      s.asked === 1 && purged(s, PU) && purged(s, PF) && !s.threw && s.operations === 1);
-s = run({ target: PU, installs: [PU], operations: true, answerYes: false });
-check("over an install, No: closed, nothing removed or installed",
-      s.rejected === 1 && !purged(s, PU) && !!s.threw && s.operations === 0);
-s = run({ target: PU, installs: [PF], operations: true, answerYes: true, purgeFails: true });
-check("old install not removed: told, closed, nothing installed",
-      s.critical === 1 && s.rejected === 1 && !!s.threw && s.operations === 0);
-s = run({ target: PU, installs: [PU], cli: true, operations: true, answerYes: true, running: true });
-check("finterm running, command line: told, interrupted, nothing removed",
-      s.critical === 1 && s.interrupted === 1 && !purged(s, PU) && s.operations === 0);
-s = run({ target: PU, installs: [], operations: true });
-check("first install goes in", s.critical === 0 && !s.threw && s.operations === 1);
-s = run({ target: "/home/u/finterm", installs: [PF], kernel: "linux", operations: true });
-check("not a Windows rule elsewhere", s.critical === 0 && !s.threw);
+      purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)));
+s = install({ kernel: "linux", target: "/home/u/finterm", installs: [PF] });
+check("not a Windows rule elsewhere", !s.stopped && s.commands.length === 0 && s.asked === 0);
 
 const removed = s => s.commands.some(c => /rmdir/.test(c) && /AppData.Local.finterm/.test(c));
-s = run({ target: PU, installs: [PU], uninstall: true, answerYes: true });
-check("uninstall, alone, Yes: the data goes (control)", s.asked === 1 && removed(s));
-s = run({ target: PU, installs: [PU], uninstall: true, answerYes: false });
+s = uninstall({ target: PU, installs: [PU], answerYes: true });
+check("uninstall, alone, Yes: the data goes", s.asked === 1 && removed(s));
+check("uninstall's data removal: full paths", fullPaths(s));
+s = uninstall({ target: PU, installs: [PU], answerYes: false });
 check("uninstall, alone, No: the data stays", s.asked === 1 && s.commands.length === 0);
-s = run({ target: PU, installs: [PU, PF], uninstall: true, answerYes: true });
+s = uninstall({ target: PU, installs: [PU, PF], answerYes: true });
 check("uninstall beside Program Files: not asked, data stays", s.asked === 0 && s.commands.length === 0);
-s = run({ target: PF.replace(/\//g, "\\"), installs: [PU, PF], uninstall: true, answerYes: true });
+s = uninstall({ target: PF.replace(/\//g, "\\"), installs: [PU, PF], answerYes: true });
 check("uninstall of Program Files beside per-user: not asked, data stays", s.asked === 0 && s.commands.length === 0);
-// An uninstaller still open: its self-delete would take the new install's.
-s = run({ target: PU, installs: [], uninstallerOpen: true, operations: true });
-check("uninstaller window open: told, closed, nothing installed",
-      s.critical === 1 && s.rejected === 1 && !!s.threw && s.operations === 0);
-s = run({ target: PU, installs: [], uninstallerOpen: true, cli: true, operations: true });
-check("uninstaller open, command line: interrupted", s.interrupted === 1 && !!s.threw);
 
 // The updater's copies beside the install go with the program, whatever the
 // data answer — they are a whole finterm, not the user's data.
-s = run({ target: PU, installs: [PU], uninstall: true, answerYes: false });
-let leftovers = (() => { const seen2 = s; seen2.hooks.uninstalled(); return seen2.commands.filter(c => /previous/.test(c)); })();
+s = uninstall({ target: PU, installs: [PU], answerYes: false });
+s.hooks.uninstalled();
+const leftovers = s.commands.filter(c => /previous/.test(c));
 check("uninstall removes the updater's copies (data kept)",
-      leftovers.length === 1 && /AppData\\Local\\Programs'/.test(leftovers[0]));
+      leftovers.length === 1 && /AppData\\Local\\Programs'/.test(leftovers[0]) && fullPaths(s));
 {
-    const ctx = { console: { log() {} } };
-    vm.createContext(ctx);
-    vm.runInContext(source, ctx);
+    const { ctx } = stubs({});
+    vm.runInContext(componentSource, ctx);
     const re = new RegExp(vm.runInContext('updaterLeftoverPattern("finterm")', ctx));
     const yes = ["finterm.previous", "finterm.previous.old", "finterm.new", "finterm.ready-20261127120000",
                  "finterm.failed", "FINTERM.previous".toLowerCase()];
@@ -119,5 +172,13 @@ check("uninstall removes the updater's copies (data kept)",
     check("leftover names matched", yes.every(n => re.test(n)));
     check("nothing else matched", no.every(n => !re.test(n)));
 }
+
+// One source of truth for what both scripts need (IFW gives each its own
+// engine, so they cannot share a file).
+const fn = (src, name) => (src.match(new RegExp("^function " + name + "\\([^]*?^}", "m")) || [""])[0];
+for (const name of ["winTool", "run", "toWin", "psQuote"])
+    check("shared helper identical in both scripts: " + name,
+          fn(componentSource, name) !== "" && fn(componentSource, name) === fn(controlSource, name));
+
 console.log(failures + " failure(s)");
 process.exit(failures ? 1 : 0);

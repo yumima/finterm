@@ -238,13 +238,14 @@ set_target_properties(test_market_clock PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME market_clock COMMAND test_market_clock)
 
 # ── Windows installer rules ──────────────────────────────────────────────────
-# installscript.qs with IFW's objects stubbed: refuse beside another install,
-# keep data another install shares.
+# installscript.qs and controlscript.qs with IFW's objects stubbed: the update
+# over an install, the data another install shares, tools by full path.
 find_program(FINTERM_NODE node)
 if(FINTERM_NODE)
     add_test(NAME installscript
              COMMAND ${FINTERM_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_installscript.js
-                     ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs)
+                     ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs
+                     ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/installer/config/controlscript.qs)
 endif()
 
 # ── Earnings refresh policy ──────────────────────────────────────────────────

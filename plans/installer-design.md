@@ -411,10 +411,15 @@ Where it differs from the plan, and why:
 - **macOS Dock** changes go through `defaults` (export, edit, import), then the Dock is restarted. This is not an
   Apple API: it is done only on a first install, and recorded.
 
-- **Windows, updating from the command line is impossible** (found on the
-  4.2.3 CI run): IFW's CLI `install` checks the target folder
-  (TargetDirectoryInUse) before it loads any component script, so the
-  constructor that removes the installed copy never runs. The GUI loads the
-  scripts first (at the introduction page), so a user's update works; CI
-  drives that GUI with `.github/ci/ifw-gui-install.qs`. A silent update
-  purges the old copy first (README, download page).
+- **Windows update over an install lives in the control script**
+  (`packaging/installer/config/controlscript.qs`, found on the 4.2.3 CI run,
+  checked against IFW 4.7/4.8 source). IFW refuses any folder holding its
+  maintenance tool (`installationAllowedToDirectory`, whatever the answer);
+  the command line checks right after loading the control script and before
+  any component script, so a component-script update never ran there. The
+  control script removes the installed copy — from its constructor on the
+  command line, from the introduction page in the GUI — then waits until the
+  folder is gone: the uninstaller's `%TEMP%\uninstall.vbs` deletes the tool,
+  then the whole folder (RemoveTargetDir), after the uninstaller exits, so
+  installing earlier would have new files deleted under it. Windows' tools
+  are run by full path; one that won't start stops the installer.
