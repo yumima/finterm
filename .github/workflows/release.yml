@@ -422,30 +422,42 @@ jobs:
           if (-not (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe"))) { throw "no maintenance tool beside finterm.exe" }
           Write-Host "default install: $dir"
 
-          # Run again over it: an update in place — the old copy is removed by
+          # Run again over it — an update in place: the old copy is removed by
           # its own uninstaller (keeping the data), then this one goes in.
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          # The installed copy marked (bytes appended): afterwards finterm.exe
-          # must be this build's again — the one in its update zip.
-          [System.IO.File]::AppendAllText((Join-Path $dir "finterm.exe"), "ci-old-copy")
-          Setup $setup "installing over the install"
           $zip = (Get-ChildItem "app/build/finterm-*-windows-x64-update.zip" | Select-Object -First 1).FullName
           $unz = Join-Path $env:RUNNER_TEMP "over-unz"
           Expand-Archive -Path $zip -DestinationPath $unz -Force
-          $want = (Get-ChildItem -Recurse -Filter finterm.exe $unz | Select-Object -First 1).FullName
-          if ((Get-FileHash $want).Hash -ne (Get-FileHash (Join-Path $dir "finterm.exe")).Hash) {
-              throw "the installed copy was not replaced"
+          $want = (Get-FileHash (Get-ChildItem -Recurse -Filter finterm.exe $unz | Select-Object -First 1).FullName).Hash
+          $exe = Join-Path $dir "finterm.exe"
+
+          # Unattended without UpdateExisting: refused, the install untouched.
+          [System.IO.File]::AppendAllText($exe, "ci-old-copy")
+          $kept = (Get-FileHash $exe).Hash
+          $refused = $false
+          try { Setup $setup "installing over the install without UpdateExisting" } catch { $refused = $true }
+          if (-not $refused) { throw "an unattended install over an install went ahead without UpdateExisting" }
+          if ((Get-FileHash $exe).Hash -ne $kept) { throw "a refused install changed the installed copy" }
+
+          # Updated: unattended with UpdateExisting, then in the wizard. The
+          # installed copy is marked first (bytes appended); afterwards it must
+          # be this build's again, with its uninstaller, and the data kept.
+          foreach ($way in "UpdateExisting", "GUI") {
+              [System.IO.File]::AppendAllText($exe, "ci-old-copy")
+              if ($way -eq "GUI") { GuiSetup $setup "updating in the wizard" }
+              else { Setup $setup "updating unattended" @("UpdateExisting=true") }
+              if ((Get-FileHash $exe).Hash -ne $want) { throw "${way}: the installed copy was not replaced" }
+              # The old uninstaller's self-delete must not have taken the new tool.
+              Start-Sleep -Seconds 15
+              foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
+                  if (-not (Test-Path (Join-Path $dir $f))) { throw "${way}: $f is missing after the update" }
+              }
+              if (-not (Test-Path $mark)) { throw "${way}: the update removed the user's data" }
+              Write-Host "${way}: updated over the install: OK"
           }
-          # The old uninstaller's self-delete helper must not have taken the new tool.
-          Start-Sleep -Seconds 15
-          foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
-              if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after installing over the install" }
-          }
-          if (-not (Test-Path $mark)) { throw "installing over the install removed the user's data" }
           Remove-Item $mark
-          Write-Host "installed over itself: OK"
 
           $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
               "purge", "--default-answer", "--confirm-command")
@@ -483,7 +495,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
           . ./.github/ci/ifw-setup.ps1
-          Setup $new "updating $tag"
+          GuiSetup $new "updating $tag in the wizard"
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {
               if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing after updating $tag" }
@@ -548,7 +560,8 @@ jobs:
 
           # The new installer replaces it (elevated removal, data kept) and
           # installs per user.
-          if ((Run $new $install) -ne 0) { throw "installing over 4.0.10 failed" }
+          . ./.github/ci/ifw-setup.ps1
+          Setup $new "installing over 4.0.10" @("UpdateExisting=true")
           for ($i = 0; (Test-Path (Join-Path $pf $tool)) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
           if (Test-Path (Join-Path $pf "finterm.exe")) { throw "4.0.10 is still in $pf" }
           if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "the new version is not in $pu" }

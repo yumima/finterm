@@ -2761,8 +2761,8 @@ if(FINTERM_BUILD_INSTALLER)
         # user installers): no administrator rights to install, and the
         # in-place updater can replace it (Program Files would need UAC for
         # every update — see services/updater/UpdateInstaller). An earlier
-        # Program Files install must be uninstalled first (installscript.qs
-        # says so) — two installs would share one data folder.
+        # Program Files install is removed by the update (controlscript.qs) —
+        # two installs would share one data folder.
         # Spelled out: IFW's @ApplicationsDirUser@ differs from Program Files
         # only on macOS.
         set(CPACK_IFW_TARGET_DIRECTORY "@HomeDir@/AppData/Local/Programs/finterm")

@@ -246,15 +246,12 @@ while another instance runs (`AppPaths::data_dir_in_use`).
 QtIFW stays. It already gives a per-user install, the Apps & Features entry,
 shortcuts, and an uninstaller tested in CI. These are the changes:
 
-- **Update over an install** (the gap in the table above): `installscript.qs`
-  finds `FintermMaintenanceTool.exe` in the target folder and asks to update.
-  Then:
-  1. It runs that tool's `purge` silently, telling it to keep the data
-     (`FINTERM_KEEP_DATA=1`, read by `onUninstallationStarted`, so there is no
-     reliance on the question's default answer).
-  2. It installs into the same folder.
-  3. The same applies to the Program Files install from 4.0.10, which is moved
-     instead of refused. The README's "uninstall it first" step goes away.
+- **Update over an install** (the gap in the table above): the installer
+  finds `FintermMaintenanceTool.exe` (in the target folder, the per-user one,
+  or Program Files from 4.0.10) and asks to update. It runs that tool's
+  `purge`, which keeps the data (its question defaults to No), waits until the
+  folder is gone, and installs. As built, this is the control script's — see
+  "As built" below.
 - **Shortcuts:** the Start Menu and Desktop `.lnk` keep their paths, so any
   taskbar pin made from them keeps working. Windows does not let an installer
   pin to the taskbar, so the finish page says how to pin.
@@ -374,7 +371,7 @@ Each phase is shippable on its own and follows the usual loop: build →
 ## As built (4.2.3)
 
 Code: `app/src/core/setup/` (DataUpgrade, Install, DataTransfer, SetupPaths), `app/src/app/` (DataGate, SetupAssistant),
-`installscript.qs` (Windows update), Settings › Storage & Data (Export…, Import…). Tests: `test_data_upgrade`,
+`packaging/installer/config/controlscript.qs` (Windows update), `installscript.qs` (shortcuts, uninstall), Settings › Storage & Data (Export…, Import…). Tests: `test_data_upgrade`,
 `test_install`, `test_data_transfer`, `tests/installer/test_installscript.js`, and the release workflow's install,
 update and uninstall steps on all three systems.
 
@@ -412,14 +409,22 @@ Where it differs from the plan, and why:
   Apple API: it is done only on a first install, and recorded.
 
 - **Windows update over an install lives in the control script**
-  (`packaging/installer/config/controlscript.qs`, found on the 4.2.3 CI run,
-  checked against IFW 4.7/4.8 source). IFW refuses any folder holding its
-  maintenance tool (`installationAllowedToDirectory`, whatever the answer);
-  the command line checks right after loading the control script and before
-  any component script, so a component-script update never ran there. The
-  control script removes the installed copy — from its constructor on the
-  command line, from the introduction page in the GUI — then waits until the
-  folder is gone: the uninstaller's `%TEMP%\uninstall.vbs` deletes the tool,
-  then the whole folder (RemoveTargetDir), after the uninstaller exits, so
-  installing earlier would have new files deleted under it. Windows' tools
-  are run by full path; one that won't start stops the installer.
+  (`packaging/installer/config/controlscript.qs`; found on the 4.2.3 CI run,
+  checked against IFW 4.7/4.8 source):
+  - IFW refuses any folder holding its maintenance tool
+    (`installationAllowedToDirectory`, whatever the answer). The command line
+    checks right after loading the control script, before any component
+    script, so a component-script update never ran there.
+  - GUI: the update runs from the introduction page. Command line: the
+    control script loads for every command (search, create-offline, …) and
+    isn't told which, so it removes nothing unless asked —
+    `UpdateExisting=true` (a key=value argument, set as a value before the
+    script loads); without it an installed finterm stops the install.
+  - The uninstaller's `%TEMP%\uninstall.vbs` deletes the tool, then the whole
+    folder (RemoveTargetDir), after the uninstaller exits: the update waits
+    until the folder is gone, or stops.
+  - IFW resets the status when it fetches packages, so an interrupt doesn't
+    stop a command-line install: a refusal is recorded
+    (`FintermInstallRefused`) and installscript.qs's createOperations throws.
+  - Windows' tools by full path; `tasklist` as CSV (the table cuts names at
+    25 characters); one that won't start stops the installer.

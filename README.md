@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`a7eeddcfb`](https://github.com/yumima/finterm/commit/a7eeddcfb) Windows update over an install: in the control script, waiting on the old folder
 - [`9fd5bd538`](https://github.com/yumima/finterm/commit/9fd5bd538) CI reports installscript's refusals; the wait is said in the dialog
 - [`69b91e5aa`](https://github.com/yumima/finterm/commit/69b91e5aa) CI GUI update: IFW judges the folder, the log is watched
 - [`04d0fe23a`](https://github.com/yumima/finterm/commit/04d0fe23a) CI GUI update: fails at once, says why; replaced copy checked
@@ -85,7 +86,7 @@ Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2)
 1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts.
 2. Start **finterm** from the Start Menu.
 
-Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended, the same: `setup.exe install --accept-licenses --default-answer --confirm-command`.
+Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended: `setup.exe install UpdateExisting=true --accept-licenses --default-answer --confirm-command` (without `UpdateExisting=true`, an installed finterm stops an unattended install rather than being removed).
 
 **macOS 13+ (Apple Silicon)**
 

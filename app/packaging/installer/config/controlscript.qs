@@ -10,15 +10,24 @@
 //   - IFW refuses a folder that holds its maintenance tool
 //     (installationAllowedToDirectory: TargetDirectoryInUse, whatever the
 //     answer). The command line checks it right after loading this script and
-//     before any component script; the GUI on the target page. So the old copy
-//     goes from here: in the constructor on the command line (no page
-//     callbacks there), on the introduction page in the GUI (the wizard is up,
-//     and Cancel works).
+//     before any component script; the GUI on the target page.
+//   - GUI: the update runs from the introduction page (the wizard is up, and
+//     the user is asked).
+//   - Command line: this script is loaded for every command (install, search,
+//     create-offline, …) and is not told which, so it removes nothing unless
+//     asked: `setup.exe install UpdateExisting=true …` (a key=value argument
+//     IFW sets as a value before this script loads). Without it, an installed
+//     finterm only stops the install.
 //   - An uninstaller removes itself after it exits, from %TEMP%\uninstall.vbs:
 //     it deletes the maintenance tool, then the whole target folder
 //     (RemoveTargetDir, on: CMakeLists.txt). Installing before that is done
 //     would have new files deleted under it — so the update waits until the
 //     folder is gone.
+//   - Stopping: IFW resets the status when it fetches the packages
+//     (fetchRemotePackagesTree: Running), so an interrupt from here does not
+//     stop a command-line install. A refusal is recorded instead —
+//     FintermInstallRefused — and installscript.qs's createOperations throws
+//     on it, which ends the install either way.
 //
 // Elsewhere (Linux, macOS) this script does nothing.
 
@@ -28,8 +37,12 @@ function Controller()
 {
     if (systemInfo.kernelType !== "winnt" || !installer.isInstaller())
         return;
-    if (installer.isCommandLineInstance())
+    if (!installer.isCommandLineInstance())
+        return; // the GUI: from the introduction page
+    if (/^(1|true|yes)$/i.test(String(installer.value("UpdateExisting") || "")))
         updateExisting();
+    else
+        refuseOverExisting();
 }
 
 Controller.prototype.IntroductionPageCallback = function()
@@ -74,18 +87,28 @@ function psQuote(s)
     return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
+// ---------------------------------------------------------------------------
+
 function powershell(command)
 {
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
 }
 
-// ---------------------------------------------------------------------------
-
 // Whether a process of that image name runs: true, false, or null (unknown).
+// CSV: the table form cuts names at 25 characters (FintermMaintenanceTool.exe
+// has 26).
 function processRunning(image)
 {
-    var r = run(winTool("tasklist.exe"), ["/FI", "IMAGENAME eq " + image, "/NH"]);
-    return r === null ? null : r[0].toLowerCase().indexOf(image.toLowerCase()) >= 0;
+    var r = run(winTool("tasklist.exe"), ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"]);
+    if (r === null)
+        return null;
+    var lines = r[0].split(/\r?\n/);
+    for (var i = 0; i < lines.length; ++i) {
+        var m = /^"([^"]*)"/.exec(lines[i]);
+        if (m && m[1].toLowerCase() === image.toLowerCase())
+            return true;
+    }
+    return false;
 }
 
 // Every finterm installation found — the target folder, the per-user one, an
@@ -115,15 +138,25 @@ function inProgramFiles(dir)
     return pf.length > 0 && dir.toLowerCase().indexOf(pf + "/") === 0;
 }
 
-// Stopped, with nothing installed: said first, then closed.
-function stop(id, title, text)
+// Nothing installs: recorded (installscript.qs's createOperations throws on
+// it), and — when `tell` — said, and the wizard closed.
+function refuse(text, id, title, tell)
 {
-    console.log("[finterm] stopped: " + id);
-    QMessageBox.critical(id, title, text, QMessageBox.Ok);
+    console.log("[finterm] refused" + (id ? " (" + id + ")" : "") + ": " + text);
+    installer.setValue("FintermInstallRefused", text);
+    if (!tell)
+        return;
+    if (id)
+        QMessageBox.critical(id, title, text, QMessageBox.Ok);
     if (installer.isCommandLineInstance())
         installer.interrupt();
     else
         gui.rejectWithoutPrompt();
+}
+
+function stop(id, title, text)
+{
+    refuse(text, id, title, true);
 }
 
 function cannotCheck(what)
@@ -133,8 +166,25 @@ function cannotCheck(what)
          toWin(installer.environmentVariable("SystemRoot") || "C:\\Windows") + " did not start).");
 }
 
-// The update. Returns when this install may go ahead; anything else stops the
-// installer.
+// The command line without UpdateExisting: nothing is removed, and nothing
+// installs beside or over an installed finterm (or under an open
+// uninstaller). Silent here — a search or create-offline loads this too —
+// the install itself says why when it stops.
+function refuseOverExisting()
+{
+    var open = processRunning("FintermMaintenanceTool.exe");
+    if (open !== false)
+        return refuse(open === null ? "The installer could not check whether a finterm uninstaller is open."
+                                    : "A finterm uninstaller is still open; close it first.");
+    var dirs = existingInstalls();
+    if (dirs.length > 0)
+        refuse("finterm is already installed in " + toWin(dirs.join(", ")) + ". To update it unattended, add " +
+               "UpdateExisting=true: setup.exe install UpdateExisting=true --accept-licenses --default-answer " +
+               "--confirm-command");
+}
+
+// The update (the GUI, or the command line with UpdateExisting). Returns when
+// this install may go ahead; anything else is refused.
 function updateExisting()
 {
     updateDone = true;
@@ -166,14 +216,8 @@ function updateExisting()
         (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission, and finterm then " +
                            "installs for your user only." : ""),
         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
-    if (answer !== QMessageBox.Yes) {
-        console.log("[finterm] update declined");
-        if (installer.isCommandLineInstance())
-            installer.interrupt();
-        else
-            gui.rejectWithoutPrompt();
-        return;
-    }
+    if (answer !== QMessageBox.Yes)
+        return refuse("The update was declined; finterm stays as it was.", "", "", true);
 
     for (var tries = 0;; ++tries) {
         var running = processRunning("finterm.exe");
@@ -194,26 +238,28 @@ function updateExisting()
     for (var j = 0; j < dirs.length; ++j) {
         var dir = dirs[j];
         var tool = toWin(dir + "/FintermMaintenanceTool.exe");
-        var r = inProgramFiles(dir)
+        var elevated = inProgramFiles(dir);
+        var r = elevated
             // Elevated: the old install was made by an administrator.
             ? powershell("$p = Start-Process -FilePath " + psQuote(tool) + " -ArgumentList " +
                          args.map(psQuote).join(",") + " -Verb RunAs -Wait -PassThru; exit $p.ExitCode")
             : run(tool, args);
         console.log("[finterm] removing " + dir + ": " + (r === null ? "could not start" : "exit " + r[1]));
-        // Until its uninstall.vbs has removed the folder (a minute at most).
-        if (powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 240; $i++) " +
+        if (r === null || r[1] !== 0)
+            return stop("finterm.install.update_failed", "finterm could not be updated",
+                        "The installed finterm in " + toWin(dir) + " could not be removed" +
+                        (elevated ? " (Windows' permission is needed for Program Files)" : "") + ". Uninstall it " +
+                        "from Settings > Apps (answer No when asked to remove your data — this version keeps it), " +
+                        "then run this installer again.");
+        // Until its uninstall.vbs has removed the folder (three minutes at most).
+        if (powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 720; $i++) " +
                        "{ Start-Sleep -Milliseconds 250 }") === null)
             return cannotCheck("wait for the installed copy's removal");
-        if (installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
-            return stop("finterm.install.update_failed", "finterm could not be updated",
-                        "The installed finterm in " + toWin(dir) + " could not be removed. Uninstall it from " +
-                        "Settings > Apps (answer No when asked to remove your data — this version keeps it), then " +
-                        "run this installer again.");
         if (installer.fileExists(dir))
             return stop("finterm.install.update_incomplete", "finterm could not be updated",
-                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " is still there " +
-                        "(a file in it may be open). Close any program using it, delete the folder, then run this " +
-                        "installer again.");
+                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " could not be " +
+                        "removed completely (a file in it may be open). Close any program or window using it, then " +
+                        "run this installer again.");
     }
     console.log("[finterm] previous install(s) removed; installing.");
 }
