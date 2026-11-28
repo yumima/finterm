@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`3facbdeba`](https://github.com/yumima/finterm/commit/3facbdeba) Linux launcher: a script that picks FUSE or unpacked at each start
 - [`eb482bbb5`](https://github.com/yumima/finterm/commit/eb482bbb5) Cut the FUSE test mount and the yt-dlp error lists
 - [`d3ee951d2`](https://github.com/yumima/finterm/commit/d3ee951d2) Review fixes: yt-dlp hint without guessing, FUSE 'unknown', batch result
 - [`16dadd8f0`](https://github.com/yumima/finterm/commit/16dadd8f0) Review fixes: update hint signs, one FUSE answer per run, batch upgrades

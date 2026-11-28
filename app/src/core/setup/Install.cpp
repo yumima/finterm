@@ -10,7 +10,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QLibrary>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -210,9 +209,11 @@ void refresh_desktop_caches(const Env& env) {
 }
 
 /// The small script the menu entry and the `finterm` command start, beside
-/// the image: whether FUSE can mount it is decided at each start, on this
-/// machine as it is then (FUSE installed or removed later is simply picked
-/// up); without it the image runs unpacked, which always works.
+/// the image. It starts the image as it is (mounted through FUSE); when the
+/// AppImage runtime can't mount it — no FUSE, no permission, a sandbox — the
+/// runtime exits with 127 before finterm runs, and the script starts it
+/// unpacked instead, which always works. No guess at what FUSE needs: what
+/// happens decides, at every start.
 QString launch_script_path(const QString& installed) {
     return QDir(QFileInfo(installed).absolutePath()).filePath(QStringLiteral(".finterm-launch"));
 }
@@ -224,13 +225,13 @@ QString launch_script_text(const QString& installed) {
     quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
     return QStringLiteral(
         "#!/bin/sh\n"
-        "# finterm's launcher, written by its installer. Starts the image, mounted where\n"
-        "# FUSE is set up (device, mount helper, libfuse2), else unpacked.\n"
+        "# finterm's launcher, written by its installer: the image mounted through\n"
+        "# FUSE, or unpacked when it can't be mounted here (the runtime exits 127).\n"
         "app='%1'\n"
-        "if [ -e /dev/fuse ] && { command -v fusermount >/dev/null 2>&1 || command -v fusermount3 >/dev/null 2>&1; } &&\n"
-        "   { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null; } | grep -q 'libfuse\\.so\\.2'; then\n"
-        "    exec \"$app\" \"$@\"\n"
-        "fi\n"
+        "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && exec \"$app\" \"$@\"\n"
+        "\"$app\" \"$@\"\n"
+        "code=$?\n"
+        "[ \"$code\" -eq 127 ] || exit \"$code\"\n"
         "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
         .arg(quoted);
 }
@@ -266,11 +267,16 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
         if (QFile::rename(desktop, bak))
             done << QStringLiteral("kept the previous launcher as ") + bak;
     }
+    // The launch script first: the menu entry and the command start it, so
+    // without it they are not changed (an earlier one keeps working).
+    if (!write_launch_script(installed)) {
+        done << QStringLiteral("could not write the launch script ") + launch_script_path(installed);
+        return done;
+    }
+    done << QStringLiteral("launch script: ") + launch_script_path(installed);
     if (write_text(desktop, desktop_entry(env, installed)))
         done << QStringLiteral("launcher: ") + desktop;
     // The command: a link we own, never someone's own file of that name.
-    if (write_launch_script(installed))
-        done << QStringLiteral("launch script: ") + launch_script_path(installed);
     const QString cmd = command_path(env);
     const QFileInfo ci(cmd);
     const bool our_link = ci.isSymLink() && (same_file(ci.symLinkTarget(), launch_script_path(installed)) ||
@@ -435,12 +441,6 @@ Env current_env() {
             env.package_icon = QDir(appdir).filePath(rel);
             break;
         }
-    // Whether FUSE is set up here (for the dialog: the launch script decides
-    // at each start by the same rule).
-    env.fuse_ready = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
-                     (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
-                      !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty()) &&
-                     QLibrary(QStringLiteral("fuse"), 2).load();
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
@@ -762,11 +762,11 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     open_args << all;
     return QProcess::startDetached(QStringLiteral("/usr/bin/open"), open_args, QDir::homePath());
 #else
-    // Through the launch script (it decides FUSE or unpacked), as the menu
-    // entry starts it; the image itself when there is no script.
+    // Through the launch script (mounted, or unpacked where that fails), as
+    // the menu entry starts it — written first if it isn't there.
     QProcess p;
     const QString script = launch_script_path(installed);
-    p.setProgram(QFileInfo::exists(script) ? script : installed);
+    p.setProgram(write_launch_script(installed) ? script : installed);
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());
     p.setWorkingDirectory(QDir::homePath());

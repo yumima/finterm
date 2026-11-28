@@ -900,8 +900,9 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          # The launcher starts the script beside the image, which picks FUSE
-          # or unpacked at each start; started here (no FUSE needed) it runs.
+          # The launcher starts the script beside the image: mounted, or
+          # unpacked when the runtime can't mount (the fallback is unit-tested
+          # in test_install); here it starts either way.
           LAUNCH="${H}/Applications/.finterm-launch"
           grep -q "^Exec=${LAUNCH}$" "${DESK}"
           [ -x "${LAUNCH}" ]
@@ -924,7 +925,7 @@ jobs:
           OUT="$(fin "${APP}" --uninstall)"; echo "${OUT}"
           echo "${OUT}" | jq -e '.ok == true' >/dev/null
           [ ! -e "${APP}" ] && [ ! -e "${H}/Applications/.finterm-previous.AppImage" ] && [ ! -e "${DESK}" ]
-          [ ! -e "${H}/.local/bin/finterm" ]
+          [ ! -e "${H}/.local/bin/finterm" ] && [ ! -e "${LAUNCH}" ]
           grep -q mine "${H}/.local/share/finterm/user/ci-mark.txt"
           echo "install + update + uninstall OK"
 

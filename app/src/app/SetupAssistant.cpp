@@ -172,10 +172,6 @@ Answer ask(const install::Env& env, const install::State& st, bool running_now) 
         text += QStringLiteral("\n\nYour data is kept, and brought up to date (a copy is made first) when it needs "
                                "to be.");
 #if defined(Q_OS_LINUX)
-    if (!env.fuse_ready && st.found != Found::Newer)
-        text += QStringLiteral("\n\nFUSE isn't set up here, so finterm unpacks itself at each start, which is "
-                               "slower. On Ubuntu: sudo apt install libfuse2 fuse3 — from then on it starts directly, "
-                               "with nothing to redo.");
     if (st.foreign_launcher && st.found != Found::Newer)
         text += QStringLiteral("\n\nThere is already a finterm launcher (from a source checkout). It is kept as "
                                "finterm.desktop.bak.");

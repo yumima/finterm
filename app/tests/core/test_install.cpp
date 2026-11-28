@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QProcess>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
@@ -57,7 +58,6 @@ class TestInstall : public QObject {
         env_.data_home = env_.home + "/.local/share";
         env_.version = QStringLiteral("4.2.3");
         env_.package = write_package(base + "/Downloads/finterm-4.2.3-linux-x64-setup.run", "4.2.3");
-        env_.fuse_ready = true;
         QDir().mkpath(env_.home);
         // Each test starts with no installer records.
         QSettings rec(AppIdentity::kOrg, AppIdentity::kApp);
@@ -182,6 +182,31 @@ class TestInstall : public QObject {
         QFile::remove(desktop());
         install::refresh_launcher(env_);
         QVERIFY(!QFileInfo::exists(desktop()));
+    }
+
+    void the_launch_script_falls_back_to_unpacked() {
+        // An image whose runtime can't mount (exits 127) unless asked to run
+        // unpacked: the script starts it again unpacked; any other exit code
+        // is the app's own and is passed on.
+        env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/fuse.run", "4.2.3");
+        QFile f(env_.package);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write("#!/bin/sh\n"
+                "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && { echo unpacked \"$@\"; exit 0; }\n"
+                "[ \"$1\" = app-fails ] && exit 3\n"
+                "echo 'Cannot mount AppImage' >&2; exit 127\n");
+        f.close();
+        QVERIFY(install::install(env_, {false}).ok);
+        const QString script = env_.home + "/Applications/.finterm-launch";
+        QProcess p;
+        p.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+        p.start(script, {"--version"});
+        QVERIFY(p.waitForFinished(5000));
+        QCOMPARE(p.exitCode(), 0);
+        QCOMPARE(QString::fromUtf8(p.readAllStandardOutput()).trimmed(), QStringLiteral("unpacked --version"));
+        p.start(script, {"app-fails"});
+        QVERIFY(p.waitForFinished(5000));
+        QCOMPARE(p.exitCode(), 3); // not retried
     }
 
     void exec_paths_are_quoted() {
