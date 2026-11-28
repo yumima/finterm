@@ -234,6 +234,9 @@ function replaceExistingInstall()
         }
         QMessageBox.warning("finterm.install.running_ask", "finterm is running",
                             "Quit finterm (every window), then click OK.", QMessageBox.Ok);
+        // Closing takes a moment (its data daemon, the window): up to 10 s.
+        installer.execute("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "Wait-Process -Name finterm -Timeout 10 -ErrorAction SilentlyContinue"]);
     }
     var args = ["purge", "--default-answer", "--confirm-command"];
     for (var j = 0; j < dirs.length; ++j) {

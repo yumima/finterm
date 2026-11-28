@@ -440,9 +440,17 @@ jobs:
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-update-mark.txt"
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-          $before = (Get-Item (Join-Path $dir "finterm.exe")).CreationTimeUtc
+          # The installed copy marked (bytes appended): afterwards finterm.exe
+          # must be this build's again — the one in its update zip.
+          [System.IO.File]::AppendAllText((Join-Path $dir "finterm.exe"), "ci-old-copy")
           GuiSetup $setup "installing over the install"
-          if ((Get-Item (Join-Path $dir "finterm.exe")).CreationTimeUtc -eq $before) { throw "the installed copy was not replaced" }
+          $zip = (Get-ChildItem "app/build/finterm-*-windows-x64-update.zip" | Select-Object -First 1).FullName
+          $unz = Join-Path $env:RUNNER_TEMP "over-unz"
+          Expand-Archive -Path $zip -DestinationPath $unz -Force
+          $want = (Get-ChildItem -Recurse -Filter finterm.exe $unz | Select-Object -First 1).FullName
+          if ((Get-FileHash $want).Hash -ne (Get-FileHash (Join-Path $dir "finterm.exe")).Hash) {
+              throw "the installed copy was not replaced"
+          }
           # The old uninstaller's self-delete helper must not have taken the new tool.
           Start-Sleep -Seconds 15
           foreach ($f in @("finterm.exe", "FintermMaintenanceTool.exe")) {

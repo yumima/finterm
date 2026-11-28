@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`04d0fe23a`](https://github.com/yumima/finterm/commit/04d0fe23a) CI GUI update: fails at once, says why; replaced copy checked
 - [`6b9dfd8af`](https://github.com/yumima/finterm/commit/6b9dfd8af) CI updates over an install through the GUI, as users do
 - [`6f1da8c0c`](https://github.com/yumima/finterm/commit/6f1da8c0c) Chunk test on getentropy's own boundaries; stray include gone
 - [`b29af40ba`](https://github.com/yumima/finterm/commit/b29af40ba) Every token from the OS random source; full installer logs in CI

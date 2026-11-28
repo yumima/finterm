@@ -4,8 +4,9 @@
 // constructor removes the installed copy — before IFW checks the target
 // folder; the command line checks it first and refuses.
 //
-// Nothing here waits on a dialog: what would stop a user is logged as
-// "[ci] refused: …" and the installer is cancelled (gui-setup.ps1 reports it).
+// IFW judges the target folder itself; its messages (TargetDirectoryInUse,
+// OverwriteTargetDirectory) are in the verbose log, which gui-setup.ps1
+// watches — it stops the installer at the first one and reports it.
 
 function Controller()
 {
@@ -13,9 +14,12 @@ function Controller()
     installer.setMessageBoxAutomaticAnswer("finterm.install.update", QMessageBox.Yes);
     // Its failures: OK, after which the script itself stops the installer.
     var stops = ["finterm.install.update_failed", "finterm.install.running", "finterm.install.running_ask",
-                 "finterm.install.uninstaller_open", "TargetDirectoryInUse", "OverwriteTargetDirectory"];
+                 "finterm.install.uninstaller_open"];
     for (var i = 0; i < stops.length; ++i)
         installer.setMessageBoxAutomaticAnswer(stops[i], QMessageBox.Ok);
+    // IFW's own: answered (and so logged) at once rather than left open.
+    installer.setMessageBoxAutomaticAnswer("TargetDirectoryInUse", QMessageBox.Ok);
+    installer.setMessageBoxAutomaticAnswer("OverwriteTargetDirectory", QMessageBox.No);
     installer.installationFinished.connect(function() { gui.clickButton(buttons.NextButton); });
 }
 
@@ -29,22 +33,7 @@ function refuse(why)
 
 Controller.prototype.IntroductionPageCallback = function() { next("introduction"); };
 
-Controller.prototype.TargetDirectoryPageCallback = function()
-{
-    // By now the component constructor has removed the installed copy. What
-    // IFW would stop on (an install still there; a folder not empty — a user
-    // would be asked about it) is checked here instead.
-    var dir = installer.value("TargetDir");
-    if (installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
-        return refuse("an installation is still in " + dir);
-    if (installer.fileExists(dir)) {
-        var r = installer.execute("cmd.exe", ["/c", "dir /b /a \"" + dir.replace(/\//g, "\\") + "\""]);
-        var left = r && r.length > 0 ? String(r[0]).trim() : "";
-        if (left)
-            return refuse(dir + " is not empty: " + left.replace(/\r?\n/g, ", "));
-    }
-    next("target " + dir);
-};
+Controller.prototype.TargetDirectoryPageCallback = function() { next("target " + installer.value("TargetDir")); };
 
 Controller.prototype.ComponentSelectionPageCallback = function() { next("components"); };
 
