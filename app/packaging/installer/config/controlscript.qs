@@ -140,9 +140,10 @@ function removeInstall(dir, grace)
                from + ", " + to + "); $ok = $true } catch { Start-Sleep -Milliseconds 250 } }; ";
     };
     // A PowerShell restricted by policy (Constrained Language) blocks the
-    // .NET calls below: said as such, rather than as "in use".
-    var script = "if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit " + c.restricted + " }; " +
-        "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
+    // .NET calls below: said as such, rather than as "in use" — checked first
+    // in each script (the elevated one's wrapper too).
+    var full = "if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit " + c.restricted + " }; ";
+    var script = full + "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
         "if (Test-Path -LiteralPath $t) { exit " + c.checkInTheWay + " }; " +
         tryMove("$d", "$t", grace * 4) + "if (-not $ok) { exit " + c.inUse + " }; " +
         tryMove("$t", "$d", 40) + "if (-not $ok) { exit " + c.notBack + " }; " +
@@ -153,7 +154,7 @@ function removeInstall(dir, grace)
         return powershell(script);
     // Elevated: the old install was made by an administrator. The script
     // has no double quotes, so it travels as one -Command "…" argument.
-    return powershell(psStart(psQuote(winTool("powershell.exe")),
+    return powershell(full + psStart(psQuote(winTool("powershell.exe")),
                               psQuote("-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\""), "runas") +
                       "if ($failed -eq 1223) { exit " + c.notPermitted + " }; " +
                       "if ($failed -ne $null) { exit " + c.notElevated + " }; exit $code");
@@ -254,7 +255,7 @@ function refuseOverExisting()
     if (dirs.length > 0)
         refuse("finterm is already installed in " + toWin(dirs.join(", ")) + ". To update it unattended, add " +
                "UpdateExisting=true: setup.exe install UpdateExisting=true --accept-licenses --default-answer " +
-               "--confirm-command");
+               "--confirm-command (for an install in another folder, also TargetDir=<that folder>).");
 }
 
 // The update (the GUI, or the command line with UpdateExisting). Returns when
@@ -280,8 +281,9 @@ function updateExisting()
         "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
         "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
-        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission, and finterm then " +
-                           "installs for your user only." : ""),
+        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission" +
+                           (inProgramFiles(String(installer.value("TargetDir")).replace(/\\/g, "/")) ? "." :
+                            ", and finterm then installs for your user only.") : ""),
         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
     if (answer !== QMessageBox.Yes)
         return refuse("The update was declined; finterm stays as it was.", "", "", true);

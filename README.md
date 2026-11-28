@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`61aa2dc37`](https://github.com/yumima/finterm/commit/61aa2dc37) Restricted PowerShell said as such; custom folder by TargetDir=; grace on retry
 - [`7a844dfcf`](https://github.com/yumima/finterm/commit/7a844dfcf) Removal by Process.Start; a Program Files copy tested on every run
 - [`c91da977e`](https://github.com/yumima/finterm/commit/c91da977e) Removal script: every exit accounted for, processes waited for themselves
 - [`079d5f348`](https://github.com/yumima/finterm/commit/079d5f348) Removal script: its own exit codes, a grace period, Program Files first
