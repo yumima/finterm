@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`079d5f348`](https://github.com/yumima/finterm/commit/079d5f348) Removal script: its own exit codes, a grace period, Program Files first
 - [`8a3533a66`](https://github.com/yumima/finterm/commit/8a3533a66) In the way of a removal: a rename test, not a process list
 - [`128aa6311`](https://github.com/yumima/finterm/commit/128aa6311) In the way of an update: what runs from the folders it removes
 - [`1bfc27c1d`](https://github.com/yumima/finterm/commit/1bfc27c1d) Process checks see every user's; refusal checked by the install's error

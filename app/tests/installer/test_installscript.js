@@ -26,7 +26,9 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 // rename test fails), closedOnAsk (closed when the user is asked), vbsOnAsk
 // (an uninstaller left open, closed when asked: its tool goes at once, its
 // folder during the wait), purgeFails, removeCode (what the removal script
-// exits with instead: its own codes), folderStays, toolsBroken, uninstall.
+// exits with instead: its own codes), stranded (folders whose copy an
+// interrupted update left at <folder>.finterm-check), folderStays,
+// toolsBroken, uninstall.
 function stubs(o) {
     const seen = { texts: [], purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
@@ -49,6 +51,7 @@ function stubs(o) {
             fileExists: p => {
                 const q = norm(p);
                 return installs.some(d => q === d + "/FintermMaintenanceTool.exe") || folders.includes(q) ||
+                       (o.stranded || []).some(d => q === d + ".finterm-check/FintermMaintenanceTool.exe") ||
                        /AppData\/Local\/finterm$/.test(q);
             },
             interrupt: () => { ++seen.interrupted; },
@@ -64,8 +67,8 @@ function stubs(o) {
                 // uninstall.vbs — the folder.
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
                 if (/IO\.Directory\]::Move/.test(line) && o.removeCode) return ["", o.removeCode];
-                if (/Test-Path/.test(line) && !/Directory\]::Move/.test(line)) { // a wait
-                    folders = folders.filter(d => !vbs.includes(d));
+                if (/Test-Path/.test(line) && !/Directory\]::Move/.test(line)) { // a wait: for a folder, or a tool
+                    if (!/FintermMaintenanceTool\.exe/.test(line)) folders = folders.filter(d => !vbs.includes(d));
                     return ["", 0];
                 }
                 if (/purge/.test(line) && o.purgeFails) return ["", 101];
@@ -171,15 +174,27 @@ for (const cli of [false, true]) {
         s = install1({ installs: [PU], answerYes: true, inUse: [PU], vbsOnAsk: true });
         check(how + ": an uninstaller left open, closed when asked: not purged again, its folder waited for, goes ahead",
               s.warned === 1 && !purged(s, PU) && s.installed &&
-              s.commands.some(c => /Test-Path/.test(c) && !/Directory\]::Move/.test(c)));
+              s.commands.some(c => /Test-Path/.test(c) && !/Directory\]::Move|FintermMaintenanceTool/.test(c)));
     }
-    for (const [code, says] of [[104, /could not be moved back/], [105, /uninstaller did not start/],
-                                [106, /finterm-check.*in the way/], [107, /permission was not given/]]) {
-        s = install1({ installs: [PF], answerYes: true, removeCode: code });
-        check(how + ": the removal script's " + code + ": said as such, stopped, nothing removed",
-              s.critical.includes("finterm.install.update_failed") && s.stopped && !purged(s, PF) &&
+    for (const [where, code, says] of [
+            [PF, 104, /left finterm in .*finterm-check\. Rename it back.*as an administrator/],
+            [PU, 104, /left finterm in .*finterm-check\. Rename it back/], [PU, 105, /uninstaller did not start/],
+            [PU, 106, /finterm-check.*in the way/], [PF, 107, /permission was not given/],
+            [PF, 108, /error 108/], [PF, 109, /could not be run with Windows' permission/], [PU, 1, /error 1\)/]]) {
+        s = install1({ installs: [where], answerYes: true, removeCode: code });
+        check(how + ": the removal script's " + code + (where === PF ? " (Program Files)" : "") +
+              ": said as such, stopped, nothing removed",
+              s.critical.includes("finterm.install.update_failed") && s.stopped && !purged(s, where) &&
               says.test(s.texts.join(" ")));
     }
+    s = install1({ installs: [PU], answerYes: true });
+    const removal = s.commands.find(c => /Directory\]::Move/.test(c)) || "";
+    check(how + ": the per-user removal script: leftover check, the uninstaller waited for itself, a start failure caught",
+          /Test-Path -LiteralPath \$t\) \{ exit 106/.test(removal) && /WaitForExit\(\)/.test(removal) &&
+          !/-Wait /.test(removal) && /-ErrorAction Stop \} catch \{ exit 105/.test(removal));
+    s = install1({ installs: [PU], answerYes: true, stranded: [PU] });
+    check(how + ": a copy stranded at .finterm-check: told to rename it back, nothing removed or installed",
+          s.stopped && !purged(s, PU) && /Rename it back/.test(s.texts.join(" ")));
     s = install1({ installs: [PU, PF], answerYes: true, inUse: [PF] });
     check(how + ": Program Files in use beside a per-user copy: stopped before the per-user one is touched",
           s.stopped && !purged(s, PU) && !purged(s, PF));
@@ -200,6 +215,9 @@ check("command line, no UpdateExisting, Program Files copy: nothing installs bes
       !purged(c0, PF) && c0.stopped && !c0.ifwRefused && /UpdateExisting=true/.test(c0.threw || ""));
 c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
+c0 = install({ cli: true, installs: [], stranded: [PU] });
+check("command line, no UpdateExisting, a stranded copy: the install stops, says so",
+      c0.stopped && /Rename it back/.test(c0.threw || ""));
 let s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
       purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)));
