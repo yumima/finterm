@@ -321,7 +321,7 @@ class TestInstall : public QObject {
         QVERIFY(r.ok);
         QVERIFY(r.error.isEmpty());
         QVERIFY(r.warning.contains("could not write the launcher"));
-        QVERIFY(r.warning.contains("--install"));
+        QVERIFY(r.warning.contains("'" + env_.home + "/Applications/.finterm-launch' --install"));
         QVERIFY(!QFileInfo::exists(desktop()));
         // A start doesn't make what isn't there (it may be the user's choice)…
         env_.package = installed();
@@ -341,12 +341,15 @@ class TestInstall : public QObject {
             QVERIFY(f.open(QIODevice::WriteOnly));
             f.write("[Desktop Entry]\nName=finterm\nExec=/home/me/src/finterm/finterm.sh\n");
         }
-        // A directory where ours would be written first: the write fails.
-        QDir().mkpath(desktop() + ".new.part");
-        QDir().mkpath(desktop() + ".new");
+        // The folder can't be written: ours can't be made.
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        if (QFileInfo(apps).isWritable())
+            QSKIP("a read-only folder doesn't stop this user (root)");
         install::install(env_, {false});
+        QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
         QVERIFY(read(desktop()).contains("finterm.sh")); // still there, not moved aside
-        QVERIFY(!QFileInfo::exists(desktop() + ".bak"));
+        QCOMPARE(QDir(apps).entryList(QDir::Files), QStringList{"finterm.desktop"}); // nothing left behind
     }
 
     void dont_ask_is_per_file() {

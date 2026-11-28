@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -132,18 +133,20 @@ QString read_text(const QString& path) {
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
 }
 
+/// `text` in place at `path` in one step (QSaveFile: a temporary of its own
+/// beside it, every byte checked, then renamed): a full disk or an error
+/// leaves the old file as it was, and nothing behind.
 bool write_text(const QString& path, const QString& text) {
     QDir().mkpath(QFileInfo(path).absolutePath());
-    const QString part = path + QStringLiteral(".part");
-    QFile f(part);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly))
         return false;
-    f.write(text.toUtf8());
-    f.close();
-    if (replace_file(part, path))
-        return true;
-    QFile::remove(part);
-    return false;
+    const QByteArray bytes = text.toUtf8();
+    if (f.write(bytes) != bytes.size()) {
+        f.cancelWriting();
+        return false;
+    }
+    return f.commit();
 }
 
 bool ours(const QString& desktop_text) {
@@ -313,7 +316,11 @@ bool write_launch_script(const QString& installed) {
 /// What could not be added, and how: by the installed image's own path (the
 /// `finterm` command may be what is missing).
 QString launcher_hint(const QStringList& missed, const QString& installed) {
-    return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run %1 --install").arg(installed);
+    // The launch script (written before anything else): it runs the image
+    // where FUSE doesn't; quoted for a shell.
+    QString path = launch_script_path(installed);
+    path.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+    return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run '%1' --install").arg(path);
 }
 
 /// What write_launcher writes: the menu entry (an install; a refresh when it
@@ -354,26 +361,32 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         // Ours written beside it first; only then is someone else's entry
         // (finterm.sh install from a source tree) moved aside — a failed
         // write leaves it in place.
+        // Ours written to a temporary of its own beside it; someone else's
+        // entry copied (not moved) to .bak; then ours replaces it in one step.
+        // Whatever fails, theirs stays in the menu, and nothing is left behind.
         const QString desktop = desktop_path(env);
-        const QString fresh = desktop + QStringLiteral(".new");
-        bool written = write_text(fresh, desktop_entry(env, installed));
-        // Someone else's is copied (not moved) to .bak, and replaced only once
-        // that copy exists: whatever fails, theirs is never lost.
+        QDir().mkpath(QFileInfo(desktop).absolutePath());
+        QSaveFile f(desktop);
+        const QByteArray bytes = desktop_entry(env, installed).toUtf8();
+        bool written = f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+        QString bak;
         if (written && QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
-            QString bak = desktop + QStringLiteral(".bak");
+            bak = desktop + QStringLiteral(".bak");
             for (int i = 2; QFileInfo::exists(bak); ++i)
                 bak = desktop + QStringLiteral(".bak") + QString::number(i);
-            if (QFile::copy(desktop, bak))
-                done << QStringLiteral("kept the previous launcher as ") + bak;
-            else
-                written = false;
+            written = QFile::copy(desktop, bak);
+            if (!written)
+                bak.clear();
         }
-        if (written && replace_file(fresh, desktop)) {
+        if (written && f.commit()) {
+            if (!bak.isEmpty())
+                done << QStringLiteral("kept the previous launcher as ") + bak;
             done << QStringLiteral("launcher: ") + desktop;
             refresh_desktop_caches(env);
         } else {
-            for (const QString& leftover : {fresh, fresh + QStringLiteral(".part")})
-                QFile::remove(leftover);
+            f.cancelWriting();
+            if (!bak.isEmpty())
+                QFile::remove(bak); // theirs is still in place: no copy needed
             done << QStringLiteral("could not write the launcher ") + desktop;
         }
     }
