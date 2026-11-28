@@ -160,37 +160,12 @@ function removeInstall(dir, grace)
                       "if ($failed -ne $null) { exit " + c.notElevated + " }; exit $code");
 }
 
-// Where Windows' Apps list says finterm is installed (IFW registers every
-// install there with its InstallLocation — a folder chosen in the wizard
-// too), under the names it has had (io.github.yumima.finterm until 4.2.1).
-// Asked once; a lookup that fails leaves the usual folders.
-var registered = null;
-function registeredInstalls()
-{
-    if (registered !== null)
-        return registered;
-    var r = powershell(
-        "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', " +
-        "'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*', " +
-        "'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
-        "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
-        "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | ForEach-Object { $_.InstallLocation }");
-    if (r === null || r[1] !== 0) {
-        console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
-        registered = [];
-    } else {
-        registered = r[0].split(/\r?\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l; });
-    }
-    return registered;
-}
-
 // Where a finterm installation can be — the target folder, the per-user one,
-// an old Program Files one, and any the Apps list knows — each once, with
-// forward slashes.
+// an old Program Files one — each once, with forward slashes.
 function installCandidates()
 {
     var raw = [installer.value("TargetDir"), installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",
-               installer.environmentVariable("ProgramFiles") + "/finterm"].concat(registeredInstalls());
+               installer.environmentVariable("ProgramFiles") + "/finterm"];
     var out = [], seen = {};
     for (var i = 0; i < raw.length; ++i) {
         var dir = String(raw[i] || "").replace(/\\/g, "/").replace(/\/+$/, "");
@@ -307,8 +282,8 @@ function updateExisting()
         "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
         (anyProgramFiles ? "\n\nA copy in Program Files, shared by every user of this computer, is removed with " +
-                           "Windows' permission; finterm then installs in the folder chosen next — for your user " +
-                           "only, unless that is Program Files." : ""),
+                           "Windows' permission; finterm itself then installs for your user only, unless it is " +
+                           "installed into Program Files again." : ""),
         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
     if (answer !== QMessageBox.Yes)
         return refuse("The update was declined; finterm stays as it was.", "", "", true);
@@ -376,18 +351,6 @@ function updateExisting()
                         "The installed finterm was uninstalled, but its folder " + toWin(dir) + " is still there " +
                         "(a file in it may be open). Close what uses it, delete the folder, then run this installer " +
                         "again. Your data is kept — it is not in that folder.");
-    }
-    // Updated where it was: an install in a folder of its own (chosen in the
-    // wizard once) gets this one there, unless another target was given. A
-    // Program Files copy is not followed — finterm installs per user since
-    // 4.1.0.
-    var own = dirs.filter(function(d) { return !inProgramFiles(d); });
-    var perUser = String(installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm").replace(/\\/g, "/");
-    var target = String(installer.value("TargetDir") || "").replace(/\\/g, "/").replace(/\/+$/, "");
-    if (own.length === 1 && target.toLowerCase() === perUser.toLowerCase() &&
-        own[0].toLowerCase() !== perUser.toLowerCase()) {
-        console.log("[finterm] installing where it was: " + own[0]);
-        installer.setValue("TargetDir", toWin(own[0]));
     }
     console.log("[finterm] previous install(s) removed; installing.");
 }

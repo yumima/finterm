@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`bcff4aeb0`](https://github.com/yumima/finterm/commit/bcff4aeb0) Installs found through the Apps list, updated where they are
 - [`5d538f9d2`](https://github.com/yumima/finterm/commit/5d538f9d2) Cut the target-dependent wording; test the elevation wrapper's check
 - [`fc2e4927a`](https://github.com/yumima/finterm/commit/fc2e4927a) Restricted check before the elevation too; TargetDir= named in the refusal
 - [`61aa2dc37`](https://github.com/yumima/finterm/commit/61aa2dc37) Restricted PowerShell said as such; custom folder by TargetDir=; grace on retry
@@ -97,7 +98,7 @@ Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2)
 1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts.
 2. Start **finterm** from the Start Menu.
 
-Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended: `setup.exe install UpdateExisting=true --accept-licenses --default-answer --confirm-command` (without it, nothing is removed, and the install stops while an installed finterm is found). An install in a folder of its own is found (Windows' Apps list) and updated where it is.
+Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended: `setup.exe install UpdateExisting=true --accept-licenses --default-answer --confirm-command` (without it, nothing is removed, and the install stops while an installed finterm is found); for an install in another folder, add `TargetDir=<that folder>`.
 
 **macOS 13+ (Apple Silicon)**
 
