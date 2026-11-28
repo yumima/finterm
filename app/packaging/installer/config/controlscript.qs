@@ -23,7 +23,8 @@
 //     Without UpdateExisting nothing is
 //     removed and an installed finterm stops the install: in the target folder
 //     by IFW's own check ("contains an installation"), elsewhere — an old
-//     Program Files copy — by the refusal below.
+//     Program Files copy, or one in a folder of its own that Windows' Apps
+//     list knows — by the refusal below.
 //   - An uninstaller removes itself after it exits, from %TEMP%\uninstall.vbs:
 //     it deletes the maintenance tool, then the whole target folder
 //     (RemoveTargetDir, on: CMakeLists.txt). Installing before that is done
@@ -94,7 +95,6 @@ function psQuote(s)
     return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-
 function powershell(command)
 {
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
@@ -105,15 +105,18 @@ function powershell(command)
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
 // console. Asked once; a lookup that fails leaves the usual folders (logged).
+// Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
+// Program Files path only — one an administrator put elsewhere is not.
 var registered = null;
 function registeredInstalls()
 {
     if (registered !== null)
         return registered;
-    var r = powershell("Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
+    var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
+                       "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
                        "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
                        "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
-                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0");
+                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0 } catch { exit 1 }");
     registered = [];
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
@@ -313,7 +316,9 @@ function updateExisting()
         "finterm.install.update", "Update finterm",
         "finterm is already installed in:" + list + "\n\n" +
         "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
-        "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
+        "is removed now, then this one is installed" +
+        (installer.isCommandLineInstance() ? " in " + toWin(installer.value("TargetDir")) : " (you choose the folder next)") +
+        ". Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
         (anyProgramFiles ? "\n\nA copy in Program Files, shared by every user of this computer, is removed with " +
                            "Windows' permission." : ""),

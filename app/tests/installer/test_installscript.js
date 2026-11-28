@@ -1,7 +1,8 @@
 // tests/installer/test_installscript.js — the Windows rules of finterm's QtIFW
 // scripts, run with IFW's objects stubbed:
 //   - controlscript.qs: installing over an installed finterm (its own folder,
-//     or an old Program Files one) updates it — the old one is removed by its
+//     an old Program Files one, or one in a folder of its own that Windows'
+//     Apps list knows) updates it — the old one is removed by its
 //     own uninstaller (elevated for Program Files) and the installer waits
 //     until its folder is gone; declined, failed or unverifiable, nothing
 //     installs (createOperations throws on the recorded refusal). The GUI from
@@ -265,6 +266,11 @@ check("the Apps list unreadable: the usual folders still checked", a0.ifwRefused
 a0 = uninstall({ target: PU, installs: [PU, D], registered: [D], answerYes: true });
 check("uninstall beside an install in a folder of its own (Apps list): not asked, data stays",
       a0.asked === 0 && changes(a0) === 0);
+for (const [own, entry] of [[PU, PU], [PU.replace(/\//g, "\\") + "\\", PU], [D, D], [D + "/", D.toUpperCase()]]) {
+    a0 = uninstall({ target: own, installs: [norm(own)], registered: [entry], answerYes: true });
+    check("uninstall alone, its own Apps entry (" + own + "): still asked, the data goes on Yes",
+          a0.asked === 1 && a0.commands.some(c => /rmdir/.test(c)));
+}
 
 let s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",

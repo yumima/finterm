@@ -143,13 +143,14 @@ function otherWindowsInstall(ownDir)
 {
     if (systemInfo.kernelType !== "winnt")
         return "";
-    var own = (ownDir || "").replace(/\\/g, "/").toLowerCase();
+    // As the Apps list's entries are kept (they come from the same TargetDir).
+    var own = String(ownDir || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
     var candidates = [
         installer.environmentVariable("ProgramFiles") + "/finterm",
         installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm"
     ].concat(registeredInstalls());
     for (var i = 0; i < candidates.length; ++i) {
-        var dir = candidates[i].replace(/\\/g, "/");
+        var dir = String(candidates[i] || "").replace(/\\/g, "/").replace(/\/+$/, "");
         if (dir.toLowerCase() !== own && installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
             return dir;
     }
@@ -171,15 +172,18 @@ function powershell(command)
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
 // console. Asked once; a lookup that fails leaves the usual folders (logged).
+// Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
+// Program Files path only — one an administrator put elsewhere is not.
 var registered = null;
 function registeredInstalls()
 {
     if (registered !== null)
         return registered;
-    var r = powershell("Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
+    var r = powershell("$ErrorActionPreference = 'Stop'; try { " +
+                       "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
                        "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
                        "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
-                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0");
+                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0 } catch { exit 1 }");
     registered = [];
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
