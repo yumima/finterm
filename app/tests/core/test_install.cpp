@@ -208,7 +208,7 @@ class TestInstall : public QObject {
             QProcessEnvironment e = QProcessEnvironment::systemEnvironment();
             e.remove("APPIMAGE_EXTRACT_AND_RUN"); // the test's own environment must not decide
             e.insert("FAKE_FUSE", QString::fromLatin1(fuse));
-            e.insert("XDG_DATA_HOME", env_.data_home);
+            e.insert("HOME", env_.home); // the launch log goes under HOME, not the real one
             p.setProcessEnvironment(e);
             p.start(script, args);
             if (!p.waitForFinished(30000)) {
@@ -223,7 +223,7 @@ class TestInstall : public QObject {
         QCOMPARE(run("1", {"--version"}), QStringLiteral("mounted --version"));
         QCOMPARE(run("0", {"--version"}), QStringLiteral("unpacked --version"));
         // Why it ran unpacked is in the launch log.
-        QVERIFY(read(env_.data_home + "/finterm/logs/launch.log").contains("Cannot mount AppImage"));
+        QVERIFY(read(env_.home + "/.local/share/finterm/logs/launch.log").contains("Cannot mount AppImage"));
         // The app's own exit code (even 127) is its own: no second start.
         int code = 0;
         QCOMPARE(run("1", {"app-fails"}, &code), QStringLiteral("mounted app-fails"));
@@ -241,6 +241,7 @@ class TestInstall : public QObject {
             QProcessEnvironment e = QProcessEnvironment::systemEnvironment();
             e.remove("APPIMAGE_EXTRACT_AND_RUN");
             e.insert("FAKE_FUSE", "hang");
+            e.insert("HOME", env_.home);
             p.setProcessEnvironment(e);
             p.start(script, {"--version"});
             QVERIFY(p.waitForStarted());
@@ -249,9 +250,10 @@ class TestInstall : public QObject {
             QVERIFY(p.waitForFinished(5000));
             QTest::qWait(300);
             QProcess ps;
-            ps.start("pgrep", {"-f", "^sleep 31.7$"});
-            ps.waitForFinished();
-            QVERIFY2(ps.readAllStandardOutput().trimmed().isEmpty(), "the test mount outlived its launcher");
+            ps.start("pgrep", {"-f", "^sleep 31\\.7$"});
+            QVERIFY2(ps.waitForFinished(5000), "pgrep did not run");
+            // pgrep: 0 a match, 1 none — anything else, it didn't look.
+            QCOMPARE(ps.exitCode(), 1);
         }
     }
 

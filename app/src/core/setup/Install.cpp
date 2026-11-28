@@ -232,14 +232,16 @@ QString launch_script_text(const QString& installed) {
         "# where a test mount works, else unpacked (which always works).\n"
         "app='%1'\n"
         "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && exec \"$app\" \"$@\"\n"
-        "tmp=$(mktemp -d) || APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n"
+        "tmp=\n"
         "probe=\n"
         "# (No \"--\" before the group: dash's kill doesn't take it.)\n"
         "alive() { kill -0 \"-$probe\" 2>/dev/null || kill -0 \"$probe\" 2>/dev/null; }\n"
         "signal() { kill \"$1\" \"-$probe\" 2>/dev/null || kill \"$1\" \"$probe\" 2>/dev/null; }\n"
         "# Stop the test mount and all it started (its process group): TERM, and\n"
-        "# KILL only for what is still there after a second.\n"
+        "# KILL only for what is still there after a second. Its pid comes from the\n"
+        "# test mount itself when the launcher is interrupted before it knew it.\n"
         "stop_probe() {\n"
+        "    [ -n \"$probe\" ] || probe=$(cat \"$tmp/pid\" 2>/dev/null)\n"
         "    [ -n \"$probe\" ] || return 0\n"
         "    signal -TERM\n"
         "    n=0\n"
@@ -247,14 +249,19 @@ QString launch_script_text(const QString& installed) {
         "    alive && signal -KILL\n"
         "    return 0\n"
         "}\n"
-        "trap 'stop_probe; rm -rf \"$tmp\"; exit 130' INT\n"
-        "trap 'stop_probe; rm -rf \"$tmp\"; exit 143' TERM\n"
-        "trap 'stop_probe; rm -rf \"$tmp\"; exit 129' HUP\n"
-        "# The test mount in a process group of its own (setsid).\n"
+        "cleanup() { stop_probe; [ -n \"$tmp\" ] && rm -rf \"$tmp\"; }\n"
+        "trap 'cleanup; exit 130' INT\n"
+        "trap 'cleanup; exit 143' TERM\n"
+        "trap 'cleanup; exit 129' HUP\n"
+        "tmp=$(mktemp -d) || { trap - INT TERM HUP; APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"; }\n"
+        "# The test mount in a process group of its own (setsid, from util-linux or\n"
+        "# busybox; without it the mount process alone is signalled — the runtime\n"
+        "# mounts in-process), writing its pid before it becomes the image.\n"
+        "start='echo $$ >\"$1/pid\"; exec \"$2\" --appimage-mount >\"$1/out\" 2>\"$1/err\"'\n"
         "if command -v setsid >/dev/null 2>&1; then\n"
-        "    setsid \"$app\" --appimage-mount >\"$tmp/out\" 2>\"$tmp/err\" &\n"
+        "    setsid sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
         "else\n"
-        "    \"$app\" --appimage-mount >\"$tmp/out\" 2>\"$tmp/err\" &\n"
+        "    sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
         "fi\n"
         "probe=$!\n"
         "i=0\n"
@@ -269,11 +276,13 @@ QString launch_script_text(const QString& installed) {
         "    rm -rf \"$tmp\"\n"
         "    exec \"$app\" \"$@\"\n"
         "fi\n"
-        "# Why this start runs unpacked, beside finterm's own logs (the last 200 lines).\n"
-        "log=\"${XDG_DATA_HOME:-$HOME/.local/share}/finterm/logs/launch.log\"\n"
+        "# Why this start runs unpacked, with finterm's own logs (AppPaths: always\n"
+        "# ~/.local/share/finterm on Linux); the last 200 lines, replaced in one move.\n"
+        "log=\"$HOME/.local/share/finterm/logs/launch.log\"\n"
         "if mkdir -p \"$(dirname \"$log\")\" 2>/dev/null; then\n"
         "    { date; echo 'FUSE mount failed or did not answer: starting unpacked.'; cat \"$tmp/err\"; } >>\"$log\" 2>/dev/null\n"
-        "    tail -n 200 \"$log\" >\"$tmp/log\" 2>/dev/null && cat \"$tmp/log\" >\"$log\" 2>/dev/null\n"
+        "    tail -n 200 \"$log\" >\"$log.new\" 2>/dev/null && mv -f \"$log.new\" \"$log\" 2>/dev/null\n"
+        "    rm -f \"$log.new\"\n"
         "fi\n"
         "rm -rf \"$tmp\"\n"
         "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
@@ -323,13 +332,12 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
         if (QFile::rename(desktop, bak))
             done << QStringLiteral("kept the previous launcher as ") + bak;
     }
-    if (write_text(desktop, desktop_entry(env, installed))) {
+    // (A menu entry or command that can't be written is reported, not a
+    // failed install: the image runs, the next refresh tries again.)
+    if (write_text(desktop, desktop_entry(env, installed)))
         done << QStringLiteral("launcher: ") + desktop;
-    } else {
-        if (ok)
-            *ok = false;
+    else
         done << QStringLiteral("could not write the launcher ") + desktop;
-    }
     // The command: a link we own, never someone's own file of that name.
     const QString cmd = command_path(env);
     const QFileInfo ci(cmd);
@@ -339,13 +347,10 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
     if (our_link || (add_command && !ci.exists() && !ci.isSymLink())) {
         QDir().mkpath(ci.absolutePath());
         QFile::remove(cmd);
-        if (QFile::link(launch_script_path(installed), cmd)) {
+        if (QFile::link(launch_script_path(installed), cmd))
             done << QStringLiteral("command: ") + cmd;
-        } else {
-            if (ok)
-                *ok = false;
+        else
             done << QStringLiteral("could not make the command ") + cmd;
-        }
     }
     refresh_desktop_caches(env);
     return done;
@@ -675,9 +680,10 @@ Result install(const Env& env, const Options& opt) {
     bool launcher_ok = true;
     r.done << write_launcher(env, st.path, /*add_command=*/true, &launcher_ok);
     if (!launcher_ok) {
-        // (Written above already: only a failure after that lands here.)
-        r.error = QStringLiteral("finterm is in %1, but its launcher could not be written (%2)")
-                      .arg(st.path, launch_script_path(st.path));
+        // (The launch script was written above already: only a failure to
+        // write it again lands here.)
+        r.error = QStringLiteral("finterm is in %1, but its launcher could not be written: %2")
+                      .arg(st.path, r.done.filter(QStringLiteral("could not")).join(QStringLiteral("; ")));
         return r;
     }
     // Offered once: recorded whether it was taken or not (unticked), so it is
@@ -764,7 +770,7 @@ void refresh_launcher(const Env& env) {
     {
         bool ok = true;
         const QStringList done = write_launcher(env, st.path, /*add_command=*/false, &ok);
-        if (ok)
+        if (ok && done.filter(QStringLiteral("could not")).isEmpty())
             LOG_INFO("Install", "Launcher brought up to date: " + done.join(QStringLiteral("; ")));
         else
             LOG_WARN("Install", "Launcher not brought up to date: " + done.join(QStringLiteral("; ")));

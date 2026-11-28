@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`231e55873`](https://github.com/yumima/finterm/commit/231e55873) Launch script: KILL only what TERM left, traps first, private temp dir
 - [`693d66817`](https://github.com/yumima/finterm/commit/693d66817) Launch script: bounded, interruptible test mount; install order
 - [`5d950c76a`](https://github.com/yumima/finterm/commit/5d950c76a) Launch script: a test mount decides, then exec — no 127 guessing
 - [`773105d62`](https://github.com/yumima/finterm/commit/773105d62) Launch script: start mounted, fall back to unpacked on the runtime's 127
