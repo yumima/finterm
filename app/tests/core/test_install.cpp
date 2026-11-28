@@ -308,9 +308,9 @@ class TestInstall : public QObject {
         QVERIFY(QFileInfo(env_.home + "/.local/bin/finterm").isSymLink()); // still there
     }
 
-    void a_launcher_that_could_not_be_made_is_retried() {
+    void a_launcher_that_could_not_be_made_is_added_by_install_again() {
         // The applications folder can't be written at install time: the
-        // install still succeeds, says so, and the next start makes it.
+        // install succeeds with a warning saying how to add it.
         const QString apps = env_.data_home + "/applications";
         QDir().mkpath(apps);
         QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
@@ -321,18 +321,32 @@ class TestInstall : public QObject {
         QVERIFY(r.ok);
         QVERIFY(r.error.isEmpty());
         QVERIFY(r.warning.contains("could not write the launcher"));
-        // The command was made; the user removes it: the retry of the menu
-        // entry doesn't bring it back.
-        QFile::remove(env_.home + "/.local/bin/finterm");
+        QVERIFY(r.warning.contains("--install"));
         QVERIFY(!QFileInfo::exists(desktop()));
+        // A start doesn't make what isn't there (it may be the user's choice)…
         env_.package = installed();
         install::refresh_launcher(env_);
-        QVERIFY(QFileInfo::exists(desktop()));
-        QVERIFY(!QFileInfo::exists(env_.home + "/.local/bin/finterm"));
-        // Removed by the user afterwards: not put back.
-        QFile::remove(desktop());
-        install::refresh_launcher(env_);
         QVERIFY(!QFileInfo::exists(desktop()));
+        // …running --install again from the installed copy does.
+        const auto again = install::install(env_, {false});
+        QVERIFY(again.ok);
+        QVERIFY(again.warning.isEmpty());
+        QVERIFY(QFileInfo::exists(desktop()));
+    }
+
+    void someone_elses_launcher_stays_when_ours_cant_be_written() {
+        QDir().mkpath(QFileInfo(desktop()).absolutePath());
+        {
+            QFile f(desktop());
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("[Desktop Entry]\nName=finterm\nExec=/home/me/src/finterm/finterm.sh\n");
+        }
+        // A directory where ours would be written first: the write fails.
+        QDir().mkpath(desktop() + ".new.part");
+        QDir().mkpath(desktop() + ".new");
+        install::install(env_, {false});
+        QVERIFY(read(desktop()).contains("finterm.sh")); // still there, not moved aside
+        QVERIFY(!QFileInfo::exists(desktop() + ".bak"));
     }
 
     void dont_ask_is_per_file() {

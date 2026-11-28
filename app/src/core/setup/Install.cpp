@@ -33,12 +33,6 @@ constexpr const char* kFavouriteKey = "setup/favourite_added";
 constexpr const char* kDontAskKey = "setup/dont_ask";
 constexpr const char* kBuiltKey = "X-Finterm-Built";
 constexpr const char* kInstalledKey = "setup/installed"; ///< [path, version, built] of the install
-/// The menu entry / the command could not be written: the next starts try
-/// again, each item on its own (one the user removed has no mark, and is
-/// never put back), at most kRetries times.
-constexpr const char* kRetryDesktopKey = "setup/retry_launcher";
-constexpr const char* kRetryCommandKey = "setup/retry_command";
-constexpr int kRetries = 3;
 
 
 /// One per thread (QSettings is reentrant, not thread-safe): the install
@@ -49,17 +43,6 @@ QSettings& settings() {
     return s;
 }
 
-/// One more try left for `key`? Counts it down; the last one gives up (logged).
-bool take_retry(const char* key) {
-    const int left = settings().value(QLatin1String(key), 0).toInt();
-    if (left <= 0)
-        return false;
-    if (left == 1)
-        settings().remove(QLatin1String(key));
-    else
-        settings().setValue(QLatin1String(key), left - 1);
-    return true;
-}
 
 /// "4.2.3" from "4.2.3", "4.2.3-dev", "finterm 4.2.3"; false when none.
 bool parse(const QString& text, int& a, int& b, int& c) {
@@ -260,6 +243,9 @@ QString launch_script_text(const QString& installed) {
         "# KILL only for what is still there after a second. Its pid: what it wrote\n"
         "# itself (right even if setsid forked), else $! (set the moment it started).\n"
         "stop_probe() {\n"
+        "    # (Just started: give it a moment to write its pid.)\n"
+        "    n=0\n"
+        "    while [ -n \"$tmp\" ] && [ ! -s \"$tmp/pid\" ] && [ -n \"$!\" ] && [ \"$n\" -lt 10 ]; do sleep 0.05; n=$((n + 1)); done\n"
         "    [ -n \"$tmp\" ] && [ -s \"$tmp/pid\" ] && probe=$(cat \"$tmp/pid\")\n"
         "    probe=${probe:-$!}\n"
         "    [ -n \"$probe\" ] || return 0\n"
@@ -280,9 +266,9 @@ QString launch_script_text(const QString& installed) {
         "# It writes its own pid before it becomes the image.\n"
         "start='echo $$ >\"$1/pid\"; exec \"$2\" --appimage-mount >\"$1/out\" 2>\"$1/err\"'\n"
         "if command -v setsid >/dev/null 2>&1; then\n"
-        "    setsid sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
+        "    setsid /bin/sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
         "else\n"
-        "    sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
+        "    /bin/sh -c \"$start\" sh \"$tmp\" \"$app\" &\n"
         "fi\n"
         "probe=$!\n"
         "i=0\n"
@@ -321,9 +307,10 @@ bool write_launch_script(const QString& installed) {
                                           QFileDevice::ExeOther);
 }
 
-/// What write_launcher writes: the menu entry (always on an install; on a
-/// refresh when it is ours or its last write failed) and whether the command
-/// may be made where there is none (an install, or its last write failed).
+/// What write_launcher writes: the menu entry (an install; a refresh when it
+/// is ours and out of date), and whether the command may be made where there
+/// is none (an install only — a refresh keeps one of ours current, never puts
+/// back one the user removed).
 struct Items {
     bool desktop = true;
     bool make_command = true;
@@ -347,7 +334,7 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     }
     done << QStringLiteral("launch script: ") + launch_script_path(installed);
     // (A menu entry or command that can't be written is reported, not a
-    // failed install: the image runs; that item is tried at the next starts.)
+    // failed install: the image runs; running --install again makes them.)
     if (items.desktop) {
         if (!env.package_icon.isEmpty() && QFileInfo(env.package_icon).isFile()) {
             QDir().mkpath(QFileInfo(icon_path(env)).absolutePath());
@@ -355,24 +342,29 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
             if (QFile::copy(env.package_icon, icon_path(env)))
                 done << QStringLiteral("icon: ") + icon_path(env);
         }
+        // Ours written beside it first; only then is someone else's entry
+        // (finterm.sh install from a source tree) moved aside — a failed
+        // write leaves it in place.
         const QString desktop = desktop_path(env);
-        const QString existing = read_text(desktop);
-        if (QFileInfo::exists(desktop) && !ours(existing)) {
-            // Someone else's (finterm.sh install from a source tree): kept.
-            QString bak = desktop + QStringLiteral(".bak");
-            for (int i = 2; QFileInfo::exists(bak); ++i)
-                bak = desktop + QStringLiteral(".bak") + QString::number(i);
-            if (QFile::rename(desktop, bak))
-                done << QStringLiteral("kept the previous launcher as ") + bak;
-        }
-        if (write_text(desktop, desktop_entry(env, installed))) {
-            done << QStringLiteral("launcher: ") + desktop;
-            settings().remove(QLatin1String(kRetryDesktopKey));
-            refresh_desktop_caches(env);
-        } else {
+        const QString fresh = desktop + QStringLiteral(".new");
+        if (!write_text(fresh, desktop_entry(env, installed))) {
+            QFile::remove(fresh);
             done << QStringLiteral("could not write the launcher ") + desktop;
-            if (!settings().contains(QLatin1String(kRetryDesktopKey)))
-                settings().setValue(QLatin1String(kRetryDesktopKey), kRetries);
+        } else {
+            if (QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
+                QString bak = desktop + QStringLiteral(".bak");
+                for (int i = 2; QFileInfo::exists(bak); ++i)
+                    bak = desktop + QStringLiteral(".bak") + QString::number(i);
+                if (QFile::rename(desktop, bak))
+                    done << QStringLiteral("kept the previous launcher as ") + bak;
+            }
+            if (replace_file(fresh, desktop)) {
+                done << QStringLiteral("launcher: ") + desktop;
+                refresh_desktop_caches(env);
+            } else {
+                QFile::remove(fresh);
+                done << QStringLiteral("could not write the launcher ") + desktop;
+            }
         }
     }
     // The command: a link we own (kept current), never someone's own file of
@@ -391,17 +383,11 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         QFile::remove(part);
         if (QFile::link(launch_script_path(installed), part) && replace_file(part, cmd)) {
             done << QStringLiteral("command: ") + cmd;
-            settings().remove(QLatin1String(kRetryCommandKey));
         } else {
             QFile::remove(part);
             done << QStringLiteral("could not make the command ") + cmd;
-            if (!settings().contains(QLatin1String(kRetryCommandKey)))
-                settings().setValue(QLatin1String(kRetryCommandKey), kRetries);
         }
-    } else if (already) {
-        settings().remove(QLatin1String(kRetryCommandKey));
     }
-    settings().sync();
     return done;
 }
 
@@ -685,8 +671,20 @@ Result install(const Env& env, const Options& opt) {
     }
     r.installed = st.path;
     if (st.running_installed) {
+        // Run from its place: the launcher is (re)made — how one that could
+        // not be written at install time is added.
         r.ok = true;
         r.done << QStringLiteral("already running from ") + st.path;
+#if defined(Q_OS_LINUX)
+        bool launcher_ok = true;
+        r.done << write_launcher(env, st.path, Items{}, &launcher_ok);
+        if (!launcher_ok) {
+            r.ok = false;
+            r.error = r.done.filter(QStringLiteral("could not")).join(QStringLiteral("; "));
+        } else if (const QStringList missed = r.done.filter(QStringLiteral("could not")); !missed.isEmpty()) {
+            r.warning = missed.join(QStringLiteral("; "));
+        }
+#endif
         return r;
     }
     const QString dir = QFileInfo(st.path).absolutePath();
@@ -727,9 +725,6 @@ Result install(const Env& env, const Options& opt) {
     }
     r.done << QStringLiteral("installed: ") + st.path;
     bool launcher_ok = true;
-    // A fresh install: any earlier marks are about another one.
-    settings().remove(QLatin1String(kRetryDesktopKey));
-    settings().remove(QLatin1String(kRetryCommandKey));
     r.done << write_launcher(env, st.path, Items{}, &launcher_ok);
     if (!launcher_ok) {
         // (The launch script was written above already: only a failure to
@@ -808,7 +803,8 @@ Result install(const Env& env, const Options& opt) {
     // Installed — what could not be added is said (and tried again at the
     // next start).
     if (const QStringList missed = r.done.filter(QStringLiteral("could not")); !missed.isEmpty())
-        r.warning = missed.join(QStringLiteral("; ")) + QStringLiteral(" (tried again at the next starts)");
+        r.warning = missed.join(QStringLiteral("; ")) +
+                    QStringLiteral(" — fix that, then run finterm --install again to add it");
     return r;
 }
 
@@ -819,26 +815,25 @@ void refresh_launcher(const Env& env) {
         return;
     const QString desktop = desktop_path(env);
     const QString text = read_text(desktop);
-    // The menu entry: kept current when it is ours; written again where its
-    // last write failed (a mark, at most kRetries starts) — never where the
-    // user removed it (no mark). Likewise the command.
+    // Ours, kept current: the menu entry when it is out of date, the launch
+    // script, the command link. Nothing is made that isn't there (one the
+    // user removed stays removed).
     Items items;
-    items.desktop = (ours(text) && (text != desktop_entry(env, st.path) ||
-                                    (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))) ||
-                    (!QFileInfo::exists(desktop) && take_retry(kRetryDesktopKey));
-    items.make_command = take_retry(kRetryCommandKey);
+    items.desktop = ours(text) && (text != desktop_entry(env, st.path) ||
+                                   (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))));
+    items.make_command = false;
     const bool script_stale = read_text(launch_script_path(st.path)) != launch_script_text(st.path);
-    if (!items.desktop && !items.make_command && !script_stale && !ours(text))
-        return; // none of ours (the user removed it), or someone else's
+    const QFileInfo cmd(command_path(env));
+    const bool command_stale = cmd.isSymLink() && same_file(cmd.symLinkTarget(), st.path); // an older link
+    if (!items.desktop && !script_stale && !command_stale)
+        return; // up to date (or none of ours: nothing to keep)
     bool ok = true;
     const QStringList done = write_launcher(env, st.path, items, &ok);
     const QStringList missed = done.filter(QStringLiteral("could not"));
-    if (ok && missed.isEmpty()) {
-        if (items.desktop || items.make_command || script_stale)
-            LOG_INFO("Install", "Launcher brought up to date: " + done.join(QStringLiteral("; ")));
-    } else {
+    if (ok && missed.isEmpty())
+        LOG_INFO("Install", "Launcher brought up to date: " + done.join(QStringLiteral("; ")));
+    else
         LOG_WARN("Install", "Launcher not brought up to date: " + missed.join(QStringLiteral("; ")));
-    }
 #else
     Q_UNUSED(env);
 #endif
@@ -897,8 +892,7 @@ Result uninstall(const Env& env) {
     if (settings().value(QLatin1String(kFavouriteKey)).toBool())
         settings().setValue(QLatin1String(kFavouriteKey), false);
     settings().remove(QLatin1String(kInstalledKey));
-    settings().remove(QLatin1String(kRetryDesktopKey));
-    settings().remove(QLatin1String(kRetryCommandKey));
+    settings().remove(QStringLiteral("setup/launcher_retry")); // (a mark a 4.2.3 pre-release wrote)
     settings().sync();
     r.ok = true;
     return r;

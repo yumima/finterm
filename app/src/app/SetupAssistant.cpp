@@ -79,7 +79,9 @@ void log_install(const install::Result& r) {
     const QString when = QDateTime::currentDateTime().toString(Qt::ISODate);
     f.write(QStringLiteral("%1 %2 %3%4\n")
                 .arg(when, r.ok ? QStringLiteral("ok") : QStringLiteral("FAILED"),
-                     r.done.join(QStringLiteral("; ")), r.error.isEmpty() ? QString() : QStringLiteral(" — ") + r.error)
+                     r.done.join(QStringLiteral("; ")),
+                     (r.error.isEmpty() ? QString() : QStringLiteral(" — ") + r.error) +
+                         (r.warning.isEmpty() ? QString() : QStringLiteral(" — warning: ") + r.warning))
                 .toUtf8());
 }
 

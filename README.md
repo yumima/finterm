@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`8d6c237d7`](https://github.com/yumima/finterm/commit/8d6c237d7) Launcher retries per item, bounded; test mount pid from itself again
 - [`ce8b3499b`](https://github.com/yumima/finterm/commit/ce8b3499b) Launcher: retried when it couldn't be made; $! for the test mount
 - [`48efe2260`](https://github.com/yumima/finterm/commit/48efe2260) Launch script: pid from the mount itself, traps before temp, log under HOME
 - [`231e55873`](https://github.com/yumima/finterm/commit/231e55873) Launch script: KILL only what TERM left, traps first, private temp dir
