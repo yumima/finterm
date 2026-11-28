@@ -63,6 +63,8 @@ class PythonSetupManager : public QObject {
     /// Get UV executable path
     QString uv_path() const;
 
+    QString find_requirements_file(const QString& filename) const;
+
     // Shared UV env vars applied to every uv invocation. Returns:
     //   UV_PYTHON_INSTALL_DIR   — keep Python under our install dir
     //   UV_CACHE_DIR            — wheels cached beside the app so reinstalls reuse them
@@ -93,7 +95,6 @@ class PythonSetupManager : public QObject {
     bool install_python_via_uv();
     bool create_venv(const QString& venv_name);
     bool install_packages(const QString& venv_name, const QString& requirements_file);
-    QString find_requirements_file(const QString& filename) const;
 
     // Helpers
 

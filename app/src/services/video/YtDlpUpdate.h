@@ -3,8 +3,10 @@
 // YouTube changes its player every few weeks and an older yt-dlp then fails
 // to resolve streams; setup installs it once and never again (its line in
 // requirements-numpy2.txt is unpinned, so the requirements hash never
-// changes). This upgrades yt-dlp and its YouTube helper — nothing else — at
-// most once a day, detached (quitting finterm doesn't cut it off).
+// changes). This upgrades yt-dlp and its YouTube helper — nothing else, and
+// within the pinned requirements — at most once a day (checked hourly while
+// finterm runs), detached (quitting finterm doesn't cut it off), its output in
+// logs/ytdlp-upgrade.log.
 
 namespace finterm::services::video {
 

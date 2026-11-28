@@ -8,7 +8,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QHash>
+#include <QSet>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -264,19 +264,21 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
 /// Ask the image to mount itself (--appimage-mount prints the mount point
 /// and holds it until stopped): whether FUSE works here for this runtime.
 bool image_can_mount(const QString& image) {
-    // Once per process for an image (current_env() is asked more than once).
-    static QHash<QString, bool> known;
-    if (const auto it = known.constFind(image); it != known.cend())
-        return it.value();
+    // A mount that worked is remembered for the process (current_env() is
+    // asked more than once); one that didn't is tried again (it may only have
+    // been slow).
+    static QSet<QString> mounts;
+    if (mounts.contains(image))
+        return true;
     QProcess p;
     QProcessEnvironment e = clean_environment();
     e.remove(QStringLiteral("APPIMAGE_EXTRACT_AND_RUN"));
     p.setProcessEnvironment(e);
     p.start(image, {QStringLiteral("--appimage-mount")});
-    if (!p.waitForStarted(2000))
-        return known[image] = false;
+    if (!p.waitForStarted(3000))
+        return false;
     bool mounted = false;
-    if (p.waitForReadyRead(3000)) {
+    if (p.waitForReadyRead(5000)) {
         const QString where = QString::fromUtf8(p.readLine()).trimmed();
         mounted = !where.isEmpty() && QFileInfo(where).isDir();
     }
@@ -285,7 +287,9 @@ bool image_can_mount(const QString& image) {
         p.kill();
         p.waitForFinished(1000);
     }
-    return known[image] = mounted;
+    if (mounted)
+        mounts.insert(image);
+    return mounted;
 }
 
 // ── macOS ────────────────────────────────────────────────────────────────────

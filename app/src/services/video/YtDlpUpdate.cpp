@@ -7,7 +7,9 @@
 #include "services/video/YtDlp.h"
 
 #include <QDateTime>
+#include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QProcess>
 #include <QSettings>
 
@@ -21,6 +23,26 @@ void refresh_ytdlp() {
     // Only the copy this environment owns: one next to the binary or on PATH
     // is the user's (or the build's) to keep.
     if (!ytdlp_program().startsWith(AppPaths::root()))
+        return;
+    // The pins stay: the requirements constrain the upgrade, so one that would
+    // move a pinned package fails instead. (Its own constraints file: the
+    // requirements without yt-dlp's line — a constraint can't carry extras.)
+    const QString requirements = mgr.find_requirements_file(QStringLiteral("requirements-numpy2.txt"));
+    QFile in(requirements);
+    if (requirements.isEmpty() || !in.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    QStringList pins;
+    for (const QString& raw : QString::fromUtf8(in.readAll()).split(QLatin1Char('\n'))) {
+        const QString line = raw.section(QLatin1Char('#'), 0, 0).trimmed();
+        if (!line.isEmpty() && !line.startsWith(QLatin1String("yt-dlp")) && !line.startsWith(QLatin1Char('-')))
+            pins << line;
+    }
+    const QString constraints = AppPaths::root() + QStringLiteral("/ytdlp-constraints.txt");
+    QSaveFile out(constraints);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text))
+        return;
+    out.write((pins.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8());
+    if (!out.commit())
         return;
     QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     const QDateTime last = s.value(QStringLiteral("video/ytdlp_refreshed_at")).toDateTime();
@@ -39,15 +61,21 @@ void refresh_ytdlp() {
         cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
     });
 #endif
-    // These two only (--upgrade-package): their dependencies move only if they
-    // must, so the versions requirements-numpy2.txt pins stay.
+    // These two only (--upgrade-package), within the pins (-c).
     proc.setProgram(mgr.uv_path());
     proc.setArguments({QStringLiteral("pip"), QStringLiteral("install"), QStringLiteral("--python"), python,
-                       QStringLiteral("--upgrade-package"), QStringLiteral("yt-dlp"),
+                       QStringLiteral("-c"), constraints, QStringLiteral("--upgrade-package"), QStringLiteral("yt-dlp"),
                        QStringLiteral("--upgrade-package"), QStringLiteral("yt-dlp-ejs"),
                        QStringLiteral("yt-dlp[default]")});
+    // Out of the install folder (an update renames it), its own log (what
+    // went wrong, if it does), not finterm's terminal.
+    proc.setWorkingDirectory(AppPaths::root());
+    const QString log = AppPaths::logs() + QStringLiteral("/ytdlp-upgrade.log");
+    proc.setStandardInputFile(QProcess::nullDevice());
+    proc.setStandardOutputFile(log, QIODevice::Truncate);
+    proc.setStandardErrorFile(log, QIODevice::Append);
     if (proc.startDetached())
-        LOG_INFO("YtDlp", "Upgrading yt-dlp (in the background)");
+        LOG_INFO("YtDlp", "Upgrading yt-dlp in the background (" + log + ")");
     else
         LOG_WARN("YtDlp", "Could not start the yt-dlp upgrade");
 }
