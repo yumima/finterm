@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`6b9dfd8af`](https://github.com/yumima/finterm/commit/6b9dfd8af) CI updates over an install through the GUI, as users do
 - [`6f1da8c0c`](https://github.com/yumima/finterm/commit/6f1da8c0c) Chunk test on getentropy's own boundaries; stray include gone
 - [`b29af40ba`](https://github.com/yumima/finterm/commit/b29af40ba) Every token from the OS random source; full installer logs in CI
 - [`290ec396b`](https://github.com/yumima/finterm/commit/290ec396b) Secrets from the OS random source; CI installer verbose for real
@@ -81,7 +82,7 @@ Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2)
 1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts.
 2. Start **finterm** from the Start Menu.
 
-Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). A silent install (`setup.exe install --confirm-command`) can't update: the installer framework refuses an occupied folder before finterm's script runs. Remove the installed copy first with `"%LOCALAPPDATA%\Programs\finterm\FintermMaintenanceTool.exe" purge --default-answer --confirm-command` (your data stays), then install.
+Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). A silent install (`setup.exe install --accept-licenses --default-answer --confirm-command`) can't update: the installer framework refuses an occupied folder before finterm's script runs. Remove the installed copy first with `"%LOCALAPPDATA%\Programs\finterm\FintermMaintenanceTool.exe" purge --default-answer --confirm-command` (your data stays), then install.
 
 **macOS 13+ (Apple Silicon)**
 
