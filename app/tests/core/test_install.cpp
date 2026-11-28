@@ -444,6 +444,25 @@ class TestInstall : public QObject {
         QVERIFY(!QFileInfo::exists(ahead));
     }
 
+    void a_start_sweeps_day_old_leftovers_even_when_all_is_current() {
+        QVERIFY(install::install(env_, {false}).ok);
+        env_.package = installed();
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        const auto aged = [&](const QString& path, qint64 secs) {
+            write_package(path, "t");
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-secs), QFileDevice::FileModificationTime));
+        };
+        aged(apps + "/.finterm.desktop.finterm-tmp.Old001", 2 * 86400);
+        aged(apps + "/.finterm.desktop.finterm-tmp.New001", 2 * 3600); // perhaps a write in progress elsewhere
+        aged(env_.home + "/Applications/.finterm-launch.part", 2 * 86400);
+        install::refresh_launcher(env_); // nothing stale: no rewrite
+        QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Old001"));
+        QVERIFY(QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.New001"));
+        QVERIFY(!QFileInfo::exists(env_.home + "/Applications/.finterm-launch.part"));
+    }
+
     void links_are_kept_as_written_and_bak_names_never_collide() {
         const QString apps = QFileInfo(desktop()).absolutePath();
         QDir().mkpath(apps);
@@ -514,7 +533,6 @@ class TestInstall : public QObject {
             QSKIP("an unreadable file doesn't stop this user (root)");
         install::refresh_launcher(env_);
         QCOMPARE(bits(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
-
     }
 
     void their_entry_stays_when_its_copy_cant_be_made() {

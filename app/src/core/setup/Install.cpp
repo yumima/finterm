@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -132,36 +133,39 @@ QString read_text(const QString& path) {
 }
 
 /// Temporaries a killed write left beside `path`: Beside's own
-/// ".<name>.finterm-tmp.XXXXXX" (exactly that; older than `now` by `age` or
-/// more, or dated a day or more ahead — a write in progress elsewhere keeps
-/// its own), and the ".new"/".part" earlier builds used. Nothing else is
-/// touched. Beside passes the filesystem's own time (the temporary it just
-/// wrote) and ten minutes; write_launcher, at every run, the local clock and
-/// a day — a margin no clock skew reaches. `skip`: one to keep.
-void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, const QString& skip = {}) {
+/// ".<name>.finterm-tmp.XXXXXX" (exactly that) and the ".new"/".part" names
+/// earlier builds used — only once older than `now` by `age` (a write in
+/// progress elsewhere, of this build or an older one, keeps its own), and,
+/// with `ahead`, also one dated a day or more past `now` (a clock since put
+/// right). Nothing else is touched. `skip`: one to keep.
+///
+/// Two callers: Beside at a rewrite — the filesystem's own time (the
+/// temporary it just wrote) and ten minutes; and every start and install —
+/// the local clock and a day, a margin larger than any ordinary clock skew
+/// (a skew past a day would make it take a write in progress elsewhere).
+void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, bool ahead, const QString& skip = {}) {
+    if (!now.isValid())
+        return;
     const QFileInfo fi(path);
     const QDir dir(fi.absolutePath());
-    QStringList names;
+    const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
+                                  QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
+    QSet<QString> legacy;
     for (const char* old : {".new", ".new.part", ".part"})
-        names << fi.fileName() + QLatin1String(old);
-    if (now.isValid()) {
-        const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
-                                      QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
-        for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
-            if (e.fileName() != skip && ours.match(e.fileName()).hasMatch() &&
-                (e.lastModified() < now.addSecs(-age) || e.lastModified() > now.addDays(1)))
-                names << e.fileName();
+        legacy.insert(fi.fileName() + QLatin1String(old));
+    for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden)) {
+        if (e.isSymLink() || e.fileName() == skip || !(legacy.contains(e.fileName()) || ours.match(e.fileName()).hasMatch()))
+            continue;
+        if (e.lastModified() < now.addSecs(-age) || (ahead && e.lastModified() > now.addDays(1)))
+            QFile::remove(e.absoluteFilePath());
     }
-    for (const QString& n : names)
-        if (QFileInfo(dir.filePath(n)).isFile() && !QFileInfo(dir.filePath(n)).isSymLink())
-            QFile::remove(dir.filePath(n));
 }
+
 
 /// `text` written to a temporary of its own beside `path` (unique name, every
 /// byte checked), for `put` to rename over it. A rename replaces the entry
 /// itself — a link, a read-only file — never what a link points to; a full
 /// disk or an error leaves the old file as it was, and nothing behind.
-
 class Beside {
   public:
     /// `perms`: what the file is to have (the temporary starts owner-only);
@@ -182,7 +186,7 @@ class Beside {
         tmp_.close();
         ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
         // What killed writes left here, timed by this temporary's own stamp.
-        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(), 600,
+        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(), 600, true,
                           QFileInfo(tmp_.fileName()).fileName());
     }
     bool ok() const { return ok_; }
@@ -403,6 +407,13 @@ bool write_launch_script(const QString& installed) {
     return write_text(path, launch_script_text(installed), perms);
 }
 
+/// The start's and the install's own sweep (see sweep_temporaries).
+void sweep_leftovers(const Env& env, const QString& installed) {
+    const QDateTime now = QDateTime::currentDateTime();
+    sweep_temporaries(desktop_path(env), now, 86400, false);
+    sweep_temporaries(launch_script_path(installed), now, 86400, false);
+}
+
 /// What could not be added, and how: by the installed image's own path (the
 /// `finterm` command may be what is missing).
 QString launcher_hint(const QStringList& missed, const QString& installed) {
@@ -450,9 +461,6 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     QStringList done;
     if (ok)
         *ok = true;
-    // Leftovers of killed writes, whether or not this run writes these files.
-    sweep_temporaries(desktop_path(env), QDateTime::currentDateTime(), 86400);
-    sweep_temporaries(launch_script_path(installed), QDateTime::currentDateTime(), 86400);
     // The launch script first, before anything else is touched: the menu
     // entry and the command start it, so without it they are left as they
     // are (an earlier launcher keeps working) and the caller is told.
@@ -865,6 +873,7 @@ Result install(const Env& env, const Options& opt) {
     }
     r.done << QStringLiteral("installed: ") + st.path;
     bool launcher_ok = true;
+    sweep_leftovers(env, st.path);
     r.done << write_launcher(env, st.path, Items{}, &launcher_ok);
     if (!launcher_ok) {
         // (The launch script was written above already: only a failure to
@@ -951,6 +960,7 @@ void refresh_launcher(const Env& env) {
     const State st = state(env);
     if (!st.running_installed)
         return;
+    sweep_leftovers(env, st.path); // at every start, whether or not anything is stale
     const QString desktop = desktop_path(env);
     const QString text = read_text(desktop);
     // Ours, kept current: the menu entry when it is out of date, the launch
