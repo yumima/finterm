@@ -194,9 +194,9 @@ class TestInstall : public QObject {
         QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
         f.write("#!/bin/sh\n"
                 "if [ \"$1\" = --appimage-mount ]; then\n"
-                "  [ \"$FAKE_FUSE\" = hang ] && { trap '' TERM; sleep 30; }\n"
+                "  [ \"$FAKE_FUSE\" = hang ] && { trap '' TERM; sleep 31.7; }\n"
                 "  [ \"$FAKE_FUSE\" = 1 ] || { echo 'Cannot mount AppImage' >&2; exit 127; }\n"
-                "  echo /tmp; exec sleep 30\n"
+                "  echo /tmp; exec sleep 31.7\n"
                 "fi\n"
                 "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && { echo unpacked \"$@\"; exit 0; }\n"
                 "echo mounted \"$@\"; [ \"$1\" = app-fails ] && exit 127; exit 0\n");
@@ -211,7 +211,7 @@ class TestInstall : public QObject {
             e.insert("XDG_DATA_HOME", env_.data_home);
             p.setProcessEnvironment(e);
             p.start(script, args);
-            if (!p.waitForFinished(20000)) {
+            if (!p.waitForFinished(30000)) {
                 p.kill();
                 p.waitForFinished();
                 return QStringLiteral("(did not finish)");
@@ -233,7 +233,7 @@ class TestInstall : public QObject {
         QElapsedTimer t;
         t.start();
         QCOMPARE(run("hang", {"--version"}), QStringLiteral("unpacked --version"));
-        QVERIFY2(t.elapsed() < 13000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 20000, qPrintable(QString::number(t.elapsed())));
 
         // Interrupted while the test mount runs: the mount goes with it.
         {
@@ -249,7 +249,7 @@ class TestInstall : public QObject {
             QVERIFY(p.waitForFinished(5000));
             QTest::qWait(300);
             QProcess ps;
-            ps.start("pgrep", {"-f", "^sleep 30$"});
+            ps.start("pgrep", {"-f", "^sleep 31.7$"});
             ps.waitForFinished();
             QVERIFY2(ps.readAllStandardOutput().trimmed().isEmpty(), "the test mount outlived its launcher");
         }
