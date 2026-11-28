@@ -99,25 +99,34 @@ function powershell(command)
 // Remove the installation in `dir` by its own uninstaller — only if the folder
 // can be removed now: Windows won't rename a folder something runs from
 // (finterm, an uninstaller window left open — anyone's, elevated or not), so
-// it is renamed aside and straight back first. One PowerShell script; for
-// Program Files it runs elevated as a whole (the rename needs it too).
-// Its exit code: the uninstaller's, 3 = in use, 4 = renamed and not back
-// (left as <dir>.finterm-check); null when it could not be started.
+// it is renamed aside and back first, each tried for up to ten seconds (a
+// program still closing, a virus scan). One PowerShell script; for Program
+// Files it runs elevated as a whole (the rename needs it too).
+// Exit codes, kept clear of the uninstaller's (IFW's 0..6): see removeCodes.
+var removeCodes = { purgeFailed: 101, inUse: 103, notBack: 104, toolNotStarted: 105, checkInTheWay: 106,
+                    notPermitted: 107 };
 function removeInstall(dir)
 {
-    var d = toWin(dir), tool = toWin(dir + "/FintermMaintenanceTool.exe");
+    var d = toWin(dir), tool = toWin(dir + "/FintermMaintenanceTool.exe"), c = removeCodes;
+    var tryMove = function(from, to) {
+        return "$ok = $false; for ($i = 0; $i -lt 40 -and -not $ok; $i++) { try { [IO.Directory]::Move(" +
+               from + ", " + to + "); $ok = $true } catch { Start-Sleep -Milliseconds 250 } }; ";
+    };
     var script = "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
-        "try { [IO.Directory]::Move($d, $t) } catch { exit 3 }; " +
-        "try { [IO.Directory]::Move($t, $d) } catch { exit 4 }; " +
-        "$p = Start-Process -FilePath " + psQuote(tool) + " -ArgumentList 'purge','--default-answer'," +
-        "'--confirm-command' -Wait -PassThru; exit $p.ExitCode";
+        "if (Test-Path -LiteralPath $t) { exit " + c.checkInTheWay + " }; " +
+        tryMove("$d", "$t") + "if (-not $ok) { exit " + c.inUse + " }; " +
+        tryMove("$t", "$d") + "if (-not $ok) { exit " + c.notBack + " }; " +
+        "try { $p = Start-Process -FilePath " + psQuote(tool) + " -ArgumentList 'purge','--default-answer'," +
+        "'--confirm-command' -Wait -PassThru -ErrorAction Stop } catch { exit " + c.toolNotStarted + " }; " +
+        "if (-not $p) { exit " + c.toolNotStarted + " }; if ($p.ExitCode -ne 0) { exit " + c.purgeFailed + " }; exit 0";
     if (!inProgramFiles(dir))
         return powershell(script);
     // Elevated: the old install was made by an administrator. The script
     // has no double quotes, so it travels as one -Command "…" argument.
-    return powershell("$p = Start-Process -FilePath " + psQuote(winTool("powershell.exe")) + " -ArgumentList " +
+    return powershell("try { $p = Start-Process -FilePath " + psQuote(winTool("powershell.exe")) + " -ArgumentList " +
                       psQuote("-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"") +
-                      " -Verb RunAs -Wait -PassThru; exit $p.ExitCode");
+                      " -Verb RunAs -Wait -PassThru -ErrorAction Stop } catch { exit " + c.notPermitted + " }; " +
+                      "if (-not $p) { exit " + c.notPermitted + " }; exit $p.ExitCode");
 }
 
 // Every finterm installation found — the target folder, the per-user one, an
@@ -138,7 +147,9 @@ function existingInstalls()
             found.push(dir);
         }
     }
-    return found;
+    // Program Files first: in use, nothing is touched yet; a per-user copy in
+    // use after it leaves a working finterm.
+    return found.filter(inProgramFiles).concat(found.filter(function(d) { return !inProgramFiles(d); }));
 }
 
 function inProgramFiles(dir)
@@ -220,32 +231,45 @@ function updateExisting()
         // (one left open, closed meanwhile) — only wait for that.
         for (var tries = 0; installer.fileExists(dir + "/FintermMaintenanceTool.exe"); ++tries) {
             var r = removeInstall(dir);
-            var code = r === null ? null : r[1];
+            var code = r === null ? null : r[1], c = removeCodes, here = toWin(dir);
             console.log("[finterm] removing " + dir + ": " + (code === null ? "could not start" : "exit " + code));
             if (code === 0)
                 break;
             if (code === null)
-                return cannotCheck("remove the installed copy in " + toWin(dir));
-            if (code === 4)
+                return cannotCheck("remove the installed copy in " + here);
+            var failed = function(why) {
                 return stop("finterm.install.update_failed", "finterm could not be updated",
-                            "The installed finterm in " + toWin(dir) + " was moved to " + toWin(dir) +
-                            ".finterm-check and could not be moved back. Rename it back, then run this installer " +
-                            "again.");
-            if (code !== 3)
-                return stop("finterm.install.update_failed", "finterm could not be updated",
-                            "The installed finterm in " + toWin(dir) + " could not be removed" +
-                            (inProgramFiles(dir) ? " (Windows' permission is needed for Program Files)" : "") +
-                            ". Uninstall it from Settings > Apps (answer No when asked to remove your data — this " +
-                            "version keeps it), then run this installer again.");
+                            "The installed finterm in " + here + " " + why);
+            };
+            var byHand = ". Uninstall it from Settings > Apps (answer No when asked to remove your data — this " +
+                         "version keeps it), then run this installer again.";
+            if (code === c.notPermitted)
+                return failed("was not removed: Windows' permission was not given" + byHand);
+            if (code === c.toolNotStarted)
+                return failed("was not removed: its uninstaller did not start" + byHand);
+            if (code === c.checkInTheWay)
+                return failed("was not removed: " + here + ".finterm-check, left by an interrupted update, is in " +
+                              "the way. Delete it, then run this installer again.");
+            if (code === c.notBack)
+                return failed("was moved to " + here + ".finterm-check and could not be moved back. Rename it back" +
+                              (inProgramFiles(dir) ? " (as an administrator)" : "") + ", then run this installer " +
+                              "again.");
+            if (code !== c.inUse)
+                return failed("could not be removed (its uninstaller failed)" + byHand);
             // In use: finterm, an uninstaller window left open, or another
             // program with a file of it open.
-            var inUse = toWin(dir) + " is in use — finterm, a finterm uninstaller window, or another program " +
-                        "has it open" + (inProgramFiles(dir) ? " (perhaps another user's)" : "") + ".";
+            var inUse = here + " is in use — finterm, a finterm uninstaller window, or another program has it " +
+                        "open" + (inProgramFiles(dir) ? " (perhaps another user's)" : "") + ".";
             if (tries >= 2 || installer.isCommandLineInstance())
                 return stop("finterm.install.in_use", "finterm is in use",
                             inUse + " Close it, then run this installer again.");
             QMessageBox.warning("finterm.install.in_use_ask", "finterm is in use",
                                 inUse + " Close it (every window), then click OK.", QMessageBox.Ok);
+            // An uninstaller window closed: its uninstall.vbs takes the tool
+            // within a second or so, then the folder — wait for that rather
+            // than run into it.
+            powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir + "/FintermMaintenanceTool.exe")) +
+                       ") -and $i -lt 20; $i++) { Start-Sleep -Milliseconds 250 }");
         }
         // Until its uninstall.vbs has removed the folder: seconds, normally; a
         // minute at most (the wizard waits with it) — longer means a file is
