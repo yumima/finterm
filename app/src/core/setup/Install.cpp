@@ -182,6 +182,15 @@ bool write_text(const QString& path, const QString& text, QFileDevice::Permissio
     return b.put();
 }
 
+/// What a symbolic link says (as written — relative stays relative).
+QString link_text(const QString& path) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    return QFileInfo(path).readSymLink();
+#else
+    return QFileInfo(path).symLinkTarget();
+#endif
+}
+
 /// Temporaries a killed write left beside `path`: Beside's own
 /// ".<name>.finterm-tmp.XXXXXX" (exactly that, and only ten minutes old or
 /// more — a write in progress elsewhere keeps its own), and the ".new"/
@@ -194,7 +203,8 @@ void sweep_temporaries(const QString& path) {
     const QDateTime stale = QDateTime::currentDateTime().addSecs(-600);
     QStringList names;
     for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
-        if (ours.match(e.fileName()).hasMatch() && e.lastModified() < stale)
+        if (ours.match(e.fileName()).hasMatch() &&
+            (e.lastModified() < stale || e.lastModified() > QDateTime::currentDateTime().addSecs(600))) // (a clock moved)
             names << e.fileName();
     for (const char* old : {".new", ".new.part", ".part"})
         names << fi.fileName() + QLatin1String(old);
@@ -358,15 +368,20 @@ QString launch_script_text(const QString& installed) {
         .arg(quoted);
 }
 
-bool write_launch_script(const QString& installed) {
+/// The launch script is a plain, runnable file of ours: right text, the exec
+/// bit, not a link (a link's target is not ours to run or chmod).
+bool launch_script_ok(const QString& installed) {
     const QString path = launch_script_path(installed);
-    if (read_text(path) != launch_script_text(installed))
-        return write_text(path, launch_script_text(installed), kRunnable); // runnable before it is in place
-    // Already right: runnable too (never through a link — that file isn't ours).
     const QFileInfo fi(path);
-    if (fi.isSymLink() || (QFile::permissions(path) & kRunnable) == kRunnable)
+    return !fi.isSymLink() && fi.isFile() && (QFile::permissions(path) & kRunnable) == kRunnable &&
+           read_text(path) == launch_script_text(installed);
+}
+
+bool write_launch_script(const QString& installed) {
+    if (launch_script_ok(installed))
         return true;
-    return QFile::setPermissions(path, kRunnable);
+    // Written (runnable before it is in place); a link is replaced by the file.
+    return write_text(launch_script_path(installed), launch_script_text(installed), kRunnable);
 }
 
 /// What could not be added, and how: by the installed image's own path (the
@@ -383,10 +398,13 @@ QString launcher_hint(const QStringList& missed, const QString& installed) {
     path.replace(QLatin1Char('\''), QStringLiteral("'\\''")); // quoted for a POSIX shell
     return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run '%1' --install").arg(path);
 #else
-    // cmd.exe runs "path" args; PowerShell needs & before a quoted path.
+    // cmd.exe runs "path" args; PowerShell needs & and single quotes (in
+    // double ones it expands $ and `), with ' doubled.
     const QString exe = QDir::toNativeSeparators(installed);
+    QString ps = exe;
+    ps.replace(QLatin1Char('\''), QStringLiteral("''"));
     return missed.join(QStringLiteral("; ")) +
-           QStringLiteral(" — fix that, then run \"%1\" --install (in PowerShell: & \"%1\" --install)").arg(exe);
+           QStringLiteral(" — fix that, then run \"%1\" --install (in PowerShell: & '%2' --install)").arg(exe, ps);
 #endif
 }
 
@@ -440,17 +458,19 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         // the user's arrangement, and it is replaced by a plain file.)
         const bool link = QFileInfo(desktop).isSymLink();
         if (written && (link || (QFileInfo::exists(desktop) && !ours(read_text(desktop))))) {
+            // (A dangling link takes a name as much as a file does.)
+            const auto taken = [](const QString& p) { return QFileInfo::exists(p) || QFileInfo(p).isSymLink(); };
             bak = desktop + QStringLiteral(".bak");
-            for (int i = 2; QFileInfo::exists(bak); ++i)
+            for (int i = 2; taken(bak); ++i)
                 bak = desktop + QStringLiteral(".bak") + QString::number(i);
             // A link is kept as the link (its target may be gone); a file by a copy.
-            written = link ? QFile::link(QFileInfo(desktop).symLinkTarget(), bak) : QFile::copy(desktop, bak);
+            written = link ? QFile::link(link_text(desktop), bak) : QFile::copy(desktop, bak);
             if (!written)
                 bak.clear();
         }
         if (written && ours_new.put()) {
             if (!bak.isEmpty())
-                done << (link ? QStringLiteral("replaced the link ") + desktop + QStringLiteral(" (its content kept as ") +
+                done << (link ? QStringLiteral("replaced the link ") + desktop + QStringLiteral(" (the link kept as ") +
                                     bak + QLatin1Char(')')
                               : QStringLiteral("kept the previous launcher as ") + bak);
             done << QStringLiteral("launcher: ") + desktop;
@@ -914,7 +934,7 @@ void refresh_launcher(const Env& env) {
     items.desktop = ours(text) && (text != desktop_entry(env, st.path) ||
                                    (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))));
     items.make_command = false;
-    const bool script_stale = read_text(launch_script_path(st.path)) != launch_script_text(st.path);
+    const bool script_stale = !launch_script_ok(st.path); // text, exec bit, a link in its place
     // A command link of ours that doesn't start the launch script (an older
     // install's, to the image or the kept previous one): pointed at it again.
     const QFileInfo cmd(command_path(env));
@@ -1008,7 +1028,7 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     // one is the installed build's own, kept current by its refresh).
     QProcess p;
     const QString script = launch_script_path(installed);
-    const bool have_script = QFileInfo(script).isExecutable() || write_launch_script(installed);
+    const bool have_script = launch_script_ok(installed) || write_launch_script(installed);
     p.setProgram(have_script ? script : installed);
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());

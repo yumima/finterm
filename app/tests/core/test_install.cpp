@@ -398,6 +398,58 @@ class TestInstall : public QObject {
         QVERIFY(read(apps + "/.finterm.desktop.backup").contains("mine"));
     }
 
+    void temporaries_are_swept_only_when_old() {
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        QDir().mkpath(apps);
+        const QString fresh = apps + "/.finterm.desktop.finterm-tmp.AbC123";
+        const QString aged = apps + "/.finterm.desktop.finterm-tmp.XyZ789";
+        write_package(fresh, "f");
+        write_package(aged, "a");
+        {
+            QFile f(aged);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
+        }
+        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(QFileInfo::exists(fresh)); // perhaps another finterm's write in progress
+        QVERIFY(!QFileInfo::exists(aged));
+    }
+
+    void links_are_kept_as_written_and_bak_names_never_collide() {
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        QDir().mkpath(apps);
+        // A relative link: its .bak says the same relative thing.
+        QVERIFY(QFile::link("../somewhere/finterm.desktop", desktop()));
+        QVERIFY(install::install(env_, {false}).ok);
+        QCOMPARE(QFile::symLinkTarget(desktop() + ".bak").isEmpty(), false);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+        QCOMPARE(QFileInfo(desktop() + ".bak").readSymLink(), QStringLiteral("../somewhere/finterm.desktop"));
+#endif
+        // Again a dangling link where ours was: the dangling .bak is a taken name.
+        QFile::remove(desktop());
+        QVERIFY(QFile::link("../gone/finterm.desktop", desktop()));
+        env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/again.run", "4.2.3");
+        const auto r = install::install(env_, {false});
+        QVERIFY(r.ok);
+        QVERIFY(r.warning.isEmpty());
+        QVERIFY(QFileInfo(desktop() + ".bak2").isSymLink());
+    }
+
+    void a_linked_launch_script_is_replaced_by_ours() {
+        QVERIFY(install::install(env_, {false}).ok);
+        const QString script = env_.home + "/Applications/.finterm-launch";
+        const QString theirs = env_.home + "/copy-of-launch";
+        QVERIFY(QFile::copy(script, theirs));
+        QFile::setPermissions(theirs, QFileDevice::ReadOwner | QFileDevice::WriteOwner); // same text, not runnable
+        QFile::remove(script);
+        QVERIFY(QFile::link(theirs, script));
+        env_.package = installed();
+        install::refresh_launcher(env_);
+        QVERIFY(!QFileInfo(script).isSymLink());
+        QVERIFY(QFileInfo(script).isExecutable());
+        QCOMPARE(QFile::permissions(theirs) & QFileDevice::ExeOwner, QFileDevice::Permissions()); // theirs untouched
+    }
+
     void their_entry_stays_when_its_copy_cant_be_made() {
         // finterm.desktop is a directory (can't be copied): nothing moves,
         // nothing is left behind, the install says the launcher is missing.
