@@ -2215,7 +2215,8 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     }
 
     if (exit_code != 0) {
-        const QString err = ytdlp_real_error(proc->readAllStandardError());
+        const QByteArray stderr_bytes = proc->readAllStandardError();
+        const QString err = ytdlp_real_error(stderr_bytes);
         play_in_progress_ = false;
         // Remember what failed. current_url_ has to go so refresh_data() stops
         // retrying, but PLAY re-resolves from one of the two — and clearing
@@ -2223,9 +2224,14 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         url_before_error_ = current_url_;
         current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
-        // YouTube changes break an older yt-dlp: say where the update is.
-        status_label_->setText("yt-dlp error: " + (err.isEmpty() ? QString("Unknown error") : err.left(120)) +
-                               " — if this keeps happening, update yt-dlp: Settings › Python Env › Upgrade.");
+        // One short line (the label is one line high); the whole error in its
+        // tooltip. YouTube changes break an older yt-dlp: then the line says
+        // where the update is.
+        const QString why = err.isEmpty() ? QStringLiteral("yt-dlp failed") : err;
+        const bool outdated = finterm::services::video::ytdlp_update_may_help(stderr_bytes);
+        status_label_->setText(outdated ? finterm::services::video::ytdlp_update_hint()
+                                        : QStringLiteral("yt-dlp: ") + why.left(90));
+        status_label_->setToolTip(why);
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp failed: " + err.left(250));
         return;

@@ -16,7 +16,9 @@
 #include <QLabel>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QScrollArea>
+#include <QSet>
 #include <QShowEvent>
 #include <QVBoxLayout>
 
@@ -675,8 +677,28 @@ void PythonEnvSection::run_next_batch() {
     QString venv_python = mgr.python_path(batch.venv);
 
     QStringList args = {"pip", "install", "--python", venv_python};
-    if (batch.upgrade)
-        args << "--upgrade";
+    if (batch.upgrade) {
+        // Only what was chosen moves (--upgrade-package): everything else in
+        // the environment stays at its requirement — the others of this venv
+        // are constraints (lines with extras can't be constraints).
+        QStringList pins;
+        QSet<QString> chosen;
+        for (const PackageRow& row : all_packages_)
+            if (row.venv == batch.venv && batch.packages.contains(row.required_spec)) {
+                chosen.insert(row.name);
+                args << "--upgrade-package" << row.display_name;
+            }
+        for (const PackageRow& row : all_packages_)
+            if (row.venv == batch.venv && !chosen.contains(row.name) && !row.required_spec.contains('['))
+                pins << row.required_spec;
+        const QString constraints = mgr.install_dir() + "/" + batch.venv + "-constraints.txt";
+        QSaveFile cf(constraints);
+        if (!pins.isEmpty() && cf.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            cf.write((pins.join('\n') + '\n').toUtf8());
+            if (cf.commit())
+                args << "-c" << constraints;
+        }
+    }
     args << batch.packages;
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();

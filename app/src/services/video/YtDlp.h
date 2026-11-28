@@ -46,6 +46,36 @@ inline QStringList ytdlp_resolve_args(const QString& format, const QString& url)
     return {"-f", format, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", url};
 }
 
+/// "Update yt-dlp" is worth saying: the failure looks like an outdated
+/// yt-dlp (its own "is older than" notice, or an extractor that no longer
+/// understands the site), and the yt-dlp in use is finterm's own — the one
+/// Settings › Python Env › Upgrade updates. Not for answers an update can't
+/// change (not live yet, private, removed).
+inline bool ytdlp_update_may_help(const QByteArray& stderr_bytes) {
+    if (!ytdlp_program().startsWith(finterm::AppPaths::root()))
+        return false;
+    const QString s = QString::fromUtf8(stderr_bytes);
+    for (const char* sign : {"is older than", "Unable to extract", "nsig", "n challenge", "Signature extraction",
+                             "player response", "Unsupported URL"})
+        if (s.contains(QLatin1String(sign), Qt::CaseInsensitive))
+            return true;
+    return false;
+}
+
+/// Where the update is, for the messages that show it.
+inline QString ytdlp_update_hint() {
+    return QStringLiteral("yt-dlp may be out of date: Settings › Python Env › Upgrade (yt-dlp)");
+}
+
+/// Answers that mean the stream isn't on yet (or no more), not a failure.
+inline bool ytdlp_not_live(const QString& err) {
+    for (const char* sign : {"will begin in", "not currently live", "is offline", "not live", "Premieres in",
+                             "live event will begin"})
+        if (err.contains(QLatin1String(sign), Qt::CaseInsensitive))
+            return true;
+    return false;
+}
+
 /// The line(s) of yt-dlp's stderr that say why it failed. Its stderr opens
 /// with boilerplate — a version-age nag, an update hint, a JS-runtime notice —
 /// and the actual ERROR is underneath; warnings only as a fallback.

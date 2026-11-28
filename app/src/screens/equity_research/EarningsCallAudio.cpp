@@ -143,14 +143,20 @@ void EarningsCallAudio::resolve(bool refresh_session) {
         if (code != 0 || out.isEmpty()) {
             if (refresh_session)
                 return; // not fatal: the stall watch is the backstop
-            QString err = services::video::ytdlp_error(proc->readAllStandardError());
+            const QByteArray stderr_bytes = proc->readAllStandardError();
+            QString err = services::video::ytdlp_error(stderr_bytes);
             // "ERROR: [youtube] UiUWuWd9-Hk: This live event will begin in 6 days."
             err.remove(QRegularExpression(QStringLiteral("^ERROR:\\s*(\\[[^\\]]*\\]\\s*)?([\\w-]+:\\s*)?")));
-            // YouTube changes break an older yt-dlp: say where the update is.
-            fail(kind_ == QLatin1String("youtube_live")
-                     ? QStringLiteral("the channel isn't live right now")
-                     : err.trimmed().left(160) +
-                           QStringLiteral(" (if this keeps happening: Settings › Python Env › Upgrade yt-dlp)"));
+            err = err.trimmed();
+            // Not live is said only when YouTube says it; an outdated yt-dlp
+            // (YouTube changed) says where the update is; nothing at all (a
+            // timeout, an empty answer) says that.
+            if (kind_ == QLatin1String("youtube_live") && services::video::ytdlp_not_live(err))
+                fail(QStringLiteral("the channel isn't live right now"));
+            else if (services::video::ytdlp_update_may_help(stderr_bytes))
+                fail(services::video::ytdlp_update_hint());
+            else
+                fail(err.isEmpty() ? QStringLiteral("no stream came back (yt-dlp gave no answer)") : err.left(160));
             return;
         }
         // An HLS answer from YouTube is a LIVE stream (a recording resolves
