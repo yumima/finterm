@@ -84,12 +84,7 @@ bool same_file(const QString& a, const QString& b) {
 /// Replace `to` with `from` in one step (POSIX rename replaces; QFile::rename
 /// refuses an existing destination).
 bool replace_file(const QString& from, const QString& to) {
-#ifdef Q_OS_UNIX
     return ::rename(QFile::encodeName(from).constData(), QFile::encodeName(to).constData()) == 0;
-#else
-    QFile::remove(to);
-    return QFile::rename(from, to);
-#endif
 }
 #endif
 
@@ -152,9 +147,11 @@ QString read_text(const QString& path) {
 ///
 /// Callers: Beside after writing — the filesystem's own time (the temporary
 /// it just wrote), ten minutes and a day; Beside after a failed write, and
-/// every start and install — the local clock, a day and thirty days, margins
-/// no ordinary clock skew reaches (one past them would make it take a write
-/// in progress elsewhere).
+/// every start and install — the local clock, a day behind and thirty ahead.
+/// Ahead gets the wider margin on purpose: a write in progress elsewhere is
+/// stamped by the file server, so a local clock running behind it makes that
+/// write look ahead — taking it breaks the write, while keeping a stale one a
+/// few more days costs a few bytes.
 void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, qint64 ahead_days,
                        const QString& skip = {}) {
     if (!now.isValid())
@@ -194,15 +191,14 @@ class Beside {
         tmp_.setAutoRemove(true);
         const QByteArray bytes = text.toUtf8();
         ok_ = tmp_.open() && tmp_.write(bytes) == bytes.size() && tmp_.flush();
-#ifdef Q_OS_UNIX
         // On disk before it replaces anything (a crash after the rename must
         // not leave an empty file where the old one was).
         ok_ = ok_ && ::fsync(tmp_.handle()) == 0;
-#endif
         tmp_.close();
         ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
         // What killed writes left here, timed by this temporary's own stamp.
-        // (A failed write has no stamp of its own: the local clock and a day.)
+        // (A failed write has no stamp of its own: the local clock, as at a
+        // start — a day behind, thirty ahead.)
         if (ok_)
             sweep_temporaries(path, QFileInfo(tmp_.fileName()).lastModified(), 600, 1,
                               QFileInfo(tmp_.fileName()).fileName());

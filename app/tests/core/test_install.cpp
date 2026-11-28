@@ -457,12 +457,14 @@ class TestInstall : public QObject {
         QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.Old001", 2 * 86400));
         QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.New001", 2 * 3600)); // perhaps a write in progress
         QVERIFY(aged(apps + "/.finterm.desktop.finterm-tmp.Fut001", -40 * 86400)); // a clock since put right
+        QVERIFY(aged(env_.home + "/Applications/.finterm-launch.finterm-tmp.Fut002", -3 * 86400)); // perhaps skew
         QVERIFY(aged(env_.home + "/Applications/.finterm-launch.part", 2 * 86400));
         QVERIFY(aged(env_.home + "/Applications/.finterm-launch.new", 2 * 3600)); // an older build writing now
         install::refresh_launcher(env_); // nothing stale: no rewrite
         QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Old001"));
         QVERIFY(QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.New001"));
         QVERIFY(!QFileInfo::exists(apps + "/.finterm.desktop.finterm-tmp.Fut001"));
+        QVERIFY(QFileInfo::exists(env_.home + "/Applications/.finterm-launch.finterm-tmp.Fut002"));
         QVERIFY(!QFileInfo::exists(env_.home + "/Applications/.finterm-launch.part"));
         QVERIFY(QFileInfo::exists(env_.home + "/Applications/.finterm-launch.new"));
         // --install from the installed copy sweeps too — beside the launch
