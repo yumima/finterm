@@ -1,7 +1,7 @@
 # GuiSetup <installer> <what>: the installer's GUI clicked through by
 # ifw-gui-install.qs — how a user updates over an install. Its verbose log is
 # watched: the first line that would stop a user (IFW's target-folder
-# messages, or the script's "[ci] refused:") ends it at once, with that line
+# messages, installscript.qs's refusals, the script's "[ci] refused:") ends it, with that line
 # as the reason. Ten minutes at most; fails on a non-zero exit or when the
 # finished page was never reached.
 function GuiSetup([string]$file, [string]$what) {
@@ -10,7 +10,8 @@ function GuiSetup([string]$file, [string]$what) {
     $p = Start-Process -FilePath $file -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
         -ArgumentList @("--verbose", "--script", "`"$qs`"")
     $null = $p.Handle # else ExitCode is empty after a timed WaitForExit
-    $stop = "TargetDirectoryInUse|OverwriteTargetDirectory|\[ci\] refused: "
+    $stop = "TargetDirectoryInUse|OverwriteTargetDirectory|\[ci\] refused: |" +
+            "finterm\.install\.(update_failed|running|uninstaller_open)\b(?!_)"
     $reason = $null
     for ($t = 0; -not $p.HasExited -and $t -lt 300; $t++) {
         Start-Sleep -Seconds 2
