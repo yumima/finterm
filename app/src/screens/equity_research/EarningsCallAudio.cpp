@@ -154,10 +154,10 @@ void EarningsCallAudio::resolve(bool refresh_session) {
                 fail(QStringLiteral("the channel isn't live right now"));
             else if (err.isEmpty())
                 fail(QStringLiteral("no stream came back (yt-dlp gave no answer)"));
+            else if (const QString hint = services::video::ytdlp_update_hint(); !hint.isEmpty())
+                fail(err.left(160) + QStringLiteral(". ") + hint);
             else
-                fail(err.left(160) + (services::video::ytdlp_hint_applies(err)
-                                          ? QStringLiteral(" — ") + services::video::ytdlp_update_hint()
-                                          : QString()));
+                fail(err.left(160));
             return;
         }
         // An HLS answer from YouTube is a LIVE stream (a recording resolves

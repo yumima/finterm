@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`d3ee951d2`](https://github.com/yumima/finterm/commit/d3ee951d2) Review fixes: yt-dlp hint without guessing, FUSE 'unknown', batch result
 - [`16dadd8f0`](https://github.com/yumima/finterm/commit/16dadd8f0) Review fixes: update hint signs, one FUSE answer per run, batch upgrades
 - [`9a36e4062`](https://github.com/yumima/finterm/commit/9a36e4062) Video errors: update hint only when an update can help; Upgrade keeps pins
 - [`de0d14d2d`](https://github.com/yumima/finterm/commit/de0d14d2d) Drop the yt-dlp auto-updater; a failed stream points to Upgrade

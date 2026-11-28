@@ -684,9 +684,9 @@ void PythonEnvSection::run_next_batch() {
         // Only what was chosen moves (--upgrade-package): everything else in
         // the environment stays at its requirement — the others of this venv
         // are constraints (lines with extras can't be constraints). Upgrade
-        // All (batch.everything) uses --upgrade instead: dependencies outside
-        // the requirements move too, and the constraints hold only the rows
-        // that aren't installed.
+        // All (batch.everything) uses --upgrade instead: every installed row
+        // and the dependencies they pull in move, within their requirements;
+        // the rows not in the batch (not installed) are the constraints.
         QStringList pins;
         QSet<QString> chosen;
         for (const PackageRow& row : all_packages_)
@@ -731,8 +731,9 @@ void PythonEnvSection::run_next_batch() {
     connect(action_proc_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [this](int exit_code, QProcess::ExitStatus status) {
                 action_stdout_buf_.clear();
-                // The worst of all batches is what is reported, not the last.
-                if (exit_code != 0 || status != QProcess::NormalExit)
+                // The first failure of the batches is what is reported, not the
+                // last batch's result.
+                if ((exit_code != 0 || status != QProcess::NormalExit) && worst_exit_ == 0)
                     worst_exit_ = exit_code != 0 ? exit_code : 1;
                 if (!action_queue_.isEmpty()) {
                     run_next_batch();
@@ -749,6 +750,16 @@ void PythonEnvSection::run_next_batch() {
     install_log_->setText(QString("Installing into %1...").arg(batch.venv == "venv-numpy1" ? "Trading" : "Analytics"));
     install_bar_->setValue(10);
 
+    // uv that can't be started at all (FailedToStart) emits no finished():
+    // end the queue as a failure, or the page stays locked.
+    connect(action_proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart)
+            return;
+        action_queue_.clear();
+        if (worst_exit_ == 0)
+            worst_exit_ = 1;
+        on_action_finished(worst_exit_);
+    });
     action_proc_->start(mgr.uv_path(), args);
 }
 

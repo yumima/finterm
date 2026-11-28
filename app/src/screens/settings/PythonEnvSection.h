@@ -62,10 +62,10 @@ class PythonEnvSection : public QWidget {
         QString venv;         // "venv-numpy1" or "venv-numpy2"
         QStringList packages; // raw spec strings to pass to uv
         bool upgrade = false;
-        bool everything = false; ///< Upgrade All: dependencies move too (within the requirements)
+        bool everything = false; ///< Upgrade All: --upgrade — dependencies move too, within the requirements
     };
     QList<ActionBatch> action_queue_;
-    int worst_exit_ = 0; ///< the worst exit code of the queue's batches
+    int worst_exit_ = 0; ///< the first failure's exit code among the queue's batches (0: none)
 
     // ── stdout accumulators — readyReadStandardOutput fires many times ────────
     QByteArray list_stdout_buf_;

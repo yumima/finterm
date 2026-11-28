@@ -8,7 +8,6 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
@@ -261,36 +260,6 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
     return {};
 }
 
-/// Ask the image to mount itself (--appimage-mount prints the mount point
-/// and holds it until stopped): 1 it mounted, 0 it can't, -1 no answer in
-/// time (unknown). One answer per process: current_env() is asked more than
-/// once, and one run's decisions must rest on the same answer.
-int image_can_mount(const QString& image) {
-    static QHash<QString, int> known;
-    if (const auto it = known.constFind(image); it != known.cend())
-        return it.value();
-    QProcess p;
-    QProcessEnvironment e = clean_environment();
-    e.remove(QStringLiteral("APPIMAGE_EXTRACT_AND_RUN"));
-    p.setProcessEnvironment(e);
-    p.start(image, {QStringLiteral("--appimage-mount")});
-    if (!p.waitForStarted(3000))
-        return known[image] = 0; // can't run it at all
-    int answer = -1;
-    if (p.waitForReadyRead(5000)) {
-        const QString where = QString::fromUtf8(p.readLine()).trimmed();
-        answer = !where.isEmpty() && QFileInfo(where).isDir() ? 1 : 0;
-    } else if (p.state() == QProcess::NotRunning) {
-        answer = 0; // it gave up: no mount here
-    }
-    p.terminate();
-    if (!p.waitForFinished(2000)) {
-        p.kill();
-        p.waitForFinished(1000);
-    }
-    return known[image] = answer;
-}
-
 // ── macOS ────────────────────────────────────────────────────────────────────
 #if defined(Q_OS_MACOS)
 
@@ -434,12 +403,12 @@ Env current_env() {
     // launcher / --appimage-extract-and-run that asked for it) tries a mount.
     // Without an image (a dev build trying the installer) the device and the
     // mount helper decide.
-    if (!appdir.isEmpty() && appdir.contains(QLatin1String("/.mount_"))) {
-        env.fuse2 = true;
-    } else if (!env.package.isEmpty()) {
-        const int can = image_can_mount(env.package);
-        env.fuse2 = can == 1;
-        env.fuse_known = can != -1; // no answer in time: the launcher's form is left as it is
+    if (!appdir.isEmpty()) {
+        // How this run started says it: mounted (APPDIR under /tmp/.mount_*)
+        // or unpacked — without FUSE, or because the launcher (or the user)
+        // asked for it; then whether FUSE works now is not known.
+        env.fuse2 = appdir.contains(QLatin1String("/.mount_"));
+        env.fuse_known = env.fuse2;
     } else
         env.fuse2 = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
                     (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
@@ -683,8 +652,6 @@ Result install(const Env& env, const Options& opt) {
 
 void refresh_launcher(const Env& env) {
 #if defined(Q_OS_LINUX)
-    if (!env.fuse_known)
-        return; // whether FUSE works is unknown this run: change nothing
     const State st = state(env);
     if (!st.running_installed)
         return;
@@ -692,9 +659,14 @@ void refresh_launcher(const Env& env) {
     const QString text = read_text(desktop);
     if (!ours(text))
         return; // none (the user removed it), or someone else's
-    if (text != desktop_entry(env, st.path) || (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))
+    // FUSE not known this run (it ran unpacked): the launcher keeps the form
+    // it has; the rest (version, paths, icon) is brought up to date.
+    Env e = env;
+    if (!env.fuse_known)
+        e.fuse2 = !desktop_value(text, "Exec").startsWith(QLatin1String("env APPIMAGE_EXTRACT_AND_RUN=1"));
+    if (text != desktop_entry(e, st.path) || (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))
         LOG_INFO("Install", "Launcher brought up to date: " +
-                                write_launcher(env, st.path, /*add_command=*/false).join(QStringLiteral("; ")));
+                                write_launcher(e, st.path, /*add_command=*/false).join(QStringLiteral("; ")));
 #else
     Q_UNUSED(env);
 #endif

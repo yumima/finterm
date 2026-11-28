@@ -52,26 +52,14 @@ inline QStringList ytdlp_resolve_args(const QString& format, const QString& url)
     return {"-f", format, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", url};
 }
 
-/// "If YouTube changed, update yt-dlp" is worth adding to `err` (yt-dlp's
-/// ERROR text): the yt-dlp in use is finterm's own (the one Settings ›
-/// Python Env upgrades), and the error is not a definite answer about the
-/// stream that no update changes (not live, private, removed, no such page).
-/// No guessing at which errors an update fixes: YouTube breaks yt-dlp in
-/// too many ways.
-inline bool ytdlp_hint_applies(const QString& err) {
-    if (QDir::cleanPath(ytdlp_program()) != QDir::cleanPath(ytdlp_venv_program()))
-        return false;
-    for (const char* answer : {"will begin in", "not currently live", "is offline", "not live", "Premieres in",
-                               "Private video", "Video unavailable", "has been removed", "This video is not available",
-                               "members-only", "Unsupported URL", "HTTP Error 404"})
-        if (err.contains(QLatin1String(answer), Qt::CaseInsensitive))
-            return false;
-    return true;
-}
-
-/// Where the update is, for the messages that show it.
+/// What to add to a failed resolve's message when the yt-dlp in use is
+/// finterm's own (the one Settings › Python Env upgrades): said as a
+/// possibility — the error itself says what happened — and "" otherwise.
 inline QString ytdlp_update_hint() {
-    return QStringLiteral("If YouTube changed, updating yt-dlp helps: Settings › Python Env › Upgrade (yt-dlp).");
+    if (QDir::cleanPath(ytdlp_program()) != QDir::cleanPath(ytdlp_venv_program()))
+        return {};
+    return QStringLiteral("If this keeps happening, YouTube may have changed: update yt-dlp in Settings › Python Env "
+                          "› Upgrade.");
 }
 
 /// Answers that mean the stream isn't on yet (or no more), not a failure.

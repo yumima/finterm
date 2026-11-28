@@ -2224,13 +2224,11 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
         // One short line (the label is one line high): the error; its tooltip
-        // the whole error and, when it may be YouTube's change, where yt-dlp
-        // is updated.
+        // the whole error and where yt-dlp is updated.
         const QString why = err.isEmpty() ? QStringLiteral("yt-dlp failed") : err;
-        status_label_->setText(QStringLiteral("yt-dlp: ") + why.left(90));
-        status_label_->setToolTip(finterm::services::video::ytdlp_hint_applies(why)
-                                      ? why + QStringLiteral("\n\n") + finterm::services::video::ytdlp_update_hint()
-                                      : why);
+        const QString hint = finterm::services::video::ytdlp_update_hint();
+        status_label_->setText(QStringLiteral("yt-dlp: ") + why.left(90) + (hint.isEmpty() ? "" : "  (hover for more)"));
+        status_label_->setToolTip(hint.isEmpty() ? why : why + QStringLiteral("\n\n") + hint);
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp failed: " + err.left(250));
         return;

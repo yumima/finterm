@@ -159,21 +159,22 @@ class TestInstall : public QObject {
     }
 
     void the_launcher_follows_the_install_but_is_not_recreated() {
-        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(install::install(env_, {false}).ok); // a mounted run: the direct form
         env_.package = installed();
-        // FUSE 2 went away: the launcher starts the image unpacked.
+        QVERIFY(read(desktop()).contains("Exec=" + installed() + "\n"));
+        // A run that was unpacked doesn't know whether FUSE works now: the
+        // launcher keeps its form, and the rest is brought up to date.
         env_.fuse2 = false;
+        env_.fuse_known = false;
+        env_.version = "4.2.3.1";
+        install::refresh_launcher(env_);
+        QVERIFY(read(desktop()).contains("Exec=" + installed() + "\n"));
+        QVERIFY(read(desktop()).contains("X-Finterm-Version=4.2.3.1"));
+        // A run that mounted: the direct form (already); one that knows FUSE
+        // is gone (a dev build's device check) writes the unpacked form.
+        env_.fuse_known = true;
         install::refresh_launcher(env_);
         QVERIFY(read(desktop()).contains("Exec=env APPIMAGE_EXTRACT_AND_RUN=1 " + installed()));
-        // FUSE unknown this run (the test mount gave no answer in time): the
-        // launcher's form stays as it is.
-        const QString before = read(desktop());
-        env_.fuse2 = true;
-        env_.fuse_known = false;
-        install::refresh_launcher(env_);
-        QCOMPARE(read(desktop()), before);
-        env_.fuse2 = false;
-        env_.fuse_known = true;
         // The command the user removed is not put back by a refresh.
         QFile::remove(env_.home + "/.local/bin/finterm");
         env_.version = "4.2.4"; // the launcher is out of date: rewritten
