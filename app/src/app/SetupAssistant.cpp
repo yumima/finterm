@@ -281,9 +281,13 @@ int handle_command_line() {
     const QStringList args = QCoreApplication::arguments();
     if (args.contains(QStringLiteral("--install"))) {
         install::Options opt;
-        opt.favourite = !args.contains(QStringLiteral("--no-favourite"));
+        // Offered on a first install only (an update shows no such choice).
+        const auto env = install::current_env();
+        const bool first = install::state(env).found == install::Found::Nothing;
+        opt.favourite = first && !args.contains(QStringLiteral("--no-favourite"));
+        opt.favourite_offered = first;
         opt.replace_unknown = args.contains(QStringLiteral("--replace"));
-        const auto r = install::install(install::current_env(), opt);
+        const auto r = install::install(env, opt);
         log_install(r);
         print_json(report(r, "install"));
         return r.ok ? 0 : 1;

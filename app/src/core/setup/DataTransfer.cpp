@@ -197,10 +197,22 @@ QString unpack(const Where& w, const QString& file, const QString& into, bool ma
     QString listing;
     if (const QString err = tar({QStringLiteral("-tzf"), file}, &listing); !err.isEmpty())
         return QStringLiteral("not a finterm data file (%1)").arg(err);
-    const QStringList names = listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    for (const QString& line : names)
-        if (!safe_entry(line.trimmed()))
-            return QStringLiteral("the file holds something other than finterm data (%1)").arg(line.trimmed());
+    // As listed (what tar is given back) and normalised once — trimmed (a CRLF
+    // listing) and without a "./" prefix (an archive made of "."): every check
+    // below uses the normalised name.
+    QStringList listed, names;
+    for (const QString& line : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        QString n = line.trimmed();
+        if (n.isEmpty())
+            continue;
+        listed << n;
+        while (n.startsWith(QLatin1String("./")))
+            n = n.mid(2);
+        names << n;
+    }
+    for (const QString& n : names)
+        if (!safe_entry(n))
+            return QStringLiteral("the file holds something other than finterm data (%1)").arg(n);
     // Only files and folders, before anything is written: no links (symbolic
     // or hard), FIFOs or devices. The verbose listing's mode column, entry by
     // entry in the same order as the names.
@@ -213,16 +225,17 @@ QString unpack(const Where& w, const QString& file, const QString& into, bool ma
         // l symbolic link, h hard link, p FIFO, c/b device, s socket.
         if (!line.isEmpty() && QStringLiteral("lhpcbs").contains(line.at(0)))
             return QStringLiteral("the file holds something other than files and folders (%1)")
-                .arg(modes.size() == names.size() ? names.at(i).trimmed() : line);
+                .arg(modes.size() == names.size() ? names.at(i) : line);
     }
-    if (!names.contains(QStringLiteral("manifest.json")) && !names.contains(QStringLiteral("./manifest.json")))
+    const qsizetype manifest_at = names.indexOf(QStringLiteral("manifest.json"));
+    if (manifest_at < 0)
         return QStringLiteral("not a finterm data file (no manifest)");
-    if (!names.contains(QStringLiteral("user/")) && !names.contains(QStringLiteral("user")) &&
-        std::none_of(names.begin(), names.end(), [](const QString& n) { return n.startsWith(QLatin1String("user/")); }))
+    if (std::none_of(names.begin(), names.end(),
+                     [](const QString& n) { return n == QLatin1String("user") || n.startsWith(QLatin1String("user/")); }))
         return QStringLiteral("the file holds no data");
     QStringList xargs{QStringLiteral("-xzf"), file, QStringLiteral("-C"), into};
     if (manifest_only)
-        xargs << QStringLiteral("manifest.json");
+        xargs << listed.at(manifest_at); // as the archive names it
     if (const QString err = tar(xargs); !err.isEmpty())
         return err;
     // AppleDouble twins (see safe_entry) are not data.

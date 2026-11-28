@@ -260,6 +260,29 @@ QString linux_installed_version(const Env& env, const QString& path, QString* bu
     return {};
 }
 
+/// Ask the image to mount itself (--appimage-mount prints the mount point
+/// and holds it until stopped): whether FUSE works here for this runtime.
+bool image_can_mount(const QString& image) {
+    QProcess p;
+    QProcessEnvironment e = clean_environment();
+    e.remove(QStringLiteral("APPIMAGE_EXTRACT_AND_RUN"));
+    p.setProcessEnvironment(e);
+    p.start(image, {QStringLiteral("--appimage-mount")});
+    if (!p.waitForStarted(3000))
+        return false;
+    bool mounted = false;
+    if (p.waitForReadyRead(5000)) {
+        const QString where = QString::fromUtf8(p.readLine()).trimmed();
+        mounted = !where.isEmpty() && QFileInfo(where).isDir();
+    }
+    p.terminate();
+    if (!p.waitForFinished(3000)) {
+        p.kill();
+        p.waitForFinished(1000);
+    }
+    return mounted;
+}
+
 // ── macOS ────────────────────────────────────────────────────────────────────
 #if defined(Q_OS_MACOS)
 
@@ -397,13 +420,16 @@ Env current_env() {
             env.package_icon = QDir(appdir).filePath(rel);
             break;
         }
-    // Whether the image can mount itself here, by what this run did: a
-    // mounted AppImage runs from /tmp/.mount_*, an unpacked one (no working
-    // FUSE, or --appimage-extract-and-run) from appimage_extracted_*. No
-    // guess at which FUSE library its runtime needs. Without an image (a dev
-    // build trying the installer) the device and the mount helper decide.
-    if (!appdir.isEmpty())
-        env.fuse2 = appdir.contains(QLatin1String("/.mount_"));
+    // Whether the image can mount itself here — no guess at which FUSE
+    // library its runtime needs: a run that mounted (APPDIR under
+    // /tmp/.mount_*) shows it can; an unpacked run (no FUSE then, or a
+    // launcher / --appimage-extract-and-run that asked for it) tries a mount.
+    // Without an image (a dev build trying the installer) the device and the
+    // mount helper decide.
+    if (!appdir.isEmpty() && appdir.contains(QLatin1String("/.mount_")))
+        env.fuse2 = true;
+    else if (!env.package.isEmpty())
+        env.fuse2 = image_can_mount(env.package);
     else
         env.fuse2 = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
                     (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
@@ -690,7 +716,7 @@ Result uninstall(const Env& env) {
         refresh_desktop_caches(env);
     }
     const QFileInfo cmd(command_path(env));
-    if (cmd.isSymLink() && same_file(cmd.symLinkTarget(), path)) {
+    if (cmd.isSymLink() && (same_file(cmd.symLinkTarget(), path) || same_file(cmd.symLinkTarget(), previous))) {
         QFile::remove(command_path(env));
         r.done << QStringLiteral("removed the finterm command");
     }

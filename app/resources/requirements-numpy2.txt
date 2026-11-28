@@ -17,9 +17,10 @@ requests==2.32.5
 aiohttp==3.13.2
 websockets==15.0.1
 # The dashboard's live video and the earnings-call audio resolve streams with
-# yt-dlp (services/video/YtDlp.h finds it in this environment). Unpinned: an
-# old yt-dlp stops working when YouTube changes; setup takes the current one.
-yt-dlp
+# yt-dlp (services/video/YtDlp.h finds it in this environment). Unpinned, with
+# the extras current YouTube support needs; an old yt-dlp stops working when
+# YouTube changes, so the app upgrades it (services/video/YtDlpUpdate.h).
+yt-dlp[default]
 beautifulsoup4==4.14.2
 googletrans==4.0.2
 protobuf>=3.20.2,<6.0.0

@@ -908,6 +908,7 @@ set(SERVICE_SOURCES
     src/services/equity/TechnicalRating.cpp
     src/services/finnhub/FinnhubService.cpp
     src/services/video/LiveHlsProxy.cpp
+    src/services/video/YtDlpUpdate.cpp
     src/services/query/QueryStore.cpp
     src/services/ma_analytics/MAAnalyticsService.cpp
     src/services/geopolitics/GeopoliticsService.cpp

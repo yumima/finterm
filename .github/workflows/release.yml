@@ -900,9 +900,15 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          # Run here unpacked (--appimage-extract-and-run): the launcher runs it
-          # unpacked too — the installer goes by how the image actually ran.
-          grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
+          # The launcher runs the image directly where it can mount itself
+          # here, unpacked where it can't: the installer tries a mount — so
+          # does this check.
+          MNTPT="$( (timeout 10 "${APP}" --appimage-mount 2>/dev/null || true) | head -n 1 )"
+          if [[ "${MNTPT}" == */.mount_* ]]; then   # (the mount is gone once timeout ends it)
+            grep -q "^Exec=${APP}$" "${DESK}"
+          else
+            grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
+          fi
           [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
           # Again, from another copy (the same version): put in place again,
           # in one rename; no "previous" made of it (that is a rollback's).

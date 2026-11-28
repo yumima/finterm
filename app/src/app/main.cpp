@@ -27,6 +27,7 @@
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "app/DataGate.h"
+#include "services/video/YtDlpUpdate.h"
 #include "core/setup/SetupPaths.h"
 #include "app/SelfTest.h"
 #include "app/SetupAssistant.h"
@@ -126,8 +127,15 @@ int main(int argc, char* argv[]) {
     // falling back. Ask for X11 (XWayland) directly. A choice the user made
     // (QT_QPA_PLATFORM set) stands; builds against the system's Qt are not
     // affected.
-    if (!qEnvironmentVariableIsEmpty("APPIMAGE") && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))
+    // Unset again once Qt has chosen (below): programs finterm starts —
+    // hearth, a PDF viewer through xdg-open — run on their own platform.
+    bool platform_set_here = false;
+#ifdef Q_OS_LINUX
+    if (!qEnvironmentVariableIsEmpty("APPIMAGE") && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
         qputenv("QT_QPA_PLATFORM", "xcb");
+        platform_set_here = true;
+    }
+#endif
 
     // Every migration this build has, before anything asks which data it can
     // read: the install offer and a scheduled import check exported files
@@ -230,6 +238,8 @@ int main(int argc, char* argv[]) {
         QString("%1-%2").arg(finterm::AppIdentity::kApp).arg(finterm::ProfileManager::instance().active());
     SingleApplication app(argc, argv, /*allowSecondary=*/true, SingleApplication::Mode::User, 100,
                           profile_key.toUtf8());
+    if (platform_set_here)
+        qunsetenv("QT_QPA_PLATFORM"); // chosen; not for the programs finterm starts
 
     // Every QLabel finterm renders becomes selectable/copyable. Qt's default is
     // unselectable, so model output and article text could be read but not
@@ -548,6 +558,9 @@ int main(int argc, char* argv[]) {
     // Storage the app no longer reads (retired caches, superseded files, dead
     // settings groups) — off the startup path, a few seconds in.
     QTimer::singleShot(3000, qApp, [] { finterm::storage::sweep_retired_storage(); });
+    // The yt-dlp finterm's Python environment holds, upgraded at most daily:
+    // YouTube changes break an old one within weeks.
+    QTimer::singleShot(120000, qApp, [] { finterm::services::video::refresh_ytdlp(); });
 
     // Assign a unique session ID so ScreenStateManager can tag each state write.
     // This lets us distinguish cross-session restores from same-session saves.

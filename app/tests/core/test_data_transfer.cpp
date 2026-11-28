@@ -144,6 +144,22 @@ class TestDataTransfer : public QObject {
         QVERIFY(!dt::run_if_scheduled(b).ran);
     }
 
+    void an_archive_repacked_from_dot_is_accepted() {
+        // Exported, unpacked and packed again as "." — every entry "./…".
+        const dt::Where a = where("dot");
+        make_db(a.data_dir + "/users/ann.db", 2);
+        QVERIFY(dt::export_to(a, tmp_.filePath("dot-src.tar.gz")).ok);
+        const QString dir = tmp_.filePath("dot-unpacked");
+        QDir().mkpath(dir);
+        QCOMPARE(QProcess::execute(tar_exe(), {"-xzf", tmp_.filePath("dot-src.tar.gz"), "-C", dir}), 0);
+        QCOMPARE(QProcess::execute(tar_exe(), {"-czf", tmp_.filePath("dot.tar.gz"), "-C", dir, "."}), 0);
+        const dt::Where b = where("dot-to");
+        QVERIFY2(dt::check_archive(b, tmp_.filePath("dot.tar.gz")).isEmpty(),
+                 qPrintable(dt::check_archive(b, tmp_.filePath("dot.tar.gz"))));
+        QVERIFY(dt::import_now(b, tmp_.filePath("dot.tar.gz")).ok);
+        QVERIFY(QFileInfo::exists(b.data_dir + "/users/ann.db"));
+    }
+
     void files_that_are_not_finterm_data_are_refused() {
         const dt::Where b = where("r");
         write(b.data_dir + "/auth.db", "theirs");

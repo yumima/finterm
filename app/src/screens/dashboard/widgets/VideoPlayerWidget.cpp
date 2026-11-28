@@ -7,6 +7,7 @@
 #include "services/tts/TtsService.h"
 #include "services/video/LiveHlsProxy.h"
 #include "services/video/YtDlp.h"
+#include "services/video/YtDlpUpdate.h"
 #include "ui/web/MediaWebProfile.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
@@ -2216,6 +2217,8 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
 
     if (exit_code != 0) {
         const QString err = ytdlp_real_error(proc->readAllStandardError());
+        // An outdated yt-dlp is the usual cause: get the current one.
+        finterm::services::video::refresh_ytdlp(/*after_failure=*/true);
         play_in_progress_ = false;
         // Remember what failed. current_url_ has to go so refresh_data() stops
         // retrying, but PLAY re-resolves from one of the two — and clearing
