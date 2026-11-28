@@ -38,7 +38,7 @@ function stubs(o) {
     let installs = (o.installs || []).slice(), folders = installs.slice();
     const values = { TargetDir: o.target || PU, ProductVersion: "4.2.3" };
     if (o.update) values.UpdateExisting = "true";
-    let inUse = (o.inUse || []).slice(), vbs = [];
+    let inUse = (o.inUse || []).slice(), vbs = [], stranded = (o.stranded || []).slice();
     const inLine = (line, d) => norm(line).toLowerCase().includes(d.toLowerCase());
     const objects = {
         console: { log() {} },
@@ -51,7 +51,7 @@ function stubs(o) {
             fileExists: p => {
                 const q = norm(p);
                 return installs.some(d => q === d + "/FintermMaintenanceTool.exe") || folders.includes(q) ||
-                       (o.stranded || []).some(d => q === d + ".finterm-check/FintermMaintenanceTool.exe") ||
+                       stranded.some(d => q === d + ".finterm-check/FintermMaintenanceTool.exe") ||
                        /AppData\/Local\/finterm$/.test(q);
             },
             interrupt: () => { ++seen.interrupted; },
@@ -66,7 +66,14 @@ function stubs(o) {
                 // through RunAs for Program Files): its tool goes, then — its
                 // uninstall.vbs — the folder.
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
-                if (/IO\.Directory\]::Move/.test(line) && o.removeCode) return ["", o.removeCode];
+                if (/IO\.Directory\]::Move/.test(line) && o.removeCode) {
+                    if (o.removeCode === 104) { // moved aside, not back
+                        const aside = installs.filter(d => inLine(line, d));
+                        installs = installs.filter(d => !aside.includes(d));
+                        stranded.push(...aside);
+                    }
+                    return ["", o.removeCode];
+                }
                 if (/Test-Path/.test(line) && !/Directory\]::Move/.test(line)) { // a wait: for a folder, or a tool
                     if (!/FintermMaintenanceTool\.exe/.test(line)) folders = folders.filter(d => !vbs.includes(d));
                     return ["", 0];
@@ -135,7 +142,7 @@ function uninstall(o) {
 
 // Removed by its uninstaller, run as `purge --default-answer --confirm-command`.
 const purged = (s, dir) => s.purgedDirs.includes(dir) &&
-    s.commands.some(c => /purge'?,'*--default-answer'?,'*--confirm-command/.test(c.replace(/'+/g, "'")) && norm(c).includes(dir));
+    s.commands.some(c => /purge --default-answer --confirm-command/.test(c) && norm(c).includes(dir));
 const fullPaths = s => s.unstarted === 0 &&
     s.commands.every(c => /^C:\\Windows\\System32\\|FintermMaintenanceTool\.exe /i.test(c));
 
@@ -148,7 +155,7 @@ for (const cli of [false, true]) {
     check(how + ": every Windows tool by full path", fullPaths(s));
     s = install1({ installs: [PF], answerYes: true });
     check(how + ": over Program Files: removed elevated, then goes ahead",
-          purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && s.installed);
+          purged(s, PF) && s.commands.some(c => /runas/i.test(c)) && s.installed);
     s = install1({ installs: [PU, PF], answerYes: true });
     check(how + ": per-user and Program Files: both removed, asked once",
           s.asked === 1 && purged(s, PU) && purged(s, PF) && s.installed);
@@ -190,18 +197,21 @@ for (const cli of [false, true]) {
     s = install1({ installs: [PU], answerYes: true });
     const removal = s.commands.find(c => /Directory\]::Move/.test(c)) || "";
     check(how + ": the per-user removal script: leftover check, the uninstaller waited for itself, a start failure caught",
-          /Test-Path -LiteralPath \$t\) \{ exit 106/.test(removal) && /WaitForExit\(\)/.test(removal) &&
-          !/-Wait /.test(removal) && /-ErrorAction Stop \} catch \{ exit 105/.test(removal));
+          /Test-Path -LiteralPath \$t\) \{ exit 106/.test(removal) && /Process\]::Start\(\$si\); \$pr\.WaitForExit\(\)/.test(removal) &&
+          !/Start-Process/.test(removal) && /if \(\$failed -ne \$null\) \{ exit 105/.test(removal));
+    s = install1({ installs: [], answerYes: true, stranded: [PU] });
+    check(how + ": a copy stranded at .finterm-check: told to rename it back, nothing installed",
+          s.stopped && /Rename it back/.test(s.texts.join(" ")));
     s = install1({ installs: [PU], answerYes: true, stranded: [PU] });
-    check(how + ": a copy stranded at .finterm-check: told to rename it back, nothing removed or installed",
-          s.stopped && !purged(s, PU) && /Rename it back/.test(s.texts.join(" ")));
+    check(how + ": stranded, and installed there again since: told to delete the old copy, nothing removed",
+          s.stopped && !purged(s, PU) && /old copy.*Delete it/.test(s.texts.join(" ")));
     s = install1({ installs: [PU, PF], answerYes: true, inUse: [PF] });
     check(how + ": Program Files in use beside a per-user copy: stopped before the per-user one is touched",
           s.stopped && !purged(s, PU) && !purged(s, PF));
     s = install1({ installs: [PF], answerYes: true, inUse: [PF] });
     check(how + ": Program Files in use: the rename test runs elevated with the purge, nothing removed",
           s.critical.includes("finterm.install.in_use") && !purged(s, PF) &&
-          s.commands.some(c => /RunAs/.test(c) && /IO\.Directory\]::Move/.test(c)));
+          s.commands.some(c => /runas/i.test(c) && /IO\.Directory\]::Move/.test(c)));
     s = install1({ installs: [] });
     check(how + ": first install: goes ahead, nothing asked", s.installed && s.asked === 0 && s.critical.length === 0);
 }
@@ -220,7 +230,7 @@ check("command line, no UpdateExisting, a stranded copy: the install stops, says
       c0.stopped && /Rename it back/.test(c0.threw || ""));
 let s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
-      purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)));
+      purged(s, PU) && !s.commands.some(c => /runas/i.test(c)));
 s = install({ kernel: "linux", target: "/home/u/finterm", installs: [PF] });
 check("not a Windows rule elsewhere", s.installed && s.commands.length === 0 && s.asked === 0);
 

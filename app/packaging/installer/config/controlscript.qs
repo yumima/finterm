@@ -99,15 +99,33 @@ function powershell(command)
 // Remove the installation in `dir` by its own uninstaller — only if the folder
 // can be removed now: Windows won't rename a folder something runs from
 // (finterm, an uninstaller window left open — anyone's, elevated or not), so
-// it is renamed aside and back first (two seconds' grace for a program still
-// closing; ten for the move back, which must not fail). One PowerShell
-// script; for Program Files it runs elevated as a whole (the rename needs it
-// too). Each process is waited for itself (WaitForExit) — Windows
-// PowerShell's -Wait would also wait for the uninstaller's uninstall.vbs,
-// unbounded; the folder wait after it is bounded.
+// it is renamed aside and back first. Grace for a program still closing: two
+// seconds in the wizard (the user is asked, and it tries again), ten on the
+// command line (it can't ask); ten for the move back, which must not fail.
+// One PowerShell script; for Program Files it runs elevated as a whole (the
+// rename needs it too).
+//
+// Processes start through [Diagnostics.Process]::Start: it keeps the handle
+// from the start (WaitForExit and ExitCode hold however fast the program
+// ends), waits for that process only (Start-Process -Wait would also wait
+// for the uninstaller's uninstall.vbs, unbounded — the folder wait after it
+// is bounded), and a declined elevation prompt is its Win32Exception 1223.
 // Exit codes, kept clear of the uninstaller's (IFW's 0..6):
 var removeCodes = { purgeFailed: 101, inUse: 103, notBack: 104, toolNotStarted: 105, checkInTheWay: 106,
-                    notPermitted: 107, noExitCode: 108, notElevated: 109 };
+                    notPermitted: 107, notElevated: 109 };
+
+// PowerShell: start `file` with `args` (one string), `verb` ("" or "runas"),
+// wait for it; $code = its exit code, or $failed = the start's Win32 error.
+function psStart(file, args, verb)
+{
+    return "$code = $null; $failed = $null; try { $si = New-Object Diagnostics.ProcessStartInfo; " +
+           "$si.FileName = " + file + "; $si.Arguments = " + args + "; $si.UseShellExecute = $true; " +
+           (verb ? "$si.Verb = '" + verb + "'; " : "") +
+           "$pr = [Diagnostics.Process]::Start($si); $pr.WaitForExit(); $code = $pr.ExitCode } " +
+           "catch [ComponentModel.Win32Exception] { $failed = $_.Exception.NativeErrorCode } " +
+           "catch { $failed = -1 }; ";
+}
+
 function removeInstall(dir)
 {
     var d = toWin(dir), tool = toWin(dir + "/FintermMaintenanceTool.exe"), c = removeCodes;
@@ -115,31 +133,23 @@ function removeInstall(dir)
         return "$ok = $false; for ($i = 0; $i -lt " + tries + " -and -not $ok; $i++) { try { [IO.Directory]::Move(" +
                from + ", " + to + "); $ok = $true } catch { Start-Sleep -Milliseconds 250 } }; ";
     };
-    // A started process, waited for itself; its exit code, or noExitCode.
-    var waitFor = "$null = $p.Handle; $p.WaitForExit(); if ($p.ExitCode -eq $null) { exit " + c.noExitCode + " }; ";
     var script = "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
         "if (Test-Path -LiteralPath $t) { exit " + c.checkInTheWay + " }; " +
-        tryMove("$d", "$t", 8) + "if (-not $ok) { exit " + c.inUse + " }; " +
+        tryMove("$d", "$t", installer.isCommandLineInstance() ? 40 : 8) + "if (-not $ok) { exit " + c.inUse + " }; " +
         tryMove("$t", "$d", 40) + "if (-not $ok) { exit " + c.notBack + " }; " +
-        "try { $p = Start-Process -FilePath " + psQuote(tool) + " -ArgumentList 'purge','--default-answer'," +
-        "'--confirm-command' -PassThru -ErrorAction Stop } catch { exit " + c.toolNotStarted + " }; " +
-        "if (-not $p) { exit " + c.toolNotStarted + " }; " + waitFor +
-        "if ($p.ExitCode -ne 0) { exit " + c.purgeFailed + " }; exit 0";
+        psStart(psQuote(tool), "'purge --default-answer --confirm-command'", "") +
+        "if ($failed -ne $null) { exit " + c.toolNotStarted + " }; if ($code -ne 0) { exit " + c.purgeFailed + " }; " +
+        "exit 0";
     if (!inProgramFiles(dir))
         return powershell(script);
     // Elevated: the old install was made by an administrator. The script
-    // has no double quotes, so it travels as one -Command "…" argument. A
-    // declined prompt is Win32 error 1223.
-    return powershell("try { $p = Start-Process -FilePath " + psQuote(winTool("powershell.exe")) + " -ArgumentList " +
-                      psQuote("-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"") +
-                      " -Verb RunAs -PassThru -ErrorAction Stop } catch { $e = $_.Exception; " +
-                      "while ($e -and -not ($e -is [ComponentModel.Win32Exception])) { $e = $e.InnerException }; " +
-                      "if ($e -and $e.NativeErrorCode -eq 1223) { exit " + c.notPermitted + " }; exit " +
-                      c.notElevated + " }; if (-not $p) { exit " + c.notElevated + " }; " + waitFor +
-                      "exit $p.ExitCode");
+    // has no double quotes, so it travels as one -Command "…" argument.
+    return powershell(psStart(psQuote(winTool("powershell.exe")),
+                              psQuote("-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\""), "runas") +
+                      "if ($failed -eq 1223) { exit " + c.notPermitted + " }; " +
+                      "if ($failed -ne $null) { exit " + c.notElevated + " }; exit $code");
 }
 
-// Every finterm installation found.
 // Where a finterm installation can be — the target folder, the per-user one,
 // an old Program Files one — each once, with forward slashes.
 function installCandidates()
@@ -157,6 +167,7 @@ function installCandidates()
     return out;
 }
 
+// Every finterm installation found.
 function existingInstalls()
 {
     var found = installCandidates().filter(function(dir) {
@@ -179,8 +190,12 @@ function strandedCopy()
 
 function strandedText(dir)
 {
+    var admin = inProgramFiles(dir) ? " (as an administrator)" : "";
+    if (installer.fileExists(dir + "/FintermMaintenanceTool.exe")) // installed there again since
+        return "An interrupted update left an old copy of finterm in " + toWin(dir) + ".finterm-check. Delete it" +
+               admin + ", then run this installer again.";
     return "An interrupted update left finterm in " + toWin(dir) + ".finterm-check. Rename it back to " + toWin(dir) +
-           (inProgramFiles(dir) ? " (as an administrator)" : "") + ", then run this installer again.";
+           admin + ", then run this installer again.";
 }
 
 function inProgramFiles(dir)
@@ -304,11 +319,11 @@ function updateExisting()
                             inUse + " Close it, then run this installer again.");
             QMessageBox.warning("finterm.install.in_use_ask", "finterm is in use",
                                 inUse + " Close it (every window), then click OK.", QMessageBox.Ok);
-            // An uninstaller window closed: its uninstall.vbs takes the tool on
-            // its first try, then the folder — a moment for that, so the
-            // folder is waited for rather than run into.
+            // An uninstaller window closed: its uninstall.vbs takes the tool
+            // (retrying each second), then the folder — five seconds for that,
+            // so the folder is waited for rather than run into.
             powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir + "/FintermMaintenanceTool.exe")) +
-                       ") -and $i -lt 8; $i++) { Start-Sleep -Milliseconds 250 }");
+                       ") -and $i -lt 20; $i++) { Start-Sleep -Milliseconds 250 }");
         }
         // Until its uninstall.vbs has removed the folder: seconds, normally; a
         // minute at most (the wizard waits with it) — longer means a file is

@@ -518,72 +518,55 @@ jobs:
           if ($t.ExitCode -ne 0) { throw "removing the updated install failed ($($t.ExitCode))" }
           for ($i = 0; (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe")) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
 
-      # ── Upgrade from the last Program Files release (4.0.10) ──────────────
-      # 4.1.0 installs per user. What an existing user meets: the new
-      # installer removes the old Program Files install (elevated, keeping the
-      # data) and installs per user. 4.0.10 comes from its release; skipped
-      # only once that is confirmed purged.
-      - name: Upgrade from 4.0.10 (Program Files)
+      # ── A Program Files copy ──────────────────────────────────────────────
+      # finterm up to 4.0.10 installed into Program Files (by an administrator,
+      # shared by every user); 4.1.0 and later per user. What such a user
+      # meets: unattended without UpdateExisting, refused — nothing installs
+      # beside it; with it (and in the wizard), the copy is removed elevated,
+      # keeping the data, and this one installs per user. The copy is this
+      # build, put there with --root (4.0.10 itself is purged); the runner is
+      # an administrator, so the elevation asks nothing.
+      - name: Update over a Program Files copy
         timeout-minutes: 30
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          # An earlier step left PATH in bash form; a user's is this.
-          $sys = Join-Path $env:SystemRoot "System32"
-          $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0;$env:ProgramFiles\GitHub CLI"
-          $work = Join-Path $env:RUNNER_TEMP "upgrade"
-          New-Item -ItemType Directory -Force -Path $work | Out-Null
-          $seen = (& gh release view v4.0.10 --repo $env:GITHUB_REPOSITORY --json tagName 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0) {
-              if ($seen -match "release not found") { Write-Host "::warning::v4.0.10 is purged - upgrade test skipped"; exit 0 }
-              throw "cannot look up v4.0.10: $seen"
-          }
-          & gh release download v4.0.10 --repo $env:GITHUB_REPOSITORY --pattern "finterm-4.0.10-windows-x64-setup.exe" --dir $work
-          if ($LASTEXITCODE -ne 0) { throw "cannot download 4.0.10" }
-          $old = Join-Path $work "finterm-4.0.10-windows-x64-setup.exe"
+          . ./.github/ci/ifw-setup.ps1
           $new = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
-          function Run([string]$file, [string[]]$arguments) {
-              # -Wait: the maintenance tool's own clean-up script too.
-              $p = Start-Process -FilePath $file -ArgumentList $arguments -PassThru -Wait
-              Write-Host "$(Split-Path -Leaf $file) $arguments -> $($p.ExitCode)"
-              return $p.ExitCode
-          }
-          $install = @("install", "--accept-licenses", "--default-answer", "--confirm-command")
           $pf = Join-Path $env:ProgramFiles "finterm"
           $pu = Join-Path $env:LOCALAPPDATA "Programs\finterm"
-          $tool = "FintermMaintenanceTool.exe"
+          $out = Join-Path $env:RUNNER_TEMP "setup-out.txt"; $err = Join-Path $env:RUNNER_TEMP "setup-err.txt"
           $mark = Join-Path $env:LOCALAPPDATA "finterm\ci-user-data.txt"
           New-Item -ItemType Directory -Force -Path (Split-Path -Parent $mark) | Out-Null
           Set-Content -Path $mark -Value "mine"
-
-          if ((Run $old $install) -ne 0) { throw "4.0.10 did not install" }
-          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "4.0.10 is not in $pf" }
-
-          . ./.github/ci/ifw-setup.ps1
-          # Unattended without UpdateExisting: nothing removed, and nothing
-          # installs per user beside it (finterm's own refusal: IFW's folder
-          # check sees an empty per-user target).
-          $refused = $false
-          try { Setup $new "installing beside 4.0.10 without UpdateExisting" } catch { $refused = $true }
-          if (-not $refused) { throw "an unattended install went in beside 4.0.10 without UpdateExisting" }
-          # The install's own error carries the refusal (createOperations threw
-          # it) — not the line the control script logs when it loads.
-          $why = Get-Content (Join-Path $env:RUNNER_TEMP "setup-out.txt"), (Join-Path $env:RUNNER_TEMP "setup-err.txt") -ErrorAction SilentlyContinue |
-              Where-Object { $_ -match "add UpdateExisting=true" -and $_ -notmatch "\[finterm\] refused" }
-          if (-not $why) { throw "the install beside 4.0.10 failed, but not by finterm's refusal" }
-          if (Test-Path (Join-Path $pu "finterm.exe")) { throw "a refused install left files in $pu" }
-          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "a refused install removed 4.0.10" }
-
-          # With it: the new installer replaces it (elevated removal, data
-          # kept) and installs per user.
-          Setup $new "installing over 4.0.10" @("UpdateExisting=true")
-          for ($i = 0; (Test-Path (Join-Path $pf $tool)) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
-          if (Test-Path (Join-Path $pf "finterm.exe")) { throw "4.0.10 is still in $pf" }
-          if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "the new version is not in $pu" }
-          if (-not (Test-Path $mark)) { throw "replacing 4.0.10 removed the user's data" }
-          Write-Host "4.0.10 -> this version: OK"
+          foreach ($way in "UpdateExisting", "GUI") {
+              Setup $new "a copy in Program Files" @("--root", "`"$pf`"") # a space in the path
+              if (-not (Test-Path (Join-Path $pf "FintermMaintenanceTool.exe"))) { throw "no copy in $pf" }
+              if ($way -eq "UpdateExisting") {
+                  # Without UpdateExisting: refused by finterm (IFW's folder
+                  # check sees an empty per-user target) — the install's own
+                  # error, not the line the control script logs when it loads.
+                  $refused = $false
+                  try { Setup $new "installing beside it without UpdateExisting" } catch { $refused = $true }
+                  if (-not $refused) { throw "an unattended install went in beside a Program Files copy" }
+                  $why = Get-Content $out, $err -ErrorAction SilentlyContinue |
+                      Where-Object { $_ -match "add UpdateExisting=true" -and $_ -notmatch "\[finterm\] refused" }
+                  if (-not $why) { throw "the install beside it failed, but not by finterm's refusal" }
+                  if (Test-Path (Join-Path $pu "finterm.exe")) { throw "a refused install left files in $pu" }
+                  if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "a refused install removed the copy" }
+                  Setup $new "updating it unattended" @("UpdateExisting=true")
+              } else {
+                  GuiSetup $new "updating it in the wizard"
+              }
+              if (Test-Path $pf) { throw "${way}: the Program Files copy is still there" }
+              if (-not (Test-Path (Join-Path $pu "finterm.exe"))) { throw "${way}: finterm is not in $pu" }
+              if (-not (Test-Path $mark)) { throw "${way}: the user's data was removed" }
+              Write-Host "${way}: Program Files copy -> per user: OK"
+              $t = Start-Process -FilePath (Join-Path $pu "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
+                  "purge", "--default-answer", "--confirm-command")
+              if ($t.ExitCode -ne 0) { throw "${way}: removing the per-user install failed ($($t.ExitCode))" }
+              for ($i = 0; (Test-Path $pu) -and $i -lt 120; $i++) { Start-Sleep -Milliseconds 500 }
+          }
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
