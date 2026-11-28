@@ -139,7 +139,9 @@ QString read_text(const QString& path) {
 /// disk or an error leaves the old file as it was, and nothing behind.
 class Beside {
   public:
-    Beside(const QString& path, const QString& text)
+    /// `perms`: what the file is to have (the temporary starts owner-only);
+    /// given to it before the rename, so the entry never lacks them.
+    Beside(const QString& path, const QString& text, QFileDevice::Permissions perms)
         : path_(path), tmp_(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral(".") +
                                                                           QFileInfo(path).fileName() +
                                                                           QStringLiteral(".XXXXXX"))) {
@@ -147,7 +149,13 @@ class Beside {
         tmp_.setAutoRemove(true);
         const QByteArray bytes = text.toUtf8();
         ok_ = tmp_.open() && tmp_.write(bytes) == bytes.size() && tmp_.flush();
+#ifdef Q_OS_UNIX
+        // On disk before it replaces anything (a crash after the rename must
+        // not leave an empty file where the old one was).
+        ok_ = ok_ && ::fsync(tmp_.handle()) == 0;
+#endif
         tmp_.close();
+        ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
     }
     bool ok() const { return ok_; }
     /// Rename it over `path`; false (and it goes) when that fails.
@@ -164,9 +172,28 @@ class Beside {
     bool ok_ = false;
 };
 
-bool write_text(const QString& path, const QString& text) {
-    Beside b(path, text);
+constexpr QFileDevice::Permissions kReadable = QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                                QFileDevice::ReadGroup | QFileDevice::ReadOther;
+constexpr QFileDevice::Permissions kRunnable = kReadable | QFileDevice::ExeOwner | QFileDevice::ExeGroup |
+                                               QFileDevice::ExeOther;
+
+bool write_text(const QString& path, const QString& text, QFileDevice::Permissions perms = kReadable) {
+    Beside b(path, text, perms);
     return b.put();
+}
+
+/// Temporaries a killed write left beside `path` (Beside's ".<name>.XXXXXX",
+/// and the ".new"/".part" earlier builds used).
+void sweep_temporaries(const QString& path) {
+    const QFileInfo fi(path);
+    const QDir dir(fi.absolutePath());
+    QStringList names = dir.entryList({QStringLiteral(".") + fi.fileName() + QStringLiteral(".??????")},
+                                      QDir::Files | QDir::Hidden);
+    for (const char* old : {".new", ".new.part", ".part"})
+        names << fi.fileName() + QLatin1String(old);
+    for (const QString& n : names)
+        if (QFileInfo(dir.filePath(n)).isFile())
+            QFile::remove(dir.filePath(n));
 }
 
 bool ours(const QString& desktop_text) {
@@ -326,7 +353,7 @@ QString launch_script_text(const QString& installed) {
 
 bool write_launch_script(const QString& installed) {
     const QString path = launch_script_path(installed);
-    if (read_text(path) != launch_script_text(installed) && !write_text(path, launch_script_text(installed)))
+    if (read_text(path) != launch_script_text(installed) && !write_text(path, launch_script_text(installed), kRunnable))
         return false;
     return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
                                           QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther |
@@ -337,16 +364,20 @@ bool write_launch_script(const QString& installed) {
 /// `finterm` command may be what is missing).
 QString launcher_hint(const QStringList& missed, const QString& installed) {
     // On Linux the launch script (written before anything else: it runs the
-    // image where FUSE doesn't); elsewhere the installed app. Quoted for a shell.
-#if defined(Q_OS_LINUX)
-    QString path = launch_script_path(installed);
-#elif defined(Q_OS_MACOS)
+    // image where FUSE doesn't); elsewhere the installed app.
+#if defined(Q_OS_UNIX)
+#    if defined(Q_OS_MACOS)
     QString path = QDir(installed).filePath(QStringLiteral("Contents/MacOS/finterm"));
-#else
-    QString path = installed;
-#endif
-    path.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+#    else
+    QString path = launch_script_path(installed);
+#    endif
+    path.replace(QLatin1Char('\''), QStringLiteral("'\\''")); // quoted for a POSIX shell
     return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run '%1' --install").arg(path);
+#else
+    // (cmd.exe and PowerShell take double quotes.)
+    return missed.join(QStringLiteral("; ")) +
+           QStringLiteral(" — fix that, then run \"%1\" --install").arg(QDir::toNativeSeparators(installed));
+#endif
 }
 
 /// What write_launcher writes: the menu entry (an install; a refresh when it
@@ -365,12 +396,9 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     QStringList done;
     if (ok)
         *ok = true;
-    // Temporaries earlier builds named this way, left by an interrupted write.
-    for (const QString& stale : {desktop_path(env) + QStringLiteral(".new"), desktop_path(env) + QStringLiteral(".new.part"),
-                                 desktop_path(env) + QStringLiteral(".part"),
-                                 launch_script_path(installed) + QStringLiteral(".part")})
-        if (QFileInfo(stale).isFile())
-            QFile::remove(stale);
+    // Temporaries a killed write left (this build's and earlier builds').
+    sweep_temporaries(desktop_path(env));
+    sweep_temporaries(launch_script_path(installed));
     // The launch script first, before anything else is touched: the menu
     // entry and the command start it, so without it they are left as they
     // are (an earlier launcher keeps working) and the caller is told.
@@ -395,10 +423,13 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         // rename (a link or a read-only file itself, never what a link points
         // to). Whatever fails, theirs stays in the menu, nothing left behind.
         const QString desktop = desktop_path(env);
-        Beside ours_new(desktop, desktop_entry(env, installed));
+        Beside ours_new(desktop, desktop_entry(env, installed), kReadable);
         bool written = ours_new.ok();
         QString bak;
-        if (written && QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
+        // (A link is backed up too, even to an entry of ours: what it was is
+        // the user's arrangement, and it is replaced by a plain file.)
+        const bool link = QFileInfo(desktop).isSymLink();
+        if (written && (link || (QFileInfo::exists(desktop) && !ours(read_text(desktop))))) {
             bak = desktop + QStringLiteral(".bak");
             for (int i = 2; QFileInfo::exists(bak); ++i)
                 bak = desktop + QStringLiteral(".bak") + QString::number(i);
@@ -408,7 +439,9 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         }
         if (written && ours_new.put()) {
             if (!bak.isEmpty())
-                done << QStringLiteral("kept the previous launcher as ") + bak;
+                done << (link ? QStringLiteral("replaced the link ") + desktop + QStringLiteral(" (its content kept as ") +
+                                    bak + QLatin1Char(')')
+                              : QStringLiteral("kept the previous launcher as ") + bak);
             done << QStringLiteral("launcher: ") + desktop;
             refresh_desktop_caches(env);
         } else {

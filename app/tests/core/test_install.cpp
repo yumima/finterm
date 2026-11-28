@@ -366,10 +366,19 @@ class TestInstall : public QObject {
         QVERIFY(!QFileInfo(desktop()).isSymLink());
         QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
         QVERIFY(QFileInfo::exists(desktop() + ".bak"));
+        // Readable by all (as a menu entry is), the launch script runnable, no
+        // temporaries left.
+        QVERIFY(QFile::permissions(desktop()) & QFileDevice::ReadOther);
+        QVERIFY(QFileInfo(env_.home + "/Applications/.finterm-launch").isExecutable());
+        QCOMPARE(QDir(apps).entryList({".finterm.desktop.*"}, QDir::Files | QDir::Hidden), QStringList{});
+        QCOMPARE(QDir(env_.home + "/Applications").entryList({"..finterm-launch.*"}, QDir::Files | QDir::Hidden),
+                 QStringList{});
         // A read-only entry is replaced as well (the folder is writable).
         QFile::remove(desktop());
         write_package(desktop(), "y");
         QFile::setPermissions(desktop(), QFileDevice::ReadOwner);
+        if (QFileInfo(desktop()).isWritable())
+            QSKIP("a read-only file doesn't stop this user (root)");
         env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/again.run", "4.2.3");
         QVERIFY(install::install(env_, {false}).ok);
         QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
