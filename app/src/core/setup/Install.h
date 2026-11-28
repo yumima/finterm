@@ -5,8 +5,9 @@
 //            version in the name, so the launcher, pins and the in-app updater
 //            keep one target); a launcher (finterm.desktop, marked as ours),
 //            its icon, a `finterm` command in ~/.local/bin; on GNOME, once, a
-//            favourite. Where the image can't mount itself (FUSE), the
-//            launcher runs it unpacked.
+//            favourite. The launcher and the command start a small script
+//            beside the image that decides at each start: mounted where
+//            FUSE is set up, unpacked (always works) where it isn't.
 //   macOS    the bundle is copied to /Applications (or ~/Applications when
 //            that can't be written), quarantine cleared; once, a Dock tile.
 //   Windows  the QtIFW installer does it; nothing here.
@@ -29,8 +30,7 @@ struct Env {
     QString package_icon;   ///< Linux: an icon inside the running image, "" when none
     QString version;        ///< this build's version
     QString built;          ///< this build's commit time (ISO, UTC); "" for a dev build — tells two builds of one version apart
-    bool fuse2 = true;      ///< Linux: this run mounted the image (FUSE works here)
-    bool fuse_known = true; ///< Linux: false when this run was unpacked (whether FUSE works now isn't known; fuse2 false)
+    bool fuse_ready = true; ///< Linux: FUSE is set up here (device, mount helper, libfuse2) — the launch script's rule
     bool system_apps_writable = true; ///< macOS: /Applications can be written
 };
 

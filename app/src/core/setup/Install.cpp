@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLibrary>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
@@ -208,6 +209,41 @@ void refresh_desktop_caches(const Env& env) {
             {QStringLiteral("-q"), QStringLiteral("-t"), QDir(env.data_home).filePath(QStringLiteral("icons/hicolor"))});
 }
 
+/// The small script the menu entry and the `finterm` command start, beside
+/// the image: whether FUSE can mount it is decided at each start, on this
+/// machine as it is then (FUSE installed or removed later is simply picked
+/// up); without it the image runs unpacked, which always works.
+QString launch_script_path(const QString& installed) {
+    return QDir(QFileInfo(installed).absolutePath()).filePath(QStringLiteral(".finterm-launch"));
+}
+
+/// The script for `installed`: its path written in (the command starts the
+/// script through a link, so the script's own location says nothing).
+QString launch_script_text(const QString& installed) {
+    QString quoted = installed;
+    quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+    return QStringLiteral(
+        "#!/bin/sh\n"
+        "# finterm's launcher, written by its installer. Starts the image, mounted where\n"
+        "# FUSE is set up (device, mount helper, libfuse2), else unpacked.\n"
+        "app='%1'\n"
+        "if [ -e /dev/fuse ] && { command -v fusermount >/dev/null 2>&1 || command -v fusermount3 >/dev/null 2>&1; } &&\n"
+        "   { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null; } | grep -q 'libfuse\\.so\\.2'; then\n"
+        "    exec \"$app\" \"$@\"\n"
+        "fi\n"
+        "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
+        .arg(quoted);
+}
+
+bool write_launch_script(const QString& installed) {
+    const QString path = launch_script_path(installed);
+    if (read_text(path) != launch_script_text(installed) && !write_text(path, launch_script_text(installed)))
+        return false;
+    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                                          QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                                          QFileDevice::ExeOther);
+}
+
 /// The launcher, icon and command for `installed`. Lines for the report.
 /// `add_command`: create the `finterm` command when there is none (an install
 /// does; a refresh only keeps one of ours current, never puts back one the
@@ -233,14 +269,17 @@ QStringList write_launcher(const Env& env, const QString& installed, bool add_co
     if (write_text(desktop, desktop_entry(env, installed)))
         done << QStringLiteral("launcher: ") + desktop;
     // The command: a link we own, never someone's own file of that name.
+    if (write_launch_script(installed))
+        done << QStringLiteral("launch script: ") + launch_script_path(installed);
     const QString cmd = command_path(env);
     const QFileInfo ci(cmd);
-    const bool our_link = ci.isSymLink() && (same_file(ci.symLinkTarget(), installed) ||
+    const bool our_link = ci.isSymLink() && (same_file(ci.symLinkTarget(), launch_script_path(installed)) ||
+                                             same_file(ci.symLinkTarget(), installed) ||
                                              same_file(ci.symLinkTarget(), previous_path(installed)));
     if (our_link || (add_command && !ci.exists() && !ci.isSymLink())) {
         QDir().mkpath(ci.absolutePath());
         QFile::remove(cmd);
-        if (QFile::link(installed, cmd))
+        if (QFile::link(launch_script_path(installed), cmd))
             done << QStringLiteral("command: ") + cmd;
     }
     refresh_desktop_caches(env);
@@ -348,8 +387,7 @@ bool remove_path(const QString& path) {
 } // namespace
 
 QString desktop_entry(const Env& env, const QString& installed) {
-    const QString exec = env.fuse2 ? exec_arg(installed)
-                                   : QStringLiteral("env APPIMAGE_EXTRACT_AND_RUN=1 ") + exec_arg(installed);
+    const QString exec = exec_arg(launch_script_path(installed));
     QString icon = QStringLiteral("finterm");
     if (!env.package_icon.isEmpty())
         icon = icon_path(env);
@@ -397,22 +435,12 @@ Env current_env() {
             env.package_icon = QDir(appdir).filePath(rel);
             break;
         }
-    // Whether the image can mount itself here — no guess at which FUSE
-    // library its runtime needs: a run that mounted (APPDIR under
-    // /tmp/.mount_*) shows it can; an unpacked run (no FUSE then, or a
-    // launcher / --appimage-extract-and-run that asked for it) tries a mount.
-    // Without an image (a dev build trying the installer) the device and the
-    // mount helper decide.
-    if (!appdir.isEmpty()) {
-        // How this run started says it: mounted (APPDIR under /tmp/.mount_*)
-        // or unpacked — without FUSE, or because the launcher (or the user)
-        // asked for it; then whether FUSE works now is not known.
-        env.fuse2 = appdir.contains(QLatin1String("/.mount_"));
-        env.fuse_known = env.fuse2;
-    } else
-        env.fuse2 = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
-                    (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
-                     !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty());
+    // Whether FUSE is set up here (for the dialog: the launch script decides
+    // at each start by the same rule).
+    env.fuse_ready = QFileInfo::exists(QStringLiteral("/dev/fuse")) &&
+                     (!QStandardPaths::findExecutable(QStringLiteral("fusermount")).isEmpty() ||
+                      !QStandardPaths::findExecutable(QStringLiteral("fusermount3")).isEmpty()) &&
+                     QLibrary(QStringLiteral("fuse"), 2).load();
 #elif defined(Q_OS_MACOS)
     QDir d(QCoreApplication::applicationDirPath());
     if (release && d.cdUp() && d.cdUp() && d.absolutePath().endsWith(QLatin1String(".app")))
@@ -659,14 +687,10 @@ void refresh_launcher(const Env& env) {
     const QString text = read_text(desktop);
     if (!ours(text))
         return; // none (the user removed it), or someone else's
-    // FUSE not known this run (it ran unpacked): the launcher keeps the form
-    // it has; the rest (version, paths, icon) is brought up to date.
-    Env e = env;
-    if (!env.fuse_known)
-        e.fuse2 = !desktop_value(text, "Exec").startsWith(QLatin1String("env APPIMAGE_EXTRACT_AND_RUN=1"));
-    if (text != desktop_entry(e, st.path) || (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))
+    if (text != desktop_entry(env, st.path) || read_text(launch_script_path(st.path)) != launch_script_text(st.path) ||
+        (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))
         LOG_INFO("Install", "Launcher brought up to date: " +
-                                write_launcher(e, st.path, /*add_command=*/false).join(QStringLiteral("; ")));
+                                write_launcher(env, st.path, /*add_command=*/false).join(QStringLiteral("; ")));
 #else
     Q_UNUSED(env);
 #endif
@@ -685,7 +709,11 @@ Result uninstall(const Env& env) {
     const QFileInfo fi(path);
     const bool installed = fi.exists() && !fi.isSymLink();
     const QString previous = previous_path(path);
-    for (const QString& p : installed ? QStringList{path, previous} : QStringList{previous}) {
+    QStringList gone = installed ? QStringList{path, previous} : QStringList{previous};
+#if defined(Q_OS_LINUX)
+    gone << launch_script_path(path);
+#endif
+    for (const QString& p : gone) {
         if (!remove_path(p)) {
             r.error = QStringLiteral("could not remove %1").arg(p);
             return r;
@@ -700,7 +728,8 @@ Result uninstall(const Env& env) {
         refresh_desktop_caches(env);
     }
     const QFileInfo cmd(command_path(env));
-    if (cmd.isSymLink() && (same_file(cmd.symLinkTarget(), path) || same_file(cmd.symLinkTarget(), previous))) {
+    if (cmd.isSymLink() && (same_file(cmd.symLinkTarget(), launch_script_path(path)) ||
+                            same_file(cmd.symLinkTarget(), path) || same_file(cmd.symLinkTarget(), previous))) {
         QFile::remove(command_path(env));
         r.done << QStringLiteral("removed the finterm command");
     }
@@ -733,13 +762,13 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     open_args << all;
     return QProcess::startDetached(QStringLiteral("/usr/bin/open"), open_args, QDir::homePath());
 #else
+    // Through the launch script (it decides FUSE or unpacked), as the menu
+    // entry starts it; the image itself when there is no script.
     QProcess p;
-    p.setProgram(installed);
+    const QString script = launch_script_path(installed);
+    p.setProgram(QFileInfo::exists(script) ? script : installed);
     p.setArguments(all);
-    QProcessEnvironment e = clean_environment();
-    if (!current_env().fuse2)
-        e.insert(QStringLiteral("APPIMAGE_EXTRACT_AND_RUN"), QStringLiteral("1"));
-    p.setProcessEnvironment(e);
+    p.setProcessEnvironment(clean_environment());
     p.setWorkingDirectory(QDir::homePath());
     return p.startDetached();
 #endif

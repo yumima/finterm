@@ -57,7 +57,7 @@ class TestInstall : public QObject {
         env_.data_home = env_.home + "/.local/share";
         env_.version = QStringLiteral("4.2.3");
         env_.package = write_package(base + "/Downloads/finterm-4.2.3-linux-x64-setup.run", "4.2.3");
-        env_.fuse2 = true;
+        env_.fuse_ready = true;
         QDir().mkpath(env_.home);
         // Each test starts with no installer records.
         QSettings rec(AppIdentity::kOrg, AppIdentity::kApp);
@@ -74,11 +74,17 @@ class TestInstall : public QObject {
         QCOMPARE(r.installed, installed());
         QVERIFY(QFileInfo(installed()).isExecutable());
         const QString text = read(desktop());
-        QVERIFY(text.contains("Exec=" + installed() + "\n"));
+        // The menu entry and the command start the launch script beside the
+        // image (it decides FUSE or unpacked at each start).
+        const QString script = env_.home + "/Applications/.finterm-launch";
+        QVERIFY(text.contains("Exec=" + script + "\n"));
+        QVERIFY(text.contains("TryExec=" + installed() + "\n"));
+        QVERIFY(QFileInfo(script).isExecutable());
+        QVERIFY(read(script).contains("APPIMAGE_EXTRACT_AND_RUN=1 exec"));
         QVERIFY(text.contains("X-Finterm-Installer=1"));
         QVERIFY(text.contains("X-Finterm-Version=4.2.3"));
         QVERIFY(text.contains("StartupWMClass=finterm"));
-        QCOMPARE(QFileInfo(env_.home + "/.local/bin/finterm").symLinkTarget(), installed());
+        QCOMPARE(QFileInfo(env_.home + "/.local/bin/finterm").symLinkTarget(), script);
 
         // Running from there now: nothing to offer.
         env_.package = installed();
@@ -159,22 +165,13 @@ class TestInstall : public QObject {
     }
 
     void the_launcher_follows_the_install_but_is_not_recreated() {
-        QVERIFY(install::install(env_, {false}).ok); // a mounted run: the direct form
+        QVERIFY(install::install(env_, {false}).ok);
         env_.package = installed();
-        QVERIFY(read(desktop()).contains("Exec=" + installed() + "\n"));
-        // A run that was unpacked doesn't know whether FUSE works now: the
-        // launcher keeps its form, and the rest is brought up to date.
-        env_.fuse2 = false;
-        env_.fuse_known = false;
-        env_.version = "4.2.3.1";
+        // The launch script removed (or out of date): a refresh puts it back.
+        const QString script = env_.home + "/Applications/.finterm-launch";
+        QFile::remove(script);
         install::refresh_launcher(env_);
-        QVERIFY(read(desktop()).contains("Exec=" + installed() + "\n"));
-        QVERIFY(read(desktop()).contains("X-Finterm-Version=4.2.3.1"));
-        // A run that mounted: the direct form (already); one that knows FUSE
-        // is gone (a dev build's device check) writes the unpacked form.
-        env_.fuse_known = true;
-        install::refresh_launcher(env_);
-        QVERIFY(read(desktop()).contains("Exec=env APPIMAGE_EXTRACT_AND_RUN=1 " + installed()));
+        QVERIFY(QFileInfo(script).isExecutable());
         // The command the user removed is not put back by a refresh.
         QFile::remove(env_.home + "/.local/bin/finterm");
         env_.version = "4.2.4"; // the launcher is out of date: rewritten
@@ -188,11 +185,12 @@ class TestInstall : public QObject {
     }
 
     void exec_paths_are_quoted() {
-        const QString odd = env_.home + "/My Apps/fin$term.AppImage";
+        // The script sits beside the image: its folder's name is what needs quoting.
+        const QString odd = env_.home + "/My Apps $1/finterm.AppImage";
         const QString text = install::desktop_entry(env_, odd);
-        QVERIFY2(text.contains("Exec=\"" + env_.home + "/My Apps/fin\\\\$term.AppImage\"\n"), qPrintable(text));
+        QVERIFY2(text.contains("Exec=\"" + env_.home + "/My Apps \\\\$1/.finterm-launch\"\n"), qPrintable(text));
         // % is a field code in Exec: a literal one is doubled.
-        QVERIFY(install::desktop_entry(env_, "/home/a%20b/finterm.AppImage").contains("Exec=/home/a%%20b/finterm.AppImage\n"));
+        QVERIFY(install::desktop_entry(env_, "/home/a%20b/finterm.AppImage").contains("Exec=/home/a%%20b/.finterm-launch\n"));
     }
 
     void an_image_we_did_not_install_is_not_run() {

@@ -2226,8 +2226,11 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         // One short line (the label is one line high): the error; its tooltip
         // the whole error and where yt-dlp is updated.
         const QString why = err.isEmpty() ? QStringLiteral("yt-dlp failed") : err;
-        const QString hint = finterm::services::video::ytdlp_update_hint();
-        status_label_->setText(QStringLiteral("yt-dlp: ") + why.left(90) + (hint.isEmpty() ? "" : "  (hover for more)"));
+        // (Not for "not live yet": an update doesn't change that.)
+        const QString hint =
+            finterm::services::video::ytdlp_not_live(why) ? QString() : finterm::services::video::ytdlp_update_hint();
+        status_label_->setText(hint.isEmpty() ? QStringLiteral("yt-dlp: ") + why.left(90)
+                                              : QStringLiteral("(hover for more) yt-dlp: ") + why.left(72));
         status_label_->setToolTip(hint.isEmpty() ? why : why + QStringLiteral("\n\n") + hint);
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp failed: " + err.left(250));

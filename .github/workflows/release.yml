@@ -900,10 +900,14 @@ jobs:
           cmp "${BUILT}" "${APP}"
           DESK="${H}/.local/share/applications/finterm.desktop"
           grep -q '^X-Finterm-Installer=1$' "${DESK}"
-          # Run here unpacked (--appimage-extract-and-run): an install from an
-          # unpacked run writes the unpacked form, which always works.
-          grep -q "^Exec=env APPIMAGE_EXTRACT_AND_RUN=1 ${APP}$" "${DESK}"
-          [ "$(readlink "${H}/.local/bin/finterm")" = "${APP}" ]
+          # The launcher starts the script beside the image, which picks FUSE
+          # or unpacked at each start; started here (no FUSE needed) it runs.
+          LAUNCH="${H}/Applications/.finterm-launch"
+          grep -q "^Exec=${LAUNCH}$" "${DESK}"
+          [ -x "${LAUNCH}" ]
+          [ "$(env -u XDG_DATA_HOME -u XDG_CONFIG_HOME HOME="${H}" "${LAUNCH}" --version)" = \
+            "finterm $(grep -h '^CMAKE_PROJECT_VERSION:' build/CMakeCache.txt | cut -d= -f2)" ]
+          [ "$(readlink "${H}/.local/bin/finterm")" = "${H}/Applications/.finterm-launch" ]
           # Again, from another copy (the same version): put in place again,
           # in one rename; no "previous" made of it (that is a rollback's).
           cp "${BUILT}" "${H}/Downloads/finterm-again.run"

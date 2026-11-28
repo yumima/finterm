@@ -154,8 +154,9 @@ void EarningsCallAudio::resolve(bool refresh_session) {
                 fail(QStringLiteral("the channel isn't live right now"));
             else if (err.isEmpty())
                 fail(QStringLiteral("no stream came back (yt-dlp gave no answer)"));
-            else if (const QString hint = services::video::ytdlp_update_hint(); !hint.isEmpty())
-                fail(err.left(160) + QStringLiteral(". ") + hint);
+            else if (const QString hint = services::video::ytdlp_update_hint();
+                     !hint.isEmpty() && !services::video::ytdlp_not_live(err))
+                fail(err.left(160) + QStringLiteral(" — ") + hint);
             else
                 fail(err.left(160));
             return;
