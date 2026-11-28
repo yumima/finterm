@@ -9,7 +9,11 @@
 //     the introduction page; the command line only with UpdateExisting=true —
 //     without it, nothing is removed and an installed finterm stops the install.
 //   - installscript.qs: an uninstall offers to remove the user's data only
-//     when no other install shares it, and removes it only on Yes.
+//     when no other install shares it — warned, No by default, when that
+//     can't be told (the Apps list unreadable) — and removes it only on Yes.
+//   - The Apps lookup's PowerShell is checked by its structure here (its
+//     failure branches need a registry to run); the Windows release job runs
+//     it for real, in its usual case.
 //   - both: Windows' tools only by full path (the stub starts nothing else,
 //     as a broken PATH wouldn't), and the helpers they share are identical.
 // Usage: node test_installscript.js <installscript.qs> <controlscript.qs>
@@ -71,7 +75,8 @@ function stubs(o) {
                 // The Apps list, as PowerShell prints it: each location escaped.
                 if (/CurrentVersion\\Uninstall/.test(line))
                     return o.appsFails ? ["", 1]
-                                       : [(o.registered || []).map(d => encodeURIComponent(d.replace(/\//g, "\\"))).join("\r\n"), 0];
+                                       : [(o.registered || []).map(d => "L " + encodeURIComponent(d.replace(/\//g, "\\")))
+                                              .concat(o.appsPartial ? ["PARTIAL"] : []).join("\r\n"), 0];
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
                 if (/IO\.Directory\]::Move/.test(line) && o.removeCode) {
                     if (o.removeCode === 104) { // moved aside, not back
@@ -266,15 +271,22 @@ check("an Apps entry whose folder holds no install: ignored", a0.installed && !a
 a0 = install({ cli: true, installs: [PU], appsFails: true });
 check("the Apps list unreadable: the usual folders still checked", a0.ifwRefused && !purged(a0, PU));
 a0 = uninstall({ target: PU, installs: [PU], appsFails: true, answerYes: true });
-check("uninstall, the Apps list unreadable: asked, warned that another install can't be ruled out",
-      a0.asked === 1 && /can't be ruled out/.test(a0.questions[0] || ""));
+check("uninstall, the Apps list unreadable: asked, warned; Yes removes the data",
+      a0.asked === 1 && /can't be ruled out/.test(a0.questions[0] || "") && a0.commands.some(c => /rmdir/.test(c)));
+a0 = uninstall({ target: PU, installs: [PU], appsFails: true, answerYes: false });
+check("uninstall, the Apps list unreadable, No: the data stays", a0.asked === 1 && changes(a0) === 0);
+a0 = uninstall({ target: PU, installs: [PU], registered: [PU], appsPartial: true, answerYes: false });
+check("uninstall, some Apps entries unreadable: warned too", a0.asked === 1 && /can't be ruled out/.test(a0.questions[0] || ""));
+a0 = install({ installs: [D], registered: [D], appsPartial: true, answerYes: true });
+check("install, some Apps entries unreadable: the ones read still count", purged(a0, D) && a0.installed);
 a0 = uninstall({ target: PU, installs: [PU], answerYes: true });
 check("uninstall, the Apps list read: asked without the warning", a0.asked === 1 && !/ruled out/.test(a0.questions[0] || ""));
 const lookup = a0.commands.find(c => /CurrentVersion\\Uninstall/.test(c)) || "";
 check("the Apps lookup: no key is empty, a key it can't read skipped, unreadable only when none is",
-      /if \(-not \(Test-Path -LiteralPath \$r\)\) \{ exit 0 \}/.test(lookup) &&
-      /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /if \(\$ev -and \$keys\.Count -eq 0\) \{ exit 1 \}/.test(lookup) &&
-      !/ErrorActionPreference/.test(lookup));
+      /ItemNotFoundException\] \}\)\.Count\) \{ exit 1 \}; exit 0 \}/.test(lookup) &&
+      /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /catch \{ \$bad\+\+ \}/.test(lookup) &&
+      /if \(\$bad -gt 0 -and \$read -eq 0\) \{ exit 1 \}; if \(\$bad -gt 0\) \{ 'PARTIAL' \}/.test(lookup) &&
+      !/ErrorActionPreference|Test-Path/.test(lookup));
 a0 = install({ installs: [PU], answerYes: true });
 check("GUI update question: the folder is chosen next", /\(you choose the folder next\)/.test(a0.questions[0] || ""));
 a0 = install({ cli: true, update: true, installs: [PU], answerYes: true });

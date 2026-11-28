@@ -140,7 +140,8 @@ function run(program, args)
 // ---------------------------------------------------------------------------
 
 // Another install's folder, "" for none — or null when that can't be told
-// (the Apps list unreadable): then the data is kept.
+// (the Apps list unreadable, or partly): then the data question is still
+// asked, warned, No by default.
 function otherWindowsInstall(ownDir)
 {
     if (systemInfo.kernelType !== "winnt")
@@ -156,7 +157,7 @@ function otherWindowsInstall(ownDir)
         if (dir.toLowerCase() !== own && installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
             return dir;
     }
-    return registeredInstalls() === null ? null : "";
+    return registeredInstalls() === null || registeredPartial ? null : "";
 }
 
 function psQuote(s)
@@ -173,37 +174,46 @@ function powershell(command)
 // registers each install in HKCU with its InstallLocation (a folder chosen
 // in the wizard too), under the names finterm has had (io.github.yumima.
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
-// console. No Uninstall key is an empty list; each key on its own — one
-// another program left unreadable is skipped; null only when none could be
-// read. Cmdlets and [uri] only (a restricted PowerShell allows them). Asked
-// once.
+// console. Every case said: no Uninstall key is an empty list; an entry that
+// can't be read is skipped and the list marked partial (registeredPartial);
+// null when the list can't be opened or no entry could be read. Cmdlets and
+// [uri] only (a restricted PowerShell allows them). Asked once.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
-var registered;
+var registered, registeredPartial = false;
 function registeredInstalls()
 {
     if (registered !== undefined)
         return registered;
     var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
-                       "if (-not (Test-Path -LiteralPath $r)) { exit 0 }; " +
-                       "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
-                       "if ($ev -and $keys.Count -eq 0) { exit 1 }; " +
-                       "foreach ($key in $keys) { $k = $null; " +
-                       "try { $k = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop } catch {}; " +
-                       "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains " +
-                       "$k.DisplayName) { [uri]::EscapeDataString([string]$k.InstallLocation) } }; exit 0");
+        "$root = Get-Item -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable e0; " +
+        "if (-not $root) { if (@($e0 | Where-Object { $_.Exception -isnot " +
+        "[Management.Automation.ItemNotFoundException] }).Count) { exit 1 }; exit 0 }; " +
+        "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
+        "$bad = @($ev).Count; $read = 0; " +
+        "foreach ($key in $keys) { $k = $null; " +
+        "try { $k = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop; $read++ } catch { $bad++ }; " +
+        "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains $k.DisplayName) " +
+        "{ 'L ' + [uri]::EscapeDataString([string]$k.InstallLocation) } }; " +
+        "if ($bad -gt 0 -and $read -eq 0) { exit 1 }; if ($bad -gt 0) { 'PARTIAL' }; exit 0");
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read");
         return (registered = null);
     }
     registered = [];
-    var lines = r[0].split(/\s+/);
+    var lines = r[0].split(/\r?\n/);
     for (var i = 0; i < lines.length; ++i) {
-        try {
-            if (lines[i])
-                registered.push(decodeURIComponent(lines[i]).replace(/\\/g, "/").replace(/\/+$/, ""));
-        } catch (e) {
-            console.log("[finterm] an Apps entry could not be read: " + lines[i]);
+        var line = lines[i].trim();
+        if (line === "PARTIAL") {
+            registeredPartial = true;
+            console.log("[finterm] some Apps entries could not be read");
+        } else if (line.indexOf("L ") === 0) {
+            try {
+                registered.push(decodeURIComponent(line.substring(2)).replace(/\\/g, "/").replace(/\/+$/, ""));
+            } catch (e) {
+                registeredPartial = true;
+                console.log("[finterm] an Apps entry could not be read: " + line);
+            }
         }
     }
     return registered;
