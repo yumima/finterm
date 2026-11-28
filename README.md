@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`53ea0759f`](https://github.com/yumima/finterm/commit/53ea0759f) Launcher: the installed build's script is used, a narrowed mode kept
 - [`c3a0cf2ad`](https://github.com/yumima/finterm/commit/c3a0cf2ad) Launcher: a dangling .bak is a taken name; the launch script is ours
 - [`f1d06cca0`](https://github.com/yumima/finterm/commit/f1d06cca0) Launcher: dangling links backed up as links; exact, aged sweep
 - [`1143d40f2`](https://github.com/yumima/finterm/commit/1143d40f2) Launcher files: final permissions and fsync before the rename

@@ -194,16 +194,28 @@ QString link_text(const QString& path) {
 /// Temporaries a killed write left beside `path`: Beside's own
 /// ".<name>.finterm-tmp.XXXXXX" (exactly that, and only ten minutes old or
 /// more — a write in progress elsewhere keeps its own), and the ".new"/
-/// ".part" earlier builds used. Nothing else is touched.
+/// ".part" earlier builds used. Nothing else is touched. "Now" is the
+/// filesystem's (a file just made there): a server clock ahead or behind
+/// doesn't make a write in progress look old; one dated more than a day
+/// ahead (a clock since put right) is taken too.
 void sweep_temporaries(const QString& path) {
     const QFileInfo fi(path);
     const QDir dir(fi.absolutePath());
+    if (!dir.exists())
+        return;
     const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
                                   QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
-    const QDateTime stale = QDateTime::currentDateTime().addSecs(-600);
+    QDateTime now;
+    {
+        QTemporaryFile probe(dir.filePath(QStringLiteral(".finterm-clock.XXXXXX")));
+        if (!probe.open())
+            return; // can't tell its time: leave them
+        now = QFileInfo(probe.fileName()).lastModified();
+    }
     QStringList names;
     for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
-        if (ours.match(e.fileName()).hasMatch() && e.lastModified() < stale)
+        if (ours.match(e.fileName()).hasMatch() &&
+            (e.lastModified() < now.addSecs(-600) || e.lastModified() > now.addDays(1)))
             names << e.fileName();
     for (const char* old : {".new", ".new.part", ".part"})
         names << fi.fileName() + QLatin1String(old);
@@ -371,7 +383,8 @@ QString launch_script_text(const QString& installed) {
 /// run or chmod). The rest of its mode is the user's to narrow.
 bool launch_script_usable(const QString& installed) {
     const QFileInfo fi(launch_script_path(installed));
-    return !fi.isSymLink() && fi.isFile() && fi.isExecutable();
+    // (Readable too: /bin/sh opens it to run it.)
+    return !fi.isSymLink() && fi.isFile() && fi.isExecutable() && fi.isReadable();
 }
 
 /// The launch script is this build's, and usable.
@@ -383,8 +396,15 @@ bool launch_script_ok(const QString& installed) {
 bool write_launch_script(const QString& installed) {
     if (launch_script_ok(installed))
         return true;
-    // Written (runnable before it is in place); a link is replaced by the file.
-    return write_text(launch_script_path(installed), launch_script_text(installed), kRunnable);
+    // Written (runnable before it is in place); a link is replaced by the
+    // file. A mode the user narrowed is kept — only what running it needs
+    // (the owner reading and running it) is added.
+    const QString path = launch_script_path(installed);
+    const QFileInfo fi(path);
+    QFileDevice::Permissions perms = kRunnable;
+    if (fi.isFile() && !fi.isSymLink())
+        perms = QFile::permissions(path) | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+    return write_text(path, launch_script_text(installed), perms);
 }
 
 /// What could not be added, and how: by the installed image's own path (the

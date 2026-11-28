@@ -459,10 +459,29 @@ class TestInstall : public QObject {
         QVERIFY(!QFileInfo(script).isSymLink());
         QVERIFY(QFileInfo(script).isExecutable());
         QCOMPARE(QFile::permissions(theirs) & QFileDevice::ExeOwner, QFileDevice::Permissions()); // theirs untouched
-        // A mode the user narrowed (700) is theirs: kept, not rewritten.
-        QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        // A mode the user narrowed (700) is theirs: kept at a start, and kept
+        // when a new text replaces the script.
+        const auto owner_only = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+        const auto bits = [&] {
+            return QFile::permissions(script) & (QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                                                 QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
+                                                 QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther);
+        };
+        QFile::setPermissions(script, owner_only);
         install::refresh_launcher(env_);
-        QCOMPARE(QFile::permissions(script) & (QFileDevice::ReadOther | QFileDevice::ExeOther), QFileDevice::Permissions());
+        QCOMPARE(bits(), owner_only);
+        {
+            QFile f(script);
+            QVERIFY(f.open(QIODevice::Append));
+            f.write("# an older text\n");
+        }
+        install::refresh_launcher(env_);
+        QVERIFY(!read(script).contains("an older text"));
+        QCOMPARE(bits(), owner_only);
+        // Runnable but not readable: sh can't open it — rewritten.
+        QFile::setPermissions(script, QFileDevice::ExeOwner);
+        install::refresh_launcher(env_);
+        QVERIFY(QFileInfo(script).isReadable());
     }
 
     void their_entry_stays_when_its_copy_cant_be_made() {
