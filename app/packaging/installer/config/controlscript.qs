@@ -96,16 +96,13 @@ function powershell(command)
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
 }
 
-// Whether a process of that image name runs for this user: true, false, or
-// null (unknown). CSV: the table form cuts names at 25 characters
-// (FintermMaintenanceTool.exe has 26). Another user's is none of this one's.
+// Whether a process of that image name runs — anyone's: the Program Files
+// copy is shared, and a process this user can't attribute must not read as
+// "not running". True, false, or null (unknown). CSV: the table form cuts
+// names at 25 characters (FintermMaintenanceTool.exe has 26).
 function processRunning(image)
 {
-    var args = ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"];
-    var user = installer.environmentVariable("USERNAME"), domain = installer.environmentVariable("USERDOMAIN");
-    if (user)
-        args = args.concat(["/FI", "USERNAME eq " + (domain ? domain + "\\" : "") + user]);
-    var r = run(winTool("tasklist.exe"), args);
+    var r = run(winTool("tasklist.exe"), ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"]);
     if (r === null)
         return null;
     var lines = r[0].split(/\r?\n/);
@@ -266,9 +263,9 @@ function updateExisting()
             return cannotCheck("wait for the installed copy's removal");
         if (installer.fileExists(dir))
             return stop("finterm.install.update_incomplete", "finterm could not be updated",
-                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " could not be " +
-                        "removed completely (a file in it may be open). Close any program or window using it, then " +
-                        "run this installer again.");
+                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " is not gone yet " +
+                        "(a file in it may be open). Close any program or window using it, then run this installer " +
+                        "again to finish — your data is kept.");
     }
     console.log("[finterm] previous install(s) removed; installing.");
 }

@@ -27,7 +27,7 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 function stubs(o) {
     const seen = { operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
-    const env = Object.assign({ SystemRoot: "C:\\Windows", USERNAME: "u", USERDOMAIN: "PC", ProgramFiles: "C:\\Program Files",
+    const env = Object.assign({ SystemRoot: "C:\\Windows", ProgramFiles: "C:\\Program Files",
                                 LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a", TEMP: "C:\\t",
                                 USERPROFILE: "C:\\Users\\u" }, o.env || {});
     let installs = (o.installs || []).slice(), folders = installs.slice();
@@ -133,8 +133,9 @@ for (const cli of [false, true]) {
     check(how + ": over its own install, Yes: removed by its uninstaller, then goes ahead",
           s.asked === 1 && purged(s, PU) && s.left.length === 0 && s.installed && s.critical.length === 0);
     check(how + ": every Windows tool by full path", fullPaths(s));
-    check(how + ": processes looked up for this user only",
-          s.commands.filter(c => /tasklist/i.test(c)).every(c => /USERNAME eq PC\\u/.test(c)));
+    check(how + ": processes looked up (anyone's)",
+          s.commands.some(c => /tasklist/i.test(c)) &&
+          s.commands.filter(c => /tasklist/i.test(c)).every(c => !/USERNAME/.test(c)));
     s = install1({ installs: [PF], answerYes: true });
     check(how + ": over Program Files: removed elevated, then goes ahead",
           purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && s.installed);
@@ -142,19 +143,19 @@ for (const cli of [false, true]) {
     check(how + ": per-user and Program Files: both removed, asked once",
           s.asked === 1 && purged(s, PU) && purged(s, PF) && s.installed);
     s = install1({ installs: [PU], answerYes: false });
-    check(how + ": No: stopped, nothing removed", s.stopped && !purged(s, PU) && s.left.length === 1);
+    check(how + ": No: stopped, nothing removed", s.stopped && s.refused && !purged(s, PU) && s.left.length === 1);
     s = install1({ installs: [PF], answerYes: true, purgeFails: true });
     check(how + ": the uninstaller fails: told, stopped, no wait",
-          s.critical.includes("finterm.install.update_failed") && s.stopped && !s.commands.some(c => /Test-Path/.test(c)));
+          s.critical.includes("finterm.install.update_failed") && s.stopped && s.refused && !s.commands.some(c => /Test-Path/.test(c)));
     s = install1({ installs: [PU], answerYes: true, folderStays: true });
     check(how + ": uninstalled but its folder stays: told, stopped (nothing installs under its uninstall.vbs)",
-          s.critical.includes("finterm.install.update_incomplete") && s.stopped);
+          s.critical.includes("finterm.install.update_incomplete") && s.stopped && s.refused);
     s = install1({ installs: [PU], answerYes: true, toolsBroken: true });
     check(how + ": a Windows tool won't start: told it can't check, stopped, nothing removed",
-          s.critical.includes("finterm.install.cannot_check") && s.stopped && !purged(s, PU));
+          s.critical.includes("finterm.install.cannot_check") && s.stopped && s.refused && !purged(s, PU));
     s = install1({ installs: [], uninstallerOpen: true });
     check(how + ": an uninstaller window open: told, stopped",
-          s.critical.includes("finterm.install.uninstaller_open") && s.stopped);
+          s.critical.includes("finterm.install.uninstaller_open") && s.stopped && s.refused);
     s = install1({ installs: [] });
     check(how + ": first install: goes ahead, nothing asked", s.installed && s.asked === 0 && s.critical.length === 0);
 }
@@ -172,10 +173,10 @@ c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
 let s = install({ cli: true, update: true, installs: [PU], answerYes: true, running: true });
 check("finterm running, command line: told, stopped, nothing removed",
-      s.critical.includes("finterm.install.running") && s.stopped && !purged(s, PU));
+      s.critical.includes("finterm.install.running") && s.stopped && s.refused && !purged(s, PU));
 s = install({ installs: [PU], answerYes: true, running: true });
 check("finterm running, GUI: asked to quit (twice), then told, stopped",
-      s.warned === 2 && s.critical.includes("finterm.install.running") && s.stopped && !purged(s, PU));
+      s.warned === 2 && s.critical.includes("finterm.install.running") && s.stopped && s.refused && !purged(s, PU));
 s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
       purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)));

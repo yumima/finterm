@@ -568,9 +568,11 @@ jobs:
           $refused = $false
           try { Setup $new "installing beside 4.0.10 without UpdateExisting" } catch { $refused = $true }
           if (-not $refused) { throw "an unattended install went in beside 4.0.10 without UpdateExisting" }
-          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP "setup-out.txt"), (Join-Path $env:RUNNER_TEMP "setup-err.txt") -Pattern "\[finterm\] refused" -Quiet)) {
-              throw "the install beside 4.0.10 failed, but not by finterm's refusal"
-          }
+          # The install's own error carries the refusal (createOperations threw
+          # it) — not the line the control script logs when it loads.
+          $why = Get-Content (Join-Path $env:RUNNER_TEMP "setup-out.txt"), (Join-Path $env:RUNNER_TEMP "setup-err.txt") -ErrorAction SilentlyContinue |
+              Where-Object { $_ -match "add UpdateExisting=true" -and $_ -notmatch "\[finterm\] refused" }
+          if (-not $why) { throw "the install beside 4.0.10 failed, but not by finterm's refusal" }
           if (Test-Path (Join-Path $pu "finterm.exe")) { throw "a refused install left files in $pu" }
           if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "a refused install removed 4.0.10" }
 

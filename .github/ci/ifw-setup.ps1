@@ -40,11 +40,13 @@ function GuiSetup([string]$file, [string]$what) {
         $hit = Get-Content $out, $err -ErrorAction SilentlyContinue | Select-String -Pattern $stop | Select-Object -First 1
         if ($hit) { $reason = $hit.Line.Trim() }
     }
-    if (-not $p.HasExited) {
-        $p.Kill($true); $null = $p.WaitForExit(30000)
-        if (-not $reason) { $reason = "did not finish in 10 minutes" }
+    $killed = -not $p.HasExited
+    if ($killed) { $p.Kill($true); $null = $p.WaitForExit(30000) }
+    if (-not $reason) { # it may have exited between two looks
+        $hit = Get-Content $out, $err -ErrorAction SilentlyContinue | Select-String -Pattern $stop | Select-Object -First 1
+        if ($hit) { $reason = $hit.Line.Trim() } elseif ($killed) { $reason = "did not finish in 10 minutes" }
     }
-    Show-SetupOutput $what $(if ($p.HasExited -and -not $reason) { $p.ExitCode } else { "stopped" }) $out $err
+    Show-SetupOutput $what $(if ($killed) { "killed" } else { $p.ExitCode }) $out $err
     if ($reason) { throw "${what}: $reason" }
     if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }
     if (-not (Select-String -Path $out, $err -Pattern "\[ci\] finished" -Quiet)) { throw "$what did not reach the end" }
