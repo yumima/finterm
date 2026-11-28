@@ -5,9 +5,8 @@
 // introduction-page update runs first; nothing here replaces it.
 
 installer.setMessageBoxAutomaticAnswer("finterm.install.update", QMessageBox.Yes);
-["finterm.install.update_failed", "finterm.install.update_incomplete", "finterm.install.running",
- "finterm.install.running_ask", "finterm.install.uninstaller_open", "finterm.install.cannot_check",
- "TargetDirectoryInUse"].forEach(function(id) { installer.setMessageBoxAutomaticAnswer(id, QMessageBox.Ok); });
+["finterm.install.update_failed", "finterm.install.update_incomplete", "finterm.install.in_use",
+ "finterm.install.in_use_ask", "finterm.install.cannot_check", "TargetDirectoryInUse"].forEach(function(id) { installer.setMessageBoxAutomaticAnswer(id, QMessageBox.Ok); });
 installer.setMessageBoxAutomaticAnswer("OverwriteTargetDirectory", QMessageBox.No);
 
 function ciNext(page) { console.log("[ci] " + page); gui.clickButton(buttons.NextButton); }

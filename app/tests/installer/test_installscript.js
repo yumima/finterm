@@ -22,11 +22,12 @@ const PF = "C:/Program Files/finterm", PU = "C:/Users/u/AppData/Local/Programs/f
 const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 
 // o: installs (folders with a maintenance tool), kernel, cli, update
-// (UpdateExisting=true), answerYes, procs (what runs: [folder or null for a
-// path this user can't read, name]), psFails, purgeFails, folderStays,
-// toolsBroken, uninstall.
+// (UpdateExisting=true), answerYes, inUse (folders something runs from: the
+// rename test fails), closedOnAsk (closed when the user is asked), vbsOnAsk
+// (an uninstaller left open, closed when asked: its tool goes at once, its
+// folder during the wait), purgeFails, folderStays, toolsBroken, uninstall.
 function stubs(o) {
-    const seen = { operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
+    const seen = { purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
     const env = Object.assign({ SystemRoot: "C:\\Windows", ProgramFiles: "C:\\Program Files",
                                 LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a", TEMP: "C:\\t",
@@ -34,18 +35,8 @@ function stubs(o) {
     let installs = (o.installs || []).slice(), folders = installs.slice();
     const values = { TargetDir: o.target || PU, ProductVersion: "4.2.3" };
     if (o.update) values.UpdateExisting = "true";
-    // Get-Process as the control script queries it: names of what runs from
-    // the folders it lists, and — only when it marks them shared — the
-    // finterm processes whose path can't be read.
-    const getProcess = cmd => {
-        const dirs = [...cmd.matchAll(/'([^']*)\\'/g)].map(m => norm(m[1]).toLowerCase());
-        const shared = /\$shared = \$true/.test(cmd);
-        const names = (o.procs || []).filter(([dir]) => dir === null ? shared
-                                                       : dirs.some(d => norm(dir).toLowerCase().startsWith(d + "/") ||
-                                                                        norm(dir).toLowerCase() === d))
-                                     .map(([, name]) => name);
-        return [...new Set(names)].sort().join(",");
-    };
+    let inUse = (o.inUse || []).slice(), vbs = [];
+    const inLine = (line, d) => norm(line).toLowerCase().includes(d.toLowerCase());
     const objects = {
         console: { log() {} },
         systemInfo: { kernelType: o.kernel || "winnt" },
@@ -67,10 +58,15 @@ function stubs(o) {
                 // full path, and the installed copy's own uninstaller.
                 const win = /^C:\\Windows\\System32\\/i.test(p), own = /FintermMaintenanceTool\.exe$/i.test(p);
                 if (!(win || own) || (win && o.toolsBroken)) { ++seen.unstarted; return []; }
-                if (/Get-Process/.test(line)) return o.psFails ? ["", 1] : [getProcess(line), 0];
+                // The rename test, then the uninstaller (one script; elevated
+                // through RunAs for Program Files): its tool goes, then — its
+                // uninstall.vbs — the folder.
+                if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 3];
+                if (/Test-Path/.test(line)) { folders = folders.filter(d => !vbs.includes(d)); return ["", 0]; }
                 if (/purge/.test(line) && o.purgeFails) return ["", 1];
                 if (/purge/.test(line)) {
                     const gone = installs.filter(d => norm(line).includes(d));
+                    seen.purgedDirs.push(...gone);
                     installs = installs.filter(d => !gone.includes(d));
                     if (!o.folderStays) folders = folders.filter(d => !gone.includes(d));
                 }
@@ -80,7 +76,12 @@ function stubs(o) {
         },
         gui: { rejectWithoutPrompt: () => { ++seen.rejected; } },
         component: { createOperations: () => { ++seen.operations; }, addOperation() {} },
-        QMessageBox: { Yes: 1, No: 2, Ok: 4, critical: id => { seen.critical.push(id); }, warning: () => { ++seen.warned; },
+        QMessageBox: { Yes: 1, No: 2, Ok: 4, critical: id => { seen.critical.push(id); },
+                       warning: () => {
+                           ++seen.warned;
+                           if (o.closedOnAsk) inUse = [];
+                           if (o.vbsOnAsk) { vbs = inUse.slice(); installs = installs.filter(d => !vbs.includes(d)); inUse = []; }
+                       },
                        question: () => { ++seen.asked; return o.answerYes ? 1 : 2; } },
     };
     // IFW gives each script its own engine; they share the installer (and
@@ -124,7 +125,9 @@ function uninstall(o) {
     return seen;
 }
 
-const purged = (s, dir) => s.commands.some(c => /purge.*--default-answer.*--confirm-command/.test(c) && norm(c).includes(dir));
+// Removed by its uninstaller, run as `purge --default-answer --confirm-command`.
+const purged = (s, dir) => s.purgedDirs.includes(dir) &&
+    s.commands.some(c => /purge'?,'*--default-answer'?,'*--confirm-command/.test(c.replace(/'+/g, "'")) && norm(c).includes(dir));
 const fullPaths = s => s.unstarted === 0 &&
     s.commands.every(c => /^C:\\Windows\\System32\\|FintermMaintenanceTool\.exe /i.test(c));
 
@@ -135,7 +138,6 @@ for (const cli of [false, true]) {
     check(how + ": over its own install, Yes: removed by its uninstaller, then goes ahead",
           s.asked === 1 && purged(s, PU) && s.left.length === 0 && s.installed && s.critical.length === 0);
     check(how + ": every Windows tool by full path", fullPaths(s));
-    check(how + ": what runs from the folder looked up", s.commands.some(c => /Get-Process/.test(c)));
     s = install1({ installs: [PF], answerYes: true });
     check(how + ": over Program Files: removed elevated, then goes ahead",
           purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && s.installed);
@@ -153,18 +155,21 @@ for (const cli of [false, true]) {
     s = install1({ installs: [PU], answerYes: true, toolsBroken: true });
     check(how + ": a Windows tool won't start: told it can't check, stopped, nothing removed",
           s.critical.includes("finterm.install.cannot_check") && s.stopped && s.refused && !purged(s, PU));
-    s = install1({ installs: [PU], answerYes: true, procs: [[PU + "/FintermMaintenanceTool.exe", "FintermMaintenanceTool"]] });
-    check(how + ": its uninstaller window open: told, stopped, nothing removed",
-          s.critical.includes("finterm.install.uninstaller_open") && s.stopped && s.refused && !purged(s, PU));
-    s = install1({ installs: [PU], answerYes: true, psFails: true });
-    check(how + ": what runs can't be checked: told, stopped, nothing removed",
-          s.critical.includes("finterm.install.cannot_check") && s.stopped && !purged(s, PU));
-    s = install1({ installs: [PU], answerYes: true, procs: [["C:/Users/other/AppData/Local/Programs/finterm/finterm.exe", "finterm"], [null, "finterm"]] });
-    check(how + ": another user's own finterm (its folder, or a path not readable): not in the way",
-          purged(s, PU) && s.installed);
-    s = install1({ installs: [PF], answerYes: true, procs: [[null, "finterm"]] });
-    check(how + ": Program Files, a finterm whose path can't be read (another user's): in the way",
-          s.critical.includes("finterm.install.running") && s.stopped && !purged(s, PF));
+    s = install1({ installs: [PU], answerYes: true, inUse: [PU] });
+    check(how + ": something runs from it: told, stopped, nothing removed",
+          s.critical.includes("finterm.install.in_use") && s.stopped && s.refused && !purged(s, PU) &&
+          s.warned === (cli ? 0 : 2));
+    if (!cli) {
+        s = install1({ installs: [PU], answerYes: true, inUse: [PU], closedOnAsk: true });
+        check(how + ": in use, closed when asked: removed, then goes ahead", s.warned === 1 && purged(s, PU) && s.installed);
+        s = install1({ installs: [PU], answerYes: true, inUse: [PU], vbsOnAsk: true });
+        check(how + ": an uninstaller left open, closed when asked: not purged again, its folder waited for, goes ahead",
+              s.warned === 1 && !purged(s, PU) && s.installed && s.commands.some(c => /Test-Path/.test(c)));
+    }
+    s = install1({ installs: [PF], answerYes: true, inUse: [PF] });
+    check(how + ": Program Files in use: the rename test runs elevated with the purge, nothing removed",
+          s.critical.includes("finterm.install.in_use") && !purged(s, PF) &&
+          s.commands.some(c => /RunAs/.test(c) && /IO\.Directory\]::Move/.test(c)));
     s = install1({ installs: [] });
     check(how + ": first install: goes ahead, nothing asked", s.installed && s.asked === 0 && s.critical.length === 0);
 }
@@ -178,13 +183,7 @@ check("command line, no UpdateExisting, Program Files copy: nothing installs bes
       !purged(c0, PF) && c0.stopped && !c0.ifwRefused && /UpdateExisting=true/.test(c0.threw || ""));
 c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
-let s = install({ cli: true, update: true, installs: [PU], answerYes: true, procs: [[PU + "/finterm.exe", "finterm"]] });
-check("finterm running, command line: told, stopped, nothing removed",
-      s.critical.includes("finterm.install.running") && s.stopped && s.refused && !purged(s, PU));
-s = install({ installs: [PU], answerYes: true, procs: [[PU + "/finterm.exe", "finterm"]] });
-check("finterm running, GUI: asked to quit (twice), then told, stopped",
-      s.warned === 2 && s.critical.includes("finterm.install.running") && s.stopped && s.refused && !purged(s, PU));
-s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
+let s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
       purged(s, PU) && !s.commands.some(c => /RunAs/.test(c)));
 s = install({ kernel: "linux", target: "/home/u/finterm", installs: [PF] });

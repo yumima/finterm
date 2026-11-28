@@ -426,5 +426,10 @@ Where it differs from the plan, and why:
   - IFW resets the status when it fetches packages, so an interrupt doesn't
     stop a command-line install: a refusal is recorded
     (`FintermInstallRefused`) and installscript.qs's createOperations throws.
-  - Windows' tools by full path; `tasklist` as CSV (the table cuts names at
-    25 characters); one that won't start stops the installer.
+  - In the way of a removal is whatever runs from the folder — anyone's,
+    elevated or not, 32- or 64-bit: Windows won't rename such a folder, so the
+    removal renames it aside and back first, in the same (for Program Files,
+    elevated) script as the purge. Process lists were tried and dropped:
+    names, owners and paths each missed a case.
+  - Windows' tools by full path; one that won't start (or fails) stops the
+    installer — never read as an answer.
