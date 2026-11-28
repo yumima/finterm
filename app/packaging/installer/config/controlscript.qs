@@ -106,8 +106,8 @@ function powershell(command)
 // finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
 // console. Every case said: no Uninstall key is an empty list; an entry that
 // can't be read is skipped and the list marked partial (registeredPartial);
-// null when the list can't be opened or no entry could be read. Cmdlets and
-// [uri] only (a restricted PowerShell allows them). Asked once.
+// null when the list can't be opened or no entry could be read. Cmdlets,
+// [uri] and [string] only (a restricted PowerShell allows them). Asked once.
 // Not HKLM: a machine-wide install (before 4.1.0) is found at the fixed
 // Program Files path only — one an administrator put elsewhere is not.
 var registered, registeredPartial = false;
