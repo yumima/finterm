@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`1bfc27c1d`](https://github.com/yumima/finterm/commit/1bfc27c1d) Process checks see every user's; refusal checked by the install's error
 - [`d821b8485`](https://github.com/yumima/finterm/commit/d821b8485) Update review: user-scoped tasklist, the refusal tested where it applies
 - [`773bdc34b`](https://github.com/yumima/finterm/commit/773bdc34b) Update over an install: opt-in on the command line, refusals that stop, CSV tasklist
 - [`a7eeddcfb`](https://github.com/yumima/finterm/commit/a7eeddcfb) Windows update over an install: in the control script, waiting on the old folder

@@ -96,22 +96,29 @@ function powershell(command)
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
 }
 
-// Whether a process of that image name runs — anyone's: the Program Files
-// copy is shared, and a process this user can't attribute must not read as
-// "not running". True, false, or null (unknown). CSV: the table form cuts
-// names at 25 characters (FintermMaintenanceTool.exe has 26).
-function processRunning(image)
+// What runs from those install folders — the names ("" for nothing), or null
+// when it could not be checked; waiting up to `seconds` for them to close. By
+// each program's own path: another user's per-user finterm runs from their
+// own folder and is none of this one's. A process whose path this user can't
+// read (another account's, an elevated one) counts only for the shared
+// Program Files folder, by its name.
+function runningFrom(dirs, seconds)
 {
-    var r = run(winTool("tasklist.exe"), ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"]);
-    if (r === null)
-        return null;
-    var lines = r[0].split(/\r?\n/);
-    for (var i = 0; i < lines.length; ++i) {
-        var m = /^"([^"]*)"/.exec(lines[i]);
-        if (m && m[1].toLowerCase() === image.toLowerCase())
-            return true;
+    var prefixes = [], shared = false;
+    for (var i = 0; i < dirs.length; ++i) {
+        prefixes.push(psQuote(toWin(dirs[i]) + "\\"));
+        shared = shared || inProgramFiles(dirs[i]);
     }
-    return false;
+    var r = powershell(
+        "$dirs = @(" + prefixes.join(",") + "); $shared = $" + (shared ? "true" : "false") + "; " +
+        "for ($i = 0; ; $i++) { " +
+        "$names = @(Get-Process | Where-Object { $p = $_.Path; " +
+        "($p -and @($dirs | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count) -or " +
+        "($shared -and -not $p -and $_.ProcessName -match '^(finterm|FintermMaintenanceTool)$') } | " +
+        "ForEach-Object { $_.ProcessName } | Sort-Object -Unique); " +
+        "if ($names.Count -eq 0 -or $i -ge " + (seconds * 4) + ") { break }; Start-Sleep -Milliseconds 250 }; " +
+        "$names -join ','");
+    return r === null || r[1] !== 0 ? null : r[0].replace(/\s+/g, "");
 }
 
 // Every finterm installation found — the target folder, the per-user one, an
@@ -170,16 +177,11 @@ function cannotCheck(what)
 }
 
 // The command line without UpdateExisting: nothing is removed, and nothing
-// installs beside or over an installed finterm (or under an open
-// uninstaller). Recorded, not shown — a search or create-offline loads this
+// installs beside or over an installed finterm. Recorded, not shown — a search or create-offline loads this
 // too; an install stops on it (createOperations: the reason is its error),
 // unless IFW's own folder check stopped it first.
 function refuseOverExisting()
 {
-    var open = processRunning("FintermMaintenanceTool.exe");
-    if (open !== false)
-        return refuse(open === null ? "The installer could not check whether a finterm uninstaller is open."
-                                    : "A finterm uninstaller is still open; close it first.");
     var dirs = existingInstalls();
     if (dirs.length > 0)
         refuse("finterm is already installed in " + toWin(dirs.join(", ")) + ". To update it unattended, add " +
@@ -192,16 +194,6 @@ function refuseOverExisting()
 function updateExisting()
 {
     updateDone = true;
-    // An uninstaller still open (on its last page) removes itself when it is
-    // closed — by then the new install's maintenance tool.
-    var open = processRunning("FintermMaintenanceTool.exe");
-    if (open === null)
-        return cannotCheck("check whether a finterm uninstaller is open");
-    if (open)
-        return stop("finterm.install.uninstaller_open", "Close the finterm uninstaller first",
-                    "A finterm uninstaller window is still open. Close it (click Finish), then run this " +
-                    "installer again.");
-
     var dirs = existingInstalls();
     if (dirs.length === 0)
         return;
@@ -223,19 +215,26 @@ function updateExisting()
     if (answer !== QMessageBox.Yes)
         return refuse("The update was declined; finterm stays as it was.", "", "", true);
 
+    // Nothing may run from a folder that is removed: finterm itself, or an
+    // uninstaller still open on its last page (it removes itself when closed —
+    // by then the new install's maintenance tool).
     for (var tries = 0;; ++tries) {
-        var running = processRunning("finterm.exe");
-        if (running === null)
-            return cannotCheck("check whether finterm is running");
-        if (!running)
+        var busy = runningFrom(dirs, tries > 0 ? 10 : 0);
+        if (busy === null)
+            return cannotCheck("check what runs from " + toWin(dirs.join(", ")));
+        if (!busy)
             break;
+        var uninstaller = /(^|,)FintermMaintenanceTool(,|$)/i.test(busy);
+        var what = uninstaller ? "a finterm uninstaller window" : "finterm";
         if (tries >= 2 || installer.isCommandLineInstance())
-            return stop("finterm.install.running", "finterm is running",
-                        "Quit finterm, then run this installer again.");
-        QMessageBox.warning("finterm.install.running_ask", "finterm is running",
-                            "Quit finterm (every window), then click OK — the installer then waits up to 10 " +
+            return stop(uninstaller ? "finterm.install.uninstaller_open" : "finterm.install.running",
+                        uninstaller ? "Close the finterm uninstaller first" : "finterm is running",
+                        "The installed finterm can't be removed while " + what + " is open (perhaps another " +
+                        "user's, for a copy in Program Files). Close it, then run this installer again.");
+        QMessageBox.warning("finterm.install.running_ask", uninstaller ? "Close the finterm uninstaller" :
+                            "finterm is running",
+                            "Close " + what + " (every window), then click OK — the installer then waits up to 10 " +
                             "seconds for it to close.", QMessageBox.Ok);
-        powershell("Wait-Process -Name finterm -Timeout 10 -ErrorAction SilentlyContinue");
     }
 
     var args = ["purge", "--default-answer", "--confirm-command"];
@@ -258,14 +257,15 @@ function updateExisting()
         // Until its uninstall.vbs has removed the folder: seconds, normally; a
         // minute at most (the wizard waits with it) — longer means a file is
         // held open, and the message says so.
-        if (powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 240; $i++) " +
-                       "{ Start-Sleep -Milliseconds 250 }") === null)
+        var waited = powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 240; " +
+                                "$i++) { Start-Sleep -Milliseconds 250 }");
+        if (waited === null || waited[1] !== 0)
             return cannotCheck("wait for the installed copy's removal");
         if (installer.fileExists(dir))
             return stop("finterm.install.update_incomplete", "finterm could not be updated",
-                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " is not gone yet " +
-                        "(a file in it may be open). Close any program or window using it, then run this installer " +
-                        "again to finish — your data is kept.");
+                        "The installed finterm was uninstalled, but its folder " + toWin(dir) + " is still there " +
+                        "(a file in it may be open). Close what uses it, delete the folder, then run this installer " +
+                        "again. Your data is kept — it is not in that folder.");
     }
     console.log("[finterm] previous install(s) removed; installing.");
 }
