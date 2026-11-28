@@ -22,6 +22,11 @@
       "linux": 3,
       "windows": 5,
       "macos": 1
+    },
+    "v4.2.2": {
+      "linux": 2,
+      "windows": 4,
+      "macos": 1
     }
   }
 }
