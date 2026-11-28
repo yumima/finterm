@@ -74,7 +74,7 @@ function stubs(o) {
                 // uninstall.vbs — the folder.
                 // The Apps list, as PowerShell prints it: each location escaped.
                 if (/CurrentVersion\\Uninstall/.test(line))
-                    return o.appsFails ? ["", 1]
+                    return o.appsFails ? ["UNREADABLE", 1]
                                        : [(o.registered || []).map(d => "L " + encodeURIComponent(d.replace(/\//g, "\\")))
                                               .concat(o.appsPartial ? ["PARTIAL"] : []).join("\r\n"), 0];
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
@@ -286,8 +286,8 @@ check("the Apps lookup: not there is empty, can't open is unreadable, unreadable
       /-not \(\$_\.FullyQualifiedErrorId -like 'PathNotFound\*'\) \}\)\.Count\) \{ 'UNREADABLE'; exit 1 \}; exit 0 \}/.test(lookup) &&
       // Restricted-safe: no type literal but [uri]/[string] (in any spelling),
       // no type by name, no compiled or evaluated code.
-      !/\[\s*(?!uri\s*\]|string\s*\])[A-Za-z][\w.`]*\s*[\]\[,`]/.test(lookup) &&
-      !/New-Object|Add-Type|Invoke-Expression|::new\(|-as\s|-is\s/i.test(lookup) &&
+      !/\[\s*(?!uri\s*\]|string\s*\])[A-Za-z][\w.`+]*\s*[\]\[,`]/i.test(lookup) &&
+      !/New-Object|Add-Type|Invoke-Expression|\biex\b|::new\(|-(as|is|isnot)\b/i.test(lookup) &&
       /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /catch \{ \$bad\+\+ \}/.test(lookup) &&
       /if \(\$bad -gt 0 -and \$read -eq 0\) \{ 'UNREADABLE'; exit 1 \}; if \(\$bad -gt 0\) \{ 'PARTIAL' \}/.test(lookup) &&
       !/ErrorActionPreference|Test-Path/.test(lookup));

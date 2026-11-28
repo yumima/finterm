@@ -423,18 +423,26 @@ jobs:
           Write-Host "default install: $dir"
 
           # The control script's Apps-list lookup, run for real (the node test
-          # checks it by its structure only), in Full Language and restricted
-          # (Constrained Language, asserted): it finds this install, read in
-          # full; a key that isn't there is an empty list; a drive that isn't
-          # there is unreadable (its own UNREADABLE and exit 1, not a crash).
+          # checks it by its structure only), in Full Language and in a
+          # PowerShell locked down from its start, as AppLocker/WDAC do: the
+          # machine-wide __PSLockdownPolicy (read by Windows PowerShell at
+          # start; this runner is a throwaway admin machine), the mode printed
+          # and asserted. It finds this install, read in full; a key that
+          # isn't there is an empty list; a drive that isn't there is
+          # unreadable (its own UNREADABLE and exit 1, not a crash).
           $lookup = & node app/tests/installer/print_apps_lookup.js app/packaging/installer/config/controlscript.qs
           if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
           function Lookup([string]$command, [bool]$restricted) {
               $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
-              $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command (
-                  "`$ExecutionContext.SessionState.LanguageMode = '$mode'; 'MODE ' + `$ExecutionContext.SessionState.LanguageMode; " + $command))
-              $code = $LASTEXITCODE
+              if ($restricted) { [Environment]::SetEnvironmentVariable("__PSLockdownPolicy", "4", "Machine") }
+              try {
+                  $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command (
+                      "'MODE ' + `$ExecutionContext.SessionState.LanguageMode; " + $command))
+                  $code = $LASTEXITCODE
+              } finally {
+                  if ($restricted) { [Environment]::SetEnvironmentVariable("__PSLockdownPolicy", $null, "Machine") }
+              }
               if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out" }
               return @{ code = $code; out = $out; locations = @($out | Where-Object { $_ -like "L *" } |
                   ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') }) }
@@ -457,7 +465,7 @@ jobs:
                   throw "a missing drive was not unreadable$how ($($r.code)): $($r.out)"
               }
           }
-          Write-Host "Apps-list lookup: found $dir; a missing key is empty, a missing drive unreadable (also restricted)"
+          Write-Host "Apps-list lookup: found $dir; a missing key is empty, a missing drive unreadable (also locked down from start)"
 
           # Run again over it — an update in place: the old copy is removed by
           # its own uninstaller (keeping the data), then this one goes in.
