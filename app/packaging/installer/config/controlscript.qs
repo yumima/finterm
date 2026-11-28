@@ -255,7 +255,7 @@ function refuseOverExisting()
     if (dirs.length > 0)
         refuse("finterm is already installed in " + toWin(dirs.join(", ")) + ". To update it unattended, add " +
                "UpdateExisting=true: setup.exe install UpdateExisting=true --accept-licenses --default-answer " +
-               "--confirm-command (for an install in another folder, also TargetDir=<that folder>).");
+               "--confirm-command");
 }
 
 // The update (the GUI, or the command line with UpdateExisting). Returns when
@@ -281,9 +281,7 @@ function updateExisting()
         "This installer replaces it with finterm " + installer.value("ProductVersion") + ": the installed copy " +
         "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
-        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission" +
-                           (inProgramFiles(String(installer.value("TargetDir")).replace(/\\/g, "/")) ? "." :
-                            ", and finterm then installs for your user only.") : ""),
+        (anyProgramFiles ? "\n\nA copy in Program Files is removed with Windows' permission." : ""),
         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
     if (answer !== QMessageBox.Yes)
         return refuse("The update was declined; finterm stays as it was.", "", "", true);

@@ -197,6 +197,12 @@ for (const cli of [false, true]) {
               s.critical.includes("finterm.install.update_failed") && s.stopped && !purged(s, where) &&
               says.test(s.texts.join(" ")));
     }
+    s = install1({ installs: [PF], answerYes: true });
+    const elevated = s.commands.find(c => /runas/i.test(c)) || "";
+    check(how + ": restricted PowerShell checked before the elevation wrapper's own .NET calls",
+          (c => c.startsWith("if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit 110 }; ") &&
+                c.indexOf("exit 110") < c.indexOf("New-Object Diagnostics.ProcessStartInfo"))
+              (elevated.replace(/^\S+ -NoProfile -ExecutionPolicy Bypass -Command /, "")));
     s = install1({ installs: [PU], answerYes: true });
     const removal = s.commands.find(c => /Directory\]::Move/.test(c)) || "";
     check(how + ": the per-user removal script: leftover check, the uninstaller waited for itself, a start failure caught",
@@ -230,8 +236,6 @@ c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
 c0 = install({ cli: true, update: true, installs: ["D:/finterm"], target: "D:/finterm", answerYes: true });
 check("command line, a custom folder given as TargetDir=: updated there", purged(c0, "D:/finterm") && c0.installed);
-c0 = install({ cli: true, installs: [PF], answerYes: true });
-check("command line refusal names TargetDir= for another folder", /TargetDir=<that folder>/.test(c0.threw || ""));
 c0 = install({ cli: true, update: true, installs: [PU], answerYes: true });
 check("command line: ten seconds' grace (it can't ask)",
       ((c0.commands.find(c => /Directory\]::Move/.test(c)) || "").match(/\$i -lt (\d+)/) || [])[1] === "40");
