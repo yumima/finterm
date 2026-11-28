@@ -2223,7 +2223,9 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         url_before_error_ = current_url_;
         current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
-        status_label_->setText("yt-dlp error: " + (err.isEmpty() ? QString("Unknown error") : err.left(120)));
+        // YouTube changes break an older yt-dlp: say where the update is.
+        status_label_->setText("yt-dlp error: " + (err.isEmpty() ? QString("Unknown error") : err.left(120)) +
+                               " — if this keeps happening, update yt-dlp: Settings › Python Env › Upgrade.");
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp failed: " + err.left(250));
         return;

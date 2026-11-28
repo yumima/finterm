@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`6dfe9d127`](https://github.com/yumima/finterm/commit/6dfe9d127) yt-dlp upgrade: within the pins, logged, out of the install folder, hourly check
 - [`2b7503b69`](https://github.com/yumima/finterm/commit/2b7503b69) Review fixes: yt-dlp upgrade only itself, detached, daily; FUSE test cached
 - [`4815d3ab4`](https://github.com/yumima/finterm/commit/4815d3ab4) Review fixes: FUSE by a test mount, tar names normalised, yt-dlp kept current
 - [`6c983d917`](https://github.com/yumima/finterm/commit/6c983d917) finterm 4.2.3

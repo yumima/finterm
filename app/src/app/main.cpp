@@ -27,7 +27,6 @@
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "app/DataGate.h"
-#include "services/video/YtDlpUpdate.h"
 #include "core/setup/SetupPaths.h"
 #include "app/SelfTest.h"
 #include "app/SetupAssistant.h"
@@ -558,15 +557,6 @@ int main(int argc, char* argv[]) {
     // Storage the app no longer reads (retired caches, superseded files, dead
     // settings groups) — off the startup path, a few seconds in.
     QTimer::singleShot(3000, qApp, [] { finterm::storage::sweep_retired_storage(); });
-    // The yt-dlp finterm's Python environment holds, upgraded at most daily
-    // (asked two minutes in, then hourly — a session can last days): YouTube
-    // changes break an old one within weeks.
-    QTimer::singleShot(120000, qApp, [] { finterm::services::video::refresh_ytdlp(); });
-    {
-        auto* hourly = new QTimer(qApp);
-        QObject::connect(hourly, &QTimer::timeout, qApp, [] { finterm::services::video::refresh_ytdlp(); });
-        hourly->start(3600 * 1000);
-    }
 
     // Assign a unique session ID so ScreenStateManager can tag each state write.
     // This lets us distinguish cross-session restores from same-session saves.

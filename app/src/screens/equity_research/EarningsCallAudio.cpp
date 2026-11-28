@@ -146,8 +146,11 @@ void EarningsCallAudio::resolve(bool refresh_session) {
             QString err = services::video::ytdlp_error(proc->readAllStandardError());
             // "ERROR: [youtube] UiUWuWd9-Hk: This live event will begin in 6 days."
             err.remove(QRegularExpression(QStringLiteral("^ERROR:\\s*(\\[[^\\]]*\\]\\s*)?([\\w-]+:\\s*)?")));
-            fail(kind_ == QLatin1String("youtube_live") ? QStringLiteral("the channel isn't live right now")
-                                                        : err.trimmed().left(160));
+            // YouTube changes break an older yt-dlp: say where the update is.
+            fail(kind_ == QLatin1String("youtube_live")
+                     ? QStringLiteral("the channel isn't live right now")
+                     : err.trimmed().left(160) +
+                           QStringLiteral(" (if this keeps happening: Settings › Python Env › Upgrade yt-dlp)"));
             return;
         }
         // An HLS answer from YouTube is a LIVE stream (a recording resolves
