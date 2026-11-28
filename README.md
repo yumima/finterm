@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`7a844dfcf`](https://github.com/yumima/finterm/commit/7a844dfcf) Removal by Process.Start; a Program Files copy tested on every run
 - [`c91da977e`](https://github.com/yumima/finterm/commit/c91da977e) Removal script: every exit accounted for, processes waited for themselves
 - [`079d5f348`](https://github.com/yumima/finterm/commit/079d5f348) Removal script: its own exit codes, a grace period, Program Files first
 - [`8a3533a66`](https://github.com/yumima/finterm/commit/8a3533a66) In the way of a removal: a rename test, not a process list
@@ -93,7 +94,7 @@ Current release: [v4.2.2](https://github.com/yumima/finterm/releases/tag/v4.2.2)
 1. Run the downloaded `.exe`. At the SmartScreen warning choose **More info → Run anyway**, and click through the installer — no administrator rights needed. It installs for your user to `%LOCALAPPDATA%\Programs\finterm` and adds Start Menu and Desktop shortcuts.
 2. Start **finterm** from the Start Menu.
 
-Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended: `setup.exe install UpdateExisting=true --accept-licenses --default-answer --confirm-command` (without it, nothing is removed, and the install stops while an installed finterm is found).
+Already have finterm? Run the new installer: it offers to **update** the installed one, keeping your data (an older copy in `C:\Program Files\finterm` is replaced too, after Windows asks for permission). Unattended: `setup.exe install UpdateExisting=true --accept-licenses --default-answer --confirm-command` (without it, nothing is removed, and the install stops while an installed finterm is found); for an install in another folder, add `TargetDir=<that folder>`.
 
 **macOS 13+ (Apple Silicon)**
 

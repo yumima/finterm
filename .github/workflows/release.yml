@@ -466,7 +466,8 @@ jobs:
               "purge", "--default-answer", "--confirm-command")
           if ($t.ExitCode -ne 0) { throw "removing the default install failed ($($t.ExitCode))" }
           if (Test-Path (Join-Path $dir "finterm.exe")) { throw "the default install is still there after purge" }
-          for ($i = 0; (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe")) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          for ($i = 0; (Test-Path $dir) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $dir) { throw "the install in $dir was not removed" }
           Write-Host "removed"
 
       # ── Update from the published release ─────────────────────────────────
@@ -516,7 +517,8 @@ jobs:
           $t = Start-Process -FilePath (Join-Path $dir "FintermMaintenanceTool.exe") -Wait -PassThru -ArgumentList @(
               "purge", "--default-answer", "--confirm-command")
           if ($t.ExitCode -ne 0) { throw "removing the updated install failed ($($t.ExitCode))" }
-          for ($i = 0; (Test-Path (Join-Path $dir "FintermMaintenanceTool.exe")) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          for ($i = 0; (Test-Path $dir) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $dir) { throw "the install in $dir was not removed" }
 
       # ── A Program Files copy ──────────────────────────────────────────────
       # finterm up to 4.0.10 installed into Program Files (by an administrator,
@@ -566,6 +568,7 @@ jobs:
                   "purge", "--default-answer", "--confirm-command")
               if ($t.ExitCode -ne 0) { throw "${way}: removing the per-user install failed ($($t.ExitCode))" }
               for ($i = 0; (Test-Path $pu) -and $i -lt 120; $i++) { Start-Sleep -Milliseconds 500 }
+              if (Test-Path $pu) { throw "${way}: the per-user install was not removed" }
           }
 
       # ── Upload ────────────────────────────────────────────────────────────

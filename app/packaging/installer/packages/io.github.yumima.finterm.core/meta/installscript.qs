@@ -56,7 +56,7 @@ function Component()
 Component.prototype.createOperations = function()
 {
     // The control script refused this install (an installed finterm not
-    // updated, an uninstaller open, …): throwing here ends it — on the
+    // updated, one in use, …): throwing here ends it — on the
     // command line its own interrupt does not (IFW resets the status).
     var refused = installer.value("FintermInstallRefused");
     if (refused)

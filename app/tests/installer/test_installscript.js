@@ -178,6 +178,8 @@ for (const cli of [false, true]) {
     if (!cli) {
         s = install1({ installs: [PU], answerYes: true, inUse: [PU], closedOnAsk: true });
         check(how + ": in use, closed when asked: removed, then goes ahead", s.warned === 1 && purged(s, PU) && s.installed);
+        const moves = s.commands.filter(c => /Directory\]::Move/.test(c)).map(c => (c.match(/\$i -lt (\d+)/) || [])[1]);
+        check(how + ": two seconds' grace at the first try, ten when tried again", moves[0] === "8" && moves[1] === "40");
         s = install1({ installs: [PU], answerYes: true, inUse: [PU], vbsOnAsk: true });
         check(how + ": an uninstaller left open, closed when asked: not purged again, its folder waited for, goes ahead",
               s.warned === 1 && !purged(s, PU) && s.installed &&
@@ -187,7 +189,8 @@ for (const cli of [false, true]) {
             [PF, 104, /left finterm in .*finterm-check\. Rename it back.*as an administrator/],
             [PU, 104, /left finterm in .*finterm-check\. Rename it back/], [PU, 105, /uninstaller did not start/],
             [PU, 106, /finterm-check.*in the way/], [PF, 107, /permission was not given/],
-            [PF, 108, /error 108/], [PF, 109, /could not be run with Windows' permission/], [PU, 1, /error 1\)/]]) {
+            [PF, 108, /error 108/], [PF, 109, /could not be run with Windows' permission/], [PU, 1, /error 1\)/],
+            [PU, 110, /PowerShell is restricted/]]) {
         s = install1({ installs: [where], answerYes: true, removeCode: code });
         check(how + ": the removal script's " + code + (where === PF ? " (Program Files)" : "") +
               ": said as such, stopped, nothing removed",
@@ -225,6 +228,11 @@ check("command line, no UpdateExisting, Program Files copy: nothing installs bes
       !purged(c0, PF) && c0.stopped && !c0.ifwRefused && /UpdateExisting=true/.test(c0.threw || ""));
 c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
+c0 = install({ cli: true, update: true, installs: ["D:/finterm"], target: "D:/finterm", answerYes: true });
+check("command line, a custom folder given as TargetDir=: updated there", purged(c0, "D:/finterm") && c0.installed);
+c0 = install({ cli: true, update: true, installs: [PU], answerYes: true });
+check("command line: ten seconds' grace (it can't ask)",
+      (c0.commands.find(c => /Directory\]::Move/.test(c)) || "").includes("$i -lt 40"));
 c0 = install({ cli: true, installs: [], stranded: [PU] });
 check("command line, no UpdateExisting, a stranded copy: the install stops, says so",
       c0.stopped && /Rename it back/.test(c0.threw || ""));

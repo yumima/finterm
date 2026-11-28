@@ -1,10 +1,11 @@
 // controlscript.qs — finterm's QtIFW control script (embedded in the
 // installer: CPACK_IFW_PACKAGE_CONTROL_SCRIPT).
 //
-// Windows: running the installer over an installed finterm UPDATES it — the
-// installed copy (and an older one in Program Files, 4.0.10 and before) is
-// removed by its own uninstaller, which keeps the user's data (its question
-// defaults to No; --default-answer takes it), then this one installs.
+// Windows: running the installer over an installed finterm updates it — in
+// the wizard when the user agrees, on the command line with UpdateExisting=
+// true. The installed copy (and an older one in Program Files, 4.0.10 and
+// before) is removed by its own uninstaller, which keeps the user's data (its
+// question defaults to No; --default-answer takes it), then this one installs.
 //
 // Why here, and how (Qt IFW 4.7/4.8 source):
 //   - IFW refuses a folder that holds its maintenance tool
@@ -16,7 +17,10 @@
 //   - Command line: this script is loaded for every command (install, search,
 //     create-offline, …) and is not told which, so it removes nothing unless
 //     asked: `setup.exe install UpdateExisting=true …` (a key=value argument
-//     IFW sets as a value before this script loads). Without it nothing is
+//     IFW sets as a value before this script loads). A custom folder is
+//     given the same way, TargetDir=<folder>: --root is applied only after
+//     this script has run, and the install takes the TargetDir value too.
+//     Without UpdateExisting nothing is
 //     removed and an installed finterm stops the install: in the target folder
 //     by IFW's own check ("contains an installation"), elsewhere — an old
 //     Program Files copy — by the refusal below.
@@ -100,8 +104,9 @@ function powershell(command)
 // can be removed now: Windows won't rename a folder something runs from
 // (finterm, an uninstaller window left open — anyone's, elevated or not), so
 // it is renamed aside and back first. Grace for a program still closing: two
-// seconds in the wizard (the user is asked, and it tries again), ten on the
-// command line (it can't ask); ten for the move back, which must not fail.
+// seconds at the wizard's first try (the user is asked, and it tries again),
+// ten after that and on the command line (it can't ask); ten for the move
+// back, which must not fail.
 // One PowerShell script; for Program Files it runs elevated as a whole (the
 // rename needs it too).
 //
@@ -112,7 +117,7 @@ function powershell(command)
 // is bounded), and a declined elevation prompt is its Win32Exception 1223.
 // Exit codes, kept clear of the uninstaller's (IFW's 0..6):
 var removeCodes = { purgeFailed: 101, inUse: 103, notBack: 104, toolNotStarted: 105, checkInTheWay: 106,
-                    notPermitted: 107, notElevated: 109 };
+                    notPermitted: 107, notElevated: 109, restricted: 110 };
 
 // PowerShell: start `file` with `args` (one string), `verb` ("" or "runas"),
 // wait for it; $code = its exit code, or $failed = the start's Win32 error.
@@ -126,16 +131,20 @@ function psStart(file, args, verb)
            "catch { $failed = -1 }; ";
 }
 
-function removeInstall(dir)
+// `grace`: the rename test's seconds (see above).
+function removeInstall(dir, grace)
 {
     var d = toWin(dir), tool = toWin(dir + "/FintermMaintenanceTool.exe"), c = removeCodes;
     var tryMove = function(from, to, tries) {
         return "$ok = $false; for ($i = 0; $i -lt " + tries + " -and -not $ok; $i++) { try { [IO.Directory]::Move(" +
                from + ", " + to + "); $ok = $true } catch { Start-Sleep -Milliseconds 250 } }; ";
     };
-    var script = "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
+    // A PowerShell restricted by policy (Constrained Language) blocks the
+    // .NET calls below: said as such, rather than as "in use".
+    var script = "if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit " + c.restricted + " }; " +
+        "$d = " + psQuote(d) + "; $t = $d + '.finterm-check'; " +
         "if (Test-Path -LiteralPath $t) { exit " + c.checkInTheWay + " }; " +
-        tryMove("$d", "$t", installer.isCommandLineInstance() ? 40 : 8) + "if (-not $ok) { exit " + c.inUse + " }; " +
+        tryMove("$d", "$t", grace * 4) + "if (-not $ok) { exit " + c.inUse + " }; " +
         tryMove("$t", "$d", 40) + "if (-not $ok) { exit " + c.notBack + " }; " +
         psStart(psQuote(tool), "'purge --default-answer --confirm-command'", "") +
         "if ($failed -ne $null) { exit " + c.toolNotStarted + " }; if ($code -ne 0) { exit " + c.purgeFailed + " }; " +
@@ -282,7 +291,7 @@ function updateExisting()
         // Its maintenance tool already gone: its uninstaller is removing it
         // (one left open, closed meanwhile) — only wait for that.
         for (var tries = 0; installer.fileExists(dir + "/FintermMaintenanceTool.exe"); ++tries) {
-            var r = removeInstall(dir);
+            var r = removeInstall(dir, tries > 0 || installer.isCommandLineInstance() ? 10 : 2);
             var code = r === null ? null : r[1], c = removeCodes, here = toWin(dir);
             console.log("[finterm] removing " + dir + ": " + (code === null ? "could not start" : "exit " + code));
             if (code === 0)
@@ -297,6 +306,9 @@ function updateExisting()
                          "version keeps it), then run this installer again.";
             if (code === c.notPermitted)
                 return failed("was not removed: Windows' permission was not given" + byHand);
+            if (code === c.restricted)
+                return failed("was not removed: PowerShell is restricted on this computer (Constrained Language " +
+                              "mode)" + byHand);
             if (code === c.notElevated)
                 return failed("was not removed: it could not be run with Windows' permission" + byHand);
             if (code === c.toolNotStarted)
@@ -313,7 +325,7 @@ function updateExisting()
             // In use: finterm, an uninstaller window left open, or another
             // program with a file of it open.
             var inUse = here + " is in use — finterm, a finterm uninstaller window, or another program has it " +
-                        "open" + (inProgramFiles(dir) ? " (perhaps another user's)" : "") + ".";
+                        "open" + (inProgramFiles(dir) ? " (perhaps another user's)" : "") + " — or it can't be renamed.";
             if (tries >= 2 || installer.isCommandLineInstance())
                 return stop("finterm.install.in_use", "finterm is in use",
                             inUse + " Close it, then run this installer again.");
