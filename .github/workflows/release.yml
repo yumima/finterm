@@ -423,25 +423,27 @@ jobs:
           Write-Host "default install: $dir"
 
           # The control script's Apps-list lookup, run for real (the node test
-          # checks it by its structure only), in Full Language and in a
-          # PowerShell locked down from the start (as AppLocker/WDAC does):
-          # it finds this install, read in full; a key that isn't there is an
-          # empty list; a drive that isn't there is unreadable (exit 1).
+          # checks it by its structure only), in Full Language and restricted
+          # (Constrained Language, asserted): it finds this install, read in
+          # full; a key that isn't there is an empty list; a drive that isn't
+          # there is unreadable (its own UNREADABLE and exit 1, not a crash).
           $lookup = & node app/tests/installer/print_apps_lookup.js app/packaging/installer/config/controlscript.qs
           if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
           function Lookup([string]$command, [bool]$restricted) {
-              if ($restricted) { $env:__PSLockdownPolicy = "4" }
-              try { $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command $command); $code = $LASTEXITCODE }
-              finally { Remove-Item Env:__PSLockdownPolicy -ErrorAction SilentlyContinue }
+              $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
+              $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command (
+                  "`$ExecutionContext.SessionState.LanguageMode = '$mode'; 'MODE ' + `$ExecutionContext.SessionState.LanguageMode; " + $command))
+              $code = $LASTEXITCODE
+              if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out" }
               return @{ code = $code; out = $out; locations = @($out | Where-Object { $_ -like "L *" } |
                   ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') }) }
           }
           $key = "CurrentVersion\Uninstall'"
           if (([regex]::Matches($lookup, [regex]::Escape($key))).Count -ne 1) { throw "the lookup's key is not where expected" }
           $missingKey = $lookup.Replace($key, "CurrentVersion\Uninstall\finterm-ci-no-such-key'")
+          if (([regex]::Matches($lookup, [regex]::Escape("'HKCU:\"))).Count -ne 1) { throw "the lookup's drive is not where expected" }
           $missingDrive = $lookup.Replace("'HKCU:\", "'HKNOPE:\")
-          if ($missingDrive -eq $lookup) { throw "the lookup's drive is not where expected" }
           foreach ($restricted in $false, $true) {
               $how = if ($restricted) { " (restricted)" } else { "" }
               $r = Lookup $lookup $restricted
@@ -451,7 +453,9 @@ jobs:
               $r = Lookup $missingKey $restricted
               if ($r.code -ne 0 -or $r.locations.Count -ne 0) { throw "a missing key was not an empty list$how ($($r.code)): $($r.out)" }
               $r = Lookup $missingDrive $restricted
-              if ($r.code -ne 1 -or $r.locations.Count -ne 0) { throw "a missing drive was not unreadable$how ($($r.code)): $($r.out)" }
+              if ($r.code -ne 1 -or $r.out -notcontains "UNREADABLE" -or $r.locations.Count -ne 0) {
+                  throw "a missing drive was not unreadable$how ($($r.code)): $($r.out)"
+              }
           }
           Write-Host "Apps-list lookup: found $dir; a missing key is empty, a missing drive unreadable (also restricted)"
 

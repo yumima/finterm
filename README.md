@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`fc5e34c99`](https://github.com/yumima/finterm/commit/fc5e34c99) CI runs the Apps lookup as a locked-down machine would, every branch
 - [`3391fe6a0`](https://github.com/yumima/finterm/commit/3391fe6a0) Apps lookup: only PathNotFound is 'not there'; three real runs in CI
 - [`323f87aa4`](https://github.com/yumima/finterm/commit/323f87aa4) Apps lookup run for real in CI; restricted-safe not-found check
 - [`4cb1a1322`](https://github.com/yumima/finterm/commit/4cb1a1322) Apps lookup: can't-open told from not-there; a partial read warns

@@ -283,10 +283,13 @@ a0 = uninstall({ target: PU, installs: [PU], answerYes: true });
 check("uninstall, the Apps list read: asked without the warning", a0.asked === 1 && !/ruled out/.test(a0.questions[0] || ""));
 const lookup = a0.commands.find(c => /CurrentVersion\\Uninstall/.test(c)) || "";
 check("the Apps lookup: not there is empty, can't open is unreadable, unreadable entries counted (none read: unreadable; some: partial)",
-      /-not \(\$_\.FullyQualifiedErrorId -like 'PathNotFound\*'\) \}\)\.Count\) \{ exit 1 \}; exit 0 \}/.test(lookup) &&
-      !/\[\s*(?!uri\s*\]|string\s*\])[A-Za-z][\w.]*\s*[\]\[]/.test(lookup) && !/New-Object/i.test(lookup) &&
+      /-not \(\$_\.FullyQualifiedErrorId -like 'PathNotFound\*'\) \}\)\.Count\) \{ 'UNREADABLE'; exit 1 \}; exit 0 \}/.test(lookup) &&
+      // Restricted-safe: no type literal but [uri]/[string] (in any spelling),
+      // no type by name, no compiled or evaluated code.
+      !/\[\s*(?!uri\s*\]|string\s*\])[A-Za-z][\w.`]*\s*[\]\[,`]/.test(lookup) &&
+      !/New-Object|Add-Type|Invoke-Expression|::new\(|-as\s|-is\s/i.test(lookup) &&
       /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /catch \{ \$bad\+\+ \}/.test(lookup) &&
-      /if \(\$bad -gt 0 -and \$read -eq 0\) \{ exit 1 \}; if \(\$bad -gt 0\) \{ 'PARTIAL' \}/.test(lookup) &&
+      /if \(\$bad -gt 0 -and \$read -eq 0\) \{ 'UNREADABLE'; exit 1 \}; if \(\$bad -gt 0\) \{ 'PARTIAL' \}/.test(lookup) &&
       !/ErrorActionPreference|Test-Path/.test(lookup));
 a0 = install({ installs: [PU], answerYes: true });
 check("GUI update question: the folder is chosen next", /\(you choose the folder next\)/.test(a0.questions[0] || ""));

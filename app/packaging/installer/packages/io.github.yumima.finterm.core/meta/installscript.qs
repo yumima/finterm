@@ -188,14 +188,14 @@ function registeredInstalls()
     var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
         "$root = Get-Item -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable e0; " +
         "if (-not $root) { if (@($e0 | Where-Object { -not ($_.FullyQualifiedErrorId -like 'PathNotFound*') }).Count) " +
-        "{ exit 1 }; exit 0 }; " +
+        "{ 'UNREADABLE'; exit 1 }; exit 0 }; " +
         "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
         "$bad = @($ev).Count; $read = 0; " +
         "foreach ($key in $keys) { $k = $null; " +
         "try { $k = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop; $read++ } catch { $bad++ }; " +
         "if ($k -and $k.InstallLocation -and @('finterm', 'io.github.yumima.finterm') -contains $k.DisplayName) " +
         "{ 'L ' + [uri]::EscapeDataString([string]$k.InstallLocation) } }; " +
-        "if ($bad -gt 0 -and $read -eq 0) { exit 1 }; if ($bad -gt 0) { 'PARTIAL' }; exit 0");
+        "if ($bad -gt 0 -and $read -eq 0) { 'UNREADABLE'; exit 1 }; if ($bad -gt 0) { 'PARTIAL' }; exit 0");
     if (r === null || r[1] !== 0) {
         console.log("[finterm] the Apps list could not be read");
         return (registered = null);
