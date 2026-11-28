@@ -439,6 +439,9 @@ jobs:
           $refused = $false
           try { Setup $setup "installing over the install without UpdateExisting" } catch { $refused = $true }
           if (-not $refused) { throw "an unattended install over an install went ahead without UpdateExisting" }
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP "setup-out.txt"), (Join-Path $env:RUNNER_TEMP "setup-err.txt") -Pattern "TargetDirectoryInUse" -Quiet)) {
+              throw "the install over the install failed, but not by IFW's folder check"
+          }
           if ((Get-FileHash $exe).Hash -ne $kept) { throw "a refused install changed the installed copy" }
 
           # Updated: unattended with UpdateExisting, then in the wizard. The
@@ -558,9 +561,21 @@ jobs:
           if ((Run $old $install) -ne 0) { throw "4.0.10 did not install" }
           if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "4.0.10 is not in $pf" }
 
-          # The new installer replaces it (elevated removal, data kept) and
-          # installs per user.
           . ./.github/ci/ifw-setup.ps1
+          # Unattended without UpdateExisting: nothing removed, and nothing
+          # installs per user beside it (finterm's own refusal: IFW's folder
+          # check sees an empty per-user target).
+          $refused = $false
+          try { Setup $new "installing beside 4.0.10 without UpdateExisting" } catch { $refused = $true }
+          if (-not $refused) { throw "an unattended install went in beside 4.0.10 without UpdateExisting" }
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP "setup-out.txt"), (Join-Path $env:RUNNER_TEMP "setup-err.txt") -Pattern "\[finterm\] refused" -Quiet)) {
+              throw "the install beside 4.0.10 failed, but not by finterm's refusal"
+          }
+          if (Test-Path (Join-Path $pu "finterm.exe")) { throw "a refused install left files in $pu" }
+          if (-not (Test-Path (Join-Path $pf "finterm.exe"))) { throw "a refused install removed 4.0.10" }
+
+          # With it: the new installer replaces it (elevated removal, data
+          # kept) and installs per user.
           Setup $new "installing over 4.0.10" @("UpdateExisting=true")
           for ($i = 0; (Test-Path (Join-Path $pf $tool)) -and $i -lt 60; $i++) { Start-Sleep -Seconds 1 }
           if (Test-Path (Join-Path $pf "finterm.exe")) { throw "4.0.10 is still in $pf" }

@@ -16,8 +16,10 @@
 //   - Command line: this script is loaded for every command (install, search,
 //     create-offline, …) and is not told which, so it removes nothing unless
 //     asked: `setup.exe install UpdateExisting=true …` (a key=value argument
-//     IFW sets as a value before this script loads). Without it, an installed
-//     finterm only stops the install.
+//     IFW sets as a value before this script loads). Without it nothing is
+//     removed and an installed finterm stops the install: in the target folder
+//     by IFW's own check ("contains an installation"), elsewhere — an old
+//     Program Files copy — by the refusal below.
 //   - An uninstaller removes itself after it exits, from %TEMP%\uninstall.vbs:
 //     it deletes the maintenance tool, then the whole target folder
 //     (RemoveTargetDir, on: CMakeLists.txt). Installing before that is done
@@ -94,12 +96,16 @@ function powershell(command)
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
 }
 
-// Whether a process of that image name runs: true, false, or null (unknown).
-// CSV: the table form cuts names at 25 characters (FintermMaintenanceTool.exe
-// has 26).
+// Whether a process of that image name runs for this user: true, false, or
+// null (unknown). CSV: the table form cuts names at 25 characters
+// (FintermMaintenanceTool.exe has 26). Another user's is none of this one's.
 function processRunning(image)
 {
-    var r = run(winTool("tasklist.exe"), ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"]);
+    var args = ["/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"];
+    var user = installer.environmentVariable("USERNAME"), domain = installer.environmentVariable("USERDOMAIN");
+    if (user)
+        args = args.concat(["/FI", "USERNAME eq " + (domain ? domain + "\\" : "") + user]);
+    var r = run(winTool("tasklist.exe"), args);
     if (r === null)
         return null;
     var lines = r[0].split(/\r?\n/);
@@ -168,8 +174,9 @@ function cannotCheck(what)
 
 // The command line without UpdateExisting: nothing is removed, and nothing
 // installs beside or over an installed finterm (or under an open
-// uninstaller). Silent here — a search or create-offline loads this too —
-// the install itself says why when it stops.
+// uninstaller). Recorded, not shown — a search or create-offline loads this
+// too; an install stops on it (createOperations: the reason is its error),
+// unless IFW's own folder check stopped it first.
 function refuseOverExisting()
 {
     var open = processRunning("FintermMaintenanceTool.exe");
@@ -251,8 +258,10 @@ function updateExisting()
                         (elevated ? " (Windows' permission is needed for Program Files)" : "") + ". Uninstall it " +
                         "from Settings > Apps (answer No when asked to remove your data — this version keeps it), " +
                         "then run this installer again.");
-        // Until its uninstall.vbs has removed the folder (three minutes at most).
-        if (powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 720; $i++) " +
+        // Until its uninstall.vbs has removed the folder: seconds, normally; a
+        // minute at most (the wizard waits with it) — longer means a file is
+        // held open, and the message says so.
+        if (powershell("for ($i = 0; (Test-Path -LiteralPath " + psQuote(toWin(dir)) + ") -and $i -lt 240; $i++) " +
                        "{ Start-Sleep -Milliseconds 250 }") === null)
             return cannotCheck("wait for the installed copy's removal");
         if (installer.fileExists(dir))

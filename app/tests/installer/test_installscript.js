@@ -27,7 +27,7 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 function stubs(o) {
     const seen = { operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
-    const env = Object.assign({ SystemRoot: "C:\\Windows", ProgramFiles: "C:\\Program Files",
+    const env = Object.assign({ SystemRoot: "C:\\Windows", USERNAME: "u", USERDOMAIN: "PC", ProgramFiles: "C:\\Program Files",
                                 LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local", APPDATA: "C:\\a", TEMP: "C:\\t",
                                 USERPROFILE: "C:\\Users\\u" }, o.env || {});
     let installs = (o.installs || []).slice(), folders = installs.slice();
@@ -98,15 +98,19 @@ function install(o) {
         c.IntroductionPageCallback(); // shown again (Back): asked once
     }
     seen.left = left();
-    if (!seen.rejected) {
+    // IFW's own check next (installationAllowedToDirectory): a target folder
+    // holding a maintenance tool is refused before any component script.
+    seen.ifwRefused = !seen.rejected && seen.left.includes(norm(values.TargetDir));
+    if (!seen.rejected && !seen.ifwRefused) {
         const comp = engine();
         vm.runInContext(componentSource, comp);
         try { vm.runInContext("new Component()", comp).createOperations(); } catch (e) { seen.threw = String(e); }
     }
     seen.installed = seen.operations === 1;
     seen.refused = !!values.FintermInstallRefused;
-    // Stopped: nothing installed, and the refusal recorded.
-    seen.stopped = !seen.installed && seen.refused;
+    // Stopped: nothing installed, and refused — by the control script, or by
+    // IFW over the folder it left.
+    seen.stopped = !seen.installed && (seen.refused || seen.ifwRefused);
     return seen;
 }
 
@@ -129,6 +133,8 @@ for (const cli of [false, true]) {
     check(how + ": over its own install, Yes: removed by its uninstaller, then goes ahead",
           s.asked === 1 && purged(s, PU) && s.left.length === 0 && s.installed && s.critical.length === 0);
     check(how + ": every Windows tool by full path", fullPaths(s));
+    check(how + ": processes looked up for this user only",
+          s.commands.filter(c => /tasklist/i.test(c)).every(c => /USERNAME eq PC\\u/.test(c)));
     s = install1({ installs: [PF], answerYes: true });
     check(how + ": over Program Files: removed elevated, then goes ahead",
           purged(s, PF) && s.commands.some(c => /RunAs/.test(c)) && s.installed);
@@ -155,10 +161,11 @@ for (const cli of [false, true]) {
 // The command line without UpdateExisting (any command — install, search,
 // create-offline — loads the control script): nothing is removed.
 let c0 = install({ cli: true, installs: [PU], answerYes: true });
-check("command line, no UpdateExisting, over an install: nothing removed, the install stops, says how",
-      !purged(c0, PU) && c0.stopped && /UpdateExisting=true/.test(c0.threw || "") && c0.asked === 0);
+check("command line, no UpdateExisting, over an install: nothing removed, IFW refuses the folder",
+      !purged(c0, PU) && c0.ifwRefused && !c0.installed && c0.asked === 0);
 c0 = install({ cli: true, installs: [PF], answerYes: true });
-check("command line, no UpdateExisting, Program Files copy: nothing installs beside it", !purged(c0, PF) && c0.stopped);
+check("command line, no UpdateExisting, Program Files copy: nothing installs beside it, says how",
+      !purged(c0, PF) && c0.stopped && !c0.ifwRefused && /UpdateExisting=true/.test(c0.threw || ""));
 c0 = install({ cli: true, installs: [], uninstallerOpen: true });
 check("command line, no UpdateExisting, an uninstaller open: the install stops", c0.stopped);
 c0 = install({ cli: true, installs: [] });
