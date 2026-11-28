@@ -137,6 +137,31 @@ QString read_text(const QString& path) {
 /// byte checked), for `put` to rename over it. A rename replaces the entry
 /// itself — a link, a read-only file — never what a link points to; a full
 /// disk or an error leaves the old file as it was, and nothing behind.
+/// Temporaries a killed write left beside `path`: Beside's own
+/// ".<name>.finterm-tmp.XXXXXX" (exactly that; ten minutes old or more, or
+/// dated a day or more ahead — a write in progress elsewhere keeps its own),
+/// and the ".new"/".part" earlier builds used. Nothing else is touched.
+/// `now`: the filesystem's own time (the temporary just written there — a
+/// file server's clock ahead or behind changes nothing); `skip`: that one.
+void sweep_temporaries(const QString& path, const QDateTime& now, const QString& skip) {
+    const QFileInfo fi(path);
+    const QDir dir(fi.absolutePath());
+    QStringList names;
+    for (const char* old : {".new", ".new.part", ".part"})
+        names << fi.fileName() + QLatin1String(old);
+    if (now.isValid()) {
+        const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
+                                      QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
+        for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
+            if (e.fileName() != skip && ours.match(e.fileName()).hasMatch() &&
+                (e.lastModified() < now.addSecs(-600) || e.lastModified() > now.addDays(1)))
+                names << e.fileName();
+    }
+    for (const QString& n : names)
+        if (QFileInfo(dir.filePath(n)).isFile() && !QFileInfo(dir.filePath(n)).isSymLink())
+            QFile::remove(dir.filePath(n));
+}
+
 class Beside {
   public:
     /// `perms`: what the file is to have (the temporary starts owner-only);
@@ -156,6 +181,9 @@ class Beside {
 #endif
         tmp_.close();
         ok_ = ok_ && tmp_.error() == QFileDevice::NoError && tmp_.setPermissions(perms);
+        // What killed writes left here, timed by this temporary's own stamp.
+        sweep_temporaries(path, ok_ ? QFileInfo(tmp_.fileName()).lastModified() : QDateTime(),
+                          QFileInfo(tmp_.fileName()).fileName());
     }
     bool ok() const { return ok_; }
     /// Rename it over `path`; false (and it goes) when that fails.
@@ -191,38 +219,6 @@ QString link_text(const QString& path) {
 #endif
 }
 
-/// Temporaries a killed write left beside `path`: Beside's own
-/// ".<name>.finterm-tmp.XXXXXX" (exactly that, and only ten minutes old or
-/// more — a write in progress elsewhere keeps its own), and the ".new"/
-/// ".part" earlier builds used. Nothing else is touched. "Now" is the
-/// filesystem's (a file just made there): a server clock ahead or behind
-/// doesn't make a write in progress look old; one dated more than a day
-/// ahead (a clock since put right) is taken too.
-void sweep_temporaries(const QString& path) {
-    const QFileInfo fi(path);
-    const QDir dir(fi.absolutePath());
-    if (!dir.exists())
-        return;
-    const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
-                                  QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
-    QDateTime now;
-    {
-        QTemporaryFile probe(dir.filePath(QStringLiteral(".finterm-clock.XXXXXX")));
-        if (!probe.open())
-            return; // can't tell its time: leave them
-        now = QFileInfo(probe.fileName()).lastModified();
-    }
-    QStringList names;
-    for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
-        if (ours.match(e.fileName()).hasMatch() &&
-            (e.lastModified() < now.addSecs(-600) || e.lastModified() > now.addDays(1)))
-            names << e.fileName();
-    for (const char* old : {".new", ".new.part", ".part"})
-        names << fi.fileName() + QLatin1String(old);
-    for (const QString& n : names)
-        if (QFileInfo(dir.filePath(n)).isFile() && !QFileInfo(dir.filePath(n)).isSymLink())
-            QFile::remove(dir.filePath(n));
-}
 
 bool ours(const QString& desktop_text) {
     return desktop_text.contains(QLatin1String(kMarker) + QStringLiteral("=1"));
@@ -397,13 +393,14 @@ bool write_launch_script(const QString& installed) {
     if (launch_script_ok(installed))
         return true;
     // Written (runnable before it is in place); a link is replaced by the
-    // file. A mode the user narrowed is kept — only what running it needs
-    // (the owner reading and running it) is added.
+    // file. A rewrite can only narrow the mode: what the user left within
+    // 755 is kept (never a write bit for others), and only what running it
+    // needs — the owner reading and running it — is added.
     const QString path = launch_script_path(installed);
     const QFileInfo fi(path);
     QFileDevice::Permissions perms = kRunnable;
     if (fi.isFile() && !fi.isSymLink())
-        perms = QFile::permissions(path) | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+        perms = (QFile::permissions(path) & kRunnable) | QFileDevice::ReadOwner | QFileDevice::ExeOwner;
     return write_text(path, launch_script_text(installed), perms);
 }
 
@@ -454,9 +451,6 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     QStringList done;
     if (ok)
         *ok = true;
-    // Temporaries a killed write left (this build's and earlier builds').
-    sweep_temporaries(desktop_path(env));
-    sweep_temporaries(launch_script_path(installed));
     // The launch script first, before anything else is touched: the menu
     // entry and the command start it, so without it they are left as they
     // are (an earlier launcher keeps working) and the caller is told.

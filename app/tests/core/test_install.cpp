@@ -421,9 +421,27 @@ class TestInstall : public QObject {
             QVERIFY(f.open(QIODevice::ReadWrite));
             QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
         }
+        // (Swept when that file is next written: here, a script out of date.)
+        {
+            QFile f(env_.home + "/Applications/.finterm-launch");
+            QVERIFY(f.open(QIODevice::Append));
+            f.write("# an older text\n");
+        }
         env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/again.run", "4.2.3");
         QVERIFY(install::install(env_, {false}).ok);
         QVERIFY(!QFileInfo::exists(beside));
+        // One dated more than a day ahead (a clock since put right) goes too.
+        const QString ahead = apps + "/.finterm.desktop.finterm-tmp.FuT001";
+        write_package(ahead, "x");
+        {
+            QFile f(ahead);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addDays(3), QFileDevice::FileModificationTime));
+        }
+        env_.version = "4.2.3.1"; // the menu entry is rewritten
+        env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/later.run", "4.2.3");
+        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(!QFileInfo::exists(ahead));
     }
 
     void links_are_kept_as_written_and_bak_names_never_collide() {
@@ -478,10 +496,24 @@ class TestInstall : public QObject {
         install::refresh_launcher(env_);
         QVERIFY(!read(script).contains("an older text"));
         QCOMPARE(bits(), owner_only);
-        // Runnable but not readable: sh can't open it — rewritten.
+        // Runnable but not readable: sh can't open it — rewritten, readable
+        // and runnable by the owner (and nothing more than it had).
         QFile::setPermissions(script, QFileDevice::ExeOwner);
+        if (QFileInfo(script).isReadable())
+            QSKIP("an unreadable file doesn't stop this user (root)");
         install::refresh_launcher(env_);
-        QVERIFY(QFileInfo(script).isReadable());
+        QCOMPARE(bits(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        // A wide mode (777) is narrowed by a rewrite: no write bit for others.
+        QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                                          QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
+                                          QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther);
+        {
+            QFile f(script);
+            QVERIFY(f.open(QIODevice::Append));
+            f.write("# an older text\n");
+        }
+        install::refresh_launcher(env_);
+        QCOMPARE(bits() & (QFileDevice::WriteGroup | QFileDevice::WriteOther), QFileDevice::Permissions());
     }
 
     void their_entry_stays_when_its_copy_cant_be_made() {
