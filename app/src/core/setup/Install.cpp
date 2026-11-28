@@ -140,7 +140,10 @@ bool write_text(const QString& path, const QString& text) {
         return false;
     f.write(text.toUtf8());
     f.close();
-    return replace_file(part, path);
+    if (replace_file(part, path))
+        return true;
+    QFile::remove(part);
+    return false;
 }
 
 bool ours(const QString& desktop_text) {
@@ -307,6 +310,12 @@ bool write_launch_script(const QString& installed) {
                                           QFileDevice::ExeOther);
 }
 
+/// What could not be added, and how: by the installed image's own path (the
+/// `finterm` command may be what is missing).
+QString launcher_hint(const QStringList& missed, const QString& installed) {
+    return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run %1 --install").arg(installed);
+}
+
 /// What write_launcher writes: the menu entry (an install; a refresh when it
 /// is ours and out of date), and whether the command may be made where there
 /// is none (an install only — a refresh keeps one of ours current, never puts
@@ -347,24 +356,25 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
         // write leaves it in place.
         const QString desktop = desktop_path(env);
         const QString fresh = desktop + QStringLiteral(".new");
-        if (!write_text(fresh, desktop_entry(env, installed))) {
-            QFile::remove(fresh);
-            done << QStringLiteral("could not write the launcher ") + desktop;
+        bool written = write_text(fresh, desktop_entry(env, installed));
+        // Someone else's is copied (not moved) to .bak, and replaced only once
+        // that copy exists: whatever fails, theirs is never lost.
+        if (written && QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
+            QString bak = desktop + QStringLiteral(".bak");
+            for (int i = 2; QFileInfo::exists(bak); ++i)
+                bak = desktop + QStringLiteral(".bak") + QString::number(i);
+            if (QFile::copy(desktop, bak))
+                done << QStringLiteral("kept the previous launcher as ") + bak;
+            else
+                written = false;
+        }
+        if (written && replace_file(fresh, desktop)) {
+            done << QStringLiteral("launcher: ") + desktop;
+            refresh_desktop_caches(env);
         } else {
-            if (QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
-                QString bak = desktop + QStringLiteral(".bak");
-                for (int i = 2; QFileInfo::exists(bak); ++i)
-                    bak = desktop + QStringLiteral(".bak") + QString::number(i);
-                if (QFile::rename(desktop, bak))
-                    done << QStringLiteral("kept the previous launcher as ") + bak;
-            }
-            if (replace_file(fresh, desktop)) {
-                done << QStringLiteral("launcher: ") + desktop;
-                refresh_desktop_caches(env);
-            } else {
-                QFile::remove(fresh);
-                done << QStringLiteral("could not write the launcher ") + desktop;
-            }
+            for (const QString& leftover : {fresh, fresh + QStringLiteral(".part")})
+                QFile::remove(leftover);
+            done << QStringLiteral("could not write the launcher ") + desktop;
         }
     }
     // The command: a link we own (kept current), never someone's own file of
@@ -682,7 +692,7 @@ Result install(const Env& env, const Options& opt) {
             r.ok = false;
             r.error = r.done.filter(QStringLiteral("could not")).join(QStringLiteral("; "));
         } else if (const QStringList missed = r.done.filter(QStringLiteral("could not")); !missed.isEmpty()) {
-            r.warning = missed.join(QStringLiteral("; "));
+            r.warning = launcher_hint(missed, st.path);
         }
 #endif
         return r;
@@ -800,11 +810,9 @@ Result install(const Env& env, const Options& opt) {
     settings().sync();
     LOG_INFO("Install", r.done.join(QStringLiteral("; ")));
     r.ok = true;
-    // Installed — what could not be added is said (and tried again at the
-    // next start).
+    // Installed — what could not be added is said, with how to add it.
     if (const QStringList missed = r.done.filter(QStringLiteral("could not")); !missed.isEmpty())
-        r.warning = missed.join(QStringLiteral("; ")) +
-                    QStringLiteral(" — fix that, then run finterm --install again to add it");
+        r.warning = launcher_hint(missed, st.path);
     return r;
 }
 
@@ -823,8 +831,11 @@ void refresh_launcher(const Env& env) {
                                    (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))));
     items.make_command = false;
     const bool script_stale = read_text(launch_script_path(st.path)) != launch_script_text(st.path);
+    // A command link of ours that doesn't start the launch script (an older
+    // install's, to the image or the kept previous one): pointed at it again.
     const QFileInfo cmd(command_path(env));
-    const bool command_stale = cmd.isSymLink() && same_file(cmd.symLinkTarget(), st.path); // an older link
+    const bool command_stale = cmd.isSymLink() && (same_file(cmd.symLinkTarget(), st.path) ||
+                                                   same_file(cmd.symLinkTarget(), previous_path(st.path)));
     if (!items.desktop && !script_stale && !command_stale)
         return; // up to date (or none of ours: nothing to keep)
     bool ok = true;
@@ -892,7 +903,9 @@ Result uninstall(const Env& env) {
     if (settings().value(QLatin1String(kFavouriteKey)).toBool())
         settings().setValue(QLatin1String(kFavouriteKey), false);
     settings().remove(QLatin1String(kInstalledKey));
-    settings().remove(QStringLiteral("setup/launcher_retry")); // (a mark a 4.2.3 pre-release wrote)
+    // (Marks 4.2.3 pre-release builds wrote.)
+    for (const char* stale : {"setup/launcher_retry", "setup/retry_launcher", "setup/retry_command"})
+        settings().remove(QLatin1String(stale));
     settings().sync();
     r.ok = true;
     return r;
