@@ -384,6 +384,20 @@ class TestInstall : public QObject {
         QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
     }
 
+    void a_dangling_link_is_replaced_and_hidden_files_kept() {
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        QDir().mkpath(apps);
+        QVERIFY(QFile::link(env_.home + "/deleted-checkout/finterm.desktop", desktop()));
+        // A hidden file of the user's that looks like a temporary name.
+        write_package(apps + "/.finterm.desktop.backup", "mine");
+        const auto r = install::install(env_, {false});
+        QVERIFY(r.ok);
+        QVERIFY(r.warning.isEmpty());
+        QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
+        QCOMPARE(QFileInfo(desktop() + ".bak").symLinkTarget(), env_.home + "/deleted-checkout/finterm.desktop");
+        QVERIFY(read(apps + "/.finterm.desktop.backup").contains("mine"));
+    }
+
     void their_entry_stays_when_its_copy_cant_be_made() {
         // finterm.desktop is a directory (can't be copied): nothing moves,
         // nothing is left behind, the install says the launcher is missing.

@@ -144,7 +144,7 @@ class Beside {
     Beside(const QString& path, const QString& text, QFileDevice::Permissions perms)
         : path_(path), tmp_(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral(".") +
                                                                           QFileInfo(path).fileName() +
-                                                                          QStringLiteral(".XXXXXX"))) {
+                                                                          QStringLiteral(".finterm-tmp.XXXXXX"))) {
         QDir().mkpath(QFileInfo(path).absolutePath());
         tmp_.setAutoRemove(true);
         const QByteArray bytes = text.toUtf8();
@@ -182,17 +182,24 @@ bool write_text(const QString& path, const QString& text, QFileDevice::Permissio
     return b.put();
 }
 
-/// Temporaries a killed write left beside `path` (Beside's ".<name>.XXXXXX",
-/// and the ".new"/".part" earlier builds used).
+/// Temporaries a killed write left beside `path`: Beside's own
+/// ".<name>.finterm-tmp.XXXXXX" (exactly that, and only ten minutes old or
+/// more — a write in progress elsewhere keeps its own), and the ".new"/
+/// ".part" earlier builds used. Nothing else is touched.
 void sweep_temporaries(const QString& path) {
     const QFileInfo fi(path);
     const QDir dir(fi.absolutePath());
-    QStringList names = dir.entryList({QStringLiteral(".") + fi.fileName() + QStringLiteral(".??????")},
-                                      QDir::Files | QDir::Hidden);
+    const QRegularExpression ours(QStringLiteral("^\\.") + QRegularExpression::escape(fi.fileName()) +
+                                  QStringLiteral("\\.finterm-tmp\\.[A-Za-z0-9]{6}$"));
+    const QDateTime stale = QDateTime::currentDateTime().addSecs(-600);
+    QStringList names;
+    for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
+        if (ours.match(e.fileName()).hasMatch() && e.lastModified() < stale)
+            names << e.fileName();
     for (const char* old : {".new", ".new.part", ".part"})
         names << fi.fileName() + QLatin1String(old);
     for (const QString& n : names)
-        if (QFileInfo(dir.filePath(n)).isFile())
+        if (QFileInfo(dir.filePath(n)).isFile() && !QFileInfo(dir.filePath(n)).isSymLink())
             QFile::remove(dir.filePath(n));
 }
 
@@ -353,11 +360,13 @@ QString launch_script_text(const QString& installed) {
 
 bool write_launch_script(const QString& installed) {
     const QString path = launch_script_path(installed);
-    if (read_text(path) != launch_script_text(installed) && !write_text(path, launch_script_text(installed), kRunnable))
-        return false;
-    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
-                                          QFileDevice::ReadGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther |
-                                          QFileDevice::ExeOther);
+    if (read_text(path) != launch_script_text(installed))
+        return write_text(path, launch_script_text(installed), kRunnable); // runnable before it is in place
+    // Already right: runnable too (never through a link — that file isn't ours).
+    const QFileInfo fi(path);
+    if (fi.isSymLink() || (QFile::permissions(path) & kRunnable) == kRunnable)
+        return true;
+    return QFile::setPermissions(path, kRunnable);
 }
 
 /// What could not be added, and how: by the installed image's own path (the
@@ -374,9 +383,10 @@ QString launcher_hint(const QStringList& missed, const QString& installed) {
     path.replace(QLatin1Char('\''), QStringLiteral("'\\''")); // quoted for a POSIX shell
     return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run '%1' --install").arg(path);
 #else
-    // (cmd.exe and PowerShell take double quotes.)
+    // cmd.exe runs "path" args; PowerShell needs & before a quoted path.
+    const QString exe = QDir::toNativeSeparators(installed);
     return missed.join(QStringLiteral("; ")) +
-           QStringLiteral(" — fix that, then run \"%1\" --install").arg(QDir::toNativeSeparators(installed));
+           QStringLiteral(" — fix that, then run \"%1\" --install (in PowerShell: & \"%1\" --install)").arg(exe);
 #endif
 }
 
@@ -433,7 +443,8 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
             bak = desktop + QStringLiteral(".bak");
             for (int i = 2; QFileInfo::exists(bak); ++i)
                 bak = desktop + QStringLiteral(".bak") + QString::number(i);
-            written = QFile::copy(desktop, bak);
+            // A link is kept as the link (its target may be gone); a file by a copy.
+            written = link ? QFile::link(QFileInfo(desktop).symLinkTarget(), bak) : QFile::copy(desktop, bak);
             if (!written)
                 bak.clear();
         }
