@@ -28,7 +28,8 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 // folder during the wait), purgeFails, removeCode (what the removal script
 // exits with instead: its own codes), stranded (folders whose copy an
 // interrupted update left at <folder>.finterm-check), folderStays,
-// toolsBroken, uninstall.
+// registered (InstallLocation values the Apps list holds), toolsBroken,
+// uninstall.
 function stubs(o) {
     const seen = { texts: [], purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
     const hook = n => ({ connect: f => { seen.hooks[n] = f; } });
@@ -65,6 +66,7 @@ function stubs(o) {
                 // The rename test, then the uninstaller (one script; elevated
                 // through RunAs for Program Files): its tool goes, then — its
                 // uninstall.vbs — the folder.
+                if (/CurrentVersion\\Uninstall/.test(line)) return [(o.registered || []).map(d => d.replace(/\//g, "\\")).join("\r\n"), 0];
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
                 if (/IO\.Directory\]::Move/.test(line) && o.removeCode) {
                     if (o.removeCode === 104) { // moved aside, not back
@@ -116,6 +118,7 @@ function install(o) {
         c.IntroductionPageCallback(); // shown again (Back): asked once
     }
     seen.left = left();
+    seen.target = values.TargetDir;
     // IFW's own check next (installationAllowedToDirectory): a target folder
     // holding a maintenance tool is refused before any component script.
     seen.ifwRefused = !seen.rejected && seen.left.includes(norm(values.TargetDir));
@@ -200,8 +203,7 @@ for (const cli of [false, true]) {
     s = install1({ installs: [PF], answerYes: true });
     const elevated = s.commands.find(c => /runas/i.test(c)) || "";
     check(how + ": restricted PowerShell checked before the elevation wrapper's own .NET calls",
-          (c => c.startsWith("if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit 110 }; ") &&
-                c.indexOf("exit 110") < c.indexOf("New-Object Diagnostics.ProcessStartInfo"))
+          (c => c.startsWith("if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { exit 110 }; "))
               (elevated.replace(/^\S+ -NoProfile -ExecutionPolicy Bypass -Command /, "")));
     s = install1({ installs: [PU], answerYes: true });
     const removal = s.commands.find(c => /Directory\]::Move/.test(c)) || "";
@@ -234,6 +236,18 @@ check("command line, no UpdateExisting, Program Files copy: nothing installs bes
       !purged(c0, PF) && c0.stopped && !c0.ifwRefused && /UpdateExisting=true/.test(c0.threw || ""));
 c0 = install({ cli: true, installs: [] });
 check("command line, no UpdateExisting, first install: goes ahead", c0.installed && !c0.refused);
+c0 = install({ installs: ["D:/finterm"], registered: ["D:/finterm"], answerYes: true });
+check("GUI: an install in a folder chosen earlier, found in the Apps list: updated", purged(c0, "D:/finterm") && c0.installed);
+check("…and installed where it was (the target follows it)", norm(c0.target || "") === "D:/finterm");
+c0 = install({ installs: ["D:/finterm"], registered: ["D:/finterm"], target: "E:/elsewhere", answerYes: true });
+check("an explicit target is kept over the install's folder", norm(c0.target || "") === "E:/elsewhere");
+c0 = install({ installs: [PF], answerYes: true });
+check("a Program Files copy is not followed: the target stays per user", norm(c0.target || "") === PU);
+c0 = install({ cli: true, installs: ["D:/finterm"], registered: ["D:/finterm"] });
+check("command line, no UpdateExisting: an install the Apps list knows elsewhere stops the install",
+      c0.stopped && !purged(c0, "D:/finterm"));
+c0 = install({ cli: true, update: true, installs: [], registered: ["D:/gone"] });
+check("an Apps entry whose folder holds no install: ignored", c0.installed && !c0.refused);
 c0 = install({ cli: true, update: true, installs: ["D:/finterm"], target: "D:/finterm", answerYes: true });
 check("command line, a custom folder given as TargetDir=: updated there", purged(c0, "D:/finterm") && c0.installed);
 c0 = install({ cli: true, update: true, installs: [PU], answerYes: true });
