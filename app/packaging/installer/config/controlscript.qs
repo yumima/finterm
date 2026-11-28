@@ -61,7 +61,8 @@ Controller.prototype.IntroductionPageCallback = function()
 // Windows' own tools, by full path — never whatever PATH finds first: a broken
 // PATH made every call fail without a word (finterm "not running", the wait
 // over at once), and a planted copy earlier on it would run instead.
-// (Kept identical in installscript.qs; test_installscript.js checks.)
+// (These, through registeredInstalls, kept identical in installscript.qs;
+// test_installscript.js checks.)
 // ---------------------------------------------------------------------------
 
 function winTool(name)
@@ -93,12 +94,44 @@ function psQuote(s)
     return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-// ---------------------------------------------------------------------------
 
 function powershell(command)
 {
     return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
 }
+
+// Where Windows' Apps list says this user has finterm installed: IFW
+// registers each install in HKCU with its InstallLocation (a folder chosen
+// in the wizard too), under the names finterm has had (io.github.yumima.
+// finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
+// console. Asked once; a lookup that fails leaves the usual folders (logged).
+var registered = null;
+function registeredInstalls()
+{
+    if (registered !== null)
+        return registered;
+    var r = powershell("Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
+                       "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
+                       "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
+                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0");
+    registered = [];
+    if (r === null || r[1] !== 0) {
+        console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
+        return registered;
+    }
+    var lines = r[0].split(/\s+/);
+    for (var i = 0; i < lines.length; ++i) {
+        try {
+            if (lines[i])
+                registered.push(decodeURIComponent(lines[i]).replace(/\\/g, "/").replace(/\/+$/, ""));
+        } catch (e) {
+            console.log("[finterm] an Apps entry could not be read: " + lines[i]);
+        }
+    }
+    return registered;
+}
+
+// ---------------------------------------------------------------------------
 
 // Remove the installation in `dir` by its own uninstaller — only if the folder
 // can be removed now: Windows won't rename a folder something runs from
@@ -161,11 +194,12 @@ function removeInstall(dir, grace)
 }
 
 // Where a finterm installation can be — the target folder, the per-user one,
-// an old Program Files one — each once, with forward slashes.
+// an old Program Files one, and any the Apps list has — each once, with
+// forward slashes.
 function installCandidates()
 {
     var raw = [installer.value("TargetDir"), installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm",
-               installer.environmentVariable("ProgramFiles") + "/finterm"];
+               installer.environmentVariable("ProgramFiles") + "/finterm"].concat(registeredInstalls());
     var out = [], seen = {};
     for (var i = 0; i < raw.length; ++i) {
         var dir = String(raw[i] || "").replace(/\\/g, "/").replace(/\/+$/, "");
@@ -282,8 +316,7 @@ function updateExisting()
         "is removed now, then this one is installed. Your data, settings and saved keys are kept — if you stop " +
         "the installer after this, run it again to install finterm." +
         (anyProgramFiles ? "\n\nA copy in Program Files, shared by every user of this computer, is removed with " +
-                           "Windows' permission; finterm itself then installs for your user only, unless it is " +
-                           "installed into Program Files again." : ""),
+                           "Windows' permission." : ""),
         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes);
     if (answer !== QMessageBox.Yes)
         return refuse("The update was declined; finterm stays as it was.", "", "", true);

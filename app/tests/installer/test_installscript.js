@@ -28,6 +28,7 @@ const norm = p => String(p).replace(/\\/g, "/").replace(/\/+$/, "");
 // folder during the wait), purgeFails, removeCode (what the removal script
 // exits with instead: its own codes), stranded (folders whose copy an
 // interrupted update left at <folder>.finterm-check), folderStays,
+// registered (InstallLocation values in the Apps list), appsFails,
 // toolsBroken, uninstall.
 function stubs(o) {
     const seen = { texts: [], purgedDirs: [], operations: 0, critical: [], warned: 0, asked: 0, rejected: 0, interrupted: 0, commands: [], unstarted: 0, hooks: {} };
@@ -65,6 +66,10 @@ function stubs(o) {
                 // The rename test, then the uninstaller (one script; elevated
                 // through RunAs for Program Files): its tool goes, then — its
                 // uninstall.vbs — the folder.
+                // The Apps list, as PowerShell prints it: each location escaped.
+                if (/CurrentVersion\\Uninstall/.test(line))
+                    return o.appsFails ? ["", 1]
+                                       : [(o.registered || []).map(d => encodeURIComponent(d.replace(/\//g, "\\"))).join("\r\n"), 0];
                 if (/IO\.Directory\]::Move/.test(line) && inUse.some(d => inLine(line, d))) return ["", 103];
                 if (/IO\.Directory\]::Move/.test(line) && o.removeCode) {
                     if (o.removeCode === 104) { // moved aside, not back
@@ -242,6 +247,25 @@ check("command line: ten seconds' grace (it can't ask)",
 c0 = install({ cli: true, installs: [], stranded: [PU] });
 check("command line, no UpdateExisting, a stranded copy: the install stops, says so",
       c0.stopped && /Rename it back/.test(c0.threw || ""));
+// Commands other than the Apps-list lookup (which only reads).
+const changes = s => s.commands.filter(c => !/CurrentVersion\\Uninstall/.test(c)).length;
+
+// An install in a folder of its own, known from the Apps list.
+const D = "D:/Börse & Co/finterm"; // non-ASCII and a space survive the console
+let a0 = install({ installs: [D], registered: [D], answerYes: true });
+check("GUI: an install in a folder of its own (Apps list): asked, removed, goes ahead",
+      a0.asked === 1 && purged(a0, D) && a0.installed);
+a0 = install({ cli: true, installs: [D], registered: [D] });
+check("command line, no UpdateExisting: an install in a folder of its own stops the install",
+      a0.stopped && !purged(a0, D) && (a0.threw || "").includes("D:\\Börse & Co\\finterm"));
+a0 = install({ cli: true, installs: [], registered: ["D:/gone"] });
+check("an Apps entry whose folder holds no install: ignored", a0.installed && !a0.refused);
+a0 = install({ cli: true, installs: [PU], appsFails: true });
+check("the Apps list unreadable: the usual folders still checked", a0.ifwRefused && !purged(a0, PU));
+a0 = uninstall({ target: PU, installs: [PU, D], registered: [D], answerYes: true });
+check("uninstall beside an install in a folder of its own (Apps list): not asked, data stays",
+      a0.asked === 0 && changes(a0) === 0);
+
 let s = install({ installs: [PU], answerYes: true, env: { ProgramFiles: "" } });
 check("no ProgramFiles in the environment: a per-user install is not taken for one (no elevation)",
       purged(s, PU) && !s.commands.some(c => /runas/i.test(c)));
@@ -253,11 +277,11 @@ s = uninstall({ target: PU, installs: [PU], answerYes: true });
 check("uninstall, alone, Yes: the data goes", s.asked === 1 && removed(s));
 check("uninstall's data removal: full paths", fullPaths(s));
 s = uninstall({ target: PU, installs: [PU], answerYes: false });
-check("uninstall, alone, No: the data stays", s.asked === 1 && s.commands.length === 0);
+check("uninstall, alone, No: the data stays", s.asked === 1 && changes(s) === 0);
 s = uninstall({ target: PU, installs: [PU, PF], answerYes: true });
-check("uninstall beside Program Files: not asked, data stays", s.asked === 0 && s.commands.length === 0);
+check("uninstall beside Program Files: not asked, data stays", s.asked === 0 && changes(s) === 0);
 s = uninstall({ target: PF.replace(/\//g, "\\"), installs: [PU, PF], answerYes: true });
-check("uninstall of Program Files beside per-user: not asked, data stays", s.asked === 0 && s.commands.length === 0);
+check("uninstall of Program Files beside per-user: not asked, data stays", s.asked === 0 && changes(s) === 0);
 
 // The updater's copies beside the install go with the program, whatever the
 // data answer — they are a whole finterm, not the user's data.
@@ -281,7 +305,7 @@ check("uninstall removes the updater's copies (data kept)",
 // One source of truth for what both scripts need (IFW gives each its own
 // engine, so they cannot share a file).
 const fn = (src, name) => (src.match(new RegExp("^function " + name + "\\([^]*?^}", "m")) || [""])[0];
-for (const name of ["winTool", "run", "toWin", "psQuote"])
+for (const name of ["winTool", "run", "toWin", "psQuote", "powershell", "registeredInstalls"])
     check("shared helper identical in both scripts: " + name,
           fn(componentSource, name) !== "" && fn(componentSource, name) === fn(controlSource, name));
 

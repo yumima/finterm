@@ -135,8 +135,8 @@ function run(program, args)
 
 // ---------------------------------------------------------------------------
 // Windows: another finterm install on this machine (an old Program Files one
-// beside the per-user one) shares the data — its uninstall never offers to
-// remove it.
+// beside the per-user one, one in a folder of its own) shares the data — its
+// uninstall never offers to remove it.
 // ---------------------------------------------------------------------------
 
 function otherWindowsInstall(ownDir)
@@ -147,7 +147,7 @@ function otherWindowsInstall(ownDir)
     var candidates = [
         installer.environmentVariable("ProgramFiles") + "/finterm",
         installer.environmentVariable("LOCALAPPDATA") + "/Programs/finterm"
-    ];
+    ].concat(registeredInstalls());
     for (var i = 0; i < candidates.length; ++i) {
         var dir = candidates[i].replace(/\\/g, "/");
         if (dir.toLowerCase() !== own && installer.fileExists(dir + "/FintermMaintenanceTool.exe"))
@@ -159,6 +159,42 @@ function otherWindowsInstall(ownDir)
 function psQuote(s)
 {
     return "'" + String(s).replace(/'/g, "''") + "'";
+}
+
+function powershell(command)
+{
+    return run(winTool("powershell.exe"), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
+}
+
+// Where Windows' Apps list says this user has finterm installed: IFW
+// registers each install in HKCU with its InstallLocation (a folder chosen
+// in the wizard too), under the names finterm has had (io.github.yumima.
+// finterm until 4.2.1). Escaped by PowerShell, so any characters survive the
+// console. Asked once; a lookup that fails leaves the usual folders (logged).
+var registered = null;
+function registeredInstalls()
+{
+    if (registered !== null)
+        return registered;
+    var r = powershell("Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' " +
+                       "-ErrorAction SilentlyContinue | Where-Object { $_.InstallLocation -and " +
+                       "@('finterm', 'io.github.yumima.finterm') -contains $_.DisplayName } | " +
+                       "ForEach-Object { [uri]::EscapeDataString([string]$_.InstallLocation) }; exit 0");
+    registered = [];
+    if (r === null || r[1] !== 0) {
+        console.log("[finterm] the Apps list could not be read; looking in the usual folders only");
+        return registered;
+    }
+    var lines = r[0].split(/\s+/);
+    for (var i = 0; i < lines.length; ++i) {
+        try {
+            if (lines[i])
+                registered.push(decodeURIComponent(lines[i]).replace(/\\/g, "/").replace(/\/+$/, ""));
+        } catch (e) {
+            console.log("[finterm] an Apps entry could not be read: " + lines[i]);
+        }
+    }
+    return registered;
 }
 
 // ---------------------------------------------------------------------------

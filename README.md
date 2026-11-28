@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`5cb0ad78a`](https://github.com/yumima/finterm/commit/5cb0ad78a) Cut the Apps-list lookup: custom folders by TargetDir= again
 - [`bcff4aeb0`](https://github.com/yumima/finterm/commit/bcff4aeb0) Installs found through the Apps list, updated where they are
 - [`5d538f9d2`](https://github.com/yumima/finterm/commit/5d538f9d2) Cut the target-dependent wording; test the elevation wrapper's check
 - [`fc2e4927a`](https://github.com/yumima/finterm/commit/fc2e4927a) Restricted check before the elevation too; TargetDir= named in the refusal
