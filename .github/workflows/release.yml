@@ -411,6 +411,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # An earlier step left PATH in bash form; a user's is this.
+          $sys = Join-Path $env:SystemRoot "System32"
+          $env:PATH = "$sys;$env:SystemRoot;$sys\Wbem;$sys\WindowsPowerShell\v1.0;$env:ProgramFiles\nodejs"
           $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
           . ./.github/ci/ifw-setup.ps1
           Setup $setup "default install"
@@ -446,7 +449,7 @@ jobs:
           # The raw value, of any type (.NET reads a non-string one as none).
           function HasLockdown { $null -ne (Get-ItemProperty -Path "Registry::$envKey" -Name __PSLockdownPolicy -ErrorAction SilentlyContinue) }
           if (HasLockdown) { throw "this runner already has a machine lockdown policy; the lookup checks need a machine without one" }
-          $restore = "reg delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul"
+          $restore = "`"$sys\reg.exe`" delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul"
           function Lookup([string]$command, [bool]$restricted) {
               $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
               $txt = Join-Path $env:RUNNER_TEMP "apps-lookup.txt"; $errTxt = Join-Path $env:RUNNER_TEMP "apps-lookup-err.txt"
@@ -456,12 +459,12 @@ jobs:
               $cmd = Join-Path $env:RUNNER_TEMP "apps-lookup.cmd"
               Set-Content -Path $cmd -Encoding ascii -Value @(
                   "@echo off",
-                  $(if ($restricted) { "reg add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d 4 /f >nul" } else { "rem" }),
+                  $(if ($restricted) { "`"$sys\reg.exe`" add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d 4 /f >nul" } else { "rem" }),
                   "`"$winps`" -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded > `"$txt`" 2> `"$errTxt`"",
                   "set code=%errorlevel%",
                   $(if ($restricted) { $restore } else { "rem" }),
                   "exit /b %code%")
-              & cmd.exe /d /c "`"$cmd`""
+              & (Join-Path $sys "cmd.exe") /d /c "`"$cmd`""
               $code = $LASTEXITCODE
               if (HasLockdown) { throw "the machine's lockdown policy was not removed" }
               $out = @(Get-Content $txt -ErrorAction SilentlyContinue)
