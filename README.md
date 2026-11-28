@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`564744161`](https://github.com/yumima/finterm/commit/564744161) CI per-user step: a user's PATH; cmd and reg by full path
 - [`acc364a2d`](https://github.com/yumima/finterm/commit/acc364a2d) CI: node by its full path in the Apps lookup check
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

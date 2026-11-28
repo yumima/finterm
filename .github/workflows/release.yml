@@ -493,6 +493,9 @@ jobs:
               }
           }
           Write-Host "Apps-list lookup: found $dir; a missing key is empty, a missing drive unreadable (also locked down from start)"
+          # The missing-drive run's exit 1 is expected; the step's shell would
+          # otherwise end with it (GitHub's pwsh exits with $LASTEXITCODE).
+          $global:LASTEXITCODE = 0
 
           # Run again over it — an update in place: the old copy is removed by
           # its own uninstaller (keeping the data), then this one goes in.
