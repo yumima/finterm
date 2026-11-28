@@ -211,9 +211,12 @@ void refresh_desktop_caches(const Env& env) {
 /// The small script the menu entry and the `finterm` command start, beside
 /// the image. It asks the image to mount itself (--appimage-mount: the
 /// AppImage runtime prints the mount point, or fails at once without FUSE),
-/// then execs it — mounted when that worked, unpacked (always works) when it
-/// didn't or gave no answer in 10 s. No guess at what FUSE needs, and finterm
-/// is the started process itself (exec): its signals and output are its own.
+/// stops that test mount and what it started (its own process group;
+/// bounded: TERM, then KILL), then execs the image —
+/// mounted when the test worked, unpacked (always works) when it didn't or
+/// gave no answer in 10 s; why is written to logs/launch.log. finterm is the
+/// started process itself (exec): its signals and output are its own. An
+/// interrupted launcher ends its test mount (trap).
 QString launch_script_path(const QString& installed) {
     return QDir(QFileInfo(installed).absolutePath()).filePath(QStringLiteral(".finterm-launch"));
 }
@@ -230,16 +233,40 @@ QString launch_script_text(const QString& installed) {
         "app='%1'\n"
         "[ -n \"$APPIMAGE_EXTRACT_AND_RUN\" ] && exec \"$app\" \"$@\"\n"
         "out=$(mktemp) || APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n"
-        "\"$app\" --appimage-mount >\"$out\" 2>/dev/null &\n"
+        "# The test mount in a process group of its own (setsid), so stopping it\n"
+        "# stops whatever it started too.\n"
+        "if command -v setsid >/dev/null 2>&1; then\n"
+        "    setsid \"$app\" --appimage-mount >\"$out\" 2>\"$out.err\" &\n"
+        "else\n"
+        "    \"$app\" --appimage-mount >\"$out\" 2>\"$out.err\" &\n"
+        "fi\n"
         "probe=$!\n"
+        "# (No \"--\" before the group: dash's kill doesn't take it.)\n"
+        "signal() { kill \"$1\" \"-$probe\" 2>/dev/null || kill \"$1\" \"$probe\" 2>/dev/null; }\n"
+        "stop_probe() {\n"
+        "    signal -TERM\n"
+        "    n=0\n"
+        "    while kill -0 \"$probe\" 2>/dev/null && [ \"$n\" -lt 20 ]; do sleep 0.05; n=$((n + 1)); done\n"
+        "    signal -KILL\n"
+        "}\n"
+        "trap 'stop_probe; rm -f \"$out\" \"$out.err\"; exit 130' INT TERM HUP\n"
         "i=0\n"
-        "while [ \"$i\" -lt 50 ] && [ ! -s \"$out\" ] && kill -0 \"$probe\" 2>/dev/null; do\n"
-        "    sleep 0.2; i=$((i + 1))\n"
+        "while [ \"$i\" -lt 200 ] && [ ! -s \"$out\" ] && kill -0 \"$probe\" 2>/dev/null; do\n"
+        "    sleep 0.05; i=$((i + 1))\n"
         "done\n"
         "mounted=no\n"
         "[ -s \"$out\" ] && [ -d \"$(head -n 1 \"$out\")\" ] && mounted=yes\n"
-        "kill \"$probe\" 2>/dev/null; wait \"$probe\" 2>/dev/null; rm -f \"$out\"\n"
-        "[ \"$mounted\" = yes ] && exec \"$app\" \"$@\"\n"
+        "stop_probe\n"
+        "trap - INT TERM HUP\n"
+        "if [ \"$mounted\" = yes ]; then\n"
+        "    rm -f \"$out\" \"$out.err\"\n"
+        "    exec \"$app\" \"$@\"\n"
+        "fi\n"
+        "log=\"${XDG_DATA_HOME:-$HOME/.local/share}/finterm/logs/launch.log\"\n"
+        "if mkdir -p \"$(dirname \"$log\")\" 2>/dev/null; then\n"
+        "    { date; echo 'FUSE mount failed or did not answer: starting unpacked.'; cat \"$out.err\"; } >>\"$log\" 2>/dev/null\n"
+        "fi\n"
+        "rm -f \"$out\" \"$out.err\"\n"
         "APPIMAGE_EXTRACT_AND_RUN=1 exec \"$app\" \"$@\"\n")
         .arg(quoted);
 }
@@ -599,6 +626,12 @@ Result install(const Env& env, const Options& opt) {
 #if defined(Q_OS_LINUX)
     // The new image next to its place (same filesystem), then one rename: a
     // running copy keeps its old file, a crash leaves the old one in place.
+    // The launch script first (it needs only the path): one that can't be
+    // written stops the install before anything is replaced.
+    if (!write_launch_script(st.path)) {
+        r.error = QStringLiteral("could not write the launch script %1").arg(launch_script_path(st.path));
+        return r;
+    }
     const QString part = QDir(dir).filePath(QStringLiteral(".finterm.AppImage.part"));
     QFile::remove(part);
     if (!QFile::copy(env.package, part)) {
@@ -623,8 +656,7 @@ Result install(const Env& env, const Options& opt) {
     bool launcher_ok = true;
     r.done << write_launcher(env, st.path, /*add_command=*/true, &launcher_ok);
     if (!launcher_ok) {
-        // The image is in place (and runs); the launcher could not be made.
-        r.installed = st.path;
+        // (Written above already: only a failure after that lands here.)
         r.error = QStringLiteral("finterm is in %1, but its launcher could not be written (%2)")
                       .arg(st.path, launch_script_path(st.path));
         return r;
@@ -710,8 +742,14 @@ void refresh_launcher(const Env& env) {
         return; // none (the user removed it), or someone else's
     if (text != desktop_entry(env, st.path) || read_text(launch_script_path(st.path)) != launch_script_text(st.path) ||
         (!env.package_icon.isEmpty() && !QFileInfo::exists(icon_path(env))))
-        LOG_INFO("Install", "Launcher brought up to date: " +
-                                write_launcher(env, st.path, /*add_command=*/false).join(QStringLiteral("; ")));
+    {
+        bool ok = true;
+        const QStringList done = write_launcher(env, st.path, /*add_command=*/false, &ok);
+        if (ok)
+            LOG_INFO("Install", "Launcher brought up to date: " + done.join(QStringLiteral("; ")));
+        else
+            LOG_WARN("Install", "Launcher not brought up to date: " + done.join(QStringLiteral("; ")));
+    }
 #else
     Q_UNUSED(env);
 #endif
@@ -788,7 +826,7 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     // one is the installed build's own, kept current by its refresh).
     QProcess p;
     const QString script = launch_script_path(installed);
-    const bool have_script = QFileInfo::exists(script) || write_launch_script(installed);
+    const bool have_script = QFileInfo(script).isExecutable() || write_launch_script(installed);
     p.setProgram(have_script ? script : installed);
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());

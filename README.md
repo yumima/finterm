@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`5d950c76a`](https://github.com/yumima/finterm/commit/5d950c76a) Launch script: a test mount decides, then exec — no 127 guessing
 - [`773105d62`](https://github.com/yumima/finterm/commit/773105d62) Launch script: start mounted, fall back to unpacked on the runtime's 127
 - [`3facbdeba`](https://github.com/yumima/finterm/commit/3facbdeba) Linux launcher: a script that picks FUSE or unpacked at each start
 - [`eb482bbb5`](https://github.com/yumima/finterm/commit/eb482bbb5) Cut the FUSE test mount and the yt-dlp error lists

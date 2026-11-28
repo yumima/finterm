@@ -9,6 +9,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
 #include <QSettings>
@@ -193,6 +194,7 @@ class TestInstall : public QObject {
         QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
         f.write("#!/bin/sh\n"
                 "if [ \"$1\" = --appimage-mount ]; then\n"
+                "  [ \"$FAKE_FUSE\" = hang ] && { trap '' TERM; sleep 30; }\n"
                 "  [ \"$FAKE_FUSE\" = 1 ] || { echo 'Cannot mount AppImage' >&2; exit 127; }\n"
                 "  echo /tmp; exec sleep 30\n"
                 "fi\n"
@@ -201,24 +203,56 @@ class TestInstall : public QObject {
         f.close();
         QVERIFY(install::install(env_, {false}).ok);
         const QString script = env_.home + "/Applications/.finterm-launch";
-        const auto run = [&](bool fuse, const QStringList& args, int* code = nullptr) {
+        const auto run = [&](const char* fuse, const QStringList& args, int* code = nullptr) {
             QProcess p;
             QProcessEnvironment e = QProcessEnvironment::systemEnvironment();
             e.remove("APPIMAGE_EXTRACT_AND_RUN"); // the test's own environment must not decide
-            e.insert("FAKE_FUSE", fuse ? "1" : "0");
+            e.insert("FAKE_FUSE", QString::fromLatin1(fuse));
+            e.insert("XDG_DATA_HOME", env_.data_home);
             p.setProcessEnvironment(e);
             p.start(script, args);
-            p.waitForFinished(15000);
+            if (!p.waitForFinished(20000)) {
+                p.kill();
+                p.waitForFinished();
+                return QStringLiteral("(did not finish)");
+            }
             if (code)
                 *code = p.exitCode();
             return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
         };
-        QCOMPARE(run(true, {"--version"}), QStringLiteral("mounted --version"));
-        QCOMPARE(run(false, {"--version"}), QStringLiteral("unpacked --version"));
+        QCOMPARE(run("1", {"--version"}), QStringLiteral("mounted --version"));
+        QCOMPARE(run("0", {"--version"}), QStringLiteral("unpacked --version"));
+        // Why it ran unpacked is in the launch log.
+        QVERIFY(read(env_.data_home + "/finterm/logs/launch.log").contains("Cannot mount AppImage"));
         // The app's own exit code (even 127) is its own: no second start.
         int code = 0;
-        QCOMPARE(run(true, {"app-fails"}, &code), QStringLiteral("mounted app-fails"));
+        QCOMPARE(run("1", {"app-fails"}, &code), QStringLiteral("mounted app-fails"));
         QCOMPARE(code, 127);
+        // A test mount that never answers and ignores TERM: unpacked after
+        // the 10 s wait and a bounded stop — not a hung start.
+        QElapsedTimer t;
+        t.start();
+        QCOMPARE(run("hang", {"--version"}), QStringLiteral("unpacked --version"));
+        QVERIFY2(t.elapsed() < 13000, qPrintable(QString::number(t.elapsed())));
+
+        // Interrupted while the test mount runs: the mount goes with it.
+        {
+            QProcess p;
+            QProcessEnvironment e = QProcessEnvironment::systemEnvironment();
+            e.remove("APPIMAGE_EXTRACT_AND_RUN");
+            e.insert("FAKE_FUSE", "hang");
+            p.setProcessEnvironment(e);
+            p.start(script, {"--version"});
+            QVERIFY(p.waitForStarted());
+            QTest::qWait(500);
+            p.terminate(); // SIGTERM to the launcher
+            QVERIFY(p.waitForFinished(5000));
+            QTest::qWait(300);
+            QProcess ps;
+            ps.start("pgrep", {"-f", "^sleep 30$"});
+            ps.waitForFinished();
+            QVERIFY2(ps.readAllStandardOutput().trimmed().isEmpty(), "the test mount outlived its launcher");
+        }
     }
 
     void exec_paths_are_quoted() {
