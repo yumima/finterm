@@ -6,7 +6,6 @@
 #include "core/logging/Logger.h"
 #include "services/video/LiveHlsProxy.h"
 #include "services/video/YtDlp.h"
-#include "services/video/YtDlpUpdate.h"
 #include "ui/theme/Theme.h"
 
 #include <QProcess>
@@ -145,7 +144,6 @@ void EarningsCallAudio::resolve(bool refresh_session) {
             if (refresh_session)
                 return; // not fatal: the stall watch is the backstop
             QString err = services::video::ytdlp_error(proc->readAllStandardError());
-            services::video::refresh_ytdlp(/*after_failure=*/true); // an outdated yt-dlp is the usual cause
             // "ERROR: [youtube] UiUWuWd9-Hk: This live event will begin in 6 days."
             err.remove(QRegularExpression(QStringLiteral("^ERROR:\\s*(\\[[^\\]]*\\]\\s*)?([\\w-]+:\\s*)?")));
             fail(kind_ == QLatin1String("youtube_live") ? QStringLiteral("the channel isn't live right now")

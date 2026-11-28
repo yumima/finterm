@@ -197,12 +197,14 @@ QString unpack(const Where& w, const QString& file, const QString& into, bool ma
     QString listing;
     if (const QString err = tar({QStringLiteral("-tzf"), file}, &listing); !err.isEmpty())
         return QStringLiteral("not a finterm data file (%1)").arg(err);
-    // As listed (what tar is given back) and normalised once — trimmed (a CRLF
-    // listing) and without a "./" prefix (an archive made of "."): every check
-    // below uses the normalised name.
+    // As listed (what tar is given back) and normalised once — without the
+    // '\r' of a CRLF listing and without a "./" prefix (an archive made of
+    // "."): every check below uses the normalised name. (Other whitespace is
+    // part of a name.)
     QStringList listed, names;
-    for (const QString& line : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
-        QString n = line.trimmed();
+    for (QString n : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        if (n.endsWith(QLatin1Char('\r')))
+            n.chop(1);
         if (n.isEmpty())
             continue;
         listed << n;

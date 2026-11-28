@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`4815d3ab4`](https://github.com/yumima/finterm/commit/4815d3ab4) Review fixes: FUSE by a test mount, tar names normalised, yt-dlp kept current
 - [`6c983d917`](https://github.com/yumima/finterm/commit/6c983d917) finterm 4.2.3
 - [`eb9e86f8d`](https://github.com/yumima/finterm/commit/eb9e86f8d) Installer: full-review fixes; Linux package gets yt-dlp, no Wayland warning
 - [`1a93f53f2`](https://github.com/yumima/finterm/commit/1a93f53f2) Installer: cut the in-app restore and tidy; review fixes

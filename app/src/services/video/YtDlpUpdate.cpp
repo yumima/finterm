@@ -6,7 +6,6 @@
 #include "python/PythonSetupManager.h"
 #include "services/video/YtDlp.h"
 
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QFileInfo>
 #include <QProcess>
@@ -14,7 +13,7 @@
 
 namespace finterm::services::video {
 
-void refresh_ytdlp(bool after_failure) {
+void refresh_ytdlp() {
     auto& mgr = python::PythonSetupManager::instance();
     const QString python = mgr.python_path(QStringLiteral("venv-numpy2"));
     if (!QFileInfo::exists(python) || !QFileInfo::exists(mgr.uv_path()))
@@ -23,40 +22,34 @@ void refresh_ytdlp(bool after_failure) {
     // is the user's (or the build's) to keep.
     if (!ytdlp_program().startsWith(AppPaths::root()))
         return;
-    static bool running = false;
-    if (running)
-        return;
     QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     const QDateTime last = s.value(QStringLiteral("video/ytdlp_refreshed_at")).toDateTime();
-    const qint64 age = last.isValid() ? last.secsTo(QDateTime::currentDateTimeUtc()) : -1;
-    if (age >= 0 && age < (after_failure ? 3600 : 86400))
+    if (last.isValid() && last.secsTo(QDateTime::currentDateTimeUtc()) < 86400)
         return;
     s.setValue(QStringLiteral("video/ytdlp_refreshed_at"), QDateTime::currentDateTimeUtc());
     s.sync();
 
-    running = true;
-    auto* proc = new QProcess(qApp);
+    QProcess proc;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert(QStringLiteral("UV_PYTHON_INSTALL_DIR"), mgr.install_dir() + QStringLiteral("/python"));
-    proc->setProcessEnvironment(env);
-    QObject::connect(proc, &QProcess::finished, proc, [proc](int code, QProcess::ExitStatus st) {
-        running = false;
-        if (st == QProcess::NormalExit && code == 0)
-            LOG_INFO("YtDlp", "yt-dlp is up to date");
-        else
-            LOG_WARN("YtDlp", "Could not upgrade yt-dlp: " +
-                                  QString::fromUtf8(proc->readAllStandardError()).trimmed().right(300));
-        proc->deleteLater();
+    for (const QString& kv : mgr.uv_env_extra())
+        env.insert(kv.section(QLatin1Char('='), 0, 0), kv.section(QLatin1Char('='), 1));
+    proc.setProcessEnvironment(env);
+#ifdef _WIN32
+    proc.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
+        cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
     });
-    QObject::connect(proc, &QProcess::errorOccurred, proc, [proc](QProcess::ProcessError) {
-        if (proc->state() == QProcess::NotRunning) {
-            running = false;
-            proc->deleteLater();
-        }
-    });
-    LOG_INFO("YtDlp", after_failure ? "A stream could not be resolved: upgrading yt-dlp" : "Upgrading yt-dlp");
-    proc->start(mgr.uv_path(), {QStringLiteral("pip"), QStringLiteral("install"), QStringLiteral("--python"), python,
-                                QStringLiteral("--upgrade"), QStringLiteral("yt-dlp[default]")});
+#endif
+    // These two only (--upgrade-package): their dependencies move only if they
+    // must, so the versions requirements-numpy2.txt pins stay.
+    proc.setProgram(mgr.uv_path());
+    proc.setArguments({QStringLiteral("pip"), QStringLiteral("install"), QStringLiteral("--python"), python,
+                       QStringLiteral("--upgrade-package"), QStringLiteral("yt-dlp"),
+                       QStringLiteral("--upgrade-package"), QStringLiteral("yt-dlp-ejs"),
+                       QStringLiteral("yt-dlp[default]")});
+    if (proc.startDetached())
+        LOG_INFO("YtDlp", "Upgrading yt-dlp (in the background)");
+    else
+        LOG_WARN("YtDlp", "Could not start the yt-dlp upgrade");
 }
 
 } // namespace finterm::services::video
