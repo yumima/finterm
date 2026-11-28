@@ -412,13 +412,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $setup = (Get-ChildItem "app/build/finterm-*-windows-x64-setup.exe" | Select-Object -First 1).FullName
-          # The installer, verbose; what it said is shown when it fails.
+          # The installer, verbose (IFW: -v is --version); what it said is shown.
           function Setup([string]$what) {
               Get-Process -Name finterm, FintermMaintenanceTool -ErrorAction SilentlyContinue |
                   ForEach-Object { Write-Host "running before ${what}: $($_.Name) $($_.Id) $($_.Path)" }
               $out = Join-Path $env:RUNNER_TEMP "setup-out.txt"; $err = Join-Path $env:RUNNER_TEMP "setup-err.txt"
               $p = Start-Process -FilePath $setup -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
-                  -ArgumentList @("-v", "install", "--accept-licenses", "--default-answer", "--confirm-command")
+                  -ArgumentList @("--verbose", "install", "--accept-licenses", "--default-answer", "--confirm-command")
               Write-Host "── $what (exit $($p.ExitCode)) ──"
               Get-Content $out, $err -ErrorAction SilentlyContinue | Select-Object -Last 120 | Write-Host
               if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }

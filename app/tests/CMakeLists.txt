@@ -1667,6 +1667,7 @@ add_test(NAME db_threads COMMAND test_db_threads)
 add_executable(test_pin_policy
     auth/test_pin_policy.cpp
     ../src/auth/PinPolicy.cpp
+    ../src/core/util/SecureRandom.cpp
 )
 target_include_directories(test_pin_policy PRIVATE ../src)
 target_link_libraries(test_pin_policy PRIVATE Qt6::Core Qt6::Network Qt6::Test)

@@ -1,6 +1,7 @@
 #include "mcp/McpOAuthAuthCode.h"
 
 #include "core/logging/Logger.h"
+#include "core/util/SecureRandom.h"
 #include "storage/secure/SecureStorage.h"
 
 #include <QByteArray>
@@ -13,7 +14,6 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRandomGenerator>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -41,10 +41,7 @@ void put_secure(const QString& key, const QString& value) {
 /// requires base64url alphabet — Qt's QByteArray::Base64UrlEncoding
 /// gives us exactly that.
 QString random_b64url(int byte_count) {
-    QByteArray bytes(byte_count, 0);
-    auto* rng = QRandomGenerator::system();
-    for (int i = 0; i < byte_count; ++i)
-        bytes[i] = static_cast<char>(rng->bounded(256));
+    const QByteArray bytes = util::secure_random_bytes(byte_count);
     return QString::fromLatin1(bytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
 }
 

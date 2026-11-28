@@ -2,6 +2,7 @@
 // the recovery key: what registration, the lock screen, Change PIN and the
 // recovery-key reset all go through.
 #include "auth/PinPolicy.h"
+#include "core/util/SecureRandom.h"
 
 #include <QCryptographicHash>
 #include <QSet>
@@ -56,6 +57,15 @@ class TestPinPolicy : public QObject {
             seen.insert(key);
         }
         QCOMPARE(seen.size(), 50);
+        // The source itself: no repeats in 64 blocks of 16 bytes.
+        QSet<QByteArray> blocks;
+        for (int i = 0; i < 64; ++i) {
+            const QByteArray b = finterm::util::secure_random_bytes(16);
+            QCOMPARE(b.size(), 16);
+            blocks.insert(b);
+        }
+        QCOMPARE(blocks.size(), 64);
+        QCOMPARE(finterm::util::secure_random_bytes(1000).size(), 1000); // past getentropy's 256
         // As a person types it back: lower case, spaces, the look-alike letters.
         QCOMPARE(pin_policy::normalize_recovery_key(QStringLiteral(" 7kq2m 9xd4t-b3n8v wq5zr ")),
                  QStringLiteral("7KQ2M9XD4TB3N8VWQ5ZR"));

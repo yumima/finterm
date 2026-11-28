@@ -1,8 +1,9 @@
 #include "auth/PinPolicy.h"
 
+#include "core/util/SecureRandom.h"
+
 #include <QCryptographicHash>
 #include <QPasswordDigestor>
-#include <QRandomGenerator>
 #include <QStringList>
 
 namespace finterm::auth::pin_policy {
@@ -52,8 +53,7 @@ QString problem(const QString& pin) {
 }
 
 QString hash(const QString& secret, int iterations) {
-    QByteArray salt(kSaltBytes, '\0');
-    QRandomGenerator::system()->fillRange(reinterpret_cast<quint32*>(salt.data()), kSaltBytes / 4);
+    const QByteArray salt = util::secure_random_bytes(kSaltBytes);
     return QStringLiteral("%1$%2$%3$%4")
         .arg(QLatin1String(kScheme))
         .arg(iterations)
@@ -88,11 +88,11 @@ bool verify(const QString& secret, const QString& stored) {
 
 QString new_recovery_key() {
     QString key;
-    auto* rng = QRandomGenerator::system();
+    const QByteArray bytes = util::secure_random_bytes(kKeyChars);
     for (int i = 0; i < kKeyChars; ++i) {
         if (i > 0 && i % 5 == 0)
             key += QLatin1Char('-');
-        key += QLatin1Char(kAlphabet[rng->bounded(32)]);
+        key += QLatin1Char(kAlphabet[quint8(bytes[i]) & 31]); // 256 = 8 × 32: unbiased
     }
     return key;
 }

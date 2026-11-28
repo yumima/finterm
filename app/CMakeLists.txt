@@ -621,6 +621,7 @@ set(CORE_SOURCES
     src/core/components/PopularityTracker.cpp
     src/core/crash/CrashHandler.cpp
     src/core/util/AppLifecycle.cpp
+    src/core/util/SecureRandom.cpp
 )
 
 # Network
@@ -1837,6 +1838,7 @@ set_source_files_properties(src/core/net/NetSpeedMeter.cpp PROPERTIES SKIP_UNITY
 # UpdateInstaller includes <windows.h> (the helper's process): its macros stay
 # in its own file.
 set_source_files_properties(src/services/updater/UpdateInstaller.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
+set_source_files_properties(src/core/util/SecureRandom.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE)
 
 # User alerts: file-local helpers in anonymous namespaces (kCategory, money…).
 set_source_files_properties(src/services/alerts/AlertService.cpp src/ui/alerts/AlertsDialog.cpp
