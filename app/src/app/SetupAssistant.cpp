@@ -58,7 +58,8 @@ QJsonObject report(const install::Result& r, const char* action) {
                        {QStringLiteral("ok"), r.ok},
                        {QStringLiteral("installed"), r.installed},
                        {QStringLiteral("done"), QJsonArray::fromStringList(r.done)},
-                       {QStringLiteral("error"), r.error}};
+                       {QStringLiteral("error"), r.error},
+                       {QStringLiteral("warning"), r.warning}};
 }
 
 /// The arguments the installed copy is started with: this run's profile.
@@ -369,9 +370,9 @@ bool offer(bool another_running) {
                                      .arg(r.error));
             return true;
         }
-        if (!r.error.isEmpty())
+        if (!r.warning.isEmpty())
             QMessageBox::warning(nullptr, QStringLiteral("finterm"),
-                                 QStringLiteral("finterm is installed, but %1.").arg(r.error));
+                                 QStringLiteral("finterm is installed, but: %1.").arg(r.warning));
         break;
     }
     }

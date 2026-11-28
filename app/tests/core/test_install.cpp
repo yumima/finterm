@@ -314,14 +314,21 @@ class TestInstall : public QObject {
         const QString apps = env_.data_home + "/applications";
         QDir().mkpath(apps);
         QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        if (QFileInfo(apps).isWritable())
+            QSKIP("a read-only folder doesn't stop this user (root)");
         const auto r = install::install(env_, {false});
         QFile::setPermissions(apps, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
         QVERIFY(r.ok);
-        QVERIFY(r.error.contains("could not write the launcher"));
+        QVERIFY(r.error.isEmpty());
+        QVERIFY(r.warning.contains("could not write the launcher"));
+        // The command was made; the user removes it: the retry of the menu
+        // entry doesn't bring it back.
+        QFile::remove(env_.home + "/.local/bin/finterm");
         QVERIFY(!QFileInfo::exists(desktop()));
         env_.package = installed();
         install::refresh_launcher(env_);
         QVERIFY(QFileInfo::exists(desktop()));
+        QVERIFY(!QFileInfo::exists(env_.home + "/.local/bin/finterm"));
         // Removed by the user afterwards: not put back.
         QFile::remove(desktop());
         install::refresh_launcher(env_);
