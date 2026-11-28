@@ -80,6 +80,7 @@ bool same_file(const QString& a, const QString& b) {
     return QDir::cleanPath(fa.absoluteFilePath()) == QDir::cleanPath(fb.absoluteFilePath());
 }
 
+#if defined(Q_OS_LINUX)
 /// Replace `to` with `from` in one step (POSIX rename replaces; QFile::rename
 /// refuses an existing destination).
 bool replace_file(const QString& from, const QString& to) {
@@ -90,8 +91,9 @@ bool replace_file(const QString& from, const QString& to) {
     return QFile::rename(from, to);
 #endif
 }
+#endif
 
-#if defined(Q_OS_UNIX)
+#if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
 QString run(const QString& program, const QStringList& args, int timeout_ms = 15000, bool* ok = nullptr) {
     QProcess p;
     p.setProcessEnvironment(clean_environment());
@@ -140,18 +142,21 @@ QString read_text(const QString& path) {
 }
 #endif
 
+#if defined(Q_OS_LINUX)
 /// Temporaries a killed write left beside `path`: Beside's own
 /// ".<name>.finterm-tmp.XXXXXX" (exactly that) and the ".new"/".part" names
-/// earlier builds used — only once older than `now` by `age` (a write in
-/// progress elsewhere, of this build or an older one, keeps its own), and,
-/// with `ahead`, also one dated a day or more past `now` (a clock since put
-/// right). Nothing else is touched. `skip`: one to keep.
+/// earlier builds used — only once older than `now` by `age` seconds (a write
+/// in progress elsewhere, of this build or an older one, keeps its own), or
+/// dated `ahead_days` or more past `now` (a clock since put right). Nothing
+/// else is touched. `skip`: one to keep.
 ///
-/// Two callers: Beside at a rewrite — the filesystem's own time (the
-/// temporary it just wrote) and ten minutes; and every start and install —
-/// the local clock and a day, a margin larger than any ordinary clock skew
-/// (a skew past a day would make it take a write in progress elsewhere).
-void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, bool ahead, const QString& skip = {}) {
+/// Callers: Beside after writing — the filesystem's own time (the temporary
+/// it just wrote), ten minutes and a day; Beside after a failed write, and
+/// every start and install — the local clock, a day and thirty days, margins
+/// no ordinary clock skew reaches (one past them would make it take a write
+/// in progress elsewhere).
+void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, qint64 ahead_days,
+                       const QString& skip = {}) {
     if (!now.isValid())
         return;
     const QFileInfo fi(path);
@@ -168,7 +173,7 @@ void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, bo
     for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden)) {
         if (e.isSymLink() || e.fileName() == skip || !(legacy.contains(e.fileName()) || ours.match(e.fileName()).hasMatch()))
             continue;
-        if (e.lastModified() < now.addSecs(-age) || (ahead && e.lastModified() > now.addDays(1)))
+        if (e.lastModified() < now.addSecs(-age) || e.lastModified() > now.addDays(ahead_days))
             QFile::remove(e.absoluteFilePath());
     }
 }
@@ -199,10 +204,10 @@ class Beside {
         // What killed writes left here, timed by this temporary's own stamp.
         // (A failed write has no stamp of its own: the local clock and a day.)
         if (ok_)
-            sweep_temporaries(path, QFileInfo(tmp_.fileName()).lastModified(), 600, true,
+            sweep_temporaries(path, QFileInfo(tmp_.fileName()).lastModified(), 600, 1,
                               QFileInfo(tmp_.fileName()).fileName());
         else
-            sweep_temporaries(path, QDateTime::currentDateTime(), 86400, true, QFileInfo(tmp_.fileName()).fileName());
+            sweep_temporaries(path, QDateTime::currentDateTime(), 86400, 30, QFileInfo(tmp_.fileName()).fileName());
     }
     bool ok() const { return ok_; }
     /// Rename it over `path`; false (and it goes) when that fails.
@@ -223,6 +228,7 @@ constexpr QFileDevice::Permissions kReadable = QFileDevice::ReadOwner | QFileDev
                                                 QFileDevice::ReadGroup | QFileDevice::ReadOther;
 constexpr QFileDevice::Permissions kRunnable = kReadable | QFileDevice::ExeOwner | QFileDevice::ExeGroup |
                                                QFileDevice::ExeOther;
+#endif
 
 #if defined(Q_OS_LINUX)
 bool write_text(const QString& path, const QString& text, QFileDevice::Permissions perms = kReadable) {
@@ -448,8 +454,8 @@ bool write_launch_script(const QString& installed) {
 /// The start's and the install's own sweep (see sweep_temporaries).
 void sweep_leftovers(const Env& env, const QString& installed) {
     const QDateTime now = QDateTime::currentDateTime();
-    sweep_temporaries(desktop_path(env), now, 86400, true);
-    sweep_temporaries(launch_script_path(installed), now, 86400, true);
+    sweep_temporaries(desktop_path(env), now, 86400, 30);
+    sweep_temporaries(launch_script_path(installed), now, 86400, 30);
 }
 #endif
 
