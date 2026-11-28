@@ -2,94 +2,10 @@
 
 A financial terminal for markets, stocks and the economy, with quant experiments, strategy building and backtesting. Connects to local or external AI engines for chat, agents and MCP tools. Free to use, 100% local, no signup. Built on open data (Yahoo Finance, SEC EDGAR, FRED). Linux, Windows and macOS.
 
-## Today's commits (2026-11-27)
+## Today's commits (2026-11-28)
 
 Latest first.
 
-- [`d8c7d44f0`](https://github.com/yumima/finterm/commit/d8c7d44f0) CI lookup check: no export/import restore; stderr in every failure
-- [`638e06386`](https://github.com/yumima/finterm/commit/638e06386) CI lookup run: -EncodedCommand like the installer's -Command; fresh output
-- [`2918981d6`](https://github.com/yumima/finterm/commit/2918981d6) CI lockdown window in one native process; the machine's value restored
-- [`fb7e29c3b`](https://github.com/yumima/finterm/commit/fb7e29c3b) CI's locked-down lookup locked down from the start, asserted
-- [`769aa7066`](https://github.com/yumima/finterm/commit/769aa7066) CI's restricted lookup asserted restricted; unreadable told from a crash
-- [`fc5e34c99`](https://github.com/yumima/finterm/commit/fc5e34c99) CI runs the Apps lookup as a locked-down machine would, every branch
-- [`3391fe6a0`](https://github.com/yumima/finterm/commit/3391fe6a0) Apps lookup: only PathNotFound is 'not there'; three real runs in CI
-- [`323f87aa4`](https://github.com/yumima/finterm/commit/323f87aa4) Apps lookup run for real in CI; restricted-safe not-found check
-- [`4cb1a1322`](https://github.com/yumima/finterm/commit/4cb1a1322) Apps lookup: can't-open told from not-there; a partial read warns
-- [`88aacbc5d`](https://github.com/yumima/finterm/commit/88aacbc5d) Apps lookup: each case explicit; an unsure uninstall asks, warned
-- [`1eeb7e628`](https://github.com/yumima/finterm/commit/1eeb7e628) Apps lookup: per key, and 'unknown' keeps the data
-- [`050d3e653`](https://github.com/yumima/finterm/commit/050d3e653) Uninstall never takes its own Apps entry for another install
-- [`7710b9cd0`](https://github.com/yumima/finterm/commit/7710b9cd0) Installs in a folder of their own: found from the Apps list (HKCU), both ways
-- [`5cb0ad78a`](https://github.com/yumima/finterm/commit/5cb0ad78a) Cut the Apps-list lookup: custom folders by TargetDir= again
-- [`bcff4aeb0`](https://github.com/yumima/finterm/commit/bcff4aeb0) Installs found through the Apps list, updated where they are
-- [`5d538f9d2`](https://github.com/yumima/finterm/commit/5d538f9d2) Cut the target-dependent wording; test the elevation wrapper's check
-- [`fc2e4927a`](https://github.com/yumima/finterm/commit/fc2e4927a) Restricted check before the elevation too; TargetDir= named in the refusal
-- [`61aa2dc37`](https://github.com/yumima/finterm/commit/61aa2dc37) Restricted PowerShell said as such; custom folder by TargetDir=; grace on retry
-- [`7a844dfcf`](https://github.com/yumima/finterm/commit/7a844dfcf) Removal by Process.Start; a Program Files copy tested on every run
-- [`c91da977e`](https://github.com/yumima/finterm/commit/c91da977e) Removal script: every exit accounted for, processes waited for themselves
-- [`079d5f348`](https://github.com/yumima/finterm/commit/079d5f348) Removal script: its own exit codes, a grace period, Program Files first
-- [`8a3533a66`](https://github.com/yumima/finterm/commit/8a3533a66) In the way of a removal: a rename test, not a process list
-- [`128aa6311`](https://github.com/yumima/finterm/commit/128aa6311) In the way of an update: what runs from the folders it removes
-- [`1bfc27c1d`](https://github.com/yumima/finterm/commit/1bfc27c1d) Process checks see every user's; refusal checked by the install's error
-- [`d821b8485`](https://github.com/yumima/finterm/commit/d821b8485) Update review: user-scoped tasklist, the refusal tested where it applies
-- [`773bdc34b`](https://github.com/yumima/finterm/commit/773bdc34b) Update over an install: opt-in on the command line, refusals that stop, CSV tasklist
-- [`a7eeddcfb`](https://github.com/yumima/finterm/commit/a7eeddcfb) Windows update over an install: in the control script, waiting on the old folder
-- [`9fd5bd538`](https://github.com/yumima/finterm/commit/9fd5bd538) CI reports installscript's refusals; the wait is said in the dialog
-- [`69b91e5aa`](https://github.com/yumima/finterm/commit/69b91e5aa) CI GUI update: IFW judges the folder, the log is watched
-- [`04d0fe23a`](https://github.com/yumima/finterm/commit/04d0fe23a) CI GUI update: fails at once, says why; replaced copy checked
-- [`6b9dfd8af`](https://github.com/yumima/finterm/commit/6b9dfd8af) CI updates over an install through the GUI, as users do
-- [`6f1da8c0c`](https://github.com/yumima/finterm/commit/6f1da8c0c) Chunk test on getentropy's own boundaries; stray include gone
-- [`b29af40ba`](https://github.com/yumima/finterm/commit/b29af40ba) Every token from the OS random source; full installer logs in CI
-- [`290ec396b`](https://github.com/yumima/finterm/commit/290ec396b) Secrets from the OS random source; CI installer verbose for real
-- [`25ca55fa6`](https://github.com/yumima/finterm/commit/25ca55fa6) CI: installer verbose flag before the command; output always shown
-- [`9c692d8e2`](https://github.com/yumima/finterm/commit/9c692d8e2) Tests build on macOS/Windows; CI shows what the installer said
-- [`6a4a69120`](https://github.com/yumima/finterm/commit/6a4a69120) Sweep comment: why behind is short and ahead generous
-- [`c1336b3a1`](https://github.com/yumima/finterm/commit/c1336b3a1) Sweep margins explained and tested; dead non-Unix branches gone
-- [`eaf0a4a13`](https://github.com/yumima/finterm/commit/eaf0a4a13) Linux-only install helpers fenced; sweep margins per clock
-- [`a5c036038`](https://github.com/yumima/finterm/commit/a5c036038) Install.cpp builds clean off Linux; sweeps on every install path
-- [`aa03ba850`](https://github.com/yumima/finterm/commit/aa03ba850) Day-old leftovers swept at every start, before the up-to-date return
-- [`e7465bd40`](https://github.com/yumima/finterm/commit/e7465bd40) Sweep leftovers at every launcher write, not only at a rewrite
-- [`545b7f3c7`](https://github.com/yumima/finterm/commit/545b7f3c7) Launch script rewrite only narrows; sweep timed by its own temporary
-- [`976f94bde`](https://github.com/yumima/finterm/commit/976f94bde) Launch script: readable to be usable; a narrowed mode survives a rewrite
-- [`53ea0759f`](https://github.com/yumima/finterm/commit/53ea0759f) Launcher: the installed build's script is used, a narrowed mode kept
-- [`c3a0cf2ad`](https://github.com/yumima/finterm/commit/c3a0cf2ad) Launcher: a dangling .bak is a taken name; the launch script is ours
-- [`f1d06cca0`](https://github.com/yumima/finterm/commit/f1d06cca0) Launcher: dangling links backed up as links; exact, aged sweep
-- [`1143d40f2`](https://github.com/yumima/finterm/commit/1143d40f2) Launcher files: final permissions and fsync before the rename
-- [`dda08ac70`](https://github.com/yumima/finterm/commit/dda08ac70) Launcher files: written beside, renamed over — links and read-only kept safe
-- [`48cb68e91`](https://github.com/yumima/finterm/commit/48cb68e91) Launcher writes through QSaveFile; hint runs the launch script
-- [`de5789f8e`](https://github.com/yumima/finterm/commit/de5789f8e) Launcher: someone else's entry copied, not moved; consistent hint
-- [`1cd1d432c`](https://github.com/yumima/finterm/commit/1cd1d432c) Launcher: no retry machinery; --install adds what couldn't be made
-- [`8d6c237d7`](https://github.com/yumima/finterm/commit/8d6c237d7) Launcher retries per item, bounded; test mount pid from itself again
-- [`ce8b3499b`](https://github.com/yumima/finterm/commit/ce8b3499b) Launcher: retried when it couldn't be made; $! for the test mount
-- [`48efe2260`](https://github.com/yumima/finterm/commit/48efe2260) Launch script: pid from the mount itself, traps before temp, log under HOME
-- [`231e55873`](https://github.com/yumima/finterm/commit/231e55873) Launch script: KILL only what TERM left, traps first, private temp dir
-- [`693d66817`](https://github.com/yumima/finterm/commit/693d66817) Launch script: bounded, interruptible test mount; install order
-- [`5d950c76a`](https://github.com/yumima/finterm/commit/5d950c76a) Launch script: a test mount decides, then exec — no 127 guessing
-- [`773105d62`](https://github.com/yumima/finterm/commit/773105d62) Launch script: start mounted, fall back to unpacked on the runtime's 127
-- [`3facbdeba`](https://github.com/yumima/finterm/commit/3facbdeba) Linux launcher: a script that picks FUSE or unpacked at each start
-- [`eb482bbb5`](https://github.com/yumima/finterm/commit/eb482bbb5) Cut the FUSE test mount and the yt-dlp error lists
-- [`d3ee951d2`](https://github.com/yumima/finterm/commit/d3ee951d2) Review fixes: yt-dlp hint without guessing, FUSE 'unknown', batch result
-- [`16dadd8f0`](https://github.com/yumima/finterm/commit/16dadd8f0) Review fixes: update hint signs, one FUSE answer per run, batch upgrades
-- [`9a36e4062`](https://github.com/yumima/finterm/commit/9a36e4062) Video errors: update hint only when an update can help; Upgrade keeps pins
-- [`de0d14d2d`](https://github.com/yumima/finterm/commit/de0d14d2d) Drop the yt-dlp auto-updater; a failed stream points to Upgrade
-- [`6dfe9d127`](https://github.com/yumima/finterm/commit/6dfe9d127) yt-dlp upgrade: within the pins, logged, out of the install folder, hourly check
-- [`2b7503b69`](https://github.com/yumima/finterm/commit/2b7503b69) Review fixes: yt-dlp upgrade only itself, detached, daily; FUSE test cached
-- [`4815d3ab4`](https://github.com/yumima/finterm/commit/4815d3ab4) Review fixes: FUSE by a test mount, tar names normalised, yt-dlp kept current
-- [`6c983d917`](https://github.com/yumima/finterm/commit/6c983d917) finterm 4.2.3
-- [`eb9e86f8d`](https://github.com/yumima/finterm/commit/eb9e86f8d) Installer: full-review fixes; Linux package gets yt-dlp, no Wayland warning
-- [`1a93f53f2`](https://github.com/yumima/finterm/commit/1a93f53f2) Installer: cut the in-app restore and tidy; review fixes
-- [`9f5df6dfb`](https://github.com/yumima/finterm/commit/9f5df6dfb) Installer review fixes: only files and folders in an import; settings per thread
-- [`77a3dcfef`](https://github.com/yumima/finterm/commit/77a3dcfef) Installer review fixes: CI checks, installed record, FUSE, links, export overwrite
-- [`40b07bb43`](https://github.com/yumima/finterm/commit/40b07bb43) One download installs, updates, migrates and adds the launcher
-- [`ceae7b26e`](https://github.com/yumima/finterm/commit/ceae7b26e) Plan: one download that installs, updates, migrates and adds the launcher
-- [`aace8bac5`](https://github.com/yumima/finterm/commit/aace8bac5) **chore(release):** download counts of the releases before v4.2.2
-- [`9c4c01317`](https://github.com/yumima/finterm/commit/9c4c01317) **chore(release):** update README download links and updates.json for v4.2.2
-- [`2149cad0b`](https://github.com/yumima/finterm/commit/2149cad0b) Dashboard IPO calendar: PRICED | NEXT 7 DAYS | NEXT 30 DAYS, as the screen
-- [`933f30341`](https://github.com/yumima/finterm/commit/933f30341) finterm 4.2.2
-- [`0b62fae6e`](https://github.com/yumima/finterm/commit/0b62fae6e) Reset this user keeps everything; backups are private
-- [`9c4cdef91`](https://github.com/yumima/finterm/commit/9c4cdef91) Defaults: the owner's dashboard as first-run layout; Markets pages fill the window
-- [`92708e657`](https://github.com/yumima/finterm/commit/92708e657) Review fixes: resets keep backups, proxy env on relaunch, no keys in logs
-- [`c82af1de2`](https://github.com/yumima/finterm/commit/c82af1de2) DataHealth: QHash::remove returns bool (MSVC C4804 is an error)
-- [`4cf6fc2b6`](https://github.com/yumima/finterm/commit/4cf6fc2b6) Lock screen, data failures and the Windows uninstaller: what customers hit
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
