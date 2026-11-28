@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`fb7e29c3b`](https://github.com/yumima/finterm/commit/fb7e29c3b) CI's locked-down lookup locked down from the start, asserted
 - [`769aa7066`](https://github.com/yumima/finterm/commit/769aa7066) CI's restricted lookup asserted restricted; unreadable told from a crash
 - [`fc5e34c99`](https://github.com/yumima/finterm/commit/fc5e34c99) CI runs the Apps lookup as a locked-down machine would, every branch
 - [`3391fe6a0`](https://github.com/yumima/finterm/commit/3391fe6a0) Apps lookup: only PathNotFound is 'not there'; three real runs in CI

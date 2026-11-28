@@ -433,16 +433,31 @@ jobs:
           $lookup = & node app/tests/installer/print_apps_lookup.js app/packaging/installer/config/controlscript.qs
           if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+          # The locked-down window is one native process (a .cmd: set the
+          # policy, run the child, keep its code, put the machine's value
+          # back), so no other PowerShell host runs inside it.
+          $envKey = "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
+          $before = [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")
+          $restore = if ($before) { "reg add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d `"$before`" /f >nul" }
+                     else { "reg delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul" }
           function Lookup([string]$command, [bool]$restricted) {
               $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
-              if ($restricted) { [Environment]::SetEnvironmentVariable("__PSLockdownPolicy", "4", "Machine") }
-              try {
-                  $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command (
-                      "'MODE ' + `$ExecutionContext.SessionState.LanguageMode; " + $command))
-                  $code = $LASTEXITCODE
-              } finally {
-                  if ($restricted) { [Environment]::SetEnvironmentVariable("__PSLockdownPolicy", $null, "Machine") }
+              $ps1 = Join-Path $env:RUNNER_TEMP "apps-lookup.ps1"; $txt = Join-Path $env:RUNNER_TEMP "apps-lookup.txt"
+              Set-Content -Path $ps1 -Value ("'MODE ' + `$ExecutionContext.SessionState.LanguageMode`r`n" + $command)
+              $cmd = Join-Path $env:RUNNER_TEMP "apps-lookup.cmd"
+              Set-Content -Path $cmd -Encoding ascii -Value @(
+                  "@echo off",
+                  $(if ($restricted) { "reg add `"$envKey`" /v __PSLockdownPolicy /t REG_SZ /d 4 /f >nul" } else { "rem" }),
+                  "`"$winps`" -NoProfile -ExecutionPolicy Bypass -File `"$ps1`" > `"$txt`" 2>&1",
+                  "set code=%errorlevel%",
+                  $(if ($restricted) { $restore } else { "rem" }),
+                  "exit /b %code%")
+              & cmd.exe /d /c "`"$cmd`""
+              $code = $LASTEXITCODE
+              if ([Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine") -ne $before) {
+                  throw "the machine's lockdown policy was not put back"
               }
+              $out = @(Get-Content $txt)
               if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out" }
               return @{ code = $code; out = $out; locations = @($out | Where-Object { $_ -like "L *" } |
                   ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') }) }
