@@ -148,10 +148,10 @@ QString read_text(const QString& path) {
 /// Callers: Beside after writing — the filesystem's own time (the temporary
 /// it just wrote), ten minutes and a day; Beside after a failed write, and
 /// every start and install — the local clock, a day behind and thirty ahead.
-/// Ahead gets the wider margin on purpose: a write in progress elsewhere is
-/// stamped by the file server, so a local clock running behind it makes that
-/// write look ahead — taking it breaks the write, while keeping a stale one a
-/// few more days costs a few bytes.
+/// The two sides differ on purpose. Behind is also the age that clears real
+/// leftovers (a killed write is always in the past), so it stays short — a
+/// day, past any ordinary skew. Ahead only has to outlast skew and a clock
+/// since put right, so it can be generous: thirty days.
 void sweep_temporaries(const QString& path, const QDateTime& now, qint64 age, qint64 ahead_days,
                        const QString& skip = {}) {
     if (!now.isValid())
