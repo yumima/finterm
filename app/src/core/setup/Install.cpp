@@ -12,10 +12,10 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 
 #include <cstdio>
 #include <tuple>
@@ -133,20 +133,40 @@ QString read_text(const QString& path) {
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
 }
 
-/// `text` in place at `path` in one step (QSaveFile: a temporary of its own
-/// beside it, every byte checked, then renamed): a full disk or an error
-/// leaves the old file as it was, and nothing behind.
-bool write_text(const QString& path, const QString& text) {
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QSaveFile f(path);
-    if (!f.open(QIODevice::WriteOnly))
-        return false;
-    const QByteArray bytes = text.toUtf8();
-    if (f.write(bytes) != bytes.size()) {
-        f.cancelWriting();
-        return false;
+/// `text` written to a temporary of its own beside `path` (unique name, every
+/// byte checked), for `put` to rename over it. A rename replaces the entry
+/// itself — a link, a read-only file — never what a link points to; a full
+/// disk or an error leaves the old file as it was, and nothing behind.
+class Beside {
+  public:
+    Beside(const QString& path, const QString& text)
+        : path_(path), tmp_(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral(".") +
+                                                                          QFileInfo(path).fileName() +
+                                                                          QStringLiteral(".XXXXXX"))) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        tmp_.setAutoRemove(true);
+        const QByteArray bytes = text.toUtf8();
+        ok_ = tmp_.open() && tmp_.write(bytes) == bytes.size() && tmp_.flush();
+        tmp_.close();
     }
-    return f.commit();
+    bool ok() const { return ok_; }
+    /// Rename it over `path`; false (and it goes) when that fails.
+    bool put() {
+        if (!ok_ || !replace_file(tmp_.fileName(), path_))
+            return false;
+        tmp_.setAutoRemove(false); // it is `path` now
+        return true;
+    }
+
+  private:
+    QString path_;
+    QTemporaryFile tmp_;
+    bool ok_ = false;
+};
+
+bool write_text(const QString& path, const QString& text) {
+    Beside b(path, text);
+    return b.put();
 }
 
 bool ours(const QString& desktop_text) {
@@ -316,9 +336,15 @@ bool write_launch_script(const QString& installed) {
 /// What could not be added, and how: by the installed image's own path (the
 /// `finterm` command may be what is missing).
 QString launcher_hint(const QStringList& missed, const QString& installed) {
-    // The launch script (written before anything else): it runs the image
-    // where FUSE doesn't; quoted for a shell.
+    // On Linux the launch script (written before anything else: it runs the
+    // image where FUSE doesn't); elsewhere the installed app. Quoted for a shell.
+#if defined(Q_OS_LINUX)
     QString path = launch_script_path(installed);
+#elif defined(Q_OS_MACOS)
+    QString path = QDir(installed).filePath(QStringLiteral("Contents/MacOS/finterm"));
+#else
+    QString path = installed;
+#endif
     path.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
     return missed.join(QStringLiteral("; ")) + QStringLiteral(" — fix that, then run '%1' --install").arg(path);
 }
@@ -339,6 +365,12 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
     QStringList done;
     if (ok)
         *ok = true;
+    // Temporaries earlier builds named this way, left by an interrupted write.
+    for (const QString& stale : {desktop_path(env) + QStringLiteral(".new"), desktop_path(env) + QStringLiteral(".new.part"),
+                                 desktop_path(env) + QStringLiteral(".part"),
+                                 launch_script_path(installed) + QStringLiteral(".part")})
+        if (QFileInfo(stale).isFile())
+            QFile::remove(stale);
     // The launch script first, before anything else is touched: the menu
     // entry and the command start it, so without it they are left as they
     // are (an earlier launcher keeps working) and the caller is told.
@@ -358,17 +390,13 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
             if (QFile::copy(env.package_icon, icon_path(env)))
                 done << QStringLiteral("icon: ") + icon_path(env);
         }
-        // Ours written beside it first; only then is someone else's entry
-        // (finterm.sh install from a source tree) moved aside — a failed
-        // write leaves it in place.
         // Ours written to a temporary of its own beside it; someone else's
-        // entry copied (not moved) to .bak; then ours replaces it in one step.
-        // Whatever fails, theirs stays in the menu, and nothing is left behind.
+        // entry copied (not moved) to .bak; then ours replaces the entry in one
+        // rename (a link or a read-only file itself, never what a link points
+        // to). Whatever fails, theirs stays in the menu, nothing left behind.
         const QString desktop = desktop_path(env);
-        QDir().mkpath(QFileInfo(desktop).absolutePath());
-        QSaveFile f(desktop);
-        const QByteArray bytes = desktop_entry(env, installed).toUtf8();
-        bool written = f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+        Beside ours_new(desktop, desktop_entry(env, installed));
+        bool written = ours_new.ok();
         QString bak;
         if (written && QFileInfo::exists(desktop) && !ours(read_text(desktop))) {
             bak = desktop + QStringLiteral(".bak");
@@ -378,13 +406,12 @@ QStringList write_launcher(const Env& env, const QString& installed, Items items
             if (!written)
                 bak.clear();
         }
-        if (written && f.commit()) {
+        if (written && ours_new.put()) {
             if (!bak.isEmpty())
                 done << QStringLiteral("kept the previous launcher as ") + bak;
             done << QStringLiteral("launcher: ") + desktop;
             refresh_desktop_caches(env);
         } else {
-            f.cancelWriting();
             if (!bak.isEmpty())
                 QFile::remove(bak); // theirs is still in place: no copy needed
             done << QStringLiteral("could not write the launcher ") + desktop;

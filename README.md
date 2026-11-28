@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`48cb68e91`](https://github.com/yumima/finterm/commit/48cb68e91) Launcher writes through QSaveFile; hint runs the launch script
 - [`de5789f8e`](https://github.com/yumima/finterm/commit/de5789f8e) Launcher: someone else's entry copied, not moved; consistent hint
 - [`1cd1d432c`](https://github.com/yumima/finterm/commit/1cd1d432c) Launcher: no retry machinery; --install adds what couldn't be made
 - [`8d6c237d7`](https://github.com/yumima/finterm/commit/8d6c237d7) Launcher retries per item, bounded; test mount pid from itself again

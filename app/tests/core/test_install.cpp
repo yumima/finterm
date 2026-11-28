@@ -352,6 +352,42 @@ class TestInstall : public QObject {
         QCOMPARE(QDir(apps).entryList(QDir::Files), QStringList{"finterm.desktop"}); // nothing left behind
     }
 
+    void a_linked_or_read_only_entry_is_replaced_not_written_through() {
+        const QString apps = QFileInfo(desktop()).absolutePath();
+        QDir().mkpath(apps);
+        // The user's entry is a link into their own files: the link is
+        // replaced (theirs kept as .bak), the file it points to untouched.
+        const QString theirs = env_.home + "/dotfiles/finterm.desktop";
+        write_package(theirs, "x"); // any content
+        const QByteArray before = read(theirs).toUtf8();
+        QVERIFY(QFile::link(theirs, desktop()));
+        QVERIFY(install::install(env_, {false}).ok);
+        QCOMPARE(read(theirs).toUtf8(), before);
+        QVERIFY(!QFileInfo(desktop()).isSymLink());
+        QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
+        QVERIFY(QFileInfo::exists(desktop() + ".bak"));
+        // A read-only entry is replaced as well (the folder is writable).
+        QFile::remove(desktop());
+        write_package(desktop(), "y");
+        QFile::setPermissions(desktop(), QFileDevice::ReadOwner);
+        env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/again.run", "4.2.3");
+        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(read(desktop()).contains("X-Finterm-Installer=1"));
+    }
+
+    void their_entry_stays_when_its_copy_cant_be_made() {
+        // finterm.desktop is a directory (can't be copied): nothing moves,
+        // nothing is left behind, the install says the launcher is missing.
+        QDir().mkpath(desktop());
+        const auto r = install::install(env_, {false});
+        QVERIFY(r.ok);
+        QVERIFY(r.warning.contains("could not write the launcher"));
+        QVERIFY(QFileInfo(desktop()).isDir());
+        QStringList left = QDir(QFileInfo(desktop()).absolutePath()).entryList(QDir::AllEntries | QDir::Hidden |
+                                                                               QDir::NoDotAndDotDot);
+        QCOMPARE(left, QStringList{"finterm.desktop"});
+    }
+
     void dont_ask_is_per_file() {
         QVERIFY(install::should_offer(env_, install::state(env_)));
         install::set_dont_ask(env_.package);
