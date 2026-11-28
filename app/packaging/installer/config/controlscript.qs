@@ -117,7 +117,7 @@ function registeredInstalls()
         return registered;
     var r = powershell("$r = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'; " +
         "$root = Get-Item -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable e0; " +
-        "if (-not $root) { if (@($e0 | Where-Object { $_.CategoryInfo.Category -ne 'ObjectNotFound' }).Count) " +
+        "if (-not $root) { if (@($e0 | Where-Object { -not ($_.FullyQualifiedErrorId -like 'PathNotFound*') }).Count) " +
         "{ exit 1 }; exit 0 }; " +
         "$keys = @(Get-ChildItem -LiteralPath $r -ErrorAction SilentlyContinue -ErrorVariable ev); " +
         "$bad = @($ev).Count; $read = 0; " +

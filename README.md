@@ -6,6 +6,7 @@ A financial terminal for markets, stocks and the economy, with quant experiments
 
 Latest first.
 
+- [`323f87aa4`](https://github.com/yumima/finterm/commit/323f87aa4) Apps lookup run for real in CI; restricted-safe not-found check
 - [`4cb1a1322`](https://github.com/yumima/finterm/commit/4cb1a1322) Apps lookup: can't-open told from not-there; a partial read warns
 - [`88aacbc5d`](https://github.com/yumima/finterm/commit/88aacbc5d) Apps lookup: each case explicit; an unsure uninstall asks, warned
 - [`1eeb7e628`](https://github.com/yumima/finterm/commit/1eeb7e628) Apps lookup: per key, and 'unknown' keeps the data

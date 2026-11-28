@@ -283,8 +283,8 @@ a0 = uninstall({ target: PU, installs: [PU], answerYes: true });
 check("uninstall, the Apps list read: asked without the warning", a0.asked === 1 && !/ruled out/.test(a0.questions[0] || ""));
 const lookup = a0.commands.find(c => /CurrentVersion\\Uninstall/.test(c)) || "";
 check("the Apps lookup: not there is empty, can't open is unreadable, unreadable entries counted (none read: unreadable; some: partial)",
-      /CategoryInfo\.Category -ne 'ObjectNotFound' \}\)\.Count\) \{ exit 1 \}; exit 0 \}/.test(lookup) &&
-      !/\[Management\./.test(lookup) &&
+      /-not \(\$_\.FullyQualifiedErrorId -like 'PathNotFound\*'\) \}\)\.Count\) \{ exit 1 \}; exit 0 \}/.test(lookup) &&
+      !/\[(?!uri\]|string\])[A-Za-z][\w.]*\]/.test(lookup) &&
       /-ErrorAction SilentlyContinue -ErrorVariable ev/.test(lookup) && /catch \{ \$bad\+\+ \}/.test(lookup) &&
       /if \(\$bad -gt 0 -and \$read -eq 0\) \{ exit 1 \}; if \(\$bad -gt 0\) \{ 'PARTIAL' \}/.test(lookup) &&
       !/ErrorActionPreference|Test-Path/.test(lookup));

@@ -423,15 +423,28 @@ jobs:
           Write-Host "default install: $dir"
 
           # The control script's Apps-list lookup, run for real (the node test
-          # checks it by its structure only): it must find this install.
+          # checks it by its structure only): it must find this install, read
+          # in full; give an empty list for a key that isn't there; and do the
+          # same in a restricted (Constrained Language) PowerShell.
           $lookup = & node app/tests/installer/print_apps_lookup.js app/packaging/installer/config/controlscript.qs
+          if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-          $found = & $winps -NoProfile -ExecutionPolicy Bypass -Command $lookup
-          if ($LASTEXITCODE -ne 0) { throw "the Apps-list lookup failed ($LASTEXITCODE): $found" }
-          $locations = @($found | Where-Object { $_ -like "L *" } |
-              ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') })
-          if (-not ($locations | Where-Object { $_ -ieq $dir })) { throw "the Apps-list lookup did not find $dir (got: $found)" }
-          Write-Host "Apps-list lookup: found $dir"
+          function Lookup([string]$command, [string]$what) {
+              $out = @(& $winps -NoProfile -ExecutionPolicy Bypass -Command $command)
+              if ($LASTEXITCODE -ne 0) { throw "the Apps-list lookup failed ${what} ($LASTEXITCODE): $out" }
+              if ($out -contains "PARTIAL") { throw "the Apps-list lookup read the list only in part ${what}: $out" }
+              return @($out | Where-Object { $_ -like "L *" } |
+                  ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') })
+          }
+          foreach ($mode in "", "`$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'; ") {
+              $what = if ($mode) { "(restricted)" } else { "" }
+              $locations = Lookup ($mode + $lookup) $what
+              if (-not ($locations | Where-Object { $_ -ieq $dir })) { throw "the Apps-list lookup did not find $dir $what" }
+          }
+          $missing = $lookup.Replace("CurrentVersion\Uninstall'", "CurrentVersion\Uninstall\finterm-ci-no-such-key'")
+          if ($missing -eq $lookup) { throw "could not point the lookup at a missing key" }
+          if ((Lookup $missing "(missing key)").Count -ne 0) { throw "the lookup found entries under a missing key" }
+          Write-Host "Apps-list lookup: found $dir (also restricted); a missing key is an empty list"
 
           # Run again over it — an update in place: the old copy is removed by
           # its own uninstaller (keeping the data), then this one goes in.
