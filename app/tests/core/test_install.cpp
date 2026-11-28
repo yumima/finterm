@@ -413,6 +413,17 @@ class TestInstall : public QObject {
         QVERIFY(install::install(env_, {false}).ok);
         QVERIFY(QFileInfo::exists(fresh)); // perhaps another finterm's write in progress
         QVERIFY(!QFileInfo::exists(aged));
+        // Beside the launch script too.
+        const QString beside = env_.home + "/Applications/..finterm-launch.finterm-tmp.QwE456";
+        write_package(beside, "s");
+        {
+            QFile f(beside);
+            QVERIFY(f.open(QIODevice::ReadWrite));
+            QVERIFY(f.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
+        }
+        env_.package = write_package(QFileInfo(env_.package).absolutePath() + "/again.run", "4.2.3");
+        QVERIFY(install::install(env_, {false}).ok);
+        QVERIFY(!QFileInfo::exists(beside));
     }
 
     void links_are_kept_as_written_and_bak_names_never_collide() {
@@ -448,6 +459,10 @@ class TestInstall : public QObject {
         QVERIFY(!QFileInfo(script).isSymLink());
         QVERIFY(QFileInfo(script).isExecutable());
         QCOMPARE(QFile::permissions(theirs) & QFileDevice::ExeOwner, QFileDevice::Permissions()); // theirs untouched
+        // A mode the user narrowed (700) is theirs: kept, not rewritten.
+        QFile::setPermissions(script, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        install::refresh_launcher(env_);
+        QCOMPARE(QFile::permissions(script) & (QFileDevice::ReadOther | QFileDevice::ExeOther), QFileDevice::Permissions());
     }
 
     void their_entry_stays_when_its_copy_cant_be_made() {

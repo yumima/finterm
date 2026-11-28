@@ -203,8 +203,7 @@ void sweep_temporaries(const QString& path) {
     const QDateTime stale = QDateTime::currentDateTime().addSecs(-600);
     QStringList names;
     for (const QFileInfo& e : dir.entryInfoList(QDir::Files | QDir::Hidden))
-        if (ours.match(e.fileName()).hasMatch() &&
-            (e.lastModified() < stale || e.lastModified() > QDateTime::currentDateTime().addSecs(600))) // (a clock moved)
+        if (ours.match(e.fileName()).hasMatch() && e.lastModified() < stale)
             names << e.fileName();
     for (const char* old : {".new", ".new.part", ".part"})
         names << fi.fileName() + QLatin1String(old);
@@ -368,13 +367,17 @@ QString launch_script_text(const QString& installed) {
         .arg(quoted);
 }
 
-/// The launch script is a plain, runnable file of ours: right text, the exec
-/// bit, not a link (a link's target is not ours to run or chmod).
+/// A plain file the user can run, not a link (a link's target is not ours to
+/// run or chmod). The rest of its mode is the user's to narrow.
+bool launch_script_usable(const QString& installed) {
+    const QFileInfo fi(launch_script_path(installed));
+    return !fi.isSymLink() && fi.isFile() && fi.isExecutable();
+}
+
+/// The launch script is this build's, and usable.
 bool launch_script_ok(const QString& installed) {
-    const QString path = launch_script_path(installed);
-    const QFileInfo fi(path);
-    return !fi.isSymLink() && fi.isFile() && (QFile::permissions(path) & kRunnable) == kRunnable &&
-           read_text(path) == launch_script_text(installed);
+    return launch_script_usable(installed) &&
+           read_text(launch_script_path(installed)) == launch_script_text(installed);
 }
 
 bool write_launch_script(const QString& installed) {
@@ -401,8 +404,15 @@ QString launcher_hint(const QStringList& missed, const QString& installed) {
     // cmd.exe runs "path" args; PowerShell needs & and single quotes (in
     // double ones it expands $ and `), with ' doubled.
     const QString exe = QDir::toNativeSeparators(installed);
-    QString ps = exe;
-    ps.replace(QLatin1Char('\''), QStringLiteral("''"));
+    QString ps;
+    for (const QChar c : exe) {
+        ps += c;
+        // PowerShell ends a single-quoted string at ' and at the typographic
+        // quotes ‘ ’ ‚ ‛ too: each is doubled.
+        if (c == QLatin1Char('\'') || c == QChar(0x2018) || c == QChar(0x2019) || c == QChar(0x201A) ||
+            c == QChar(0x201B))
+            ps += c;
+    }
     return missed.join(QStringLiteral("; ")) +
            QStringLiteral(" — fix that, then run \"%1\" --install (in PowerShell: & '%2' --install)").arg(exe, ps);
 #endif
@@ -1024,11 +1034,12 @@ bool launch_installed(const QString& installed, const QStringList& args) {
     return QProcess::startDetached(QStringLiteral("/usr/bin/open"), open_args, QDir::homePath());
 #else
     // Through the launch script (mounted, or unpacked where that fails), as
-    // the menu entry starts it — written only if it isn't there (an existing
-    // one is the installed build's own, kept current by its refresh).
+    // the menu entry starts it — the installed build's own when it is usable
+    // (whatever version wrote it; its refresh keeps it current), written only
+    // when it is missing or unusable.
     QProcess p;
     const QString script = launch_script_path(installed);
-    const bool have_script = launch_script_ok(installed) || write_launch_script(installed);
+    const bool have_script = launch_script_usable(installed) || write_launch_script(installed);
     p.setProgram(have_script ? script : installed);
     p.setArguments(all);
     p.setProcessEnvironment(clean_environment());
