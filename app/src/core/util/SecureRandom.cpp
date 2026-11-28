@@ -5,10 +5,7 @@
 
 #if defined(Q_OS_WIN)
 #    include <windows.h>
-#    include <bcrypt.h>
-#    if defined(_MSC_VER)
-#        pragma comment(lib, "bcrypt")
-#    endif
+#    include <bcrypt.h> // linked as bcrypt (CMake)
 #else
 #    include <unistd.h>
 #    if defined(Q_OS_MACOS)

@@ -53,7 +53,7 @@ QString problem(const QString& pin) {
 }
 
 QString hash(const QString& secret, int iterations) {
-    const QByteArray salt = util::secure_random_bytes(kSaltBytes);
+    const QByteArray salt = finterm::util::secure_random_bytes(kSaltBytes);
     return QStringLiteral("%1$%2$%3$%4")
         .arg(QLatin1String(kScheme))
         .arg(iterations)
@@ -88,7 +88,7 @@ bool verify(const QString& secret, const QString& stored) {
 
 QString new_recovery_key() {
     QString key;
-    const QByteArray bytes = util::secure_random_bytes(kKeyChars);
+    const QByteArray bytes = finterm::util::secure_random_bytes(kKeyChars);
     for (int i = 0; i < kKeyChars; ++i) {
         if (i > 0 && i % 5 == 0)
             key += QLatin1Char('-');

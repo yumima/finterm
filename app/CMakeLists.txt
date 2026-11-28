@@ -2255,6 +2255,9 @@ else()
     message(STATUS "Qt6 WebEngineWidgets found — enabling WebEngine video path")
 endif()
 
+if(WIN32)
+    target_link_libraries(finterm PRIVATE bcrypt) # util::secure_random_bytes
+endif()
 target_link_libraries(finterm PRIVATE
     Qt6::Widgets
     Qt6::Charts

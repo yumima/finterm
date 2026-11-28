@@ -1,5 +1,6 @@
 // src/services/agents/AgentService.cpp
 #include "services/agents/AgentService.h"
+#include "core/util/SecureRandom.h"
 
 #include "ai_chat/LlmService.h"
 #include "auth/AuthManager.h"
@@ -30,7 +31,6 @@
 #include <QMutexLocker>
 #include <QPointer>
 #include <QProcess>
-#include <QRandomGenerator>
 #include <QSet>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -213,8 +213,7 @@ class TerminalToolBridge {
 
     /// Authorise `wire_names` for one dispatch; returns the session token.
     QString open_session(const QSet<QString>& wire_names, bool lasting) {
-        const QString token =
-            QUuid::createUuid().toString(QUuid::Id128) + QString::number(QRandomGenerator::system()->generate64(), 16);
+        const QString token = finterm::util::secure_token();
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker lock(&mutex_);
         for (auto it = sessions_.begin(); it != sessions_.end();) {

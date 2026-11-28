@@ -41,7 +41,7 @@ void put_secure(const QString& key, const QString& value) {
 /// requires base64url alphabet — Qt's QByteArray::Base64UrlEncoding
 /// gives us exactly that.
 QString random_b64url(int byte_count) {
-    const QByteArray bytes = util::secure_random_bytes(byte_count);
+    const QByteArray bytes = finterm::util::secure_random_bytes(byte_count);
     return QString::fromLatin1(bytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
 }
 

@@ -65,7 +65,16 @@ class TestPinPolicy : public QObject {
             blocks.insert(b);
         }
         QCOMPARE(blocks.size(), 64);
-        QCOMPARE(finterm::util::secure_random_bytes(1000).size(), 1000); // past getentropy's 256
+        // Past getentropy's 256 per call: every chunk filled, and its own.
+        const QByteArray big = finterm::util::secure_random_bytes(1000);
+        QCOMPARE(big.size(), 1000);
+        QSet<QByteArray> chunks;
+        for (int at = 0; at < 1000; at += 250) {
+            QVERIFY(big.mid(at, 250) != QByteArray(250, '\0'));
+            chunks.insert(big.mid(at, 250));
+        }
+        QCOMPARE(chunks.size(), 4);
+        QCOMPARE(finterm::util::secure_token().size(), 64);
         // As a person types it back: lower case, spaces, the look-alike letters.
         QCOMPARE(pin_policy::normalize_recovery_key(QStringLiteral(" 7kq2m 9xd4t-b3n8v wq5zr ")),
                  QStringLiteral("7KQ2M9XD4TB3N8VWQ5ZR"));

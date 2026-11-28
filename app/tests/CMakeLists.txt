@@ -1671,6 +1671,9 @@ add_executable(test_pin_policy
 )
 target_include_directories(test_pin_policy PRIVATE ../src)
 target_link_libraries(test_pin_policy PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+if(WIN32)
+    target_link_libraries(test_pin_policy PRIVATE bcrypt)
+endif()
 set_target_properties(test_pin_policy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME pin_policy COMMAND test_pin_policy)
 

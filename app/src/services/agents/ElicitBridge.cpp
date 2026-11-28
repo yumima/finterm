@@ -1,9 +1,9 @@
 #include "services/agents/ElicitBridge.h"
+#include "core/util/SecureRandom.h"
 
 #include "core/logging/Logger.h"
 
 #include <QMetaType>
-#include <QUuid>
 
 namespace finterm::services {
 
@@ -53,7 +53,7 @@ mcp::ElicitResponse ElicitBridge::request(const mcp::ElicitRequest& req, int tim
         return out;
     }
 
-    pending_token_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    pending_token_ = finterm::util::secure_token();
     pending_response_ = mcp::ElicitResponse{};
     response_ready_ = false;
     const QString token = pending_token_;

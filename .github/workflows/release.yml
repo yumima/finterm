@@ -420,7 +420,9 @@ jobs:
               $p = Start-Process -FilePath $setup -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err `
                   -ArgumentList @("--verbose", "install", "--accept-licenses", "--default-answer", "--confirm-command")
               Write-Host "── $what (exit $($p.ExitCode)) ──"
-              Get-Content $out, $err -ErrorAction SilentlyContinue | Select-Object -Last 120 | Write-Host
+              foreach ($f in $out, $err) {
+                  Write-Host "· $(Split-Path -Leaf $f):"; Get-Content $f -ErrorAction SilentlyContinue | Write-Host
+              }
               if ($p.ExitCode -ne 0) { throw "$what failed ($($p.ExitCode))" }
           }
           Setup "default install"

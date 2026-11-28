@@ -1,4 +1,5 @@
 #include "python/PythonWorker.h"
+#include "core/util/SecureRandom.h"
 
 #include "core/util/AppLifecycle.h"
 #include "core/config/AppPaths.h"
@@ -8,7 +9,6 @@
 
 #include <QHostAddress>
 #include <QTcpSocket>
-#include <QUuid>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -416,8 +416,7 @@ void PythonWorker::launch_process() {
         // A fresh token per launch, handed to the daemon in its environment
         // and sent back as our first frame: loopback is open to every local
         // process, and the daemon must serve only this one.
-        tcp_token_ = QUuid::createUuid().toString(QUuid::WithoutBraces) +
-                     QUuid::createUuid().toString(QUuid::WithoutBraces);
+        tcp_token_ = finterm::util::secure_token();
         QProcessEnvironment env = proc_->processEnvironment();
         env.insert(QStringLiteral("FINTERM_DAEMON_TOKEN"), tcp_token_);
         proc_->setProcessEnvironment(env);

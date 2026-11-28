@@ -1,5 +1,6 @@
 // src/auth/AuthService.cpp
 #include "auth/AuthService.h"
+#include "core/util/SecureRandom.h"
 #include "storage/sqlite/migrations/MigrationRunner.h"
 
 #include "auth/PinPolicy.h"
@@ -259,7 +260,7 @@ QString AuthService::reset_pin_with_recovery_key(const QString& username, const 
 }
 
 QString AuthService::make_token() const {
-    return QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return finterm::util::secure_token();
 }
 
 QJsonObject AuthService::profile_json(int id, const QString& username, const QString& email, const QString& created_at,
@@ -306,7 +307,7 @@ void AuthService::register_local_user(const QString& username, const QString& pi
     // Synthetic email — keeps the existing unique-email constraint satisfied
     // without exposing it in the local-user flow.
     const QString synthetic_email = u + QLatin1String(kSyntheticEmailSuffix);
-    const QString api_key = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString api_key = finterm::util::secure_token();
 
     QSqlQuery q(db_);
     q.prepare("INSERT INTO users (username, email, password_hash, recovery_hash, api_key, otp_verified, created_at) "
