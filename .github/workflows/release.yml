@@ -434,17 +434,17 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $lookup) { throw "print_apps_lookup.js failed" }
           $winps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
           # The locked-down window is one native process (a .cmd: set the
-          # policy, run the child, keep its code, put the machine's value back
-          # exactly — reg export/import), so no other PowerShell host runs
+          # policy, run the child, keep its code, remove the policy), so no
+          # other PowerShell host runs
           # inside it. The lookup goes as -EncodedCommand: the same as the
-          # installer's -Command, with no quoting through cmd.
+          # installer's -Command, with no quoting through cmd. The runner has
+          # no machine lockdown policy of its own (checked), so putting it
+          # back is deleting it.
           $envKey = "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
-          $saved = Join-Path $env:RUNNER_TEMP "lockdown-before.reg"
-          $had = $null -ne (Get-ItemProperty -Path "Registry::$envKey" -Name __PSLockdownPolicy -ErrorAction SilentlyContinue)
-          if ($had) { & reg export "$envKey" $saved /y | Out-Null; if ($LASTEXITCODE -ne 0) { throw "could not save the machine's environment" } }
-          $restore = if ($had) { "reg import `"$saved`" >nul 2>nul" }
-                     else { "reg delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul" }
-          $beforeValue = [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")
+          if ($null -ne [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")) {
+              throw "this runner already has a machine lockdown policy; the lookup checks need a machine without one"
+          }
+          $restore = "reg delete `"$envKey`" /v __PSLockdownPolicy /f >nul 2>nul"
           function Lookup([string]$command, [bool]$restricted) {
               $mode = if ($restricted) { "ConstrainedLanguage" } else { "FullLanguage" }
               $txt = Join-Path $env:RUNNER_TEMP "apps-lookup.txt"; $errTxt = Join-Path $env:RUNNER_TEMP "apps-lookup-err.txt"
@@ -461,14 +461,14 @@ jobs:
                   "exit /b %code%")
               & cmd.exe /d /c "`"$cmd`""
               $code = $LASTEXITCODE
-              if ([Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine") -ne $beforeValue) {
-                  throw "the machine's lockdown policy was not put back"
+              if ($null -ne [Environment]::GetEnvironmentVariable("__PSLockdownPolicy", "Machine")) {
+                  throw "the machine's lockdown policy was not removed"
               }
-              if (-not (Test-Path $txt)) { throw "the lookup did not run (cmd exit $code)" }
-              $out = @(Get-Content $txt)
+              $out = @(Get-Content $txt -ErrorAction SilentlyContinue)
               $err = (Get-Content $errTxt -Raw -ErrorAction SilentlyContinue)
+              if ($out.Count -eq 0) { throw "the lookup did not run (cmd exit $code): $err" }
               if ($out -notcontains "MODE $mode") { throw "the lookup did not run in $mode`: $out $err" }
-              return @{ code = $code; out = $out; locations = @($out | Where-Object { $_ -like "L *" } |
+              return @{ code = $code; out = $out; err = $err; locations = @($out | Where-Object { $_ -like "L *" } |
                   ForEach-Object { [uri]::UnescapeDataString($_.Substring(2)).Replace('/', '\').TrimEnd('\') }) }
           }
           $key = "CurrentVersion\Uninstall'"
@@ -479,14 +479,14 @@ jobs:
           foreach ($restricted in $false, $true) {
               $how = if ($restricted) { " (restricted)" } else { "" }
               $r = Lookup $lookup $restricted
-              if ($r.code -ne 0) { throw "the Apps-list lookup failed$how ($($r.code)): $($r.out)" }
-              if ($r.out -contains "PARTIAL") { throw "the Apps-list lookup read the list only in part${how}: $($r.out)" }
+              if ($r.code -ne 0) { throw "the Apps-list lookup failed$how ($($r.code)): $($r.out) $($r.err)" }
+              if ($r.out -contains "PARTIAL") { throw "the Apps-list lookup read the list only in part${how}: $($r.out) $($r.err)" }
               if (-not ($r.locations | Where-Object { $_ -ieq $dir })) { throw "the Apps-list lookup did not find $dir$how" }
               $r = Lookup $missingKey $restricted
-              if ($r.code -ne 0 -or $r.locations.Count -ne 0) { throw "a missing key was not an empty list$how ($($r.code)): $($r.out)" }
+              if ($r.code -ne 0 -or $r.locations.Count -ne 0) { throw "a missing key was not an empty list$how ($($r.code)): $($r.out) $($r.err)" }
               $r = Lookup $missingDrive $restricted
               if ($r.code -ne 1 -or $r.out -notcontains "UNREADABLE" -or $r.locations.Count -ne 0) {
-                  throw "a missing drive was not unreadable$how ($($r.code)): $($r.out)"
+                  throw "a missing drive was not unreadable$how ($($r.code)): $($r.out) $($r.err)"
               }
           }
           Write-Host "Apps-list lookup: found $dir; a missing key is empty, a missing drive unreadable (also locked down from start)"
